@@ -61,5 +61,3 @@ premium-warning: '&c&lWARNING: &6This command should&l only&6 be invoked if you 
 
 # Client key verification
 invalid-public-key: '&cInvalid client public key. Please try to restart your game.'
-
-# ====== Bungee/Waterfall only ======
