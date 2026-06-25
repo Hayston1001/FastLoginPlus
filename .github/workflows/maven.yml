@@ -24,22 +24,3 @@ jobs:
 
       - name: Build and test
         run: mvn package --batch-mode --threads 2.0C --no-snapshot-updates --strict-checksums
-
-  dependency:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version-file: '.java-version'
-          cache: 'maven'
-
-      - name: Submit Dependency Snapshot
-        if: ${{ github.event_name == 'push' }}
-        uses: advanced-security/maven-dependency-submission-action@v4.0.3
