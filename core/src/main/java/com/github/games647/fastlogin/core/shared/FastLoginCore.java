@@ -430,6 +430,11 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     /**
      * Load a language file with the English default as fallback.
      * Keys from the default file are used when the language file doesn't have them.
+     *
+     * @param langFile the language file name in the plugin folder
+     * @param defaultFile the default resource file name in the jar
+     * @return the merged configuration
+     * @throws IOException if the file cannot be read
      */
     private Configuration loadLanguageFile(String langFile, String defaultFile) throws IOException {
         ConfigurationProvider configProvider = ConfigurationProvider.getProvider(YamlConfiguration.class);
