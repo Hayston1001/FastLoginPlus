@@ -25,10 +25,24 @@ jobs:
       - name: Build
         run: mvn package --batch-mode --no-snapshot-updates -DskipTests
 
+      - name: Extract changelog for this version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Extract the section between this version header and the next version header
+          echo "# ChangeLog" > /tmp/release-notes.md
+          echo "" >> /tmp/release-notes.md
+          sed -n "/^## ${TAG}/,/^## [v]/p" CHANGELOG.md | sed '$ d' >> /tmp/release-notes.md
+          # If extraction failed (empty), fallback to full changelog
+          if [ $(wc -l < /tmp/release-notes.md) -le 2 ]; then
+            echo "# ChangeLog" > /tmp/release-notes.md
+            echo "" >> /tmp/release-notes.md
+            cat CHANGELOG.md >> /tmp/release-notes.md
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: /tmp/release-notes.md
           files: |
             bukkit/target/FastLoginPlusBukkit.jar
             bungee/target/FastLoginPlusBungee.jar
