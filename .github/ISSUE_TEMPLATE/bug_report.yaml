@@ -27,7 +27,7 @@ body:
       description: |
         Link to the contents of your config.yml file.
         You can use [GitHub](https://gist.github.com/), [Hastebin](https://hastebin.com) or similar for that.
-      placeholder: https://gist.github.com/games647/88c4439e1cd7810f21318b1b24a04ee0
+      placeholder: https://gist.github.com/
   - type: textarea
     attributes:
       label: Server log
@@ -56,8 +56,8 @@ body:
       description: Check list for previous tickets
       options:
         - label: |
-            I tried the [latest build](https://ci.codemc.io/job/Games647/job/FastLogin/) 
-            (build refers to development builds not necessary a release version; i.e. v1.10 is out of date)
+            I tried the [latest build](https://github.com/Hayston1001/FastLoginPlus/actions) 
+            (build refers to development builds from GitHub Actions)
           required: true
         - label: |
             I checked for existing tickets -

@@ -25,24 +25,24 @@
  */
 package com.github.games647.fastlogin.core.storage;
 
-import com.github.games647.craftapi.UUIDAdapter;
-import com.github.games647.fastlogin.core.shared.FloodgateState;
-import com.zaxxer.hikari.HikariConfig;
-import com.zaxxer.hikari.HikariDataSource;
-import org.slf4j.Logger;
-
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import static java.sql.Statement.RETURN_GENERATED_KEYS;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
 
-import static java.sql.Statement.RETURN_GENERATED_KEYS;
+import org.slf4j.Logger;
+
+import com.github.games647.craftapi.UUIDAdapter;
+import com.github.games647.fastlogin.core.shared.FloodgateState;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
 public abstract class SQLStorage implements AuthStorage {
 
@@ -65,14 +65,14 @@ public abstract class SQLStorage implements AuthStorage {
             + "` WHERE `Name`=? LIMIT 1";
     protected static final String LOAD_BY_UUID = "SELECT * FROM `" + PREMIUM_TABLE
             + "` WHERE `UUID`=? LIMIT 1";
-    protected static final String DELETE_BY_NAME = "DELETE FROM " + PREMIUM_TABLE
-            + " WHERE `Name` = ?";
     protected static final String INSERT_PROFILE = "INSERT INTO `" + PREMIUM_TABLE
             + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`) " + "VALUES (?, ?, ?, ?, ?) ";
     // limit not necessary here, because it's unique
     protected static final String UPDATE_PROFILE = "UPDATE `" + PREMIUM_TABLE
             + "` SET `UUID`=?, `Name`=?, `Premium`=?, `Floodgate`=?, `LastIp`=?, "
             + "`LastLogin`=CURRENT_TIMESTAMP WHERE `UserID`=?";
+    protected static final String DELETE_BY_NAME = "DELETE FROM `" + PREMIUM_TABLE
+            + "` WHERE `Name`=?";
 
     protected final Logger log;
     protected final HikariDataSource dataSource;
@@ -145,25 +145,6 @@ public abstract class SQLStorage implements AuthStorage {
         return null;
     }
 
-    @Override
-    public int deleteProfile(String name) {
-        try (Connection con = dataSource.getConnection();
-            PreparedStatement deleteStmt = con.prepareStatement(DELETE_BY_NAME)) {
-            deleteStmt.setString(1, name);
-
-            int rowsDeleted = deleteStmt.executeUpdate();
-            if (rowsDeleted > 0) {
-                log.info("Deleted {}'s profile data", name);
-            } else {
-                log.info("No profile data found for {}", name);
-            }
-            return rowsDeleted;
-        } catch (SQLException sqlEx) {
-            log.error("Failed to query profile: {}", name, sqlEx);
-            return 0;
-        }
-    }
-
     private Optional<StoredProfile> parseResult(ResultSet resultSet) throws SQLException {
         if (resultSet.next()) {
             long userId = resultSet.getInt("UserID");
@@ -232,6 +213,18 @@ public abstract class SQLStorage implements AuthStorage {
         } catch (SQLException ex) {
             log.error("Failed to save playerProfile {}", playerProfile, ex);
         }
+    }
+
+    @Override
+    public boolean deleteProfile(String name) {
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement deleteStmt = con.prepareStatement(DELETE_BY_NAME)) {
+            deleteStmt.setString(1, name);
+            return deleteStmt.executeUpdate() > 0;
+        } catch (SQLException ex) {
+            log.error("Failed to delete profile: {}", name, ex);
+        }
+        return false;
     }
 
     /**

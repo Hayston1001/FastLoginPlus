@@ -25,17 +25,21 @@
  */
 package com.github.games647.fastlogin.bungee.listener;
 
+import java.util.Arrays;
+
 import com.github.games647.fastlogin.bungee.BungeeLoginSession;
 import com.github.games647.fastlogin.bungee.FastLoginBungee;
 import com.github.games647.fastlogin.bungee.task.AsyncToggleMessage;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.NamespaceKey;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteStreams;
+
 import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
@@ -44,20 +48,20 @@ import net.md_5.bungee.api.event.PluginMessageEvent;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.event.EventHandler;
 
-import java.util.Arrays;
-
 public class PluginMessageListener implements Listener {
 
     private final FastLoginBungee plugin;
 
     private final String successChannel;
     private final String changeChannel;
+    private final String deleteChannel;
 
     public PluginMessageListener(FastLoginBungee plugin) {
         this.plugin = plugin;
 
         this.successChannel = new NamespaceKey(plugin.getName(), SuccessMessage.SUCCESS_CHANNEL).getCombinedName();
         this.changeChannel = new NamespaceKey(plugin.getName(), ChangePremiumMessage.CHANGE_CHANNEL).getCombinedName();
+        this.deleteChannel = new NamespaceKey(plugin.getName(), DeletePremiumMessage.DELETE_CHANNEL).getCombinedName();
     }
 
     @EventHandler
@@ -111,6 +115,32 @@ public class PluginMessageListener implements Listener {
                 Runnable task = new AsyncToggleMessage(core, forPlayer, playerName, false, isSourceInvoker);
                 plugin.getScheduler().runAsync(task);
             }
+        } else if (deleteChannel.equals(channel)) {
+            DeletePremiumMessage deleteMessage = new DeletePremiumMessage();
+            deleteMessage.readFrom(dataInput);
+
+            String playerName = deleteMessage.getPlayerName();
+            plugin.getScheduler().runAsync(() -> {
+                StoredProfile profile = core.getStorage().loadProfile(playerName);
+                if (profile == null || !profile.isExistingPlayer()) {
+                    String message = core.getMessage("delete-not-found");
+                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                    return;
+                }
+                if (profile.isOnlinemodePreferred()) {
+                    String message = core.getMessage("delete-premium-denied");
+                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                    return;
+                }
+                boolean deleted = core.getStorage().deleteProfile(playerName);
+                if (deleted) {
+                    String message = core.getMessage("delete-success");
+                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                } else {
+                    String message = core.getMessage("delete-fail");
+                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                }
+            });
         }
     }
 

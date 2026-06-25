@@ -31,17 +31,17 @@
 
     <parent>
         <groupId>com.github.games647</groupId>
-        <artifactId>fastlogin</artifactId>
-        <version>1.12-SNAPSHOT</version>
+        <artifactId>fastloginplus</artifactId>
+        <version>0.0.1</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <!--This has to be in lowercase because it's used by plugin.yml-->
-    <artifactId>fastlogin.velocity</artifactId>
+    <artifactId>fastloginplus.velocity</artifactId>
     <packaging>jar</packaging>
 
     <!--Represents the main plugin-->
-    <name>FastLoginVelocity</name>
+    <name>FastLoginPlusVelocity</name>
 
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
@@ -62,20 +62,6 @@
                     </execution>
                 </executions>
             </plugin>
-
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
-                <configuration>
-                    <annotationProcessors>
-                        <annotationProcessor>
-                            com.velocitypowered.api.plugin.ap.PluginAnnotationProcessor
-                        </annotationProcessor>
-                    </annotationProcessors>
-                </configuration>
-            </plugin>
-
             <plugin>
                 <artifactId>maven-shade-plugin</artifactId>
                 <version>3.6.0</version>
@@ -102,6 +88,17 @@
                         <transformer
                                 implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                     </transformers>
+                    <artifactSet>
+                        <includes>
+                            <include>com.github.games647:*</include>
+                            <include>com.zaxxer:HikariCP</include>
+                            <include>net.md-5:bungeecord-config</include>
+                            <include>org.yaml:snakeyaml</include>
+                            <include>com.github.games647:craftapi</include>
+                            <include>org.mariadb.jdbc:mariadb-java-client</include>
+                            <include>org.xerial:sqlite-jdbc</include>
+                        </includes>
+                    </artifactSet>
                     <filters>
                         <filter>
                             <artifact>*:*</artifact>
@@ -111,6 +108,12 @@
                         </filter>
                         <filter>
                             <artifact>org.mariadb.jdbc:*</artifact>
+                            <includes>
+                                <include>**</include>
+                            </includes>
+                        </filter>
+                        <filter>
+                            <artifact>org.xerial:sqlite-jdbc</artifact>
                             <includes>
                                 <include>**</include>
                             </includes>
@@ -150,7 +153,7 @@
         <!--Common plugin component-->
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>fastlogin.core</artifactId>
+            <artifactId>fastloginplus.core</artifactId>
             <version>${project.version}</version>
             <exclusions>
                 <!-- Velocity ships an older version -->
@@ -175,15 +178,25 @@
         <dependency>
             <groupId>com.velocitypowered</groupId>
             <artifactId>velocity-api</artifactId>
-            <version>3.4.0-SNAPSHOT</version>
+            <version>3.3.0-SNAPSHOT</version>
             <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.moandjiezana.toml</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.spongepowered</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!--Velocity does not ship any database driver-->
         <dependency>
             <groupId>org.mariadb.jdbc</groupId>
             <artifactId>mariadb-java-client</artifactId>
-            <version>3.5.3</version>
+            <version>3.4.0</version>
             <exclusions>
                 <!-- Exclude JNA implementation for WAFFLE - Windows Authentication Framework (mariadb)-->
                 <exclusion>
@@ -191,6 +204,13 @@
                     <artifactId>waffle-jna</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.xerial</groupId>
+            <artifactId>sqlite-jdbc</artifactId>
+            <version>3.42.0.0</version>
+            <scope>compile</scope>
         </dependency>
 
         <!-- Bedrock player bridge -->

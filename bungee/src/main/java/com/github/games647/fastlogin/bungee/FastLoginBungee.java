@@ -25,6 +25,16 @@
  */
 package com.github.games647.fastlogin.bungee;
 
+import java.nio.file.Path;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ThreadFactory;
+
+import org.geysermc.floodgate.api.FloodgateApi;
+import org.geysermc.geyser.GeyserImpl;
+import org.slf4j.Logger;
+
 import com.github.games647.fastlogin.bungee.hook.BungeeAuthHook;
 import com.github.games647.fastlogin.bungee.listener.ConnectListener;
 import com.github.games647.fastlogin.bungee.listener.PluginMessageListener;
@@ -35,6 +45,7 @@ import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.hooks.bedrock.GeyserService;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.ChannelMessage;
+import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.NamespaceKey;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
 import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
@@ -44,6 +55,7 @@ import com.google.common.collect.MapMaker;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
 import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.PendingConnection;
@@ -53,15 +65,6 @@ import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.md_5.bungee.api.plugin.PluginManager;
 import net.md_5.bungee.api.scheduler.GroupedThreadFactory;
-import org.geysermc.floodgate.api.FloodgateApi;
-import org.geysermc.geyser.GeyserImpl;
-import org.slf4j.Logger;
-
-import java.nio.file.Path;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ThreadFactory;
 
 /**
  * BungeeCord version of FastLogin. This plugin keeps track on online mode connections.
@@ -105,6 +108,7 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
         //this is required to listen to incoming messages from the server
         getProxy().registerChannel(NamespaceKey.getCombined(getName(), ChangePremiumMessage.CHANGE_CHANNEL));
         getProxy().registerChannel(NamespaceKey.getCombined(getName(), SuccessMessage.SUCCESS_CHANNEL));
+        getProxy().registerChannel(NamespaceKey.getCombined(getName(), DeletePremiumMessage.DELETE_CHANNEL));
 
         registerHook();
     }

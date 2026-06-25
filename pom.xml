@@ -5,6 +5,7 @@
     The MIT License (MIT)
 
     Copyright (c) 2015-2024 games647 and contributors
+// Copyright (c) 2025 Hayston - FastLoginPlus fork
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -31,15 +32,15 @@
 
     <groupId>com.github.games647</groupId>
     <!--This has to be in lowercase because it's used by plugin.yml-->
-    <artifactId>fastlogin</artifactId>
+    <artifactId>fastloginplus</artifactId>
     <packaging>pom</packaging>
 
-    <name>FastLogin</name>
-    <version>1.12-SNAPSHOT</version>
+    <name>FastLoginPlus</name>
+    <version>0.0.1</version>
 
-    <url>https://www.spigotmc.org/resources/fastlogin.14153/</url>
+    <url>https://github.com/Hayston1001/FastLoginPlus</url>
     <description>
-        Automatically login premium (paid accounts) player on an offline mode server
+        Actively maintained fork of FastLogin with updates and feature enhancements
     </description>
 
     <properties>
@@ -83,7 +84,7 @@
             <plugin>
                 <!-- Update compiler plugin for old Maven versions like GH runner -->
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.14.0</version>
+                <version>3.13.0</version>
             </plugin>
 
             <plugin>
@@ -106,7 +107,7 @@
             <plugin>
                 <groupId>com.mycila</groupId>
                 <artifactId>license-maven-plugin</artifactId>
-                <version>5.0.0</version>
+                <version>4.5</version>
                 <configuration>
                     <licenseSets>
                         <licenseSet>
@@ -134,7 +135,7 @@
             </plugin>
             <plugin>
                 <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>3.6.0</version>
+                <version>3.4.0</version>
                 <configuration>
                     <configLocation>checkstyle.xml</configLocation>
                     <consoleOutput>true</consoleOutput>
@@ -145,7 +146,7 @@
                     <dependency>
                         <groupId>com.puppycrawl.tools</groupId>
                         <artifactId>checkstyle</artifactId>
-                        <version>10.23.0</version>
+                        <version>10.17.0</version>
                     </dependency>
                 </dependencies>
                 <executions>
@@ -162,7 +163,7 @@
             <!-- Require newer versions for Junit5 support -->
             <plugin>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.3</version>
+                <version>3.3.0</version>
                 <configuration>
                     <!-- Work-around to make multi-release classes discoverable
                     https://issues.apache.org/jira/browse/SUREFIRE-1731 -->
@@ -221,7 +222,7 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.12.2</version>
+            <version>5.10.3</version>
             <scope>test</scope>
         </dependency>
 

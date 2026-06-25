@@ -25,18 +25,6 @@
  */
 package com.github.games647.fastlogin.bukkit;
 
-import com.github.games647.fastlogin.bukkit.listener.BungeeListener;
-import com.github.games647.fastlogin.core.message.ChannelMessage;
-import com.github.games647.fastlogin.core.message.LoginActionMessage;
-import com.github.games647.fastlogin.core.message.NamespaceKey;
-import com.google.common.io.ByteArrayDataOutput;
-import com.google.common.io.ByteStreams;
-import io.papermc.paper.configuration.ServerConfiguration;
-import org.bukkit.Bukkit;
-import org.bukkit.Server;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.messaging.PluginMessageRecipient;
-
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -47,11 +35,23 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import static java.util.stream.Collectors.toSet;
 import java.util.stream.Stream;
 
+import org.bukkit.Bukkit;
+import org.bukkit.Server;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.messaging.PluginMessageRecipient;
+
+import com.github.games647.fastlogin.bukkit.listener.BungeeListener;
 import static com.github.games647.fastlogin.core.message.ChangePremiumMessage.CHANGE_CHANNEL;
+import com.github.games647.fastlogin.core.message.ChannelMessage;
+import static com.github.games647.fastlogin.core.message.DeletePremiumMessage.DELETE_CHANNEL;
+import com.github.games647.fastlogin.core.message.LoginActionMessage;
+import com.github.games647.fastlogin.core.message.NamespaceKey;
 import static com.github.games647.fastlogin.core.message.SuccessMessage.SUCCESS_CHANNEL;
-import static java.util.stream.Collectors.toSet;
+import com.google.common.io.ByteArrayDataOutput;
+import com.google.common.io.ByteStreams;
 
 public class BungeeManager {
 
@@ -135,13 +135,6 @@ public class BungeeManager {
 
     private boolean detectProxy() {
         try {
-            ServerConfiguration.class.getDeclaredMethod("isProxyEnabled");
-            return Bukkit.getServerConfig().isProxyEnabled();
-        } catch (NoClassDefFoundError | NoSuchMethodException noSuchClassMethodEx) {
-            // Ignore continue below
-        }
-
-        try {
             if (isProxySupported("org.spigotmc.SpigotConfig", "bungee")) {
                 return true;
             }
@@ -174,8 +167,10 @@ public class BungeeManager {
         // outgoing
         String successChannel = new NamespaceKey(groupId, SUCCESS_CHANNEL).getCombinedName();
         String changeChannel = new NamespaceKey(groupId, CHANGE_CHANNEL).getCombinedName();
+        String deleteChannel = new NamespaceKey(groupId, DELETE_CHANNEL).getCombinedName();
         server.getMessenger().registerOutgoingPluginChannel(plugin, successChannel);
         server.getMessenger().registerOutgoingPluginChannel(plugin, changeChannel);
+        server.getMessenger().registerOutgoingPluginChannel(plugin, deleteChannel);
     }
 
     private Set<UUID> loadBungeeCordIds() {

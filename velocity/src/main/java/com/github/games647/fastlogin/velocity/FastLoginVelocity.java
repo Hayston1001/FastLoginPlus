@@ -25,11 +25,26 @@
  */
 package com.github.games647.fastlogin.velocity;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.Collections;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentMap;
+
+import org.geysermc.floodgate.api.FloodgateApi;
+import org.geysermc.geyser.GeyserImpl;
+import org.slf4j.Logger;
+
 import com.github.games647.fastlogin.core.hooks.bedrock.BedrockService;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.hooks.bedrock.GeyserService;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.ChannelMessage;
+import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
 import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
@@ -46,36 +61,24 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
+import com.velocitypowered.api.proxy.InboundConnection;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.messages.ChannelMessageSink;
 import com.velocitypowered.api.proxy.messages.ChannelRegistrar;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import org.geysermc.floodgate.api.FloodgateApi;
-import org.geysermc.geyser.GeyserImpl;
-import org.slf4j.Logger;
 
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentMap;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 //TODO: Support for floodgate
-@Plugin(id = PomData.NAME, name = PomData.DISPLAY_NAME, description = PomData.DESCRIPTION, url = PomData.URL,
-        version = PomData.VERSION, authors = {"games647", "https://github.com/games647/FastLogin/graphs/contributors"})
+@Plugin(id = "fastloginplus", name = "FastLoginPlus", description = "Login plugin for premium players", url = "",
+        version = "1.2.1", authors = {"Hayston", "games647"})
 public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
 
     private final ProxyServer server;
     private final Path dataDirectory;
     private final Logger logger;
-    private final ConcurrentMap<InetSocketAddress, VelocityLoginSession> session = new MapMaker().weakKeys().makeMap();
+    private final ConcurrentMap<InboundConnection, VelocityLoginSession> session = new MapMaker().weakKeys().makeMap();
     private static final String PROXY_ID_FILE = "proxyId.txt";
 
     private FastLoginCore<Player, CommandSource, FastLoginVelocity> core;
@@ -115,6 +118,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         ChannelRegistrar channelRegistry = server.getChannelRegistrar();
         channelRegistry.register(MinecraftChannelIdentifier.create(getName(), ChangePremiumMessage.CHANGE_CHANNEL));
         channelRegistry.register(MinecraftChannelIdentifier.create(getName(), SuccessMessage.SUCCESS_CHANNEL));
+        channelRegistry.register(MinecraftChannelIdentifier.create(getName(), DeletePremiumMessage.DELETE_CHANNEL));
     }
 
     @Subscribe
@@ -126,7 +130,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
 
     @Override
     public String getName() {
-        return PomData.NAME;
+        return "fastloginplus";
     }
 
     @Override
@@ -175,7 +179,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         return core;
     }
 
-    public ConcurrentMap<InetSocketAddress, VelocityLoginSession> getSession() {
+    public ConcurrentMap<InboundConnection, VelocityLoginSession> getSession() {
         return session;
     }
 

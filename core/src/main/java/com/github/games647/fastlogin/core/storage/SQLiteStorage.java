@@ -64,18 +64,29 @@ public class SQLiteStorage extends SQLStorage {
 
         config.addDataSourceProperty("url", JDBC.PREFIX + path);
 
+        SQLiteConfig sqLiteConfig = new SQLiteConfig();
+
+        // Use WAL (Write-Ahead Logging) mode to allow concurrent reads while a write is in progress.
+        // This avoids blocking the entire database on single-writer operations, which is critical
+        // under the proxy architecture where multiple async tasks may read/write from different threads.
+        sqLiteConfig.setJournalMode(SQLiteConfig.JournalMode.WAL);
+
+        // Set a busy timeout so that SQLite waits up to 5 seconds for the lock instead of
+        // immediately throwing SQLITE_BUSY. This prevents "database is locked" errors when
+        // two operations arrive back-to-back and one is still committing.
+        sqLiteConfig.setBusyTimeout(5000);
+
         // a try to fix https://www.spigotmc.org/threads/fastlogin.101192/page-26#post-1874647
         // format strings retrieved by the timestamp column to match them from MySQL
         // vs the default: yyyy-MM-dd HH:mm:ss.SSS
         try {
             SQLiteConfig.class.getDeclaredMethod("setDateStringFormat", String.class);
-
-            SQLiteConfig sqLiteConfig = new SQLiteConfig();
             sqLiteConfig.setDateStringFormat("yyyy-MM-dd HH:mm:ss");
-            config.addDataSourceProperty("config", sqLiteConfig);
         } catch (NoSuchMethodException noSuchMethodException) {
             // Versions below this driver version do set the default timestamp value, so this change is not necessary
         }
+
+        config.addDataSourceProperty("config", sqLiteConfig);
 
         return config;
     }

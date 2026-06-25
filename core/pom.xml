@@ -31,12 +31,12 @@
 
     <parent>
         <groupId>com.github.games647</groupId>
-        <artifactId>fastlogin</artifactId>
-        <version>1.12-SNAPSHOT</version>
+        <artifactId>fastloginplus</artifactId>
+        <version>0.0.1</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>fastlogin.core</artifactId>
+    <artifactId>fastloginplus.core</artifactId>
     <packaging>jar</packaging>
 
     <properties>
@@ -44,7 +44,7 @@
         <maven.compiler.release>8</maven.compiler.release>
     </properties>
 
-    <name>FastLoginCore</name>
+    <name>FastLoginPlusCore</name>
 
     <repositories>
         <repository>
@@ -140,7 +140,7 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-jdk14</artifactId>
-            <version>2.0.17</version>
+            <version>2.0.13</version>
         </dependency>
 
         <!-- snakeyaml is present in Bungee, Spigot, so we could use this independent implementation -->
@@ -154,7 +154,7 @@
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
-            <version>2.4</version>
+            <version>2.2</version>
         </dependency>
 
         <!--Floodgate for Xbox Live Authentication-->
@@ -203,7 +203,7 @@
         <dependency>
             <groupId>com.github.games647</groupId>
             <artifactId>craftapi</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>0.8.1</version>
         </dependency>
 
         <!-- Database driver included in Spigot -->

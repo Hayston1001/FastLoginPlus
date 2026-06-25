@@ -1,161 +1,124 @@
-# FastLogin
+# FastLoginPlus
 
-![A shield-shaped emblem with a bold lightning bolt on the left, resembling Minecraft blocks. To the right, "FastLogin" is written in teal, with the tagline: "Automatically detect and login premium Minecraft players"](https://github.com/user-attachments/assets/0788ef69-029b-465e-83a2-b8e7bccc6295 "FastLogin project logo.avif")
+[中文](README_zh.md)
 
-Checks if a Minecraft player has a paid account (premium). If so, they can skip offline authentication (auth plugins).
-So they don't need to enter passwords. This is also called auto login (auto-login).
+> **Actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin)** with updates, bug fixes, and feature enhancements.
+
+FastLoginPlus automatically detects whether a Minecraft player owns a paid (premium) account. If so, they can skip offline-mode authentication — no password needed.
 
 ## Features
 
-* Detect paid accounts from others
-* Automatically login paid accounts (premium)
-* Support various of auth plugins
-* Premium UUID support
-* Forward skins
-* Detect username changed and will update the existing database record
-* BungeeCord/Velocity support
-* Auto register new premium players
-* No client modifications needed
-* Good performance by using async operations
-* Locale messages
-* Support for Bedrock players proxies through FloodGate
+* Auto-detect and auto-login premium (paid) accounts
+* Auto-register new premium players
+* Premium UUID support & skin forwarding
+* Username change detection with automatic DB update
+* Multi-platform: Bukkit (Spigot/Paper) / BungeeCord / Velocity
+* Bedrock player support via Floodgate / Geyser
+* Built-in English & Chinese language files, with custom language support
+* PlaceholderAPI integration
+* Async operations for high performance
+* No client mods required
 
-## Issues
+## What's New in FastLoginPlus
 
-Please use issues for bug reports, suggestions, questions and more. Please check for existing issues. Existing issues
-can be voted up by adding up vote to the original post. Closing issues means that they are marked as resolved. Comments
-are still allowed and it could be re-opened.
+Compared to the original FastLogin, this fork includes:
 
-## Development builds
-
-Development builds contain the latest changes from the Source-Code. They are bleeding edge and could introduce new bugs,
-but also include features, enhancements and bug fixes that are not yet in a released version. If you click on the left
-side on `Changes`, you can see iterative change sets leading to a specific build.
-
-You can download them from here: [CodeMC(Jenkins)](https://ci.codemc.org/job/Games647/job/FastLogin/)
-
-***
-
-## Technical Authentication
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as Client
-    participant S as Server
-    participant M as Mojang
-
-    C->>S: LOGIN_START (name)
-    Note over S: DB: check if username is saved as premium
-    S->>C: ENCRYPTION_REQUEST
-    Note right of C: Offline clients terminates connection here
-    Note right of C: In Offlinemode: LOGIN_SUCCESS is sent directly
-
-    rect rgb(240, 240, 240)
-        C->>M: POST /session/minecraft/join
-        C->>S: ENCRYPTION_RESPONSE
-        Note right of C: Client starts encrypting
-    end
-
-    Note over S: Decrypt and verify token
-    S->>M: GET /hasJoined (async)
-    M->>S: {uuid, name, skin}
-
-    Note over S: Server encrypts traffic
-    Note over S: Inject skin and premium UUID
-    S->>S: Re-inject LOGIN_START(name)
-
-    S->>C: LOGIN_SUCCESS
-```
-
-## Commands
-
-    /premium [player] Label the invoker or the argument as paid account
-    /cracked [player] Label the invoker or the argument as cracked account
-
-## Permissions
-
-    fastlogin.bukkit.command.premium
-    fastlogin.bukkit.command.cracked
-
-    fastlogin.command.premium.other
-    fastlogin.command.cracked.other
-
-## Placeholder
-
-This plugin supports `PlaceholderAPI` on `Spigot`. It exports the following variable
-`%fastlogin_status%`. In BungeeCord environments, the status of a player will be delivered with a delay after the player
-already successful joined the server. This takes about a couple of milliseconds. In this case the value
-will be `Unknown`.
-
-Possible values: `Premium`, `Cracked`, `Unknown`
+* **SQLite WAL mode** — Write-Ahead Logging for better concurrent read/write performance under proxy architecture
+* **SQLite busy timeout** — Configurable 5s wait instead of instant `SQLITE_BUSY` errors
+* **Thread-safe SQLite operations** — `ReentrantLock` guarding all profile load/save operations
+* **switchMode bug fix** — New premium players are no longer incorrectly kicked when `switchMode` is enabled ([#1359](https://github.com/TuxCoding/FastLogin/issues/1359))
+* **fldelete enhanced** — Localized messages, premium player protection, BungeeCord support
+* **Multi-language system** — Built-in `en`/`zh`, config-driven, auto-fills missing keys on startup
+* **Bilingual config** — `config.yml` comments in both English and Chinese
 
 ## Requirements
 
-* Java: 21+ recommended for improved multi-threading code by FastLogin
-  * Spigot: 8+
-  * BungeeCord and Velocity: 17+
-* Server software in offlinemode:
-  * Spigot (or a fork e.g. Paper) 1.8.8+
-    * Protocol plugin:
-      * [ProtocolLib 5.3+ with development build above 720](https://www.spigotmc.org/resources/protocollib.1997/) or
-      * [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/)
-  * Latest BungeeCord (or a fork e.g. Waterfall) or Velocity proxy
-* An auth plugin.
+* **Java**: 8+ (Spigot), 17+ (BungeeCord / Velocity), 21+ recommended
+* **Server** in offline mode (`online-mode=false`)
+* **Spigot** (or Paper) 1.8.8+ with [ProtocolLib](https://www.spigotmc.org/resources/protocollib.1997/) (5.3+) or [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/)
+* **BungeeCord** (or Waterfall) / **Velocity** proxy
+* An auth plugin (see below)
 
-### Supported auth plugins
+### Supported Auth Plugins
 
-#### Spigot/Paper
-
-* [AdvancedLogin (Paid)](https://www.spigotmc.org/resources/advancedlogin.10510/)
-* [AuthMe (5.X)](https://dev.bukkit.org/bukkit-plugins/authme-reloaded/)
+#### Spigot / Paper
+* [AuthMe](https://dev.bukkit.org/bukkit-plugins/authme-reloaded/) (5.x)
 * [CrazyLogin](https://dev.bukkit.org/bukkit-plugins/crazylogin/)
 * [LoginSecurity](https://dev.bukkit.org/bukkit-plugins/loginsecurity/)
 * [LogIt](https://github.com/games647/LogIt)
 * [UltraAuth](https://dev.bukkit.org/bukkit-plugins/ultraauth-aa/)
-* [UserLogin](https://www.spigotmc.org/resources/userlogin.80669/)
 * [xAuth](https://dev.bukkit.org/bukkit-plugins/xauth/)
+* [Passky](https://github.com/Passky)
 
-#### BungeeCord/Waterfall
-
+#### BungeeCord / Waterfall
 * [BungeeAuth](https://www.spigotmc.org/resources/bungeeauth.493/)
 
-## Network requests
+## Installation
 
-This plugin performs network requests to:
+### Spigot / Paper
 
-* https://api.mojang.com - retrieving uuid data to decide if we should activate premium login
-* https://sessionserver.mojang.com - verify if the player is the owner of that account
+1. Install ProtocolLib or ProtocolSupport
+2. Download `FastLoginPlusBukkit.jar` and place it in `plugins/`
+3. Set `online-mode=false` in `server.properties`
 
-***
+### BungeeCord / Waterfall or Velocity
 
-## How to install
+Install the plugin on **both** the proxy and the backend server:
 
-### Spigot/Paper
-
-1. Download and install ProtocolLib/ProtocolSupport
-2. Download and install `FastLoginBukkit`
-3. Set your server in offline mode by setting the value `onlinemode` in your server.properties to `false`
-
-### BungeeCord/Waterfall or Velocity
-
-Install the plugin on both platforms, that is proxy (BungeeCord or Velocity) and backend server (Spigot).
-
-1. Activate proxy support in the server configuration
-   * This is often found in `spigot.yml` or `paper.yml`
+1. Enable proxy support in your backend server config (`spigot.yml` or `paper.yml`)
 2. Restart the backend server
-3. Now there is `allowed-proxies.txt` file in the FastLogin folder of the restarted server
-    * BungeeCord: Put your `stats`-id from the BungeeCord config into this file
-    * Velocity: On plugin startup the plugin generates a `proxyId.txt` inside the plugins folder of the proxy
-4. Activate ip forwarding in your proxy config
-5. Check your database settings in the config of FastLogin on your proxy
-    * The proxies only ship with a limited set of drivers where Spigot supports more. Therefore, these are supported:
-    * BungeeCord: `mysql` for MySQL/MariaDB
-    * Velocity: `mariadb` for MySQL/MariaDB
-    * Note the embedded file storage SQLite is not available
-    * MySQL/MariaDB requires an external database server running. Check your server provider if there is one available
-   or install one.
-6. Set proxy and Spigot in offline mode by setting the value `onlinemode` in your `config.yml` to false
-7. You should *always* configure the firewall for your Spigot server so that it's only accessible through your proxy
-   * This is also the case without this plugin
-   * https://www.spigotmc.org/wiki/bungeecord-installation/#post-installation
+3. Configure `allowed-proxies.txt` in the FastLoginPlus plugin folder:
+   - **BungeeCord**: Add your `stats`-id from BungeeCord config
+   - **Velocity**: The plugin auto-generates `proxyId.txt`
+4. Enable IP forwarding in your proxy config
+5. Configure database settings in `config.yml` (BungeeCord: `mysql`; Velocity: `mariadb`)
+6. Set `online-mode=false` on both proxy and backend
+7. **Always** firewall your backend so it's only accessible through the proxy
+
+## Commands
+
+| Command | Description | Permission |
+|---------|-------------|------------|
+| `/premium [player]` | Mark yourself (or another) as premium | `fastloginplus.bukkit.command.premium` |
+| `/cracked [player]` | Mark yourself (or another) as cracked | `fastloginplus.bukkit.command.cracked` |
+| `/fldelete <player>` | Delete a player record from the database | `fastloginplus.bukkit.command.delete` |
+
+## Permissions
+
+| Permission | Description | Default |
+|-----------|-------------|---------|
+| `fastloginplus.bukkit.command.premium` | Mark self as premium | true |
+| `fastloginplus.bukkit.command.premium.other` | Mark others as premium | op |
+| `fastloginplus.bukkit.command.cracked` | Mark self as cracked | true |
+| `fastloginplus.bukkit.command.cracked.other` | Mark others as cracked | op |
+| `fastloginplus.bukkit.command.delete` | Delete player records | op |
+
+## PlaceholderAPI
+
+On Spigot, this plugin exports `%fastloginplus_status%`. Possible values: `Premium`, `Cracked`, `Unknown`.
+
+> In BungeeCord environments, the status may briefly be `Unknown` for a few milliseconds after join.
+
+## Language Support
+
+Set `language` in `config.yml`:
+
+```yaml
+language: en   # English
+language: zh   # 中文
+```
+
+Custom languages are supported — set any value (e.g. `language: ja`), and the plugin will load `messages_ja.yml`. If the file doesn't exist, it falls back to English. Missing keys are auto-filled on every startup.
+
+## Network Requests
+
+This plugin contacts:
+* `https://api.mojang.com` — UUID lookup for premium detection
+* `https://sessionserver.mojang.com` — Account ownership verification
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+Originally created by [games647](https://github.com/TuxCoding/FastLogin).
+Fork maintained by [Hayston](https://github.com/Hayston1001).

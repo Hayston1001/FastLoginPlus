@@ -1,12 +1,12 @@
 # project data for BungeeCord
 # This file will be prioritised over plugin.yml which can be also used for Bungee
 # This make it easy to combine BungeeCord and Bukkit support in one plugin
-name: ${project.parent.name}
+name: FastLoginPlus
 # ${-} will be automatically replaced by Maven
-main: ${project.groupId}.${project.artifactId}.${project.name}
+main: com.github.games647.fastlogin.bungee.FastLoginBungee
 
-version: ${project.version}-${git.commit.id.abbrev}
-author: games647, https://github.com/games647/FastLogin/graphs/contributors
+version: 0.0.1
+author: Hayston, games647
 
 softDepends:
     # BungeeCord auth plugins
@@ -16,4 +16,4 @@ softDepends:
     - floodgate
 
 description: |
-    ${project.description}
+    Login plugin for premium players

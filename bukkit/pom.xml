@@ -35,16 +35,16 @@
 
     <parent>
         <groupId>com.github.games647</groupId>
-        <artifactId>fastlogin</artifactId>
-        <version>1.12-SNAPSHOT</version>
+        <artifactId>fastloginplus</artifactId>
+        <version>0.0.1</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <!--This has to be in lowercase because it's used by plugin.yml-->
-    <artifactId>fastlogin.bukkit</artifactId>
+    <artifactId>fastloginplus.bukkit</artifactId>
     <packaging>jar</packaging>
 
-    <name>FastLoginBukkit</name>
+    <name>FastLoginPlusBukkit</name>
 
     <build>
         <plugins>
@@ -160,7 +160,7 @@
         <!--Common plugin component-->
         <dependency>
             <groupId>com.github.games647</groupId>
-            <artifactId>fastlogin.core</artifactId>
+            <artifactId>fastloginplus.core</artifactId>
             <version>${project.version}</version>
         </dependency>
 
@@ -168,7 +168,7 @@
         <dependency>
             <groupId>io.papermc.paper</groupId>
             <artifactId>paper-api</artifactId>
-            <version>1.21.6-R0.1-SNAPSHOT</version>
+            <version>1.20.6-R0.1-SNAPSHOT</version>
             <scope>provided</scope>
             <!-- Use our own newer api version -->
             <exclusions>
@@ -348,22 +348,6 @@
             </exclusions>
         </dependency>
 
-        <dependency>
-            <groupId>com.github.zigazajc007</groupId>
-            <artifactId>Passky</artifactId>
-            <version>v3.0.0</version>
-            <scope>provided</scope>
-            <optional>true</optional>
-
-            <!-- Exclude dependencies to prevent potential version conflicts-->
-            <exclusions>
-                <exclusion>
-                    <groupId>*</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
         <!--No maven repository :(-->
         <dependency>
             <groupId>de.st_ddt.crazy</groupId>
@@ -395,7 +379,7 @@
         <dependency>
             <groupId>org.bouncycastle</groupId>
             <artifactId>bcprov-jdk18on</artifactId>
-            <version>1.80</version>
+            <version>1.78.1</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

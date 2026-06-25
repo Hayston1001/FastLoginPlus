@@ -25,70 +25,90 @@
  */
 package com.github.games647.fastlogin.bukkit.command;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.ConsoleCommandSender;
-import org.bukkit.command.TabExecutor;
-import org.bukkit.entity.Player;
+import org.jetbrains.annotations.NotNull;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
+import com.github.games647.fastlogin.bukkit.event.BukkitFastLoginPremiumToggleEvent;
+import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
+import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
+import com.github.games647.fastlogin.core.storage.StoredProfile;
 
-public class DeleteCommand implements TabExecutor {
-    private final FastLoginBukkit plugin;
+public class DeleteCommand implements CommandExecutor {
+
+    protected final FastLoginBukkit plugin;
 
     public DeleteCommand(FastLoginBukkit plugin) {
         this.plugin = plugin;
     }
 
-    /**
-     * Handles the command to delete profiles.
-     */
     @Override
-    public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-
-        if (!sender.hasPermission(command.getPermission())) {
-            plugin.getCore().sendLocaleMessage("no-permission", sender);
+    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
+                             String[] args) {
+        if (args.length == 0) {
+            plugin.getCore().sendLocaleMessage("delete-specify-player", sender);
             return true;
         }
 
+        String targetName = args[0];
+
         if (plugin.getBungeeManager().isEnabled()) {
-            sender.sendMessage("Error: Cannot delete profile entries when using BungeeCord!");
-            return false;
+            sendBungeeDeleteMessage(sender, targetName);
+            plugin.getCore().sendLocaleMessage("wait-on-proxy", sender);
+            return true;
         }
 
-        if (args.length < 1) {
-            sender.sendMessage("Error: Must supply username to delete!");
-            return false;
+        StoredProfile profile = plugin.getCore().getStorage().loadProfile(targetName);
+        if (profile == null) {
+            sender.sendMessage("Error occurred");
+            return true;
         }
 
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            int count = plugin.getCore().getStorage().deleteProfile(args[0]);
-            if (!(sender instanceof ConsoleCommandSender)) {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (count == 0) {
-                        sender.sendMessage("Error: No profile entries found!");
-                    } else {
-                        sender.sendMessage("Deleted " + count + " matching profile entries");
-                    }
-                });
+        if (!profile.isExistingPlayer()) {
+            plugin.getCore().sendLocaleMessage("delete-not-found", sender);
+            return true;
+        }
+
+        if (profile.isOnlinemodePreferred()) {
+            plugin.getCore().sendLocaleMessage("delete-premium-denied", sender);
+            return true;
+        }
+
+        plugin.getScheduler().runAsync(() -> {
+            boolean deleted = plugin.getCore().getStorage().deleteProfile(targetName);
+            if (deleted) {
+                plugin.getServer().getPluginManager().callEvent(
+                        new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
+                );
             }
+            plugin.getScheduler().getSyncExecutor().execute(() -> {
+                if (deleted) {
+                    plugin.getCore().sendLocaleMessage("delete-success", sender);
+                } else {
+                    plugin.getCore().sendLocaleMessage("delete-fail", sender);
+                }
+            });
         });
 
         return true;
     }
 
-    @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        List<String> list = new ArrayList<>();
-        for (Player p : Bukkit.getOnlinePlayers()) {
-            if (p.getName().toLowerCase().startsWith(args[0])) {
-                list.add(p.getName());
+    private void sendBungeeDeleteMessage(CommandSender sender, String targetName) {
+        DeletePremiumMessage message = new DeletePremiumMessage(targetName);
+        if (sender instanceof org.bukkit.plugin.messaging.PluginMessageRecipient) {
+            plugin.getBungeeManager().sendPluginMessage(
+                    (org.bukkit.plugin.messaging.PluginMessageRecipient) sender, message
+            );
+        } else {
+            java.util.Optional<? extends org.bukkit.entity.Player> optPlayer =
+                    plugin.getServer().getOnlinePlayers().stream().findFirst();
+            if (!optPlayer.isPresent()) {
+                plugin.getLog().info("No player online to send a plugin message to the proxy");
+                return;
             }
+            plugin.getBungeeManager().sendPluginMessage(optPlayer.get(), message);
         }
-        return null;
     }
 }

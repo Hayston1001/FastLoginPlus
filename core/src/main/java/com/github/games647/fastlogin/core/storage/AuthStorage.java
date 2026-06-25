@@ -32,9 +32,9 @@ public interface AuthStorage {
 
     StoredProfile loadProfile(UUID uuid);
 
-    int deleteProfile(String name);
-
     void save(StoredProfile playerProfile);
+
+    boolean deleteProfile(String name);
 
     void close();
 }

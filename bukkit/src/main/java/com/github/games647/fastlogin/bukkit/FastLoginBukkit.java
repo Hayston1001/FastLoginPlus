@@ -25,10 +25,29 @@
  */
 package com.github.games647.fastlogin.bukkit;
 
+import java.net.InetSocketAddress;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
+import org.bukkit.Bukkit;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.geysermc.floodgate.api.FloodgateApi;
+import org.geysermc.geyser.GeyserImpl;
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+
 import com.comphenix.protocol.ProtocolLibrary;
 import com.github.games647.fastlogin.bukkit.command.CrackedCommand;
-import com.github.games647.fastlogin.bukkit.command.PremiumCommand;
 import com.github.games647.fastlogin.bukkit.command.DeleteCommand;
+import com.github.games647.fastlogin.bukkit.command.PremiumCommand;
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
 import com.github.games647.fastlogin.bukkit.listener.PaperCacheListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.ProtocolLibListener;
@@ -43,24 +62,6 @@ import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.hooks.bedrock.GeyserService;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
-import org.bukkit.Bukkit;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.PluginManager;
-import org.bukkit.plugin.java.JavaPlugin;
-import org.geysermc.floodgate.api.FloodgateApi;
-import org.geysermc.geyser.GeyserImpl;
-import org.jetbrains.annotations.NotNull;
-import org.slf4j.Logger;
-
-import java.net.InetSocketAddress;
-import java.nio.file.Path;
-import java.time.Duration;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * This plugin checks if a player has a paid account and if so tries to skip offline mode authentication.

@@ -1,0 +1,65 @@
+# FastLoginPlus - 中文语言文件
+# 此文件自动生成，缺失的键值会在启动时自动补全。
+
+# ====== 通用 (BungeeCord & Bukkit) ======
+
+# Switch 模式：非白名单的离线玩家被踢出
+switch-kick-message: '&4本服务器仅允许正版（付费）账号加入'
+
+# Premium 激活
+add-premium: '&2已将你添加到正版玩家列表'
+add-premium-other: '&2已将该玩家添加到正版玩家列表'
+
+# 已经是 Premium
+already-exists: '&4你已经在正版玩家列表中'
+already-exists-other: '&4该玩家已在正版玩家列表中'
+
+# 移除 Premium
+remove-premium: '&2已将你从正版玩家列表中移除'
+not-premium: '&4你不在正版玩家列表中'
+not-premium-other: '&4该玩家不在正版玩家列表中'
+
+# 未知玩家
+player-unknown: '&4玩家不在数据库中'
+
+# 反机器人
+kick-antibot: '&4请稍等片刻！'
+
+# 删除命令
+delete-specify-player: '&4用法: /fldelete <玩家名>'
+delete-not-found: '&4数据库中未找到该玩家'
+delete-success: '&2已从数据库中删除该玩家记录'
+delete-fail: '&4删除玩家记录失败'
+delete-premium-denied: '&4不能删除正版玩家的记录'
+
+# ====== Bukkit/Spigot ======
+
+# 自动登录
+auto-login: '&2已自动登录'
+
+# 自动注册（密码自动生成）
+auto-register: '&2已尝试自动注册，密码为: &7%password&2，建议你尽快修改密码'
+
+# 权限
+no-permission: '&4权限不足'
+no-console: '&4你不是玩家，无法在控制台中为自己切换 Premium 状态'
+
+# 代理通信
+wait-on-proxy: '&6正在发送请求...（别忘了按照插件页面上的 BungeeCord 设置指南操作）'
+
+# 错误消息
+error-kick: '&4发生错误'
+invalid-verify-token: '&4无效的验证令牌，请确认你使用的服务器地址正确'
+invalid-session: '&4无效的会话'
+invalid-request: '&4无效的请求'
+
+# 服务器未就绪
+not-started: '&c服务器尚未完全启动，请稍后重试'
+
+# Premium 确认警告（二次确认）
+premium-warning: '&c&l警告: &6此命令&l仅&6应在你是该正版账号的拥有者时使用\n再次输入 &a/premium&6 以确认'
+
+# 客户端密钥验证
+invalid-public-key: '&c客户端公钥无效，请尝试重启游戏'
+
+# ====== Bungee/Waterfall 专用 ======

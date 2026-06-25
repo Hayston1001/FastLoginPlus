@@ -105,7 +105,8 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
 
             Configuration config = core.getConfig();
             Optional<Profile> premiumUUID = Optional.empty();
-            if (config.get("nameChangeCheck", false) || config.get("autoRegister", false)) {
+            if (config.get("nameChangeCheck", false) || config.get("autoRegister", false)
+                    || config.get("switchMode", false)) {
                 premiumUUID = core.getResolver().findProfile(username);
             }
 
@@ -143,6 +144,12 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
         core.getPlugin().getLog().info("GameProfile {} uses a premium username", username);
         if (core.getConfig().get("autoRegister", false) && (authHook == null || !authHook.isRegistered(username))) {
             requestPremiumLogin(source, profile, username, false);
+            return true;
+        }
+
+        if (core.getConfig().get("switchMode", false)) {
+            boolean registered = authHook != null && authHook.isRegistered(username);
+            requestPremiumLogin(source, profile, username, registered);
             return true;
         }
 

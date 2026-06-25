@@ -7,7 +7,7 @@
 nbproject/
 nb-configuration.xml
 
-# IntelliJ
+# IntelliJ IDEA
 *.iml
 *.ipr
 *.iws
@@ -23,27 +23,33 @@ pom.xml.versionsBackup
 # Gradle
 .gradle
 
-# Ignore Gradle GUI config
+# Gradle GUI config
 gradle-app.setting
 
-# Avoid ignoring Gradle wrapper jar file (.jar files are usually ignored)
-!gradle-wrapper.jar
-
-# various other potential build files
+# Build artifacts
 build/
 bin/
 dist/
 manifest.mf
 *.log
+*.jar
 
 # Vim
 .*.sw[a-p]
 
-# virtual machine crash logs, see https://www.java.com/en/download/help/error_hotspot.xml
+# JVM crash logs
 hs_err_pid*
 
-# Mac filesystem dust
+# macOS
 .DS_Store
 
-# Factorypath from Visual Studio Code
+# Windows
+Thumbs.db
+desktop.ini
+
+# VSCode Factorypath
 .factorypath
+
+# Local library jars (provided by user, not distributed)
+!bukkit/lib/*.jar
+!bungee/lib/*.jar

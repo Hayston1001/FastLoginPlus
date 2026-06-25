@@ -1,15 +1,15 @@
 # project data for Bukkit in order to register our plugin with all it's components
 # ${-} are variables from Maven (pom.xml) which will be replaced after the build
-name: ${project.parent.name}
-version: ${project.version}-${git.commit.id.abbrev}
-main: ${project.groupId}.${project.artifactId}.${project.name}
+name: FastLoginPlus
+version: 0.0.1
+main: com.github.games647.fastlogin.bukkit.FastLoginBukkit
 
 # meta data for plugin managers
-authors: [games647, 'https://github.com/games647/FastLogin/graphs/contributors']
+authors: [Hayston, games647]
 description: |
-    ${project.description}
-website: ${project.url}
-dev-url: ${project.url}
+    Login plugin for premium players
+website: ''
+dev-url: ''
 
 # This plugin doesn't have to be transformed for compatibility with Minecraft >= 1.13
 api-version: '1.13'
@@ -30,10 +30,9 @@ softdepend:
     - LogIt
     - UltraAuth
     - xAuth
-    - Passky
 
 commands:
-    ${project.parent.name}:
+    fastloginplus:
         description: 'Label the invoker as premium'
         aliases: [prem, premium, loginfast]
         usage: /<command> [player]
@@ -46,8 +45,9 @@ commands:
         permission: ${project.artifactId}.command.cracked
 
     fldelete:
-        description: 'Delete player profile data'
-        usage: /<command> [player]
+        description: 'Delete a player record from the FastLogin database'
+        aliases: [unwhitelist]
+        usage: /<command> <player>
         permission: ${project.artifactId}.command.delete
 
 permissions:
@@ -70,5 +70,5 @@ permissions:
             ${project.artifactId}.command.cracked: true
 
     ${project.artifactId}.command.delete:
-        description: 'Delete other players profile data'
+        description: 'Delete a player record from the FastLogin database'
         default: op

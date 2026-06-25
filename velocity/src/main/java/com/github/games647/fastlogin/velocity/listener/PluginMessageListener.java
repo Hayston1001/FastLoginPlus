@@ -25,8 +25,11 @@
  */
 package com.github.games647.fastlogin.velocity.listener;
 
+import java.util.Arrays;
+
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -41,9 +44,8 @@ import com.velocitypowered.api.event.connection.PluginMessageEvent;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ServerConnection;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
-import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
-import java.util.Arrays;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 public class PluginMessageListener {
 
@@ -51,6 +53,7 @@ public class PluginMessageListener {
 
     private final String successChannel;
     private final String changeChannel;
+    private final String deleteChannel;
 
     public PluginMessageListener(FastLoginVelocity plugin) {
         this.plugin = plugin;
@@ -58,6 +61,7 @@ public class PluginMessageListener {
         String prefix = plugin.getName();
         this.successChannel = MinecraftChannelIdentifier.create(prefix, SuccessMessage.SUCCESS_CHANNEL).getId();
         this.changeChannel = MinecraftChannelIdentifier.create(prefix, ChangePremiumMessage.CHANGE_CHANNEL).getId();
+        this.deleteChannel = MinecraftChannelIdentifier.create(prefix, DeletePremiumMessage.DELETE_CHANNEL).getId();
     }
 
     @Subscribe
@@ -112,6 +116,32 @@ public class PluginMessageListener {
                 Runnable task = new AsyncToggleMessage(core, sender, playerName, false, isSourceInvoker);
                 plugin.getScheduler().runAsync(task);
             }
+        } else if (deleteChannel.equals(channel)) {
+            DeletePremiumMessage deleteMessage = new DeletePremiumMessage();
+            deleteMessage.readFrom(dataInput);
+
+            String playerName = deleteMessage.getPlayerName();
+            plugin.getScheduler().runAsync(() -> {
+                StoredProfile profile = core.getStorage().loadProfile(playerName);
+                if (profile == null || !profile.isExistingPlayer()) {
+                    String message = core.getMessage("delete-not-found");
+                    sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+                    return;
+                }
+                if (profile.isOnlinemodePreferred()) {
+                    String message = core.getMessage("delete-premium-denied");
+                    sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+                    return;
+                }
+                boolean deleted = core.getStorage().deleteProfile(playerName);
+                if (deleted) {
+                    String message = core.getMessage("delete-success");
+                    sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+                } else {
+                    String message = core.getMessage("delete-fail");
+                    sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+                }
+            });
         }
     }
 
@@ -127,7 +157,7 @@ public class PluginMessageListener {
         if (shouldPersist) {
             //bukkit module successfully received and force logged in the user
             //update only on success to prevent corrupt data
-            VelocityLoginSession loginSession = plugin.getSession().get(forPlayer.getRemoteAddress());
+            VelocityLoginSession loginSession = plugin.getSession().get(forPlayer);
             StoredProfile playerProfile = loginSession.getProfile();
             loginSession.setRegistered(true);
             if (!loginSession.isAlreadySaved()) {

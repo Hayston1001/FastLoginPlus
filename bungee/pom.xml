@@ -31,13 +31,13 @@
 
     <parent>
         <groupId>com.github.games647</groupId>
-        <artifactId>fastlogin</artifactId>
-        <version>1.12-SNAPSHOT</version>
+        <artifactId>fastloginplus</artifactId>
+        <version>0.0.1</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <!--This has to be in lowercase because it's used by plugin.yml-->
-    <artifactId>fastlogin.bungee</artifactId>
+    <artifactId>fastloginplus.bungee</artifactId>
     <packaging>jar</packaging>
 
     <properties>
@@ -45,7 +45,7 @@
     </properties>
 
     <!--Represents the main plugin-->
-    <name>FastLoginBungee</name>
+    <name>FastLoginPlusBungee</name>
 
     <build>
         <plugins>
@@ -115,7 +115,7 @@
         <!--Common plugin component-->
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>fastlogin.core</artifactId>
+            <artifactId>fastloginplus.core</artifactId>
             <version>${project.version}</version>
             <!--Those classes are already present in BungeeCord version-->
             <exclusions>

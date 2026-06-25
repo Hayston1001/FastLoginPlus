@@ -23,36 +23,47 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.github.games647.fastlogin.core.scheduler;
+package com.github.games647.fastlogin.core.message;
 
-import org.slf4j.Logger;
+import com.google.common.io.ByteArrayDataInput;
+import com.google.common.io.ByteArrayDataOutput;
 
-import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicInteger;
+public class DeletePremiumMessage implements ChannelMessage {
 
-public abstract class AbstractAsyncScheduler {
+    public static final String DELETE_CHANNEL = "del-st";
 
-    protected final Logger logger;
-    protected final Executor processingPool;
-    protected final AtomicInteger currentlyRunning = new AtomicInteger();
+    private String playerName;
 
-    public AbstractAsyncScheduler(Logger logger, Executor processingPool) {
-        this.logger = logger;
-        this.processingPool = processingPool;
+    public DeletePremiumMessage(String playerName) {
+        this.playerName = playerName;
     }
 
-    public abstract CompletableFuture<Void> runAsync(Runnable task);
+    public DeletePremiumMessage() {
+    }
 
-    public abstract CompletableFuture<Void> runAsyncDelayed(Runnable task, Duration delay);
+    public String getPlayerName() {
+        return playerName;
+    }
 
-    protected void process(Runnable task) {
-        currentlyRunning.incrementAndGet();
-        try {
-            task.run();
-        } finally {
-            currentlyRunning.getAndDecrement();
-        }
+    @Override
+    public String getChannelName() {
+        return DELETE_CHANNEL;
+    }
+
+    @Override
+    public void readFrom(ByteArrayDataInput input) {
+        playerName = input.readUTF();
+    }
+
+    @Override
+    public void writeTo(ByteArrayDataOutput output) {
+        output.writeUTF(playerName);
+    }
+
+    @Override
+    public String toString() {
+        return this.getClass().getSimpleName() + '{'
+            + "playerName='" + playerName + '\''
+            + '}';
     }
 }

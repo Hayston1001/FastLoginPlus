@@ -1,0 +1,65 @@
+# FastLoginPlus - English Language File
+# This file is auto-generated. Missing keys will be filled automatically on startup.
+
+# ====== Shared (BungeeCord & Bukkit) ======
+
+# Switch mode: kicked when a cracked player tries to join
+switch-kick-message: '&4Only paid Minecraft accounts are allowed to join this server'
+
+# Premium activation
+add-premium: '&2Added to the list of premium players'
+add-premium-other: '&2Player has been added to the premium list'
+
+# Already premium
+already-exists: '&4You are already on the premium list'
+already-exists-other: '&4Player is already on the premium list'
+
+# Premium removal
+remove-premium: '&2Removed from the list of premium players'
+not-premium: '&4You are not in the premium list'
+not-premium-other: '&4Player is not in the premium list'
+
+# Unknown player
+player-unknown: '&4Player not in the database'
+
+# Anti-bot
+kick-antibot: '&4Please wait a moment!'
+
+# Delete command
+delete-specify-player: '&4Usage: /fldelete <player>'
+delete-not-found: '&4Player not found in the database'
+delete-success: '&2Player record has been deleted from the database'
+delete-fail: '&4Failed to delete player record'
+delete-premium-denied: '&4Cannot delete a premium player record'
+
+# ====== Bukkit/Spigot ======
+
+# Auto login
+auto-login: '&2Auto logged in'
+
+# Auto register (password is auto-generated)
+auto-register: '&2Tried auto registering with password: &7%password&2. You may want change it?'
+
+# Permissions
+no-permission: '&4Not enough permissions'
+no-console: '&4You are not a player. You cannot toggle the premium state for YOURSELF as a console'
+
+# Proxy communication
+wait-on-proxy: '&6Sending request... (Do not forget to follow the BungeeCord setup guide referenced on the plugin page)'
+
+# Error messages
+error-kick: '&4Error occurred'
+invalid-verify-token: '&4Invalid nonce token. Please verify you are using the correct server address'
+invalid-session: '&4Invalid session'
+invalid-request: '&4Invalid request'
+
+# Server not ready
+not-started: '&cServer is not fully started yet. Please retry'
+
+# Premium warning (double-confirm)
+premium-warning: '&c&lWARNING: &6This command should&l only&6 be invoked if you are the owner of this paid Minecraft account\nType &a/premium&6 again to confirm'
+
+# Client key verification
+invalid-public-key: '&cInvalid client public key. Please try to restart your game.'
+
+# ====== Bungee/Waterfall only ======
