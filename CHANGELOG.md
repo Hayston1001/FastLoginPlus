@@ -6,13 +6,15 @@ First independent release of FastLoginPlus, forked from [FastLogin](https://gith
 
 FastLoginPlus 首个独立版本，基于 [FastLogin](https://github.com/TuxCoding/FastLogin) fork 并增强。
 
-### Brand Independence / 品牌独立
+### Project Renaming / 项目更名
 
 - Renamed to **FastLoginPlus**, Maven artifact `fastlogin` → `fastloginplus`
 - Independent versioning starting from v0.0.1
+- Java package names (`com.github.games647.fastlogin`) unchanged for upstream compatibility
 
 - 项目更名为 **FastLoginPlus**，Maven 坐标从 `fastlogin` 改为 `fastloginplus`
 - 独立版本号体系，从 v0.0.1 起步
+- Java 包名（`com.github.games647.fastlogin`）保留不变，便于合并上游更新
 
 ### Bug Fixes / Bug 修复
 
