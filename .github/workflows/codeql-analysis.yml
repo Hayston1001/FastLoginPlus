@@ -1,50 +1,35 @@
-# GitHub automatic code security scanning using CodeQL
-
-# Human-readable name in the actions tab
-name: "CodeQL"
+name: CodeQL
 
 on:
   workflow_run:
-    workflows: ["Maven Build"]
+    workflows: ["Build"]
     branches: [main]
-    types:
-      - completed
+    types: [completed]
 
 jobs:
-  # job i
   analyze:
-
-    # Display name
     name: Analyze
-
-    # Environment
     runs-on: ubuntu-latest
-
-    timeout-minutes: ${{ (matrix.language == 'swift' && 120) || 360 }}
-
+    timeout-minutes: 360
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     permissions:
-      # Only allow write for security, then all others default to read only
       security-events: write
 
     strategy:
       fail-fast: true
       matrix:
-        # Languages to scan
-        language: [ 'java' ]
+        language: ['java']
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
 
-      # Setup Java
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
@@ -52,11 +37,8 @@ jobs:
           java-version-file: '.java-version'
           cache: 'maven'
 
-      # Manually start the autobuild process, because autobuild always selects Java 8 as build toolchain, but
-      # we are doing cross-crompiling from a newer Java version
       - name: Build with Maven
-        # Extracted from autobuild
-        run: mvn package -f "pom.xml" --batch-mode -V -e -Dfindbugs.skip -Dcheckstyle.skip -Dpmd.skip=true -Dspotbugs.skip -Denforcer.skip -Dmaven.javadoc.skip -DskipTests -Dmaven.test.skip.exec -Dlicense.skip=true -Drat.skip=true -Dspotless.check.skip=true -t /home/runner/.m2/toolchains.xml
+        run: mvn package --batch-mode -DskipTests -Dcheckstyle.skip=true -Dlicense.skip=true
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
