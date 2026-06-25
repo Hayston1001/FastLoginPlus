@@ -32,11 +32,13 @@ jobs:
           echo "# ChangeLog" > /tmp/release-notes.md
           echo "" >> /tmp/release-notes.md
           sed -n "/^## ${TAG}/,/^## [v]/p" CHANGELOG.md | sed '$ d' >> /tmp/release-notes.md
-          # If extraction failed (empty), fallback to full changelog
+          # If extraction failed (empty), fallback to a simple message
           if [ $(wc -l < /tmp/release-notes.md) -le 2 ]; then
             echo "# ChangeLog" > /tmp/release-notes.md
             echo "" >> /tmp/release-notes.md
-            cat CHANGELOG.md >> /tmp/release-notes.md
+            echo "Release ${TAG}" >> /tmp/release-notes.md
+            echo "" >> /tmp/release-notes.md
+            echo "For detailed changes, see commits." >> /tmp/release-notes.md
           fi
 
       - name: Create GitHub Release
