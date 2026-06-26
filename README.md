@@ -2,33 +2,27 @@
 
 [中文](README_zh.md)
 
-> **Actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin)** with bug fixes, performance improvements, and new features.
+> **Actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin)** — auto-detect and login premium Minecraft accounts on offline-mode servers.
 
-Auto-detect premium (paid) Minecraft accounts on offline-mode servers — skip authentication, no password needed.
+For base features, platform support, and technical details, see [FastLogin's README](https://github.com/TuxCoding/FastLogin).
 
-## Features
+## What's Different
 
-* Auto-detect, auto-login, and auto-register premium accounts
-* Premium UUID & skin forwarding, username change detection
-* **Offline whitelist** — block unknown cracked players, allow premium via Mojang API
-* Multi-platform: Bukkit (Spigot/Paper) / BungeeCord / Velocity
-* Bedrock support via Floodgate / Geyser
-* SQLite WAL mode with thread-safe operations (ReentrantLock + busy timeout)
-* Built-in English & Chinese, custom language support, bilingual config
-* PlaceholderAPI integration, fully async, no client mods required
-
-## Requirements
-
-* **Java** 8+ (Spigot), 17+ (BungeeCord / Velocity), 21+ recommended
-* Server in **offline mode** (`online-mode=false`)
-* [ProtocolLib](https://www.spigotmc.org/resources/protocollib.1997/) (5.3+) or [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/)
-* An auth plugin: [AuthMe](https://dev.bukkit.org/bukkit-plugins/authme-reloaded/) · [LoginSecurity](https://dev.bukkit.org/bukkit-plugins/loginsecurity/) · [CrazyLogin](https://dev.bukkit.org/bukkit-plugins/crazylogin/) · [xAuth](https://dev.bukkit.org/bukkit-plugins/xauth/) · [Passky](https://github.com/Passky) · [BungeeAuth](https://www.spigotmc.org/resources/bungeeauth.493/)
+- **Offline Whitelist** — block unknown cracked players, allow premium via Mojang API. Replaces the upstream `switchMode` which had issues with new premium players being kicked.
+- **Multi-language** — built-in English and Chinese, custom language files supported, bilingual config comments.
+- **SQLite concurrency** — WAL mode, busy timeout, thread-safe operations with `ReentrantLock`.
+- **Session retry** — Mojang session verification retries on network errors instead of failing immediately.
+- **SkinsRestorer compatibility** — no longer overrides skins set via SkinsRestorer.
+- **`fldelete` rewrite** — localized messages, premium player protection, BungeeCord support.
+- **Log readability** — human-readable login flow messages instead of raw packet dumps.
 
 ## Quick Start
 
 **Spigot / Paper:** install ProtocolLib → drop `FastLoginPlusBukkit.jar` in `plugins/` → set `online-mode=false`
 
 **BungeeCord / Velocity:** install on both proxy and backend → configure `allowed-proxies.txt` → enable IP forwarding → set `online-mode=false` on both → [full guide](https://github.com/Hayston1001/FastLoginPlus/wiki)
+
+For detailed installation steps, see [FastLogin's install guide](https://github.com/TuxCoding/FastLogin#how-to-install).
 
 ## Commands & Permissions
 

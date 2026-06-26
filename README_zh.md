@@ -2,33 +2,27 @@
 
 [English](README.md)
 
-> **[FastLogin](https://github.com/TuxCoding/FastLogin) 的活跃维护分支**，持续修复 Bug、优化性能、增加功能。
+> **[FastLogin](https://github.com/TuxCoding/FastLogin) 的活跃维护分支** — 在离线模式服务器上自动检测并登录 Minecraft 正版账号。
 
-在离线模式服务器上自动检测 Minecraft 正版（付费）账号——跳过认证，无需密码。
+基础功能、平台支持、技术原理等请参阅 [FastLogin 自述文件](https://github.com/TuxCoding/FastLogin)。
 
-## 功能特性
+## 改进之处
 
-* 自动检测、登录、注册正版账号
-* 正版 UUID 和皮肤转发，用户名变更检测
-* **离线白名单** — 阻止未知离线玩家，正版玩家通过 Mojang API 自动放行
-* 多平台支持：Bukkit (Spigot/Paper) / BungeeCord / Velocity
-* 通过 Floodgate / Geyser 支持基岩版
-* SQLite WAL 模式 + 线程安全操作（ReentrantLock + busy timeout）
-* 内置中英文，支持自定义语言，配置文件中英双语
-* PlaceholderAPI 集成，全异步，无需客户端 Mod
-
-## 环境要求
-
-* **Java** 8+（Spigot），17+（BungeeCord / Velocity），推荐 21+
-* 服务器**离线模式**（`online-mode=false`）
-* [ProtocolLib](https://www.spigotmc.org/resources/protocollib.1997/)（5.3+）或 [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/)
-* 登录插件：[AuthMe](https://dev.bukkit.org/bukkit-plugins/authme-reloaded/) · [LoginSecurity](https://dev.bukkit.org/bukkit-plugins/loginsecurity/) · [CrazyLogin](https://dev.bukkit.org/bukkit-plugins/crazylogin/) · [xAuth](https://dev.bukkit.org/bukkit-plugins/xauth/) · [Passky](https://github.com/Passky) · [BungeeAuth](https://www.spigotmc.org/resources/bungeeauth.493/)
+- **离线白名单** — 阻止未知离线玩家，正版玩家通过 Mojang API 自动放行。替代上游的 `switchMode`（该功能会误踢首次加入的正版玩家）。
+- **多语言** — 内置中英文，支持自定义语言文件，配置注释双语。
+- **SQLite 并发优化** — WAL 模式、busy timeout、`ReentrantLock` 线程安全。
+- **会话验证重试** — Mojang 验证遇到网络错误时自动重试，而非直接失败。
+- **SkinsRestorer 兼容** — 不再覆盖 SkinsRestorer 设置的皮肤。
+- **`fldelete` 重写** — 本地化消息、premium 玩家保护、BungeeCord 支持。
+- **日志可读性** — 人类可读的登录流程消息替代原始包名输出。
 
 ## 快速开始
 
 **Spigot / Paper：** 安装 ProtocolLib → 将 `FastLoginPlusBukkit.jar` 放入 `plugins/` → 设置 `online-mode=false`
 
 **BungeeCord / Velocity：** 在代理和后端都安装 → 配置 `allowed-proxies.txt` → 启用 IP 转发 → 两端都设 `online-mode=false` → [完整指南](https://github.com/Hayston1001/FastLoginPlus/wiki)
+
+详细安装步骤请参阅 [FastLogin 安装指南](https://github.com/TuxCoding/FastLogin#how-to-install)。
 
 ## 命令与权限
 
