@@ -106,7 +106,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             Configuration config = core.getConfig();
             Optional<Profile> premiumUUID = Optional.empty();
             if (config.get("nameChangeCheck", false) || config.get("autoRegister", false)
-                    || config.get("switchMode", false)) {
+                    || config.get("offline-whitelist", false)) {
                 premiumUUID = core.getResolver().findProfile(username);
             }
 
@@ -114,8 +114,8 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                     || (!isNameChanged(source, username, premiumUUID.get())
                     && !isUsernameAvailable(source, username, profile))) {
                 //nothing detected the player as premium -> start a cracked session
-                if (core.getConfig().get("switchMode", false)) {
-                    source.kick(core.getMessage("switch-kick-message"));
+                if (core.getConfig().get("offline-whitelist", false)) {
+                    source.kick(core.getMessage("offline-whitelist-kick-message"));
                     return;
                 }
 
@@ -147,7 +147,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             return true;
         }
 
-        if (core.getConfig().get("switchMode", false)) {
+        if (core.getConfig().get("offline-whitelist", false)) {
             boolean registered = authHook != null && authHook.isRegistered(username);
             requestPremiumLogin(source, profile, username, registered);
             return true;

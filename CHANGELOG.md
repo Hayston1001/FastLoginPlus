@@ -1,5 +1,30 @@
 # FastLoginPlus Changelog
 
+## v0.0.2
+
+### Offline Whitelist / 离线白名单
+
+Replaced `switchMode` with a new standalone **offline-whitelist** feature:
+
+- `offline-whitelist: true` — Only players already in the database can join as cracked/offline
+- New offline (cracked) players are kicked with a localized message
+- Premium players are unaffected — auto-detected via Mojang API and allowed to join
+- Existing cracked players in the database continue to join normally
+- The Mojang API check is automatically triggered when `offline-whitelist` is enabled (no need to enable `autoRegister` or `nameChangeCheck` separately)
+
+用新的独立 **离线白名单** 功能替代 `switchMode`：
+
+- `offline-whitelist: true` — 仅数据库中已有记录的玩家可以离线模式加入
+- 新的离线玩家会被踢出，显示本地化消息
+- 正版玩家不受影响 — 通过 Mojang API 自动检测并允许加入
+- 数据库中已有的离线玩家仍可正常加入
+- 开启 `offline-whitelist` 后自动触发 Mojang API 检查（无需额外开启 `autoRegister` 或 `nameChangeCheck`）
+
+### Removed / 移除
+
+- **`switchMode`** config option removed — replaced by `offline-whitelist`
+- **`switchMode`** 配置项移除 — 由 `offline-whitelist` 替代
+
 ## v0.0.1
 
 First independent release of FastLoginPlus, forked from [FastLogin](https://github.com/TuxCoding/FastLogin) with enhancements.
@@ -18,9 +43,9 @@ FastLoginPlus 首个独立版本，基于 [FastLogin](https://github.com/TuxCodi
 
 ### Bug Fixes / Bug 修复
 
-- **switchMode kicked new premium players**: When `switchMode` was enabled, premium players joining for the first time were incorrectly kicked ([#1359](https://github.com/TuxCoding/FastLogin/issues/1359)). Now premium players are properly detected via Mojang API and allowed to join.
+- **switchMode kicked new premium players**: When `switchMode` was enabled, premium players joining for the first time were incorrectly kicked ([#1359](https://github.com/TuxCoding/FastLogin/issues/1359)). Now premium players are properly detected via Mojang API and allowed to join. (Note: `switchMode` has since been replaced by `offline-whitelist` in v0.0.2)
 
-- **switchMode 误踢正版新玩家**：上游 `switchMode` 开启后，首次加入的正版玩家会被错误踢出（[#1359](https://github.com/TuxCoding/FastLogin/issues/1359)）。修复后，正版玩家会通过 Mojang API 自动检测并正确放行。
+- **switchMode 误踢正版新玩家**：上游 `switchMode` 开启后，首次加入的正版玩家会被错误踢出（[#1359](https://github.com/TuxCoding/FastLogin/issues/1359)）。修复后，正版玩家会通过 Mojang API 自动检测并正确放行。（注：`switchMode` 已在 v0.0.2 中被 `offline-whitelist` 替代）
 
 ### SQLite Concurrency / SQLite 并发优化
 
