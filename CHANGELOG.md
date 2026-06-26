@@ -1,5 +1,27 @@
 # FastLoginPlus Changelog
 
+## v0.0.3
+
+### SkinsRestorer Compatibility / SkinsRestorer 兼容性
+
+Fixed FastLogin overriding SkinsRestorer custom skins ([TuxCoding/FastLogin#1347](https://github.com/TuxCoding/FastLogin/issues/1347)):
+
+- Player skins set via SkinsRestorer's `/skin` command are now preserved — FastLoginPlus skips its own skin when SR has a custom skin for the player
+- Added `SkinsRestorerCompat` helper using SR's official API (`PlayerStorage.getSkinIdOfPlayer`)
+- SkinsRestorer listed as `softdepend` in `plugin.yml` to ensure correct load order
+
+修复 FastLogin 覆盖 SkinsRestorer 自定义皮肤的问题（[TuxCoding/FastLogin#1347](https://github.com/TuxCoding/FastLogin/issues/1347)）：
+
+- 通过 SkinsRestorer `/skin` 命令设置的皮肤现在会被保留 — 当 SR 有玩家的自定义皮肤时，FastLoginPlus 会跳过自身皮肤
+- 新增 `SkinsRestorerCompat` 辅助类，使用 SR 官方 API（`PlayerStorage.getSkinIdOfPlayer`）
+- `plugin.yml` 中添加 SkinsRestorer 为 `softdepend`，确保加载顺序正确
+
+### Bug Fixes / Bug 修复
+
+- **`forwardSkin: false` not working on Paper**: The `PaperCacheListener` was always registered on Paper regardless of the `forwardSkin` config. Now respects the setting.
+
+- **Paper 服务端 `forwardSkin: false` 无效**：`PaperCacheListener` 在 Paper 上无论 `forwardSkin` 设置如何都会注册，现已修复为正确读取配置。
+
 ## v0.0.2
 
 ### Offline Whitelist / 离线白名单
