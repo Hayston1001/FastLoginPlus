@@ -1,5 +1,39 @@
 # FastLoginPlus Changelog
 
+## v0.0.4
+
+### Session Retry / 会话验证重试
+
+Added automatic retry for Mojang session server verification (Spigot+ProtocolLib only):
+
+- When `hasJoined` fails due to a network error (IOException), the plugin now retries up to `mojang-retry-count` times (default 3) with `mojang-retry-delay` ms between attempts (default 1000)
+- HTTP 204 (auth rejection) is NOT retried — only network errors
+- New kick message `session-retry-exhausted` shown when all retries fail
+
+新增 Mojang 会话服务器验证自动重试（仅 Spigot+ProtocolLib）：
+
+- 当 `hasJoined` 因网络错误（IOException）失败时，插件会自动重试，最多 `mojang-retry-count` 次（默认 3），每次间隔 `mojang-retry-delay` 毫秒（默认 1000）
+- HTTP 204（认证拒绝）不会重试，仅重试网络错误
+- 所有重试耗尽后显示新的踢出消息 `session-retry-exhausted`
+
+### Log Improvement / 日志优化
+
+Improved login flow log readability:
+
+- Replaced raw ProtocolLib packet dump with human-readable messages
+- Moved internal details (packet type override, encryption setup) to DEBUG level
+- Added "Verifying session for {player}" log at session check start
+
+优化登录流程日志可读性：
+
+- 用人类可读的消息替代原始 ProtocolLib 包名输出
+- 将内部细节（包类型覆盖、加密初始化）降为 DEBUG 级别
+- 新增"Verifying session for {player}"日志，标识验证开始
+
+### Dependency / 依赖更新
+
+- Mockito 5.17.0 → 5.18.0 (fixes JDK 25 ByteBuddy compatibility / 修复 JDK 25 ByteBuddy 兼容性)
+
 ## v0.0.3
 
 ### SkinsRestorer Compatibility / SkinsRestorer 兼容性

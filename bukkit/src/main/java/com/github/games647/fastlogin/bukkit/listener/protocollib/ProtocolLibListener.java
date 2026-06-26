@@ -114,9 +114,9 @@ public class ProtocolLibListener extends PacketAdapter {
         Player sender = packetEvent.getPlayer();
         PacketType packetType = getOverriddenType(packetEvent.getPacketType());
 
-        plugin.getLog().info("New incoming packet {} from {}", packetType, sender.getName());
         try {
             if (packetType == START) {
+                plugin.getLog().info("Login request received from {}", sender.getAddress());
                 if (plugin.getFloodgateService() != null) {
                     boolean success = processFloodgateTasks(packetEvent);
                     if (!success) {
@@ -158,7 +158,7 @@ public class ProtocolLibListener extends PacketAdapter {
     private @NotNull PacketType getOverriddenType(PacketType packetType) {
         if (packetType.isDynamic()) {
             String vanillaName = packetType.getPacketClass().getName();
-            plugin.getLog().info("Overriding packet type for unregistered packet type to fix ProtocolLib bug");
+            plugin.getLog().debug("Overriding packet type for unregistered packet type to fix ProtocolLib bug");
             if (vanillaName.endsWith("ServerboundHelloPacket")) {
                 return START;
             }
