@@ -52,6 +52,7 @@ error-kick: '&4发生错误'
 invalid-verify-token: '&4无效的验证令牌，请确认你使用的服务器地址正确'
 invalid-session: '&4无效的会话'
 invalid-request: '&4无效的请求'
+session-retry-exhausted: '&4多次尝试验证会话失败，Mojang 服务器可能暂时不可用，请稍后再试'
 
 # 服务器未就绪
 not-started: '&c服务器尚未完全启动，请稍后重试'

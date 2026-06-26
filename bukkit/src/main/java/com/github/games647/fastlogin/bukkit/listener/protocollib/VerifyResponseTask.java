@@ -144,13 +144,22 @@ public class VerifyResponseTask implements Runnable {
 
         String requestedUsername = session.getRequestUsername();
         InetSocketAddress socketAddress = player.getAddress();
-        try {
-            MojangResolver resolver = plugin.getCore().getResolver();
-            InetAddress address = socketAddress.getAddress();
-            Optional<Verification> response = resolver.hasJoined(requestedUsername, serverId, address);
-            if (response.isPresent()) {
-                encryptConnection(session, requestedUsername, response.get());
-            } else {
+        int retryCount = plugin.getCore().getConfig().get("mojang-retry-count", 3);
+        long retryDelay = plugin.getCore().getConfig().get("mojang-retry-delay", 1000);
+
+        MojangResolver resolver = plugin.getCore().getResolver();
+        InetAddress address = socketAddress.getAddress();
+
+        plugin.getLog().info("Verifying session for {} ...", requestedUsername);
+        for (int attempt = 1; attempt <= retryCount; attempt++) {
+            try {
+                Optional<Verification> response = resolver.hasJoined(requestedUsername, serverId, address);
+                if (response.isPresent()) {
+                    encryptConnection(session, requestedUsername, response.get());
+                    return;
+                }
+
+                // HTTP 204 — Mojang explicitly rejected the session, no point retrying
                 //user tried to fake an authentication
                 disconnect(
                         "invalid-session",
@@ -174,9 +183,26 @@ public class VerifyResponseTask implements Runnable {
                 }
 
                 plugin.getLog().warn(ADDRESS_VERIFY_WARNING);
+                return;
+            } catch (IOException ioEx) {
+                plugin.getLog().warn("Session server request failed for {} (attempt {}/{}): {}",
+                        requestedUsername, attempt, retryCount, ioEx.getMessage());
+
+                if (attempt < retryCount) {
+                    try {
+                        Thread.sleep(retryDelay);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        disconnect("session-retry-exhausted",
+                                "Interrupted during session server retry for {}", requestedUsername);
+                        return;
+                    }
+                } else {
+                    disconnect("session-retry-exhausted",
+                            "Failed to connect to session server after {} attempts for {}",
+                            retryCount, requestedUsername);
+                }
             }
-        } catch (IOException ioEx) {
-            disconnect("error-kick", "Failed to connect to session server", ioEx);
         }
     }
 
@@ -229,7 +255,7 @@ public class VerifyResponseTask implements Runnable {
     }
 
     private boolean enableEncryption(SecretKey loginKey) throws IllegalArgumentException {
-        plugin.getLog().info("Enabling onlinemode encryption for {}", player.getAddress());
+        plugin.getLog().debug("Enabling onlinemode encryption for {}", player.getAddress());
         // Initialize method reflections
         if (encryptKeyMethod == null || encryptMethod == null) {
             Class<?> networkManagerClass = MinecraftReflection.getNetworkManagerClass();
