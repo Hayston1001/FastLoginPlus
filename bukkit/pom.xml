@@ -365,6 +365,21 @@
             </exclusions>
         </dependency>
 
+        <!--SkinsRestorer API for skin compatibility (optional)-->
+        <dependency>
+            <groupId>net.skinsrestorer</groupId>
+            <artifactId>skinsrestorer-api</artifactId>
+            <version>15.12.3</version>
+            <scope>provided</scope>
+            <optional>true</optional>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!--No maven repository :(-->
         <dependency>
             <groupId>de.st_ddt.crazy</groupId>

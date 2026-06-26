@@ -84,6 +84,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private GeyserService geyserService;
 
     private PremiumPlaceholder premiumPlaceholder;
+    private SkinsRestorerCompat skinsRestorerCompat;
 
     public FastLoginBukkit() {
         this.logger = CommonUtil.initializeLoggerService(getLogger());
@@ -141,7 +142,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         pluginManager.registerEvents(new ConnectionListener(this), this);
 
         //if server is using paper - we need to add one more listener to correct the user cache usage
-        if (isPaper()) {
+        if (isPaper() && getConfig().getBoolean("forwardSkin")) {
             pluginManager.registerEvents(new PaperCacheListener(this), this);
         }
 
@@ -151,6 +152,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             premiumPlaceholder = new PremiumPlaceholder(this);
             premiumPlaceholder.register();
         }
+
+        skinsRestorerCompat = new SkinsRestorerCompat(logger);
     }
 
     private void registerCommands() {
@@ -322,6 +325,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     public GeyserService getGeyserService() {
         return geyserService;
+    }
+
+    public SkinsRestorerCompat getSkinsRestorerCompat() {
+        return skinsRestorerCompat;
     }
 
     @Override

@@ -57,6 +57,13 @@ public class PaperCacheListener implements Listener {
                 continue;
             }
 
+            // Skip if SkinsRestorer has a custom skin for this player — SR skin takes priority
+            if (plugin.getSkinsRestorerCompat().hasCustomSkin(session.getUuid())) {
+                plugin.getLog().debug("Skipping FastLogin skin for {} — SkinsRestorer custom skin detected",
+                        session.getUsername());
+                break;
+            }
+
             session.getSkin().ifPresent(skin -> event.getPlayerProfile().setProperty(new ProfileProperty(Textures.KEY,
                     skin.getValue(), skin.getSignature())));
             break;

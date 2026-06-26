@@ -58,6 +58,13 @@ public class SkinApplyListener implements Listener {
         //loginEvent.getAddress is just a InetAddress not InetSocketAddress, so not unique enough
         for (BukkitLoginSession session : plugin.getLoginSessions().values()) {
             if (session.getUsername().equals(player.getName())) {
+                // Skip if SkinsRestorer has a custom skin for this player — SR skin takes priority
+                if (plugin.getSkinsRestorerCompat().hasCustomSkin(session.getUuid())) {
+                    plugin.getLog().debug("Skipping FastLogin skin for {} — SkinsRestorer custom skin detected",
+                            session.getUsername());
+                    break;
+                }
+
                 session.getSkin().ifPresent(skin -> applySkin(player, skin.getValue(), skin.getSignature()));
                 break;
             }

@@ -30,6 +30,8 @@ softdepend:
     - LogIt
     - UltraAuth
     - xAuth
+    # Skin plugins
+    - SkinsRestorer
 
 commands:
     fastloginplus:
