@@ -53,3 +53,6 @@ desktop.ini
 # Local library jars (provided by user, not distributed)
 !bukkit/lib/*.jar
 !bungee/lib/*.jar
+
+# AI agent context
+AGENTS.md
