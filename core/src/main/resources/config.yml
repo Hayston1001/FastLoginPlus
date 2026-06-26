@@ -98,6 +98,13 @@ kick-toggle: true
 # 适用于 DNAT / 透明反向代理环境。仅 Spigot+ProtocolLib。
 useProxyAgnosticResolver: true
 
+# Session server retry when network error occurs (Spigot+ProtocolLib only)
+# 当会话服务器网络错误时重试（仅 Spigot+ProtocolLib）
+# Total attempts per login / 每次登录的总尝试次数
+mojang-retry-count: 3
+# Delay between retries in milliseconds / 重试间隔（毫秒）
+mojang-retry-delay: 1000
+
 # Verify client public key signature (1.19+ only)
 # 验证客户端公钥签名（仅 1.19+）
 verifyClientKeys: false
