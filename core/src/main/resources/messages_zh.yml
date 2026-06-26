@@ -3,8 +3,8 @@
 
 # ====== 通用 (BungeeCord & Bukkit) ======
 
-# Switch 模式：非白名单的离线玩家被踢出
-switch-kick-message: '&4本服务器仅允许正版（付费）账号加入'
+# 离线白名单：未注册的离线玩家被踢出
+offline-whitelist-kick-message: '&4本服务器仅允许已注册的玩家加入，请联系管理员'
 
 # Premium 激活
 add-premium: '&2已将你添加到正版玩家列表'

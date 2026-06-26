@@ -49,16 +49,16 @@ respectIpLimit: false
 secondAttemptCracked: false
 
 # ========================================
-# Switch Mode / 切换模式
+# Offline Whitelist / 离线白名单
 # ========================================
-# Migrate from offline-mode to online-mode without losing players.
-# New cracked players will be kicked; existing players are unaffected.
-# Premium players joining for the first time will be auto-detected
-# via Mojang API and allowed to join (if autoRegister is also true).
-# 从离线模式迁移到在线模式，不丢失已有玩家。
-# 新的离线玩家会被踢出，已有玩家不受影响。
-# 首次加入的正版玩家会通过 Mojang API 自动检测并允许加入（需同时开启 autoRegister）。
-switchMode: false
+# Only allow known players (already in database) to join as cracked/offline.
+# New offline players will be kicked. Premium players are unaffected
+# (auto-detected via Mojang API and allowed to join).
+# Existing cracked players in the database can still join normally.
+# 仅允许已知玩家（数据库中已有记录）以离线模式加入。
+# 新的离线玩家会被踢出。正版玩家不受影响（通过 Mojang API 自动检测并允许加入）。
+# 数据库中已有的离线玩家仍可正常加入。
+offline-whitelist: false
 
 # ========================================
 # UUID & Skin / UUID 与皮肤

@@ -3,8 +3,8 @@
 
 # ====== Shared (BungeeCord & Bukkit) ======
 
-# Switch mode: kicked when a cracked player tries to join
-switch-kick-message: '&4Only paid Minecraft accounts are allowed to join this server'
+# Offline whitelist: kicked when an unknown cracked player tries to join
+offline-whitelist-kick-message: '&4Only registered players are allowed to join this server. Please contact an admin.'
 
 # Premium activation
 add-premium: '&2Added to the list of premium players'
