@@ -195,7 +195,6 @@ public abstract class SQLStorage implements AuthStorage {
 
                         saveStmt.setString(2, playerProfile.getName());
                         saveStmt.setBoolean(3, playerProfile.isOnlinemodePreferred());
-                        saveStmt.setBoolean(3, playerProfile.isOnlinemodePreferred());
                         saveStmt.setInt(4, playerProfile.getFloodgate().getValue());
                         saveStmt.setString(5, playerProfile.getLastIp());
 

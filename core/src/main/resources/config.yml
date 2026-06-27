@@ -9,26 +9,26 @@
 # Language / 语言设置
 # ========================================
 # Language file to use. Built-in options: "en" (English), "zh" (中文)
-# 使用的语言文件。内置选项："en"（英文）、"zh"（中文）
-# You can also use a custom value, e.g. "ja" -> loads messages_jh.yml
-# 也可以使用自定义值，例如 "ja" -> 加载 messages_ja.yml
-# Missing keys will be auto-filled from the English default on startup.
-# 缺失的键值会在启动时自动从英文默认文件补全。
+# 使用的语言文件. 内置选项: "en" (英文), "zh" (中文)
+# You can also use a custom value, e.g. "ja" -> loads messages_ja.yml
+# 也可以使用自定义值, 例如 "ja" -> 加载 messages_ja.yml
+# Missing keys will be auto-filled on startup.
+# 缺失的键值会在启动时自动补全.
 language: en
 
 # ========================================
 # Anti-bot / 反机器人
 # ========================================
 # Simple anti-bot protection. For serious protection, use a dedicated firewall.
-# 简单的反机器人保护。建议使用专用防火墙获得更好的效果。
+# 简单的反机器人保护. 建议使用专用防火墙获得更好的效果.
 anti-bot:
   enabled: true
   # Total connections allowed in the time window / 时间窗口内允许的总连接数
   connections: 600
-  # Minutes before entries expire / 条目过期时间（分钟）
+  # Minutes before entries expire / 条目过期时间 (分钟)
   expire: 10
   # Action when limit is hit: 'ignore' (drop) or 'block' (kick)
-  # 达到上限时的动作：'ignore'（忽略）或 'block'（踢出）
+  # 达到上限时的动作: 'ignore' (忽略) 或 'block' (踢出)
   action: 'ignore'
 
 # ========================================
@@ -37,15 +37,35 @@ anti-bot:
 
 # Auto-register new premium players on first join
 # 首次加入时自动注册正版玩家
-autoRegister: false
+autoRegister: true
+
+# Enable auto-login for premium players
+# 启用正版玩家自动登录
+autoLogin: true
+
+# Use premium UUID for premium players.
+# Bukkit-side implementation uses ProtocolLib reflection to set the UUID.
+# BungeeCord/Velocity-side uses native proxy API, no special requirements.
+# 为正版玩家使用正版 UUID.
+# Bukkit 端通过 ProtocolLib 反射设置 UUID.
+# BungeeCord/Velocity 端使用代理原生 API, 无特殊要求.
+premiumUuid: true
+
+# Query Mojang API for new players and detect name changes by UUID.
+# If a player's name is not in the database but their UUID is (under an old name),
+# the old record is updated with the new name and they log in as premium.
+# 对新玩家查询 Mojang API, 并通过 UUID 检测是否改名.
+# 如果玩家名不在数据库中, 但其 UUID 对应的旧记录存在, 则更新旧记录的名字并走正版登录.
+nameChangeCheck: true
 
 # Respect auth plugin per-IP registration limit
 # 尊重登录插件的单 IP 注册限制
 respectIpLimit: false
 
-# If a cracked player uses a premium name and fails auth, remember them
-# so they can join as cracked on next attempt
-# 如果离线玩家使用了正版用户名且认证失败，记住他们以便下次以离线模式加入
+# If an offline player uses a premium username but fails authentication, 
+# remember them so they can join in offline mode next time (not recommended).
+# 如果离线玩家使用了正版用户名且认证失败, 
+# 记住他们以便下次以离线模式加入 (不建议)
 secondAttemptCracked: false
 
 # ========================================
@@ -55,32 +75,23 @@ secondAttemptCracked: false
 # New offline players will be kicked. Premium players are unaffected
 # (auto-detected via Mojang API and allowed to join).
 # Existing cracked players in the database can still join normally.
-# This option does NOT require autoRegister or nameChangeCheck to be enabled.
-# 仅允许已知玩家（数据库中已有记录）以离线模式加入。
-# 新的离线玩家会被踢出。正版玩家不受影响（通过 Mojang API 自动检测并允许加入）。
-# 数据库中已有的离线玩家仍可正常加入。
-# 此选项不需要同时开启 autoRegister 或 nameChangeCheck。
+# This option only controls access - it does NOT auto-register premium players
+# in the auth plugin. Use autoRegister for that.
+# 仅允许已知玩家 (数据库中已有记录) 以离线模式加入.
+# 新的离线玩家会被踢出. 正版玩家不受影响 (通过 Mojang API 自动检测并允许加入).
+# 数据库中已有的离线玩家仍可正常加入.
+# 此选项仅控制访问权限, 不会在登录插件中自动注册正版玩家.
+# 如需自动注册正版玩家, 请同时开启 autoRegister.
 offline-whitelist: false
 
 # ========================================
-# UUID & Skin / UUID 与皮肤
+# Skin / 皮肤恢复
 # ========================================
-
-# Use premium UUID for premium players (requires Spigot/Paper)
-# 为正版玩家使用正版 UUID（需要 Spigot/Paper）
-premiumUuid: false
-
-# Query Mojang API for new players and detect name changes by UUID.
-# If a player's name is not in the database but their UUID is (under an old name),
-# the old record is updated with the new name and they log in as premium.
-# 对新玩家查询 Mojang API，并通过 UUID 检测是否改名。
-# 如果玩家名不在数据库中，但其 UUID 对应的旧记录存在，则更新旧记录的名字并走正版登录。
-nameChangeCheck: false
 
 # Forward premium skin to the player
 # Even when enabled, SkinsRestorer custom skins take priority (if SR is installed).
-# 转发正版皮肤给玩家
-# 即使开启，SkinsRestorer 的自定义皮肤也会优先生效（如果安装了 SR）。
+# 转发正版皮肤给玩家.
+# 即使开启, SkinsRestorer 的自定义皮肤也会优先生效 (如果安装了 SR).
 forwardSkin: true
 
 # ========================================
@@ -91,8 +102,8 @@ forwardSkin: true
 # 使用 /premium 命令前显示警告
 premium-warning: true
 
-# Kick player after they confirm /premium
-# 玩家确认 /premium 后踢出服务器
+# Kick the player from the server after they confirm /premium, forcing them to reconnect.
+# 玩家确认 /premium 后踢出服务器, 迫使其重连
 kick-toggle: true
 
 # ========================================
@@ -101,53 +112,49 @@ kick-toggle: true
 
 # Alternative session resolver that doesn't send server IP to Mojang.
 # Useful behind DNAT / transparent reverse proxy. Spigot+ProtocolLib only.
-# 不向 Mojang 发送服务器 IP 的替代会话解析器。
-# 适用于 DNAT / 透明反向代理环境。仅 Spigot+ProtocolLib。
+# 不向 Mojang 发送服务器 IP 的替代会话解析器.
+# 适用于 DNAT / 透明反向代理环境. 仅 Spigot+ProtocolLib.
 useProxyAgnosticResolver: true
 
 # Session server retry when network error occurs (Spigot+ProtocolLib only)
-# 当会话服务器网络错误时重试（仅 Spigot+ProtocolLib）
+# 当会话服务器网络错误时重试 (仅 Spigot+ProtocolLib)
 # Total attempts per login / 每次登录的总尝试次数
 mojang-retry-count: 3
-# Delay between retries in milliseconds / 重试间隔（毫秒）
+# Delay between retries in milliseconds / 重试间隔 (毫秒)
 mojang-retry-delay: 1000
 
 # Verify client public key signature (1.19+ only)
-# 验证客户端公钥签名（仅 1.19+）
+# 验证客户端公钥签名 (仅 1.19+)
 verifyClientKeys: false
 
 # IP addresses for rotating Mojang API requests (to avoid rate limits)
-# 用于轮换 Mojang API 请求的 IP 地址（避免速率限制）
+# 用于轮换 Mojang API 请求的 IP 地址 (避免速率限制)
 #ip-addresses:
 #    - 192-168-0-2
 ip-addresses: []
 
 # Max Mojang name->UUID requests per 10 minutes (per IP)
-# 每 10 分钟最大 Mojang 名称->UUID 请求数（每个 IP）
+# 每 10 分钟最大 Mojang 名称->UUID 请求数 (每个 IP)
 mojang-request-limit: 600
 
 # Auto-register players in FastLogin DB but missing from auth plugin DB
 # 自动注册在 FastLogin 数据库中但不在登录插件数据库中的玩家
 auto-register-unknown: false
 
-# Enable auto-login for premium players (disable for 2FA)
-# 启用正版玩家自动登录（禁用可实现双因素认证）
-autoLogin: true
-
 # ========================================
 # Floodgate / Bedrock / 基岩版
 # ========================================
 
 # Auto-login for Floodgate (Bedrock) players. Values: false / true / linked / no-conflict
-# Floodgate（基岩版）玩家自动登录。可选值：false / true / linked / no-conflict
+# Floodgate (基岩版) 玩家自动登录. 可选值: false / true / linked / no-conflict
 autoLoginFloodgate: false
 
 # Allow Bedrock players to join even if their name conflicts with a Java premium account
-# 允许基岩版玩家加入，即使其用户名与 Java 正版账号冲突
+# 允许基岩版玩家加入, 即使其用户名与 Java 正版账号冲突
 allowFloodgateNameConflict: false
 
 # Auto-register Floodgate players. Requires autoLoginFloodgate.
-# 自动注册 Floodgate 玩家。需要开启 autoLoginFloodgate。
+# 自动注册 Floodgate 玩家. 需要开启 autoLoginFloodgate.
 autoRegisterFloodgate: false
 
 # ========================================
@@ -155,12 +162,12 @@ autoRegisterFloodgate: false
 # ========================================
 
 # SQLite (single file, recommended for small servers)
-# SQLite（单文件，推荐小型服务器使用）
+# SQLite (单文件, 推荐小型服务器使用)
 driver: 'sqlite'
 database: '{pluginDir}/FastLogin.db'
 
 # MySQL/MariaDB (uncomment to use, recommended for networks)
-# MySQL/MariaDB（取消注释以使用，推荐大型网络使用）
+# MySQL/MariaDB (取消注释以使用, 推荐大型网络使用)
 #driver: 'mysql'
 #host: '127.0.0.1'
 #port: 3306
@@ -168,7 +175,7 @@ database: '{pluginDir}/FastLogin.db'
 #username: 'myUser'
 #password: 'myPassword'
 
-# Connection pool settings (seconds) / 连接池设置（秒）
+# Connection pool settings (seconds) / 连接池设置 (秒)
 #timeout: 30
 #lifetime: 30
 
@@ -181,6 +188,6 @@ database: '{pluginDir}/FastLogin.db'
 # Proxies / HTTP 代理
 # ========================================
 # HTTP proxies for Mojang API requests (workaround for rate limits)
-# 用于 Mojang API 请求的 HTTP 代理（速率限制的解决方案）
+# 用于 Mojang API 请求的 HTTP 代理 (速率限制的解决方案)
 proxies:
   # - 'xyz.com:1337'

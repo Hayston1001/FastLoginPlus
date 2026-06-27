@@ -148,8 +148,8 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
         }
 
         if (core.getConfig().get("offline-whitelist", false)) {
-            boolean registered = authHook != null && authHook.isRegistered(username);
-            requestPremiumLogin(source, profile, username, registered);
+            // Only gate access — registration is autoRegister's responsibility
+            requestPremiumLogin(source, profile, username, true);
             return true;
         }
 
