@@ -54,5 +54,6 @@ desktop.ini
 !bukkit/lib/*.jar
 !bungee/lib/*.jar
 
-# AI agent context
+# AI agent
 AGENTS.md
+.hermes/
