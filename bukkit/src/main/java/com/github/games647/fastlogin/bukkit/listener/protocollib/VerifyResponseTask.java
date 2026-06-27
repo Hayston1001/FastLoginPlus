@@ -223,6 +223,16 @@ public class VerifyResponseTask implements Runnable {
         session.setUuid(verification.getId());
         session.setVerifiedPremium(true);
 
+        // AuthMe 6.0 premium integration: inject state to skip Pre-Join dialog
+        com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+            plugin.getAuthMePremiumIntegrator();
+        if (integrator != null && integrator.isAuthMePremiumEnabled()) {
+            UUID mojangUuid = verification.getId();
+            integrator.injectPendingPremium(requestedUsername, mojangUuid);
+            integrator.injectVerifiedUuid(requestedUsername, mojangUuid);
+            plugin.getLog().debug("Injected AuthMe 6.0 premium state for {}", requestedUsername);
+        }
+
         setPremiumUUID(session.getUuid());
         receiveFakeStartPacket(realUsername, session.getClientPublicKey(), session.getUuid());
     }
