@@ -34,6 +34,10 @@ softdepend:
     - SkinsRestorer
 
 commands:
+    flp:
+        description: 'FastLoginPlus commands (used when AuthMe 6.0+ is present)'
+        usage: /<command> premium|cracked|delete [player]
+
     fastloginplus:
         description: 'Label the invoker as premium'
         aliases: [prem, premium, loginfast]

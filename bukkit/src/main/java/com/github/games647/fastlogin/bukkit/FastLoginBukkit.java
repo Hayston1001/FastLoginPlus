@@ -179,9 +179,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     private void registerCommands() {
-        //register commands using a unique name
-        Optional.ofNullable(getCommand("premium")).ifPresent(c -> c.setExecutor(new PremiumCommand(this)));
-        Optional.ofNullable(getCommand("cracked")).ifPresent(c -> c.setExecutor(new CrackedCommand(this)));
+        if (authMeVersionDetector != null && authMeVersionDetector.isAuthMe6()) {
+            // AuthMe 6.0+ has its own /premium — use /flp namespace
+            logger.info("AuthMe 6.0+ detected, registering commands under /flp");
+            Optional.ofNullable(getCommand("flp")).ifPresent(c ->
+                c.setExecutor(new com.github.games647.fastlogin.bukkit.command.FlpCommand(this)));
+        } else {
+            // AuthMe 5.x or no AuthMe — use original command names
+            Optional.ofNullable(getCommand("premium")).ifPresent(c -> c.setExecutor(new PremiumCommand(this)));
+            Optional.ofNullable(getCommand("cracked")).ifPresent(c -> c.setExecutor(new CrackedCommand(this)));
+        }
         Optional.ofNullable(getCommand("fldelete")).ifPresent(c -> c.setExecutor(new DeleteCommand(this)));
     }
 
