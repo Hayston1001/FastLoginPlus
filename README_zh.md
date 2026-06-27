@@ -30,7 +30,7 @@
 | 命令 | 说明 | 权限 | 默认值 |
 |------|------|------|--------|
 | `/premium [玩家]` | 标记为正版 | `fastloginplus.bukkit.command.premium` | true |
-| `/cracked [玩家]` | 标记为离线 | `fastloginplus.bukkit.command.cracked` | true |
+| `/cracked [玩家]` | 标记为离线 | `fastloginplus.bukkit.command.cracked` | op |
 | `/fldelete <玩家>` | 删除玩家记录 | `fastloginplus.bukkit.command.delete` | op |
 
 添加 `.other` 后缀可操作其他玩家（默认：op）。

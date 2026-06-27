@@ -68,7 +68,7 @@ permissions:
 
     ${project.artifactId}.command.cracked:
         description: 'Label themselves as cracked'
-        default: true
+        default: op
 
     ${project.artifactId}.command.cracked.other:
         description: 'Label others as cracked'

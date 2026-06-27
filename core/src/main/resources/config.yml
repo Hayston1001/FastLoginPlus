@@ -55,9 +55,11 @@ secondAttemptCracked: false
 # New offline players will be kicked. Premium players are unaffected
 # (auto-detected via Mojang API and allowed to join).
 # Existing cracked players in the database can still join normally.
+# This option does NOT require autoRegister or nameChangeCheck to be enabled.
 # 仅允许已知玩家（数据库中已有记录）以离线模式加入。
 # 新的离线玩家会被踢出。正版玩家不受影响（通过 Mojang API 自动检测并允许加入）。
 # 数据库中已有的离线玩家仍可正常加入。
+# 此选项不需要同时开启 autoRegister 或 nameChangeCheck。
 offline-whitelist: false
 
 # ========================================
@@ -68,12 +70,17 @@ offline-whitelist: false
 # 为正版玩家使用正版 UUID（需要 Spigot/Paper）
 premiumUuid: false
 
-# Check Mojang API for name changes (only for players not in DB)
-# 检查 Mojang API 以发现用户名变更（仅针对不在数据库中的玩家）
+# Query Mojang API for new players and detect name changes by UUID.
+# If a player's name is not in the database but their UUID is (under an old name),
+# the old record is updated with the new name and they log in as premium.
+# 对新玩家查询 Mojang API，并通过 UUID 检测是否改名。
+# 如果玩家名不在数据库中，但其 UUID 对应的旧记录存在，则更新旧记录的名字并走正版登录。
 nameChangeCheck: false
 
 # Forward premium skin to the player
+# Even when enabled, SkinsRestorer custom skins take priority (if SR is installed).
 # 转发正版皮肤给玩家
+# 即使开启，SkinsRestorer 的自定义皮肤也会优先生效（如果安装了 SR）。
 forwardSkin: true
 
 # ========================================

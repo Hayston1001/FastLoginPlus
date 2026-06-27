@@ -30,7 +30,7 @@ For detailed installation steps, see [FastLogin's install guide](https://github.
 | Command | Description | Permission | Default |
 |---------|-------------|------------|---------|
 | `/premium [player]` | Mark as premium | `fastloginplus.bukkit.command.premium` | true |
-| `/cracked [player]` | Mark as cracked | `fastloginplus.bukkit.command.cracked` | true |
+| `/cracked [player]` | Mark as cracked | `fastloginplus.bukkit.command.cracked` | op |
 | `/fldelete <player>` | Delete player record | `fastloginplus.bukkit.command.delete` | op |
 
 Add `.other` suffix for targeting other players (default: op).
