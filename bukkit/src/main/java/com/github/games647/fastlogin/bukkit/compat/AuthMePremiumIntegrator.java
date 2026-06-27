@@ -180,6 +180,55 @@ public final class AuthMePremiumIntegrator {
         }
     }
 
+    /**
+     * Directly set the premium UUID in AuthMe's database for the given player.
+     * Used when the player is already registered (by forceRegister) and we want
+     * to mark them as premium without requiring /premium or reconnect.
+     *
+     * @param playerName the player name
+     * @param mojangUuid the verified Mojang UUID
+     */
+    public void markPlayerAsPremium(String playerName, UUID mojangUuid) {
+        if (!versionDetector.isAuthMe6()) {
+            return;
+        }
+        try {
+            AuthMeApi api = AuthMeApi.getInstance();
+            if (api == null) {
+                return;
+            }
+
+            // Access AuthMe's DataSource through reflection
+            Object dataSource = findFieldByType(api.getClass(),
+                "fr.xephi.authme.datasource.DataSource", api);
+            if (dataSource == null) {
+                return;
+            }
+
+            // Get the auth record
+            Method getAuth = dataSource.getClass().getMethod("getAuth", String.class);
+            Object auth = getAuth.invoke(dataSource, playerName.toLowerCase(java.util.Locale.ROOT));
+            if (auth == null) {
+                return;
+            }
+
+            // Set premium UUID
+            Method setPremiumUuid = auth.getClass().getMethod("setPremiumUuid", UUID.class);
+            setPremiumUuid.invoke(auth, mojangUuid);
+
+            // Update in database
+            Method updatePremium = dataSource.getClass().getMethod(
+                "updatePremiumUuid", auth.getClass());
+            boolean success = (boolean) updatePremium.invoke(dataSource, auth);
+
+            if (success) {
+                plugin.getLog().info("Marked {} as premium in AuthMe database", playerName);
+            }
+        } catch (Exception e) {
+            plugin.getLog().debug("markPlayerAsPremium failed: {}", e.getMessage());
+        }
+    }
+
     // --- Reflection helpers ---
 
     private Object getPendingPremiumCache() throws Exception {

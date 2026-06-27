@@ -63,6 +63,16 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
 
         super.run();
 
+        // AuthMe 6.0: if we just registered/logged in a premium player,
+        // also mark them as premium in AuthMe's database
+        if (session != null && session.isVerifiedPremium()) {
+            com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+                plugin.getAuthMePremiumIntegrator();
+            if (integrator != null && integrator.isAuthMePremiumEnabled()) {
+                integrator.markPlayerAsPremium(player.getName(), session.getUuid());
+            }
+        }
+
         PremiumStatus status = PremiumStatus.CRACKED;
         if (isOnlineMode()) {
             status = PremiumStatus.PREMIUM;
