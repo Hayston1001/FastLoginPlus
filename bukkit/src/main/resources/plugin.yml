@@ -1,7 +1,7 @@
 # project data for Bukkit in order to register our plugin with all it's components
 # ${-} are variables from Maven (pom.xml) which will be replaced after the build
 name: FastLoginPlus
-version: 0.0.4
+version: 0.0.5
 main: com.github.games647.fastlogin.bukkit.FastLoginBukkit
 
 # meta data for plugin managers

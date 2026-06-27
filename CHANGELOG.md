@@ -1,5 +1,29 @@
 # FastLoginPlus Changelog
 
+## v0.0.5
+
+### AuthMe 6.0 Compatibility / AuthMe 6.0 兼容
+
+Full compatibility with AuthMe 6.0's premium system. FLP auto-detects AuthMe version at startup and adapts without user intervention:
+
+- **Runtime version detection** — checks for `PendingPremiumCache` class existence (more reliable than version string parsing)
+- **Premium state injection** — after Mojang verification, injects `PendingPremiumCache` + `PremiumLoginVerifier` via reflection to skip AuthMe's Pre-Join dialog
+- **Auto-registration** — new premium players are force-registered in AuthMe's database and marked as premium
+- **Session restore** — respects AuthMe 6.0's own premium bypass instead of interfering with it
+- **`/flp` command namespace** — when AuthMe 6.0 is detected, FLP registers commands under `/flp` (e.g. `/flp premium`) to avoid conflict with AuthMe's `/premium`
+- **Startup logging** — detailed AuthMe compatibility info on server start (version, enablePremium status, active behavior)
+- All reflection calls wrapped in try-catch — falls back to no-op if AuthMe internal classes change
+
+完整兼容 AuthMe 6.0 的正版系统。FLP 启动时自动检测 AuthMe 版本并适配，无需用户手动配置：
+
+- **运行时版本检测** — 通过 `PendingPremiumCache` 类存在性判断（比版本号解析更可靠）
+- **正版状态注入** — Mojang 验证后通过反射注入 `PendingPremiumCache` + `PremiumLoginVerifier`，跳过 AuthMe 的 Pre-Join 对话框
+- **自动注册** — 新正版玩家会被强制注册到 AuthMe 数据库并标记为 premium
+- **会话恢复** — 尊重 AuthMe 6.0 自身的 premium 跳过机制，不再互相干扰
+- **`/flp` 命令命名空间** — 检测到 AuthMe 6.0 时，FLP 命令注册为 `/flp`（如 `/flp premium`），避免与 AuthMe 的 `/premium` 冲突
+- **启动日志** — 服务器启动时输出详细的 AuthMe 兼容信息（版本、enablePremium 状态、当前行为）
+- 所有反射调用都有 try-catch 保护 — AuthMe 内部类变更时自动降级为空操作
+
 ## v0.0.4
 
 ### Session Retry / 会话验证重试
