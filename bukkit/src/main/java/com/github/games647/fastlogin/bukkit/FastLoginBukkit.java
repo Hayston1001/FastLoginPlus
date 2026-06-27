@@ -45,6 +45,8 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 
 import com.comphenix.protocol.ProtocolLibrary;
+import com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator;
+import com.github.games647.fastlogin.bukkit.compat.AuthMeVersionDetector;
 import com.github.games647.fastlogin.bukkit.command.CrackedCommand;
 import com.github.games647.fastlogin.bukkit.command.DeleteCommand;
 import com.github.games647.fastlogin.bukkit.command.PremiumCommand;
@@ -86,6 +88,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private PremiumPlaceholder premiumPlaceholder;
     private SkinsRestorerCompat skinsRestorerCompat;
 
+    private AuthMeVersionDetector authMeVersionDetector;
+    private AuthMePremiumIntegrator authMePremiumIntegrator;
+
     public FastLoginBukkit() {
         this.logger = CommonUtil.initializeLoggerService(getLogger());
         this.scheduler = new BukkitScheduler(this, logger);
@@ -95,6 +100,23 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     public void onEnable() {
         core = new FastLoginCore<>(this);
         core.load();
+
+        // Detect AuthMe version and initialize compatibility layer
+        authMeVersionDetector = new AuthMeVersionDetector();
+        if (authMeVersionDetector.isAuthMe6()) {
+            authMePremiumIntegrator = new AuthMePremiumIntegrator(this, authMeVersionDetector);
+            boolean premiumEnabled = authMePremiumIntegrator.isAuthMePremiumEnabled();
+            logger.info("AuthMe 6.0+ detected: v{}", authMeVersionDetector.getVersion());
+            logger.info("  enablePremium={}", premiumEnabled);
+            if (premiumEnabled) {
+                logger.info("  FLP will auto-register premium players and inject premium state into AuthMe");
+                logger.info("  Commands registered under /flp namespace (AuthMe owns /premium)");
+            } else {
+                logger.info("  FLP handles all premium detection (AuthMe premium is disabled)");
+            }
+        } else if (authMeVersionDetector.isAuthMePresent()) {
+            logger.info("AuthMe 5.x detected — using standard FLP flow");
+        }
 
         if (getServer().getOnlineMode()) {
             //we need to require offline to prevent a loginSession request for an offline player
@@ -329,6 +351,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     public SkinsRestorerCompat getSkinsRestorerCompat() {
         return skinsRestorerCompat;
+    }
+
+    public AuthMeVersionDetector getAuthMeVersionDetector() {
+        return authMeVersionDetector;
+    }
+
+    public AuthMePremiumIntegrator getAuthMePremiumIntegrator() {
+        return authMePremiumIntegrator;
     }
 
     @Override
