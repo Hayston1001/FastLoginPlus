@@ -77,6 +77,14 @@ public class AuthMeHook implements AuthPlugin<Player>, Listener {
 
         BukkitLoginSession session = plugin.getSession(player.spigot().getRawAddress());
         if (session != null && session.isVerifiedPremium()) {
+            // AuthMe 6.0 with enablePremium: let AuthMe handle premium bypass itself
+            // Only cancel RestoreSession if AuthMe is NOT handling premium
+            com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+                plugin.getAuthMePremiumIntegrator();
+            if (integrator != null && integrator.isAuthMePremiumEnabled()) {
+                // AuthMe 6.0 premium is active — don't interfere with its flow
+                return;
+            }
             restoreSessionEvent.setCancelled(true);
         }
     }
