@@ -73,15 +73,14 @@ secondAttemptCracked: false
 # ========================================
 # Only allow known players (already in database) to join as cracked/offline.
 # New offline players will be kicked. Premium players are unaffected
-# (auto-detected via Mojang API and allowed to join).
 # Existing cracked players in the database can still join normally.
-# This option only controls access - it does NOT auto-register premium players
-# in the auth plugin. Use autoRegister for that.
+# Use /cracked to add offline players to the database.
+# Use /fldelete to remove offline players from the database.
 # 仅允许已知玩家 (数据库中已有记录) 以离线模式加入.
-# 新的离线玩家会被踢出. 正版玩家不受影响 (通过 Mojang API 自动检测并允许加入).
+# 新的离线玩家会被踢出. 正版玩家不受影响.
 # 数据库中已有的离线玩家仍可正常加入.
-# 此选项仅控制访问权限, 不会在登录插件中自动注册正版玩家.
-# 如需自动注册正版玩家, 请同时开启 autoRegister.
+# 使用 /cracked 向数据库添加离线玩家, 
+# 使用 /fldelete 从数据库删除离线玩家.
 offline-whitelist: false
 
 # ========================================

@@ -2,24 +2,25 @@
 
 ## v0.0.6
 
+### AuthMe 6.0 Compatibility / AuthMe 6.0 兼容
+
+- Add AuthMe 6.0 compatibility to README (both EN and ZH)
+- Document `/flp` command namespace for AuthMe 6.0+ (avoids `/premium` conflict)
+
 ### Config & Defaults / 配置优化
 
 - Change `autoRegister`, `premiumUuid`, `nameChangeCheck` defaults to `true`
-- Reorganize config sections: move auth options together, rename "UUID & Skin" to "Skin"
-- Clarify `offline-whitelist` only controls access, not registration — use `autoRegister` for that
-- Fix duplicate `setBoolean` call in SQLStorage
-- Normalize Chinese punctuation to ASCII in config comments
-- Fix typo: `messages_jh` → `messages_ja`
+- Change `/cracked` default permission from `true` to `op`
+- Optimize config comments and sections
+- Clarify `offline-whitelist` only controls access, not registration
 - Add `LOGIN-FLOW.md` documentation
 
 ### 配置与默认值
 
 - 将 `autoRegister`、`premiumUuid`、`nameChangeCheck` 默认值改为 `true`
-- 重新组织配置分区：将认证相关选项归在一起，"UUID 与皮肤"改为"皮肤"
-- 明确 `offline-whitelist` 仅控制访问权限，不负责注册（注册由 `autoRegister` 负责）
-- 修复 SQLStorage 中重复的 `setBoolean` 调用
-- 配置注释中的中文标点统一为 ASCII 标点
-- 修正拼写错误：`messages_jh` → `messages_ja`
+- 将 `/cracked` 默认权限从 `true` 改为 `op`
+- 优化配置文件注释和分区
+- 明确 `offline-whitelist` 仅控制访问权限，不负责注册
 - 新增 `LOGIN-FLOW.md` 登录流程文档
 
 ## v0.0.5
