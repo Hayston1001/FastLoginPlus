@@ -2,20 +2,11 @@
 
 ## v0.0.6
 
-### AuthMe 6.0 Compatibility / AuthMe 6.0 兼容
-
-- Add AuthMe 6.0 compatibility to README (both EN and ZH)
-- Document `/flp` command namespace for AuthMe 6.0+ (avoids `/premium` conflict)
-
-### Config & Defaults / 配置优化
-
 - Change `autoRegister`, `premiumUuid`, `nameChangeCheck` defaults to `true`
 - Change `/cracked` default permission from `true` to `op`
 - Optimize config comments and sections
 - Clarify `offline-whitelist` only controls access, not registration
 - Add `LOGIN-FLOW.md` documentation
-
-### 配置与默认值
 
 - 将 `autoRegister`、`premiumUuid`、`nameChangeCheck` 默认值改为 `true`
 - 将 `/cracked` 默认权限从 `true` 改为 `op`
