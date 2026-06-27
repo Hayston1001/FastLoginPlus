@@ -1,1 +1,1 @@
-{"id":"fastloginplus","name":"FastLoginPlus","version":"0.0.1","description":"Login plugin for premium players","authors":["Hayston","games647"],"dependencies":[],"main":"com.github.games647.fastlogin.velocity.FastLoginVelocity"}
+{"id":"fastloginplus","name":"FastLoginPlus","version":"0.0.6","description":"Login plugin for premium players","authors":["Hayston","games647"],"dependencies":[],"main":"com.github.games647.fastlogin.velocity.FastLoginVelocity"}
