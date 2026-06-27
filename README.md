@@ -8,6 +8,7 @@ For base features, platform support, and technical details, see [FastLogin's REA
 
 ## What's Different
 
+- **AuthMe 6.0 compatibility** — auto-detects AuthMe version, adapts premium flow and command namespace (`/flp`) without user config.
 - **Offline Whitelist** — block unknown cracked players, allow premium via Mojang API. Replaces the upstream `switchMode` which had issues with new premium players being kicked.
 - **Multi-language** — built-in English and Chinese, custom language files supported, bilingual config comments.
 - **SQLite concurrency** — WAL mode, busy timeout, thread-safe operations with `ReentrantLock`.
@@ -33,6 +34,8 @@ For detailed installation steps, see [FastLogin's install guide](https://github.
 | `/fldelete <player>` | Delete player record | `fastloginplus.bukkit.command.delete` | op |
 
 Add `.other` suffix for targeting other players (default: op).
+
+> **Note:** When AuthMe 6.0+ is detected, `/premium` and `/cracked` are registered under `/flp` (e.g. `/flp premium`) to avoid command conflict. `/fldelete` is unchanged.
 
 ## PlaceholderAPI
 

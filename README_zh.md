@@ -8,6 +8,7 @@
 
 ## 改进之处
 
+- **AuthMe 6.0 兼容** — 自动检测 AuthMe 版本，适配正版流程和命令命名空间（`/flp`），无需用户配置。
 - **离线白名单** — 阻止未知离线玩家，正版玩家通过 Mojang API 自动放行。替代上游的 `switchMode`（该功能会误踢首次加入的正版玩家）。
 - **多语言** — 内置中英文，支持自定义语言文件，配置注释双语。
 - **SQLite 并发优化** — WAL 模式、busy timeout、`ReentrantLock` 线程安全。
@@ -33,6 +34,8 @@
 | `/fldelete <玩家>` | 删除玩家记录 | `fastloginplus.bukkit.command.delete` | op |
 
 添加 `.other` 后缀可操作其他玩家（默认：op）。
+
+> **注意：** 检测到 AuthMe 6.0+ 时，`/premium` 和 `/cracked` 会注册为 `/flp` 子命令（如 `/flp premium`），避免命令冲突。`/fldelete` 不受影响。
 
 ## PlaceholderAPI
 
