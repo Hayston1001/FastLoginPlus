@@ -25,7 +25,6 @@
  */
 package com.github.games647.fastlogin.core.scheduler;
 
-import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -34,38 +33,8 @@ import org.slf4j.Logger;
 
 public class AsyncScheduler extends AbstractAsyncScheduler {
 
-    private static boolean isJava21Plus() {
-        try {
-            String version = System.getProperty("java.specification.version");
-            if (version != null) {
-                int major = version.startsWith("1.")
-                        ? Integer.parseInt(version.substring(2))
-                        : Integer.parseInt(version.split("\\.")[0]);
-                return major >= 21;
-            }
-        } catch (Exception ignored) {
-        }
-        return false;
-    }
-
-    private static Executor newVirtualThreadExecutor() {
-        try {
-            Class<?> executorsClass = Class.forName("java.util.concurrent.Executors");
-            Method method = executorsClass.getMethod("newVirtualThreadPerTaskExecutor");
-            return (Executor) method.invoke(null);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to create virtual thread executor", e);
-        }
-    }
-
     public AsyncScheduler(Logger logger, Executor processingPool) {
-        super(logger, isJava21Plus() ? newVirtualThreadExecutor() : processingPool);
-        if (isJava21Plus()) {
-            logger.info("Using optimized green threads with Java 21+");
-        } else {
-            logger.info("Using legacy platform scheduler for using an older Java version. "
-                    + "Upgrade Java to 21+ for improved performance");
-        }
+        super(logger, processingPool);
     }
 
     @Override
