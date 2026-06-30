@@ -35,26 +35,8 @@ softdepend:
 
 commands:
     flp:
-        description: 'FastLoginPlus commands (used when AuthMe 6.0+ is present)'
+        description: 'FastLoginPlus commands'
         usage: /<command> premium|cracked|delete [player]
-
-    fastloginplus:
-        description: 'Label the invoker as premium'
-        aliases: [prem, premium, loginfast]
-        usage: /<command> [player]
-        permission: ${project.artifactId}.command.premium
-
-    cracked:
-        description: 'Label the invoker or the player specified as cracked if marked premium before'
-        aliases: [unpremium]
-        usage: /<command> [player]
-        permission: ${project.artifactId}.command.cracked
-
-    fldelete:
-        description: 'Delete a player record from the FastLogin database'
-        aliases: [unwhitelist]
-        usage: /<command> <player>
-        permission: ${project.artifactId}.command.delete
 
 permissions:
     ${project.artifactId}.command.premium:

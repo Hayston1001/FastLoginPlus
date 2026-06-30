@@ -4,12 +4,14 @@
 
 - Change `autoRegister`, `premiumUuid`, `nameChangeCheck` defaults to `true`
 - Change `/cracked` default permission from `true` to `op`
+- Unify all commands under `/flp` namespace: `/premium` → `/flp premium`, `/cracked` → `/flp cracked`, `/fldelete` → `/flp delete`
 - Optimize config comments and sections
 - Clarify `offline-whitelist` only controls access, not registration
 - Add `LOGIN-FLOW.md` documentation
 
 - 将 `autoRegister`、`premiumUuid`、`nameChangeCheck` 默认值改为 `true`
 - 将 `/cracked` 默认权限从 `true` 改为 `op`
+- 统一所有命令到 `/flp` 命名空间：`/premium` → `/flp premium`，`/cracked` → `/flp cracked`，`/fldelete` → `/flp delete`
 - 优化配置文件注释和分区
 - 明确 `offline-whitelist` 仅控制访问权限，不负责注册
 - 新增 `LOGIN-FLOW.md` 登录流程文档

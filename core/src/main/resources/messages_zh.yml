@@ -26,7 +26,7 @@ player-unknown: '&4玩家不在数据库中'
 kick-antibot: '&4请稍等片刻！'
 
 # 删除命令
-delete-specify-player: '&4用法: /fldelete <玩家名>'
+delete-specify-player: '&4用法: /flp delete <玩家名>'
 delete-not-found: '&4数据库中未找到该玩家'
 delete-success: '&2已从数据库中删除该玩家记录'
 delete-fail: '&4删除玩家记录失败'
@@ -58,7 +58,7 @@ session-retry-exhausted: '&4多次尝试验证会话失败，Mojang 服务器可
 not-started: '&c服务器尚未完全启动，请稍后重试'
 
 # Premium 确认警告（二次确认）
-premium-warning: '&c&l警告: &6此命令&l仅&6应在你是该正版账号的拥有者时使用\n再次输入 &a/premium&6 以确认'
+premium-warning: '&c&l警告: &6此命令&l仅&6应在你是该正版账号的拥有者时使用\n再次输入 &a/flp premium&6 以确认'
 
 # 客户端密钥验证
 invalid-public-key: '&c客户端公钥无效，请尝试重启游戏'

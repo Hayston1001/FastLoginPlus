@@ -74,13 +74,13 @@ secondAttemptCracked: false
 # Only allow known players (already in database) to join as cracked/offline.
 # New offline players will be kicked. Premium players are unaffected
 # Existing cracked players in the database can still join normally.
-# Use /cracked to add offline players to the database.
-# Use /fldelete to remove offline players from the database.
+# Use /flp cracked to add offline players to the database.
+# Use /flp delete to remove offline players from the database.
 # 仅允许已知玩家 (数据库中已有记录) 以离线模式加入.
 # 新的离线玩家会被踢出. 正版玩家不受影响.
 # 数据库中已有的离线玩家仍可正常加入.
-# 使用 /cracked 向数据库添加离线玩家, 
-# 使用 /fldelete 从数据库删除离线玩家.
+# 使用 /flp cracked 向数据库添加离线玩家, 
+# 使用 /flp delete 从数据库删除离线玩家.
 offline-whitelist: false
 
 # ========================================
@@ -97,12 +97,12 @@ forwardSkin: true
 # Command Behavior / 命令行为
 # ========================================
 
-# Show warning before /premium command takes effect
-# 使用 /premium 命令前显示警告
+# Show warning before /flp premium command takes effect
+# 使用 /flp premium 命令前显示警告
 premium-warning: true
 
-# Kick the player from the server after they confirm /premium, forcing them to reconnect.
-# 玩家确认 /premium 后踢出服务器, 迫使其重连
+# Kick the player from the server after they confirm /flp premium, forcing them to reconnect.
+# 玩家确认 /flp premium 后踢出服务器, 迫使其重连
 kick-toggle: true
 
 # ========================================
