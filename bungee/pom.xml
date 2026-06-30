@@ -230,6 +230,14 @@
             </exclusions>
         </dependency>
 
+        <!-- Netty needed for mocking BungeeCord in tests (previously from Geyser core jar) -->
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler</artifactId>
+            <version>4.1.103.Final</version>
+            <scope>test</scope>
+        </dependency>
+
         <!--Login plugin-->
         <dependency>
             <groupId>me.vik1395</groupId>
