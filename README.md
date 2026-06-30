@@ -25,6 +25,17 @@ For base features, platform support, and technical details, see [FastLogin's REA
 
 For detailed installation steps, see [FastLogin's install guide](https://github.com/TuxCoding/FastLogin#how-to-install).
 
+## Bedrock Player Support (Geyser / Floodgate)
+
+FastLoginPlus works with [Geyser](https://geysermc.org/) to allow Bedrock players to join your offline-mode Java server.
+
+- **Geyser only** — Bedrock players join without Xbox authentication. FLP treats them as regular Java players; premium auto-login works if the username matches a paid Java account.
+- **Geyser + [Floodgate](https://geysermc.org/floodgate/)** (recommended) — Bedrock players authenticate via Xbox Live, and their usernames are prefixed (e.g. `Steve` → `.Steve`). This prevents FLP from mistaking a Bedrock player for a premium Java account and avoids username conflicts between platforms.
+
+> **Recommendation:** Install Floodgate alongside Geyser for better security and identity separation. FLP does not require Floodgate to function, but it is strongly recommended when both Java and Bedrock players share the same server.
+
+> **Version requirements:** Geyser requires **Java 21+** to run. Geyser-Spigot requires a Paper/Spigot server on **1.20.5 or above**. Servers below 1.20.5 can still use Geyser by installing [ViaVersion](https://viaversion.com/) on the backend and running Geyser on a proxy (Velocity/BungeeCord), or by using Geyser-Standalone with ViaVersion. ViaVersion allows the server to accept newer Java clients, which Geyser uses as the translation target. See [Geyser supported versions](https://geysermc.org/wiki/geyser/supported-versions/) for details.
+
 ## Commands & Permissions
 
 | Command | Description | Permission | Default |
