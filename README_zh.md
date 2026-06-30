@@ -11,7 +11,8 @@
 - **AuthMe 6.0 兼容** — 自动检测 AuthMe 版本，适配正版流程和命令命名空间（`/flp`），无需用户配置。
 - **离线白名单** — 阻止未知离线玩家，正版玩家通过 Mojang API 自动放行。替代上游的 `switchMode`（该功能会误踢首次加入的正版玩家）。
 - **多语言** — 内置中英文，支持自定义语言文件，配置注释双语。
-- **SQLite 并发优化** — WAL 模式、busy timeout、`ReentrantLock` 线程安全。
+- **SQLite 并发优化** — WAL 模式、busy timeout、`ReentrantLock` 线程安全（包括 `deleteProfile`）。
+- **代理端 SQLite 支持** — BungeeCord 和 Velocity 内置 SQLite JDBC 驱动，适用于单代理小型服。上游仅支持 MySQL/MariaDB。
 - **会话验证重试** — Mojang 验证遇到网络错误时自动重试，而非直接失败。
 - **SkinsRestorer 兼容** — 不再覆盖 SkinsRestorer 设置的皮肤。
 - **`/flp delete` 重写** — 本地化消息、premium 玩家保护、BungeeCord 支持。

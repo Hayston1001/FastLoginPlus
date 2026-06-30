@@ -11,7 +11,8 @@ For base features, platform support, and technical details, see [FastLogin's REA
 - **AuthMe 6.0 compatibility** — auto-detects AuthMe version, adapts premium flow and command namespace (`/flp`) without user config.
 - **Offline Whitelist** — block unknown cracked players, allow premium via Mojang API. Replaces the upstream `switchMode` which had issues with new premium players being kicked.
 - **Multi-language** — built-in English and Chinese, custom language files supported, bilingual config comments.
-- **SQLite concurrency** — WAL mode, busy timeout, thread-safe operations with `ReentrantLock`.
+- **SQLite concurrency** — WAL mode, busy timeout, thread-safe operations with `ReentrantLock` (including `deleteProfile`).
+- **SQLite on proxy platforms** — BungeeCord and Velocity now bundle SQLite JDBC driver for single-proxy setups. Upstream only supports MySQL/MariaDB on proxies.
 - **Session retry** — Mojang session verification retries on network errors instead of failing immediately.
 - **SkinsRestorer compatibility** — no longer overrides skins set via SkinsRestorer.
 - **`/flp delete` rewrite** — localized messages, premium player protection, BungeeCord support.
