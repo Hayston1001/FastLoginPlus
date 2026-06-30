@@ -40,17 +40,19 @@ FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入
 
 | 命令 | 说明 | 权限 | 默认值 |
 |------|------|------|--------|
-| `/premium [玩家]` | 标记为正版 | `fastloginplus.bukkit.command.premium` | true |
-| `/cracked [玩家]` | 标记为离线 | `fastloginplus.bukkit.command.cracked` | op |
-| `/fldelete <玩家>` | 删除玩家记录 | `fastloginplus.bukkit.command.delete` | op |
+| `/flp premium [玩家]` | 标记为正版 | `fastloginplus.bukkit.command.premium` | true |
+| `/flp cracked [玩家]` | 标记为离线 | `fastloginplus.bukkit.command.cracked` | op |
+| `/flp delete <玩家>` | 删除玩家记录 | `fastloginplus.bukkit.command.delete` | op |
 
 添加 `.other` 后缀可操作其他玩家（默认：op）。
 
-> **注意：** 检测到 AuthMe 6.0+ 时，`/premium` 和 `/cracked` 会注册为 `/flp` 子命令（如 `/flp premium`），避免命令冲突。`/fldelete` 不受影响。
-
 ## PlaceholderAPI
 
-导出 `%fastloginplus_status%` — 可选值：`Premium`、`Cracked`、`Unknown`。
+| 占位符 | 可选值 | 说明 |
+|---|---|---|
+| `%fastloginplus_status%` | `Premium`、`Cracked`、`Unknown` | 认证状态 |
+| `%fastloginplus_is_premium%` | `true`、`false` | 是否通过正版验证 |
+| `%fastloginplus_floodgate%` | `Java`、`Bedrock`、`Linked`、`Unknown` | 连接平台（Java 版或通过 Geyser/Floodgate 的基岩版） |
 
 ## 许可证
 

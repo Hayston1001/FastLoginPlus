@@ -47,9 +47,7 @@ import org.slf4j.Logger;
 import com.comphenix.protocol.ProtocolLibrary;
 import com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator;
 import com.github.games647.fastlogin.bukkit.compat.AuthMeVersionDetector;
-import com.github.games647.fastlogin.bukkit.command.CrackedCommand;
-import com.github.games647.fastlogin.bukkit.command.DeleteCommand;
-import com.github.games647.fastlogin.bukkit.command.PremiumCommand;
+import com.github.games647.fastlogin.bukkit.command.FlpCommand;
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
 import com.github.games647.fastlogin.bukkit.listener.PaperCacheListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.ProtocolLibListener;
@@ -63,6 +61,7 @@ import com.github.games647.fastlogin.core.hooks.bedrock.BedrockService;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.hooks.bedrock.GeyserService;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
+import com.github.games647.fastlogin.core.shared.FloodgateState;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 
 /**
@@ -76,6 +75,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     );
 
     private final Map<UUID, PremiumStatus> premiumPlayers = new ConcurrentHashMap<>();
+    private final Map<UUID, FloodgateState> playerFloodgateState = new ConcurrentHashMap<>();
     private final Logger logger;
 
     private boolean serverStarted;
@@ -110,7 +110,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             logger.info("  enablePremium={}", premiumEnabled);
             if (premiumEnabled) {
                 logger.info("  FLP will auto-register premium players and inject premium state into AuthMe");
-                logger.info("  Commands registered under /flp namespace (AuthMe owns /premium)");
             } else {
                 logger.info("  FLP handles all premium detection (AuthMe premium is disabled)");
             }
@@ -179,17 +178,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     private void registerCommands() {
-        if (authMeVersionDetector != null && authMeVersionDetector.isAuthMe6()) {
-            // AuthMe 6.0+ has its own /premium — use /flp namespace
-            logger.info("AuthMe 6.0+ detected, registering commands under /flp");
-            Optional.ofNullable(getCommand("flp")).ifPresent(c ->
-                c.setExecutor(new com.github.games647.fastlogin.bukkit.command.FlpCommand(this)));
-        } else {
-            // AuthMe 5.x or no AuthMe — use original command names
-            Optional.ofNullable(getCommand("premium")).ifPresent(c -> c.setExecutor(new PremiumCommand(this)));
-            Optional.ofNullable(getCommand("cracked")).ifPresent(c -> c.setExecutor(new CrackedCommand(this)));
-        }
-        Optional.ofNullable(getCommand("fldelete")).ifPresent(c -> c.setExecutor(new DeleteCommand(this)));
+        Optional.ofNullable(getCommand("flp")).ifPresent(c ->
+            c.setExecutor(new FlpCommand(this)));
     }
 
     private boolean initializeFloodgate() {
@@ -212,6 +202,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     public void onDisable() {
         loginSession.clear();
         premiumPlayers.clear();
+        playerFloodgateState.clear();
 
         if (core != null) {
             core.close();
@@ -269,6 +260,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     public Map<UUID, PremiumStatus> getPremiumPlayers() {
         return premiumPlayers;
+    }
+
+    public Map<UUID, FloodgateState> getPlayerFloodgateState() {
+        return playerFloodgateState;
     }
 
     /**

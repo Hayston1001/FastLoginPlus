@@ -40,17 +40,19 @@ FastLoginPlus works with [Geyser](https://geysermc.org/) to allow Bedrock player
 
 | Command | Description | Permission | Default |
 |---------|-------------|------------|---------|
-| `/premium [player]` | Mark as premium | `fastloginplus.bukkit.command.premium` | true |
-| `/cracked [player]` | Mark as cracked | `fastloginplus.bukkit.command.cracked` | op |
-| `/fldelete <player>` | Delete player record | `fastloginplus.bukkit.command.delete` | op |
+| `/flp premium [player]` | Mark as premium | `fastloginplus.bukkit.command.premium` | true |
+| `/flp cracked [player]` | Mark as cracked | `fastloginplus.bukkit.command.cracked` | op |
+| `/flp delete <player>` | Delete player record | `fastloginplus.bukkit.command.delete` | op |
 
 Add `.other` suffix for targeting other players (default: op).
 
-> **Note:** When AuthMe 6.0+ is detected, `/premium` and `/cracked` are registered under `/flp` (e.g. `/flp premium`) to avoid command conflict. `/fldelete` is unchanged.
-
 ## PlaceholderAPI
 
-Exports `%fastloginplus_status%` — values: `Premium`, `Cracked`, `Unknown`.
+| Placeholder | Values | Description |
+|---|---|---|
+| `%fastloginplus_status%` | `Premium`, `Cracked`, `Unknown` | Authentication status |
+| `%fastloginplus_is_premium%` | `true`, `false` | Whether the player passed premium verification |
+| `%fastloginplus_floodgate%` | `Java`, `Bedrock`, `Linked`, `Unknown` | Connection platform (Java vs Bedrock via Geyser/Floodgate) |
 
 ## License
 

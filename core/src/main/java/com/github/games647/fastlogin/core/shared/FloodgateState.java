@@ -30,31 +30,44 @@ public enum FloodgateState {
     /**
      * Purely Java profile
      */
-    FALSE(0),
+    FALSE(0, "Java"),
 
     /**
      * Purely Bedrock profile
      */
-    TRUE(1),
+    TRUE(1, "Bedrock"),
 
     /**
      * Bedrock profile is bidirectional associated with the Java Mojang profile.
      */
-    LINKED(2),
+    LINKED(2, "Linked"),
 
     /**
      * Data before floodgate database migration. Floodgate state is unknown.
      */
-    NOT_MIGRATED(3);
+    NOT_MIGRATED(3, "Unknown");
 
     private final int value;
+    private final String readableName;
 
     FloodgateState(int value) {
+        this(value, null);
+    }
+
+    FloodgateState(int value, String readableName) {
         this.value = value;
+        this.readableName = readableName;
     }
 
     public int getValue() {
         return value;
+    }
+
+    /**
+     * @return a human-readable name for this state, or the enum name if none was set
+     */
+    public String getReadableName() {
+        return readableName != null ? readableName : name();
     }
 
     /**

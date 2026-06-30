@@ -25,16 +25,20 @@
  */
 package com.github.games647.fastlogin.bukkit;
 
+import com.github.games647.fastlogin.core.shared.FloodgateState;
+
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.List;
 
 public class PremiumPlaceholder extends PlaceholderExpansion {
 
-    private static final String PLACEHOLDER_VARIABLE = "status";
+    private static final String PLACEHOLDER_STATUS = "status";
+    private static final String PLACEHOLDER_IS_PREMIUM = "is_premium";
+    private static final String PLACEHOLDER_FLOODGATE = "floodgate";
 
     private final FastLoginBukkit plugin;
 
@@ -49,17 +53,26 @@ public class PremiumPlaceholder extends PlaceholderExpansion {
 
     @Override
     public @NotNull List<String> getPlaceholders() {
-        return Collections.singletonList(PLACEHOLDER_VARIABLE);
+        return Arrays.asList(PLACEHOLDER_STATUS, PLACEHOLDER_IS_PREMIUM, PLACEHOLDER_FLOODGATE);
     }
 
     @Override
     public String onRequest(OfflinePlayer player, @NotNull String identifier) {
-        // player is null if offline
-        if (player != null && PLACEHOLDER_VARIABLE.equals(identifier)) {
-            return plugin.getStatus(player.getUniqueId()).getReadableName();
+        if (player == null) {
+            return null;
         }
 
-        return null;
+        switch (identifier) {
+            case PLACEHOLDER_STATUS:
+                return plugin.getStatus(player.getUniqueId()).getReadableName();
+            case PLACEHOLDER_IS_PREMIUM:
+                return String.valueOf(plugin.getStatus(player.getUniqueId()).isPremium());
+            case PLACEHOLDER_FLOODGATE:
+                FloodgateState floodgate = plugin.getPlayerFloodgateState().get(player.getUniqueId());
+                return floodgate != null ? floodgate.getReadableName() : "Java";
+            default:
+                return null;
+        }
     }
 
     @Override

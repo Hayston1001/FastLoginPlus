@@ -42,4 +42,11 @@ public enum PremiumStatus {
     public String getReadableName() {
         return readableName;
     }
+
+    /**
+     * @return true if this status represents a premium (paid) account
+     */
+    public boolean isPremium() {
+        return this == PREMIUM;
+    }
 }
