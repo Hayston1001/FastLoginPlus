@@ -1,17 +1,49 @@
 # FastLoginPlus Changelog
 
+## v0.0.7
+
+### Command Namespace Unification / 命令命名空间统一
+
+- Unify all commands under `/flp` namespace: `/premium` → `/flp premium`, `/cracked` → `/flp cracked`, `/fldelete` → `/flp delete`
+- Remove legacy standalone command definitions from plugin.yml
+- Update command references in config comments and user-facing messages
+
+- 统一所有命令到 `/flp` 命名空间：`/premium` → `/flp premium`，`/cracked` → `/flp cracked`，`/fldelete` → `/flp delete`
+- 从 plugin.yml 移除旧的独立命令定义
+- 更新配置注释和用户消息中的命令引用
+
+### PlaceholderAPI Placeholders / PlaceholderAPI 变量
+
+- Add `%fastloginplus_is_premium%` placeholder (returns true/false)
+- Add `%fastloginplus_floodgate%` placeholder (returns Java/Bedrock/Linked/Unknown)
+
+- 新增 `%fastloginplus_is_premium%` 变量（返回 true/false）
+- 新增 `%fastloginplus_floodgate%` 变量（返回 Java/Bedrock/Linked/Unknown）
+
+### Bedrock Player Support / 基岩版玩家支持
+
+- Upgrade Geyser 2.2.1→2.10.1 and Floodgate 2.2.3→2.2.5
+- Add Bedrock player support section to README with Geyser/Floodgate guidance
+
+- 升级 Geyser 2.2.1→2.10.1 和 Floodgate 2.2.3→2.2.5
+- README 新增基岩版玩家支持章节，含 Geyser/Floodgate 指引
+
+### Code Cleanup / 代码清理
+
+- Remove dead version-detection and reflection code from AsyncScheduler
+
+- 移除 AsyncScheduler 中无用的版本检测和反射代码
+
 ## v0.0.6
 
 - Change `autoRegister`, `premiumUuid`, `nameChangeCheck` defaults to `true`
 - Change `/cracked` default permission from `true` to `op`
-- Unify all commands under `/flp` namespace: `/premium` → `/flp premium`, `/cracked` → `/flp cracked`, `/fldelete` → `/flp delete`
 - Optimize config comments and sections
 - Clarify `offline-whitelist` only controls access, not registration
 - Add `LOGIN-FLOW.md` documentation
 
 - 将 `autoRegister`、`premiumUuid`、`nameChangeCheck` 默认值改为 `true`
 - 将 `/cracked` 默认权限从 `true` 改为 `op`
-- 统一所有命令到 `/flp` 命名空间：`/premium` → `/flp premium`，`/cracked` → `/flp cracked`，`/fldelete` → `/flp delete`
 - 优化配置文件注释和分区
 - 明确 `offline-whitelist` 仅控制访问权限，不负责注册
 - 新增 `LOGIN-FLOW.md` 登录流程文档

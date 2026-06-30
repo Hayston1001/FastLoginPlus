@@ -14,7 +14,7 @@ For base features, platform support, and technical details, see [FastLogin's REA
 - **SQLite concurrency** — WAL mode, busy timeout, thread-safe operations with `ReentrantLock`.
 - **Session retry** — Mojang session verification retries on network errors instead of failing immediately.
 - **SkinsRestorer compatibility** — no longer overrides skins set via SkinsRestorer.
-- **`fldelete` rewrite** — localized messages, premium player protection, BungeeCord support.
+- **`/flp delete` rewrite** — localized messages, premium player protection, BungeeCord support.
 - **Log readability** — human-readable login flow messages instead of raw packet dumps.
 
 ## Quick Start

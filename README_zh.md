@@ -14,7 +14,7 @@
 - **SQLite 并发优化** — WAL 模式、busy timeout、`ReentrantLock` 线程安全。
 - **会话验证重试** — Mojang 验证遇到网络错误时自动重试，而非直接失败。
 - **SkinsRestorer 兼容** — 不再覆盖 SkinsRestorer 设置的皮肤。
-- **`fldelete` 重写** — 本地化消息、premium 玩家保护、BungeeCord 支持。
+- **`/flp delete` 重写** — 本地化消息、premium 玩家保护、BungeeCord 支持。
 - **日志可读性** — 人类可读的登录流程消息替代原始包名输出。
 
 ## 快速开始
