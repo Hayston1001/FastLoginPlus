@@ -122,6 +122,16 @@ public class SQLiteStorage extends SQLStorage {
     }
 
     @Override
+    public boolean deleteProfile(String name) {
+        lock.lock();
+        try {
+            return super.deleteProfile(name);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
     protected String getCreateTableStmt() {
         // SQLite has a different syntax for auto increment
         return CREATE_TABLE_STMT.replace("AUTO_INCREMENT", "AUTOINCREMENT");
