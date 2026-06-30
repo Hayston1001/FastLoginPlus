@@ -43,7 +43,7 @@ public class GeyserService extends BedrockService<GeyserSession> {
         super(core);
         this.geyser = geyser;
         this.core = core;
-        this.authType = GeyserImpl.getInstance().getConfig().getRemote().authType();
+        this.authType = geyser.config().java().authType();
     }
 
     @Override

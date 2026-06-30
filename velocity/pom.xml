@@ -227,6 +227,20 @@
             </exclusions>
         </dependency>
 
+        <!-- Geyser API (needed for GeyserApi class hierarchy resolution) -->
+        <dependency>
+            <groupId>org.geysermc.geyser</groupId>
+            <artifactId>api</artifactId>
+            <version>${geyser.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- Floodgate -->
         <dependency>
             <groupId>org.geysermc.floodgate</groupId>

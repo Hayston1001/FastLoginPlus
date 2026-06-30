@@ -52,8 +52,8 @@
 
         <lombook.version>1.18.34</lombook.version>
 
-        <floodgate.version>2.2.3-SNAPSHOT</floodgate.version>
-        <geyser.version>2.2.1-SNAPSHOT</geyser.version>
+        <floodgate.version>2.2.5-SNAPSHOT</floodgate.version>
+        <geyser.version>2.10.1-SNAPSHOT</geyser.version>
     </properties>
 
     <modules>
@@ -74,6 +74,17 @@
             <url>https://repo.codemc.io/repository/maven-releases/</url>
         </repository>
     </distributionManagement>
+
+    <repositories>
+        <!-- GeyserMC base-api releases -->
+        <repository>
+            <id>opencollab-releases</id>
+            <url>https://repo.opencollab.dev/maven-releases/</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
 
     <build>
         <!--Just use the project name to replace an old version of the plugin if the user does only copy-paste-->
@@ -231,6 +242,39 @@
             <artifactId>mockito-core</artifactId>
             <version>5.18.0</version>
             <scope>test</scope>
+        </dependency>
+
+        <!-- Geyser API base interfaces (GeyserApiBase, Connection) - needed because
+             geyser:core and geyser:api exclude all transitive deps -->
+        <dependency>
+            <groupId>org.geysermc.api</groupId>
+            <artifactId>base-api</artifactId>
+            <version>1.0.3</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Floodgate LinkedPlayer class lives in geyser:common -->
+        <dependency>
+            <groupId>org.geysermc.geyser</groupId>
+            <artifactId>common</artifactId>
+            <version>2.2.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- fastutil classes referenced by GeyserSession bytecode type-use annotations -->
+        <dependency>
+            <groupId>it.unimi.dsi</groupId>
+            <artifactId>fastutil-core</artifactId>
+            <version>8.5.16</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Cumulus FormBuilder referenced by GeyserImpl.sendForm() type-use annotations -->
+        <dependency>
+            <groupId>org.geysermc.cumulus</groupId>
+            <artifactId>cumulus</artifactId>
+            <version>1.1.2</version>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 </project>
