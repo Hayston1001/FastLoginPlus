@@ -83,6 +83,10 @@
                             <pattern>org.mariadb</pattern>
                             <shadedPattern>fastlogin.mariadb</shadedPattern>
                         </relocation>
+                        <relocation>
+                            <pattern>org.sqlite</pattern>
+                            <shadedPattern>fastlogin.sqlite</shadedPattern>
+                        </relocation>
                     </relocations>
                     <transformers>
                         <transformer

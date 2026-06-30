@@ -160,13 +160,21 @@ autoRegisterFloodgate: false
 # Database / 数据库
 # ========================================
 
-# SQLite (single file, recommended for small servers)
-# SQLite (单文件, 推荐小型服务器使用)
+# --- SQLite ---
+# Best for: single proxy + single backend server (small/private servers)
+# 最适合: 单代理 + 单后端服务器 (小型/私人服务器)
+# Pros: zero setup, single file, no external service needed
+# 优点: 无需安装额外服务, 单文件存储, 开箱即用
+# Cons: not suitable for multi-server networks (file-based, cannot be shared across servers)
+# 缺点: 不适合多服务器网络 (基于文件, 无法跨服务器共享)
 driver: 'sqlite'
 database: '{pluginDir}/FastLogin.db'
 
-# MySQL/MariaDB (uncomment to use, recommended for networks)
-# MySQL/MariaDB (取消注释以使用, 推荐大型网络使用)
+# --- MySQL/MariaDB ---
+# Best for: proxy networks with multiple backend servers (recommended for production)
+# 最适合: 多后端服务器的代理网络 (生产环境推荐)
+# Uncomment the lines below AND comment out the SQLite driver above to use
+# 取消注释下面的行, 并注释掉上面的 SQLite driver 以使用
 #driver: 'mysql'
 #host: '127.0.0.1'
 #port: 3306
