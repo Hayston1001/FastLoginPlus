@@ -41,12 +41,15 @@ jobs:
             echo "For detailed changes, see commits." >> /tmp/release-notes.md
           fi
 
+      - name: Set version variable
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           body_path: /tmp/release-notes.md
           files: |
-            bukkit/target/FastLoginPlusBukkit.jar
-            folia/target/FastLoginPlusFolia.jar
-            bungee/target/FastLoginPlusBungee.jar
-            velocity/target/FastLoginPlusVelocity.jar
+            bukkit/target/FastLoginPlusBukkit-${{ env.VERSION }}.jar
+            folia/target/FastLoginPlusFolia-${{ env.VERSION }}.jar
+            bungee/target/FastLoginPlusBungee-${{ env.VERSION }}.jar
+            velocity/target/FastLoginPlusVelocity-${{ env.VERSION }}.jar
