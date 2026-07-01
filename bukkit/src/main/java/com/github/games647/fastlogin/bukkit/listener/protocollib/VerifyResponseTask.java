@@ -29,6 +29,7 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.injector.netty.channel.NettyChannelInjector;
+import io.netty.channel.Channel;
 import com.comphenix.protocol.injector.packet.PacketRegistry;
 import com.comphenix.protocol.injector.temporary.TemporaryPlayerFactory;
 import com.comphenix.protocol.reflect.EquivalentConverter;
@@ -111,12 +112,15 @@ public class VerifyResponseTask implements Runnable {
         try {
             verifyResponse(session);
         } finally {
-            //this is a fake packet; it shouldn't be sent to the server
+            // Cancel the original ENCRYPTION_BEGIN packet so the vanilla handler never sees it.
+            // Without this, the vanilla handler would try to enable encryption again (already done
+            // by us), causing Netty pipeline state corruption and chunk rendering issues on first login.
             synchronized (packetEvent.getAsyncMarker().getProcessingLock()) {
                 packetEvent.setCancelled(true);
             }
 
-            ProtocolLibrary.getProtocolManager().getAsynchronousManager().signalPacketTransmission(packetEvent);
+            ProtocolLibrary.getProtocolManager().getAsynchronousManager()
+                .signalPacketTransmission(packetEvent);
         }
     }
 
@@ -128,15 +132,6 @@ public class VerifyResponseTask implements Runnable {
             loginKey = EncryptionUtil.decryptSharedKey(privateKey, sharedSecret);
         } catch (GeneralSecurityException securityEx) {
             disconnect("error-kick", "Cannot decrypt received contents", securityEx);
-            return;
-        }
-
-        try {
-            if (!enableEncryption(loginKey)) {
-                return;
-            }
-        } catch (Exception ex) {
-            disconnect("error-kick", "Cannot decrypt received contents", ex);
             return;
         }
 
@@ -155,7 +150,7 @@ public class VerifyResponseTask implements Runnable {
             try {
                 Optional<Verification> response = resolver.hasJoined(requestedUsername, serverId, address);
                 if (response.isPresent()) {
-                    encryptConnection(session, requestedUsername, response.get());
+                    encryptConnection(session, requestedUsername, response.get(), loginKey);
                     return;
                 }
 
@@ -206,7 +201,8 @@ public class VerifyResponseTask implements Runnable {
         }
     }
 
-    private void encryptConnection(BukkitLoginSession session, String requestedUsername, Verification verification) {
+    private void encryptConnection(BukkitLoginSession session, String requestedUsername,
+                                   Verification verification, SecretKey loginKey) {
         plugin.getLog().info("Profile {} has a verified premium account", requestedUsername);
         String realUsername = verification.getName();
         if (realUsername == null) {
@@ -233,8 +229,46 @@ public class VerifyResponseTask implements Runnable {
             plugin.getLog().debug("Injected AuthMe 6.0 premium state for {}", requestedUsername);
         }
 
-        setPremiumUUID(session.getUuid());
-        receiveFakeStartPacket(realUsername, session.getClientPublicKey(), session.getUuid());
+        // Schedule Netty pipeline modifications on the channel's event loop thread.
+        // This avoids a race condition where enableEncryption() modifies the pipeline from an async
+        // thread while the vanilla handler is still processing the original ENCRYPTION_BEGIN packet.
+        // All pipeline work (encryption, UUID spoof, fake START injection) runs serially on the
+        // event loop, after ProtocolLib has cancelled the original packet and released the vanilla handler.
+        Channel channel = getChannel();
+        if (channel == null || !channel.isActive()) {
+            disconnect("error-kick", "Channel unavailable for {}", requestedUsername);
+            return;
+        }
+
+        String username = realUsername;
+        UUID uuid = verification.getId();
+        ClientPublicKey clientKey = session.getClientPublicKey();
+        channel.eventLoop().execute(() -> {
+            try {
+                if (!enableEncryption(loginKey)) {
+                    return;
+                }
+            } catch (Exception ex) {
+                disconnect("error-kick", "Cannot enable encryption for {}", username, ex);
+                return;
+            }
+
+            setPremiumUUID(uuid);
+            receiveFakeStartPacket(username, clientKey, uuid);
+        });
+    }
+
+    private Channel getChannel() {
+        try {
+            NettyChannelInjector injectorContainer = (NettyChannelInjector) Accessors.getMethodAccessorOrNull(
+                    TemporaryPlayerFactory.class, "getInjectorFromPlayer", Player.class
+            ).invoke(null, player);
+
+            return FuzzyReflection.getFieldValue(injectorContainer, Channel.class, true);
+        } catch (Exception ex) {
+            plugin.getLog().error("Failed to get Netty channel for {}", player, ex);
+            return null;
+        }
     }
 
     private void setPremiumUUID(UUID premiumUUID) {
