@@ -47,5 +47,6 @@ jobs:
           body_path: /tmp/release-notes.md
           files: |
             bukkit/target/FastLoginPlusBukkit.jar
+            folia/target/FastLoginPlusFolia.jar
             bungee/target/FastLoginPlusBungee.jar
             velocity/target/FastLoginPlusVelocity.jar
