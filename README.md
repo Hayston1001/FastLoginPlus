@@ -1,41 +1,52 @@
 # FastLoginPlus
 
-[中文](README_zh.md)
+[中文→](README_zh.md)
 
-> **Actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin)** — auto-detect and login premium Minecraft accounts on offline-mode servers.
+> **Auto-detect and login premium Minecraft players on offline-mode servers** — no password needed, no client mods required. Actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin).
 
-For base features, platform support, and technical details, see [FastLogin's README](https://github.com/TuxCoding/FastLogin).
+Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow cracked clients, but this forces all players — including those with paid accounts — to type a password every time they join. FastLoginPlus checks each player against Mojang's API on login: if they own the game, they skip the auth plugin entirely and get their real UUID and skin automatically.
 
-## What's Different
+## Features
 
-- **AuthMe 6.0 compatibility** — auto-detects AuthMe version, adapts premium flow and command namespace (`/flp`) without user config.
-- **Offline Whitelist** — block unknown cracked players, allow premium via Mojang API. Replaces the upstream `switchMode` which had issues with new premium players being kicked.
-- **Multi-language** — built-in English and Chinese, custom language files supported, bilingual config comments.
-- **SQLite concurrency** — WAL mode, busy timeout, thread-safe operations with `ReentrantLock` (including `deleteProfile`).
-- **SQLite on proxy platforms** — BungeeCord and Velocity now bundle SQLite JDBC driver for single-proxy setups. Upstream only supports MySQL/MariaDB on proxies.
-- **Session retry** — Mojang session verification retries on network errors instead of failing immediately.
-- **SkinsRestorer compatibility** — no longer overrides skins set via SkinsRestorer.
-- **`/flp delete` rewrite** — localized messages, premium player protection, BungeeCord support.
-- **Log readability** — human-readable login flow messages instead of raw packet dumps.
+### Core (from FastLogin)
+
+* Auto-detect premium accounts via Mojang API — skip auth plugin login
+* Premium UUID and skin forwarding
+* Auto-register new premium players
+* BungeeCord / Velocity proxy support
+* Bedrock player support via Geyser / Floodgate
+
+### Improvements (new in FastLoginPlus)
+
+* **AuthMe 6.0 compatibility** — auto-detects AuthMe version without user config
+* **Offline Whitelist** — block unknown cracked players, allow premium via Mojang API. Replaces upstream `switchMode` which kicked new premium players
+* **Multi-layer anti-bot** — per-IP rate limiting, burst detection, temporary IP ban, trusted IP whitelist, and `FastLoginAntiBotEvent` for plugin integration
+* **Folia support** — dedicated module with Folia-compatible scheduler (`Entity.getScheduler()`, `Bukkit.getAsyncScheduler()`)
+* **Auto update check** — checks GitHub Releases on startup and periodically; notifies OPs in-game when a new version is available
+* **Multi-language** — built-in English and Chinese, custom language files supported, bilingual config comments
+* **SQLite on proxy platforms** — BungeeCord and Velocity now bundle SQLite JDBC driver; upstream only supports MySQL/MariaDB on proxies
+* **Session retry** — Mojang verification retries on network errors instead of failing immediately
+* **SkinsRestorer compatibility** — no longer overrides skins set via SkinsRestorer
+* **Log readability** — human-readable login flow messages instead of raw packet dumps
 
 ## Quick Start
 
 **Spigot / Paper:** install ProtocolLib → drop `FastLoginPlusBukkit.jar` in `plugins/` → set `online-mode=false`
 
-**BungeeCord / Velocity:** install on both proxy and backend → configure `allowed-proxies.txt` → enable IP forwarding → set `online-mode=false` on both → [full guide](https://github.com/Hayston1001/FastLoginPlus/wiki)
+**Folia:** drop `FastLoginPlusFolia.jar` in `plugins/` → set `online-mode=false`
 
-For detailed installation steps, see [FastLogin's install guide](https://github.com/TuxCoding/FastLogin#how-to-install).
+**BungeeCord / Velocity:** install on both proxy and backend → configure `allowed-proxies.txt` → enable IP forwarding → set `online-mode=false` on both
 
-## Bedrock Player Support (Geyser / Floodgate)
+## Requirements
 
-FastLoginPlus works with [Geyser](https://geysermc.org/) to allow Bedrock players to join your offline-mode Java server.
+| Platform | Java | Notes |
+|----------|------|-------|
+| Spigot / Paper | 8+ | Requires [ProtocolLib 5.3+](https://www.spigotmc.org/resources/protocollib.1997/) or [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/) |
+| Folia | 17+ | Requires ProtocolLib 5.3+ |
+| BungeeCord / Waterfall | 17+ | — |
+| Velocity | 17+ | — |
 
-- **Geyser only** — Bedrock players join without Xbox authentication. FLP treats them as regular Java players; premium auto-login works if the username matches a paid Java account.
-- **Geyser + [Floodgate](https://geysermc.org/floodgate/)** (recommended) — Bedrock players authenticate via Xbox Live, and their usernames are prefixed (e.g. `Steve` → `.Steve`). This prevents FLP from mistaking a Bedrock player for a premium Java account and avoids username conflicts between platforms.
-
-> **Recommendation:** Install Floodgate alongside Geyser for better security and identity separation. FLP does not require Floodgate to function, but it is strongly recommended when both Java and Bedrock players share the same server.
-
-> **Version requirements:** Geyser requires **Java 21+** to run. Geyser-Spigot requires a Paper/Spigot server on **1.20.5 or above**. Servers below 1.20.5 can still use Geyser by installing [ViaVersion](https://viaversion.com/) on the backend and running Geyser on a proxy (Velocity/BungeeCord), or by using Geyser-Standalone with ViaVersion. ViaVersion allows the server to accept newer Java clients, which Geyser uses as the translation target. See [Geyser supported versions](https://geysermc.org/wiki/geyser/supported-versions/) for details.
+An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin). See [full list](https://github.com/TuxCoding/FastLogin#supported-auth-plugins).
 
 ## Commands & Permissions
 
