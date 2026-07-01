@@ -43,6 +43,15 @@
 language: en
 
 # ========================================
+# Update Check / 更新检查
+# ========================================
+# Check for new versions on GitHub. Logs to console; notifies OPs on login.
+# 检查 GitHub 上的新版本. 打印到控制台; OP 登录时发送消息.
+check-update: true
+# Check interval in hours / 检查间隔 (小时)
+update-check-interval: 24
+
+# ========================================
 # Anti-bot / 反机器人
 # ========================================
 # Simple anti-bot protection. For serious protection, use a dedicated firewall.

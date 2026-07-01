@@ -61,6 +61,7 @@ import com.github.games647.fastlogin.core.antibot.PerIpRateLimiter;
 import com.github.games647.fastlogin.core.antibot.RateLimiter;
 import com.github.games647.fastlogin.core.antibot.TickingRateLimiter;
 import com.github.games647.fastlogin.core.antibot.TrustedIpSet;
+import com.github.games647.fastlogin.core.UpdateChecker;
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
 import com.github.games647.fastlogin.core.hooks.DefaultPasswordGenerator;
 import com.github.games647.fastlogin.core.hooks.PasswordGenerator;
@@ -98,6 +99,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     private AntiBotService antiBot;
     private PasswordGenerator<P> passwordGenerator = new DefaultPasswordGenerator<>();
     private AuthPlugin<P> authPlugin;
+    private UpdateChecker updateChecker;
 
     public FastLoginCore(T plugin) {
         this.plugin = plugin;
@@ -176,6 +178,14 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         resolver.setMaxNameRequests(config.getInt("mojang-request-limit"));
         resolver.setProxySelector(new RotatingProxySelector(proxies));
         resolver.setOutgoingAddresses(addresses);
+
+        if (config.getBoolean("check-update", true)) {
+            String currentVersion = plugin.getClass().getPackage().getImplementationVersion();
+            if (currentVersion == null) {
+                currentVersion = "unknown";
+            }
+            updateChecker = new UpdateChecker(plugin.getLog(), currentVersion);
+        }
     }
 
     private AntiBotService createAntiBotService(Configuration botSection) {
@@ -357,6 +367,14 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     public AntiBotService getAntiBotService() {
         return antiBot;
+    }
+
+    public UpdateChecker getUpdateChecker() {
+        return updateChecker;
+    }
+
+    public int getUpdateCheckInterval() {
+        return config.getInt("update-check-interval", 24);
     }
 
     public void setAuthPluginHook(AuthPlugin<P> authPlugin) {

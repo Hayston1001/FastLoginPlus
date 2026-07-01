@@ -52,10 +52,12 @@ import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
 import com.github.games647.fastlogin.bukkit.listener.PaperCacheListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.ProtocolLibListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.SkinApplyListener;
+import com.github.games647.fastlogin.bukkit.listener.UpdateNotifyListener;
 import com.github.games647.fastlogin.bukkit.listener.protocolsupport.ProtocolSupportListener;
 import com.github.games647.fastlogin.bukkit.task.DelayedAuthHook;
 import com.github.games647.fastlogin.core.CommonUtil;
 import com.github.games647.fastlogin.core.PremiumStatus;
+import com.github.games647.fastlogin.core.UpdateChecker;
 import com.github.games647.fastlogin.core.antibot.AntiBotService;
 import com.github.games647.fastlogin.core.hooks.bedrock.BedrockService;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
@@ -175,11 +177,43 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
 
         skinsRestorerCompat = new SkinsRestorerCompat(logger);
+
+        scheduleUpdateCheck();
     }
 
     private void registerCommands() {
         Optional.ofNullable(getCommand("flp")).ifPresent(c ->
             c.setExecutor(new FlpCommand(this)));
+    }
+
+    private void scheduleUpdateCheck() {
+        UpdateChecker checker = core.getUpdateChecker();
+        if (checker == null) {
+            return;
+        }
+
+        long intervalTicks = core.getUpdateCheckInterval() * 60L * 60L;
+        getServer().getScheduler().runTaskLaterAsynchronously(this, () -> {
+            if (checker.checkForUpdates()) {
+                String msg = core.getMessage("update-available");
+                if (msg != null) {
+                    logger.warn(msg.replace("%new%", checker.getLatestVersion())
+                            .replace("%current%", checker.getCurrentVersion()));
+                }
+            }
+
+            getServer().getScheduler().runTaskTimerAsynchronously(this, () -> {
+                if (checker.checkForUpdates()) {
+                    String msg = core.getMessage("update-available");
+                    if (msg != null) {
+                        logger.warn(msg.replace("%new%", checker.getLatestVersion())
+                                .replace("%current%", checker.getCurrentVersion()));
+                    }
+                }
+            }, intervalTicks, intervalTicks);
+        }, 60L);
+
+        getServer().getPluginManager().registerEvents(new UpdateNotifyListener(this), this);
     }
 
     private boolean initializeFloodgate() {

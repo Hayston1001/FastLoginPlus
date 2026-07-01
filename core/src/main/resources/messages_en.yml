@@ -90,3 +90,6 @@ premium-warning: '&c&lWARNING: &6This command should&l only&6 be invoked if you 
 
 # Client key verification
 invalid-public-key: '&cInvalid client public key. Please try to restart your game.'
+
+# Update notification
+update-available: '&e[FastLoginPlus] &aNew version available: &f%new% &a(current: &f%current%&a). Download: &fhttps://github.com/Hayston1001/FastLoginPlus/releases'

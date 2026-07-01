@@ -48,6 +48,7 @@ import com.github.games647.fastlogin.core.message.ChannelMessage;
 import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.NamespaceKey;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
+import com.github.games647.fastlogin.core.UpdateChecker;
 import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
@@ -111,6 +112,7 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
         getProxy().registerChannel(NamespaceKey.getCombined(getName(), DeletePremiumMessage.DELETE_CHANNEL));
 
         registerHook();
+        scheduleUpdateCheck();
     }
 
     @Override
@@ -149,6 +151,24 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
         } catch (ReflectiveOperationException ex) {
             logger.error("Couldn't load the auth hook class", ex);
         }
+    }
+
+    private void scheduleUpdateCheck() {
+        UpdateChecker checker = core.getUpdateChecker();
+        if (checker == null) {
+            return;
+        }
+
+        long intervalSeconds = core.getUpdateCheckInterval() * 60L * 60L;
+        getProxy().getScheduler().schedule(this, () -> {
+            if (checker.checkForUpdates()) {
+                String msg = core.getMessage("update-available");
+                if (msg != null) {
+                    logger.warn(msg.replace("%new%", checker.getLatestVersion())
+                            .replace("%current%", checker.getCurrentVersion()));
+                }
+            }
+        }, 3L, intervalSeconds, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     public void sendPluginMessage(Server server, ChannelMessage message) {

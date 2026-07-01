@@ -46,6 +46,7 @@ import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.ChannelMessage;
 import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
+import com.github.games647.fastlogin.core.UpdateChecker;
 import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
@@ -119,6 +120,8 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         channelRegistry.register(MinecraftChannelIdentifier.create(getName(), ChangePremiumMessage.CHANGE_CHANNEL));
         channelRegistry.register(MinecraftChannelIdentifier.create(getName(), SuccessMessage.SUCCESS_CHANNEL));
         channelRegistry.register(MinecraftChannelIdentifier.create(getName(), DeletePremiumMessage.DELETE_CHANNEL));
+
+        scheduleUpdateCheck();
     }
 
     @Subscribe
@@ -126,6 +129,26 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         if (core != null) {
             core.close();
         }
+    }
+
+    private void scheduleUpdateCheck() {
+        UpdateChecker checker = core.getUpdateChecker();
+        if (checker == null) {
+            return;
+        }
+
+        long intervalSeconds = core.getUpdateCheckInterval() * 60L * 60L;
+        server.getScheduler().buildTask(this, () -> {
+            if (checker.checkForUpdates()) {
+                String msg = core.getMessage("update-available");
+                if (msg != null) {
+                    logger.warn(msg.replace("%new%", checker.getLatestVersion())
+                            .replace("%current%", checker.getCurrentVersion()));
+                }
+            }
+        }).delay(3L, java.util.concurrent.TimeUnit.SECONDS)
+          .repeat(intervalSeconds, java.util.concurrent.TimeUnit.SECONDS)
+          .schedule();
     }
 
     @Override
