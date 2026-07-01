@@ -208,8 +208,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                                 .replace("%current%", checker.getCurrentVersion()));
                     }
                 }
-            }, intervalTicks, intervalTicks);
-        }, 60L);
+            }, intervalTicks, intervalTicks, java.util.concurrent.TimeUnit.SECONDS);
+        }, 60L, java.util.concurrent.TimeUnit.SECONDS);
 
         getServer().getPluginManager().registerEvents(new UpdateNotifyListener(this), this);
     }
