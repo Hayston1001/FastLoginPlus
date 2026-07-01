@@ -27,25 +27,73 @@ package com.github.games647.fastlogin.core.antibot;
 
 import org.slf4j.Logger;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
 public class AntiBotService {
 
     private final Logger logger;
 
-    private final RateLimiter rateLimiter;
+    private final RateLimiter globalLimiter;
     private final Action limitReachedAction;
 
-    public AntiBotService(Logger logger, RateLimiter rateLimiter, Action limitReachedAction) {
-        this.logger = logger;
+    private final TrustedIpSet trustedIpSet;
+    private final IpBanManager ipBanManager;
+    private final PerIpRateLimiter perIpLimiter;
+    private final long banDurationMs;
 
-        this.rateLimiter = rateLimiter;
+    public AntiBotService(Logger logger, RateLimiter globalLimiter, Action limitReachedAction,
+                          TrustedIpSet trustedIpSet, IpBanManager ipBanManager,
+                          PerIpRateLimiter perIpLimiter, long banDurationMs) {
+        this.logger = logger;
+        this.globalLimiter = globalLimiter;
         this.limitReachedAction = limitReachedAction;
+        this.trustedIpSet = trustedIpSet;
+        this.ipBanManager = ipBanManager;
+        this.perIpLimiter = perIpLimiter;
+        this.banDurationMs = banDurationMs;
     }
 
+    /**
+     * Check an incoming connection through the multi-layer anti-bot pipeline.
+     *
+     * <p>Check order:
+     * <ol>
+     *   <li>Trusted IP → allow immediately</li>
+     *   <li>Banned IP → reject</li>
+     *   <li>Per-IP rate limit → ban + reject if exceeded</li>
+     *   <li>Global rate limit → reject if exceeded</li>
+     * </ol>
+     *
+     * @param clientAddress the client's socket address
+     * @param username      the player's username
+     * @return the action to take
+     */
     public Action onIncomingConnection(InetSocketAddress clientAddress, String username) {
-        if (!rateLimiter.tryAcquire()) {
-            logger.warn("Anti-Bot join limit - Ignoring {}", clientAddress);
+        InetAddress address = clientAddress.getAddress();
+
+        // 1. trusted IP — always allow
+        if (trustedIpSet.isTrusted(address)) {
+            return Action.Continue;
+        }
+
+        // 2. banned IP — reject
+        if (ipBanManager.isBanned(address)) {
+            logger.warn("Anti-Bot: banned IP rejected - {} ({})", username, clientAddress);
+            return limitReachedAction;
+        }
+
+        // 3. per-IP rate limit
+        if (!perIpLimiter.tryAcquire(address)) {
+            ipBanManager.ban(address, banDurationMs);
+            logger.warn("Anti-Bot: per-IP limit exceeded, banning {} ({}) for {}ms",
+                    username, clientAddress, banDurationMs);
+            return limitReachedAction;
+        }
+
+        // 4. global rate limit
+        if (!globalLimiter.tryAcquire()) {
+            logger.warn("Anti-Bot: global join limit - {} ({})", username, clientAddress);
             return limitReachedAction;
         }
 

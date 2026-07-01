@@ -56,8 +56,11 @@ import com.github.games647.fastlogin.core.CommonUtil;
 import com.github.games647.fastlogin.core.ProxyAgnosticMojangResolver;
 import com.github.games647.fastlogin.core.antibot.AntiBotService;
 import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
+import com.github.games647.fastlogin.core.antibot.IpBanManager;
+import com.github.games647.fastlogin.core.antibot.PerIpRateLimiter;
 import com.github.games647.fastlogin.core.antibot.RateLimiter;
 import com.github.games647.fastlogin.core.antibot.TickingRateLimiter;
+import com.github.games647.fastlogin.core.antibot.TrustedIpSet;
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
 import com.github.games647.fastlogin.core.hooks.DefaultPasswordGenerator;
 import com.github.games647.fastlogin.core.hooks.PasswordGenerator;
@@ -176,7 +179,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     private AntiBotService createAntiBotService(Configuration botSection) {
-        RateLimiter rateLimiter;
+        Ticker ticker = Ticker.systemTicker();
+
+        // --- global rate limiter (existing) ---
+        RateLimiter globalLimiter;
         if (botSection.getBoolean("enabled", true)) {
             int maxCon = botSection.getInt("connections", 200);
             long expireTime = botSection.getLong("expire", 5) * 60 * 1_000L;
@@ -184,12 +190,13 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
                 expireTime = MAX_EXPIRE_RATE;
             }
 
-            rateLimiter = new TickingRateLimiter(Ticker.systemTicker(), maxCon, expireTime);
+            globalLimiter = new TickingRateLimiter(ticker, maxCon, expireTime);
         } else {
             // no-op rate limiter
-            rateLimiter = () -> true;
+            globalLimiter = () -> true;
         }
 
+        // --- action ---
         Action action = Action.Ignore;
         switch (botSection.getString("action", "ignore")) {
             case "ignore":
@@ -202,7 +209,31 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
                 plugin.getLog().warn("Invalid anti bot action - defaulting to ignore");
         }
 
-        return new AntiBotService(plugin.getLog(), rateLimiter, action);
+        // --- trusted IPs ---
+        Set<InetAddress> trustedIps = new HashSet<>();
+        for (String ip : botSection.getStringList("trusted-ips")) {
+            try {
+                trustedIps.add(InetAddress.getByName(ip));
+            } catch (UnknownHostException ex) {
+                plugin.getLog().warn("Invalid trusted-ips entry: {}", ip, ex);
+            }
+        }
+        TrustedIpSet trustedIpSet = new TrustedIpSet(trustedIps);
+
+        // --- per-IP rate limiter ---
+        int burstLimit = botSection.getInt("burst-limit", 10);
+        long burstWindowMs = botSection.getLong("burst-window", 10) * 1_000L;
+        int perIpConnLimit = botSection.getInt("per-ip-connections", 20);
+        long perIpExpireMs = botSection.getLong("per-ip-expire", 5) * 60 * 1_000L;
+        PerIpRateLimiter perIpLimiter = new PerIpRateLimiter(ticker, burstLimit, burstWindowMs,
+                perIpConnLimit, perIpExpireMs);
+
+        // --- IP ban manager ---
+        long banDurationMs = botSection.getLong("ban-duration", 5) * 60 * 1_000L;
+        IpBanManager ipBanManager = new IpBanManager(ticker);
+
+        return new AntiBotService(plugin.getLog(), globalLimiter, action,
+                trustedIpSet, ipBanManager, perIpLimiter, banDurationMs);
     }
 
     private Configuration loadFile(String fileName) throws IOException {

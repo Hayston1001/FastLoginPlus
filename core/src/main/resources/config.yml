@@ -1,3 +1,29 @@
+#
+# SPDX-License-Identifier: MIT
+#
+# The MIT License (MIT)
+#
+# Copyright (c) 2015-2024 games647 and contributors
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+
 # ========================================
 # FastLoginPlus Configuration
 # FastLoginPlus 配置文件
@@ -30,6 +56,27 @@ anti-bot:
   # Action when limit is hit: 'ignore' (drop) or 'block' (kick)
   # 达到上限时的动作: 'ignore' (忽略) 或 'block' (踢出)
   action: 'ignore'
+
+  # --- Per-IP rate limiting / 按 IP 限速 ---
+  # Max connections per IP in the long window / 单个 IP 在长时间窗口内允许的最大连接数
+  per-ip-connections: 20
+  # Long window duration (minutes) / 长时间窗口 (分钟)
+  per-ip-expire: 5
+
+  # --- Burst detection / 突发检测 ---
+  # Max connections per IP in the burst window / 短时间内单 IP 最大连接数
+  burst-limit: 10
+  # Burst window duration (seconds) / 突发窗口 (秒)
+  burst-window: 10
+
+  # --- Temporary ban / 临时封禁 ---
+  # Ban duration when per-IP limit is exceeded (minutes) / 单 IP 超限后封禁时长 (分钟)
+  ban-duration: 5
+
+  # --- Trusted IPs / 信任 IP ---
+  # IPs that bypass all anti-bot checks / 跳过所有反机器人检查的 IP
+  trusted-ips: []
+  #  - '127.0.0.1'
 
 # ========================================
 # Premium Detection / 正版检测
