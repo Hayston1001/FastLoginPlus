@@ -27,18 +27,23 @@ package com.github.games647.fastlogin.bukkit.command;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 
+import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Umbrella command for /flp when AuthMe 6.0+ is present.
  * Routes /flp premium, /flp cracked, /flp delete to their handlers.
  */
-public class FlpCommand implements CommandExecutor {
+public class FlpCommand implements CommandExecutor, TabCompleter {
 
     private final FastLoginBukkit plugin;
     private final PremiumCommand premiumCmd;
@@ -81,5 +86,27 @@ public class FlpCommand implements CommandExecutor {
                 sender.sendMessage("§7Usage: /flp premium|cracked|delete [player]");
                 return true;
         }
+    }
+
+    @Override
+    public @NotNull List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
+                                               @NotNull String label, @NotNull String[] args) {
+        if (args.length == 0 || args.length == 1) {
+            String prefix = args.length == 0 ? "" : args[0].toLowerCase();
+            return Arrays.stream(new String[]{"premium", "cracked", "delete"})
+                    .filter(s -> s.startsWith(prefix))
+                    .collect(Collectors.toList());
+        }
+
+        // Second argument: online player names
+        if (args.length == 2) {
+            String prefix = args[1].toLowerCase();
+            return Bukkit.getOnlinePlayers().stream()
+                    .map(p -> p.getName())
+                    .filter(name -> name.toLowerCase().startsWith(prefix))
+                    .collect(Collectors.toList());
+        }
+
+        return Collections.emptyList();
     }
 }
