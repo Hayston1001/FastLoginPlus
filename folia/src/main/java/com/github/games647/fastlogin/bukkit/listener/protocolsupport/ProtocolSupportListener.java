@@ -31,6 +31,8 @@ import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.bukkit.event.BukkitFastLoginPreLoginEvent;
 import com.github.games647.fastlogin.core.antibot.AntiBotService;
 import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
+
+import com.github.games647.fastlogin.bukkit.event.BukkitFastLoginAntiBotEvent;
 import com.github.games647.fastlogin.core.shared.JoinManagement;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -69,6 +71,15 @@ public class ProtocolSupportListener extends JoinManagement<Player, CommandSende
         plugin.getLog().info("Incoming login request for {} from {}", username, address);
 
         Action action = antiBotService.onIncomingConnection(address, username);
+        if (action != Action.Continue) {
+            BukkitFastLoginAntiBotEvent antiBotEvent =
+                    new BukkitFastLoginAntiBotEvent(address, username, action);
+            plugin.getServer().getPluginManager().callEvent(antiBotEvent);
+            if (antiBotEvent.isCancelled()) {
+                action = Action.Continue;
+            }
+        }
+
         switch (action) {
             case Ignore:
                 // just ignore
