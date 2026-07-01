@@ -55,6 +55,7 @@ desktop.ini
 # Local library jars (provided by user, not distributed)
 !bukkit/lib/*.jar
 !bungee/lib/*.jar
+!folia/lib/*.jar
 
 # AI agent
 AGENTS.md
