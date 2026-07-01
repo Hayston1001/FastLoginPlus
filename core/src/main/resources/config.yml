@@ -142,17 +142,20 @@ kick-toggle: true
 # Auto-register players in flp DB but missing from auth plugin DB
 auto-register-unknown: true
 
+# ======[[ Spigot+ProtocolLib users only ]]======
 # Alternative session resolver that doesn't send server IP to Mojang.
-# Useful behind DNAT / transparent reverse proxy. Spigot+ProtocolLib only.
+# Useful behind DNAT / transparent reverse proxy.
 useProxyAgnosticResolver: true
 
-# Session server retry when network error occurs (Spigot+ProtocolLib only)
+# ======[[ Spigot+ProtocolLib users only ]]======
+# Session server retry when network error occurs
 # Total attempts per login
 mojang-retry-count: 3
 # Delay between retries in milliseconds
 mojang-retry-delay: 1000
 
-# Verify client public key signature (1.19+ only)
+# ======[[ 1.19+ only ]]======
+# Verify client public key signature
 verifyClientKeys: false
 
 # IP addresses for rotating Mojang API requests (to avoid rate limits)
