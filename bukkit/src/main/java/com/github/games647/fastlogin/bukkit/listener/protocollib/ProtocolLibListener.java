@@ -45,6 +45,8 @@ import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.packet.ClientPublicKey;
 import com.github.games647.fastlogin.core.antibot.AntiBotService;
 import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
+
+import com.github.games647.fastlogin.bukkit.event.BukkitFastLoginAntiBotEvent;
 import com.mojang.datafixers.util.Either;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
@@ -131,6 +133,15 @@ public class ProtocolLibListener extends PacketAdapter {
                 String username = getUsername(packet);
 
                 Action action = antiBotService.onIncomingConnection(address, username);
+                if (action != Action.Continue) {
+                    BukkitFastLoginAntiBotEvent antiBotEvent =
+                            new BukkitFastLoginAntiBotEvent(address, username, action);
+                    plugin.getServer().getPluginManager().callEvent(antiBotEvent);
+                    if (antiBotEvent.isCancelled()) {
+                        action = Action.Continue;
+                    }
+                }
+
                 switch (action) {
                     case Ignore:
                         // just ignore

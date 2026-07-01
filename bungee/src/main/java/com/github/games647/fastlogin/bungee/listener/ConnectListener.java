@@ -33,6 +33,8 @@ import com.github.games647.fastlogin.bungee.task.FloodgateAuthTask;
 import com.github.games647.fastlogin.bungee.task.ForceLoginTask;
 import com.github.games647.fastlogin.core.antibot.AntiBotService;
 import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
+
+import com.github.games647.fastlogin.bungee.event.BungeeFastLoginAntiBotEvent;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -132,6 +134,14 @@ public class ConnectListener implements Listener {
         plugin.getLog().info("Incoming login request for {} from {}", username, connection.getSocketAddress());
 
         Action action = antiBotService.onIncomingConnection(address, username);
+        if (action != Action.Continue) {
+            BungeeFastLoginAntiBotEvent antiBotEvent = new BungeeFastLoginAntiBotEvent(address, username, action);
+            plugin.getProxy().getPluginManager().callEvent(antiBotEvent);
+            if (antiBotEvent.isCancelled()) {
+                action = Action.Continue;
+            }
+        }
+
         switch (action) {
             case Ignore:
                 // just ignore

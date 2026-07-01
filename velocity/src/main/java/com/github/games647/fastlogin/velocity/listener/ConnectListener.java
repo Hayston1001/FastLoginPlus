@@ -28,6 +28,8 @@ package com.github.games647.fastlogin.velocity.listener;
 import com.github.games647.craftapi.UUIDAdapter;
 import com.github.games647.fastlogin.core.antibot.AntiBotService;
 import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
+
+import com.github.games647.fastlogin.velocity.event.VelocityFastLoginAntiBotEvent;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -63,6 +65,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 
 public class ConnectListener {
 
@@ -97,6 +100,21 @@ public class ConnectListener {
         }
 
         Action action = antiBotService.onIncomingConnection(address, username);
+        if (action != Action.Continue) {
+            VelocityFastLoginAntiBotEvent antiBotEvent = new VelocityFastLoginAntiBotEvent(address, username, action);
+            try {
+                plugin.getProxy().getEventManager().fire(antiBotEvent).get();
+            } catch (InterruptedException interruptedEx) {
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException executionEx) {
+                plugin.getLog().error("Error firing anti-bot event", executionEx);
+            }
+
+            if (antiBotEvent.isCancelled()) {
+                action = Action.Continue;
+            }
+        }
+
         switch (action) {
             case Ignore:
                 // just ignore
