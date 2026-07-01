@@ -126,7 +126,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         saveDefaultFile(defaultMessagesFile);
 
         // Save all built-in language files so users can see what's available
-        saveDefaultFile("messages_zh.yml", defaultMessagesFile);
+        saveDefaultFile("messages_zh.yml");
 
         // Save the selected language file (falls back to English if not bundled)
         if (!language.equals("en") && !language.equals("zh")) {
