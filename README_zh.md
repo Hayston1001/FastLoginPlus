@@ -48,6 +48,25 @@
 
 需要后端安装登录插件（如 AuthMe、LoginSecurity、CrazyLogin）。[完整列表](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)。
 
+### AuthMe 6.0
+
+AuthMe 6.0 新增了 **preJoin 对话框**（Paper/Folia），在配置阶段就阻塞连接——早于 `PlayerJoinEvent`。FLP 无法绕过此对话框。
+
+**必须配置：** 在 AuthMe 的 `config.yml` 中设置 `enablePremium: true`。这会启用 AuthMe 的正版子系统，允许 FLP 注入已验证的会话数据。否则控制台将输出错误消息。
+
+> AuthMe 5.x 或未使用 Paper 对话框系统的服务器不需要额外配置。
+
+### 基岩版玩家支持（Geyser / Floodgate）
+
+FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入离线模式 Java 服务器。
+
+- **仅 Geyser** — 基岩玩家无需 Xbox 认证即可加入。FLP 将其视为普通 Java 玩家；若用户名与正版 Java 账号匹配，会触发正版自动登录。
+- **Geyser + [Floodgate](https://geysermc.org/floodgate/)**（推荐） — 基岩玩家通过 Xbox Live 认证，用户名自动添加前缀（如 `Steve` → `.Steve`），避免 FLP 将基岩玩家误判为正版 Java 账号，同时防止两个平台的用户名冲突。
+
+> **建议：** 在 Geyser 基础上额外安装 Floodgate，以获得更好的安全性和身份隔离。FLP 不强制要求 Floodgate，但在 Java 与基岩玩家共存的服务器上强烈推荐使用。
+
+> **版本要求：** Geyser 运行需要 **Java 21+**。Geyser-Spigot 要求 Paper/Spigot 服务器版本在 **1.20.5 或以上**。低于 1.20.5 的服务器仍然可以通过 [ViaVersion](https://viaversion.com/) 使用 Geyser——在后端安装 ViaVersion 并通过代理（Velocity/BungeeCord）运行 Geyser，或直接搭建 Geyser-Standalone 配合 ViaVersion。ViaVersion 让服务器接受新版本 Java 客户端连接，Geyser 则以此为翻译目标实现基岩版接入。详见 [Geyser 支持的版本](https://geysermc.org/wiki/geyser/supported-versions/)。
+
 ## 命令与权限
 
 | 命令 | 说明 | 权限 | 默认值 |

@@ -47,10 +47,17 @@ import java.util.UUID;
  *   <li>{@link #forceRegisterInAuthMe} — auto-register a premium player in AuthMe's DB</li>
  *   <li>{@link #injectPendingPremium} — mark a player as pending premium verification</li>
  *   <li>{@link #injectVerifiedUuid} — store a verified Mojang UUID so AuthMe's
- *       shouldSkipPreJoinDialogForPremium() returns true</li>
+ *       {@code shouldSkipPreJoinDialogForPremium()} returns true</li>
  * </ul>
  *
  * <p>All methods are no-ops if AuthMe 6.0 is not detected.
+ *
+ * <p><b>How instances are found:</b> AuthMe 6.0 uses {@code ch.jalu.injector.Injector} as its DI
+ * container. {@code PendingPremiumCache} and {@code PremiumLoginVerifier} are <em>not</em> fields
+ * of {@code AuthMeApi} — they are separate beans managed by the injector and injected into
+ * internal classes like {@code AsynchronousJoin} and {@code PaperDialogFlowListener}.
+ * This class accesses them by reflecting on the {@code AuthMe.injector} field and calling
+ * {@code injector.getSingleton(TargetClass.class)}.
  */
 public final class AuthMePremiumIntegrator {
 
@@ -58,7 +65,7 @@ public final class AuthMePremiumIntegrator {
     private final AuthMeVersionDetector versionDetector;
 
     // Cached reflection handles (lazy-initialized)
-    private Object authMeApiInstance;
+    private Object authMeInjector;
     private Object pendingPremiumCache;
     private Object premiumLoginVerifier;
 
@@ -90,6 +97,33 @@ public final class AuthMePremiumIntegrator {
             return config.getBoolean("settings.enablePremium", false);
         } catch (Exception e) {
             plugin.getLog().debug("Could not read AuthMe enablePremium: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Returns true if AuthMe 6.0's preJoin dialog UI is enabled.
+     * Reads from AuthMe's config.yml; defaults to true (AuthMe's default).
+     *
+     * @return true if preJoin dialog is enabled
+     */
+    public boolean isPreJoinDialogEnabled() {
+        if (!versionDetector.isAuthMe6()) {
+            return false;
+        }
+        try {
+            Plugin authMePlugin = Bukkit.getPluginManager().getPlugin("AuthMe");
+            if (authMePlugin == null) {
+                return false;
+            }
+            File authMeConfig = new File(authMePlugin.getDataFolder(), "config.yml");
+            if (!authMeConfig.exists()) {
+                return false;
+            }
+            YamlConfiguration config = YamlConfiguration.loadConfiguration(authMeConfig);
+            return config.getBoolean("settings.registration.dialog.preJoin.enable", true);
+        } catch (Exception e) {
+            plugin.getLog().debug("Could not read AuthMe preJoin setting: {}", e.getMessage());
             return false;
         }
     }
@@ -128,8 +162,8 @@ public final class AuthMePremiumIntegrator {
 
     /**
      * Inject a pending premium entry into AuthMe's PendingPremiumCache.
-     * This causes shouldSkipPreJoinDialogForPremium() to return true (skips dialog).
-     * No-op if AuthMe 6.0 is not present.
+     * This causes {@code canBypassWithPremium()} to recognize the player's pending premium
+     * enrollment on reconnect. No-op if AuthMe 6.0 is not present.
      *
      * @param playerName the player name
      * @param mojangUuid the verified Mojang UUID
@@ -155,8 +189,9 @@ public final class AuthMePremiumIntegrator {
 
     /**
      * Store a verified Mojang UUID in AuthMe's PremiumLoginVerifier.
-     * This enables canBypassWithPremium() to find a verified session (60s TTL).
-     * No-op if AuthMe 6.0 is not present.
+     * This enables {@code shouldSkipPreJoinDialogForPremium()} to find a verified session
+     * (60s TTL) so the preJoin dialog is skipped for this player. No-op if AuthMe 6.0 is
+     * not present.
      *
      * @param playerName the player name
      * @param mojangUuid the verified Mojang UUID
@@ -193,14 +228,15 @@ public final class AuthMePremiumIntegrator {
             return;
         }
         try {
-            AuthMeApi api = AuthMeApi.getInstance();
-            if (api == null) {
+            Object injector = getAuthMeInjector();
+            if (injector == null) {
                 return;
             }
 
-            // Access AuthMe's DataSource through reflection
-            Object dataSource = findFieldByType(api.getClass(),
-                "fr.xephi.authme.datasource.DataSource", api);
+            // Get DataSource from AuthMe's DI injector
+            Class<?> dataSourceClass = Class.forName("fr.xephi.authme.datasource.DataSource");
+            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+            Object dataSource = getSingleton.invoke(injector, dataSourceClass);
             if (dataSource == null) {
                 return;
             }
@@ -231,44 +267,71 @@ public final class AuthMePremiumIntegrator {
 
     // --- Reflection helpers ---
 
+    /**
+     * Returns AuthMe's {@code ch.jalu.injector.Injector} instance by reflecting on the
+     * {@code AuthMe.injector} field. Cached after first successful lookup.
+     *
+     * @return the injector instance, or null if not found
+     */
+    private Object getAuthMeInjector() throws Exception {
+        if (authMeInjector != null) {
+            return authMeInjector;
+        }
+        Plugin authMePlugin = Bukkit.getPluginManager().getPlugin("AuthMe");
+        if (authMePlugin == null) {
+            return null;
+        }
+        // AuthMe has: private Injector injector;
+        for (Class<?> c = authMePlugin.getClass(); c != null; c = c.getSuperclass()) {
+            for (Field f : c.getDeclaredFields()) {
+                if (f.getType().getName().equals("ch.jalu.injector.Injector")) {
+                    f.setAccessible(true);
+                    authMeInjector = f.get(authMePlugin);
+                    return authMeInjector;
+                }
+            }
+        }
+        plugin.getLog().debug("Could not find AuthMe's Injector field");
+        return null;
+    }
+
+    /**
+     * Gets the {@code PendingPremiumCache} singleton from AuthMe's DI injector.
+     * The injector's {@code getSingleton()} method returns the managed instance.
+     *
+     * @return the PendingPremiumCache instance, or null if not found
+     */
     private Object getPendingPremiumCache() throws Exception {
         if (pendingPremiumCache != null) {
             return pendingPremiumCache;
         }
-        authMeApiInstance = AuthMeApi.getInstance();
-        if (authMeApiInstance == null) {
+        Object injector = getAuthMeInjector();
+        if (injector == null) {
             return null;
         }
-        pendingPremiumCache = findFieldByType(authMeApiInstance.getClass(),
-            "fr.xephi.authme.service.PendingPremiumCache", authMeApiInstance);
+        Class<?> cacheClass = Class.forName("fr.xephi.authme.service.PendingPremiumCache");
+        Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+        pendingPremiumCache = getSingleton.invoke(injector, cacheClass);
         return pendingPremiumCache;
     }
 
+    /**
+     * Gets the {@code PremiumLoginVerifier} singleton from AuthMe's DI injector.
+     * The injector's {@code getSingleton()} method returns the managed instance.
+     *
+     * @return the PremiumLoginVerifier instance, or null if not found
+     */
     private Object getPremiumLoginVerifier() throws Exception {
         if (premiumLoginVerifier != null) {
             return premiumLoginVerifier;
         }
-        if (authMeApiInstance == null) {
-            authMeApiInstance = AuthMeApi.getInstance();
-        }
-        if (authMeApiInstance == null) {
+        Object injector = getAuthMeInjector();
+        if (injector == null) {
             return null;
         }
-        premiumLoginVerifier = findFieldByType(authMeApiInstance.getClass(),
-            "fr.xephi.authme.service.PremiumLoginVerifier", authMeApiInstance);
+        Class<?> verifierClass = Class.forName("fr.xephi.authme.service.PremiumLoginVerifier");
+        Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+        premiumLoginVerifier = getSingleton.invoke(injector, verifierClass);
         return premiumLoginVerifier;
-    }
-
-    private static Object findFieldByType(Class<?> clazz, String typeName, Object instance)
-            throws Exception {
-        for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
-            for (Field f : c.getDeclaredFields()) {
-                if (f.getType().getName().equals(typeName)) {
-                    f.setAccessible(true);
-                    return f.get(instance);
-                }
-            }
-        }
-        return null;
     }
 }

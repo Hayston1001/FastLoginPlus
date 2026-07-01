@@ -226,6 +226,11 @@ public class VerifyResponseTask implements Runnable {
             UUID mojangUuid = verification.getId();
             integrator.injectPendingPremium(requestedUsername, mojangUuid);
             integrator.injectVerifiedUuid(requestedUsername, mojangUuid);
+            // Mark as premium in DB NOW so shouldSkipPreJoinDialogForPremium()
+            // sees auth.isPremium()=true during the configuration phase.
+            // Without this, the first login would be blocked by the preJoin dialog
+            // because markPlayerAsPremium() normally runs in ForceLoginTask (after PlayerJoinEvent).
+            integrator.markPlayerAsPremium(requestedUsername, mojangUuid);
             plugin.getLog().debug("Injected AuthMe 6.0 premium state for {}", requestedUsername);
         }
 
