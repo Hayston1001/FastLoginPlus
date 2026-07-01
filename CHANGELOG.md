@@ -1,5 +1,71 @@
 # FastLoginPlus Changelog
 
+## v0.1.0
+
+> **v0.1.0 marks the first major release of FastLoginPlus** — a consolidated upgrade covering new platforms, security hardening, and important bug fixes accumulated since the fork.
+>
+> **v0.1.0 是 FastLoginPlus 的首个里程碑版本** —— 涵盖新平台支持、安全加固以及 fork 以来积累的重要修复。
+
+### Folia Platform Support / Folia 平台支持
+
+- Add Folia as a separate module with FoliaScheduler
+- The stability on Folia still requires long-term observation and verification
+
+- 新增 Folia 作为独立模块，使用 FoliaScheduler
+- Folia 支持的稳定性仍需长期观察和检验
+
+### Proxy SQLite Support / 代理端 SQLite 支持
+
+- Add SQLite support for BungeeCord with sqlite-jdbc dependency and shading
+- Add missing org.sqlite relocation in Velocity for class isolation
+
+- 为 BungeeCord 添加 SQLite 支持，包含 sqlite-jdbc 依赖和重定位
+- 为 Velocity 添加缺失的 org.sqlite 重定位以实现类隔离
+
+### Automatic Update Check / 自动更新检查
+
+- Add UpdateChecker for GitHub Releases with startup and periodic checks
+- OP players receive update notifications on login
+- Config option: check-update (default: true)
+
+- 新增 UpdateChecker 检查 GitHub Releases，支持启动时和周期性检查
+- OP 玩家登录时会收到更新通知
+- 配置项：check-update（默认：true）
+
+### FastLoginAntiBotEvent / 反机器人事件
+
+- Add FastLoginAntiBotEvent interface in core (exposes address/username/action)
+- Fire event on Block/Ignore actions, allow cancellation to bypass
+
+- 新增 FastLoginAntiBotEvent 核心接口（暴露 address/username/action）
+- 在 Block/Ignore 操作时触发事件，允许取消以绕过
+
+### Multi-Layer Anti-Bot Upgrade / 多层反机器人升级
+
+- PerIpRateLimiter: dual-window (burst + long) per-IP rate limiting
+- IpBanManager: temporary IP ban with auto-expiration
+- TrustedIpSet: immutable whitelist bypassing all anti-bot checks
+- WindowCounter: thread-safe dual-window counter per IP
+- AntiBotService: refactored as multi-layer orchestrator (trusted IP → ban check → per-IP limit → global limit)
+- New config keys: per-ip-connections, per-ip-expire, burst-limit, burst-window, ban-duration, trusted-ips
+
+- PerIpRateLimiter：双窗口（突发 + 长期）每 IP 速率限制
+- IpBanManager：临时 IP 封禁，自动过期
+- TrustedIpSet：不可变白名单，绕过所有反机器人检查
+- WindowCounter：每 IP 线程安全双窗口计数器
+- AntiBotService：重构为多层编排器（可信 IP → 封禁检查 → 每 IP 限制 → 全局限制）
+- 新配置项：per-ip-connections、per-ip-expire、burst-limit、burst-window、ban-duration、trusted-ips
+
+### Bug Fixes / 修复
+
+- Fix chunk rendering race condition on first login (fixes TuxCoding/FastLogin#1358)
+- Add lock to SQLiteStorage.deleteProfile for thread safety
+- Unify version management — use ${project.version}
+
+- 修复首次登录时区块渲染竞态条件（修复 TuxCoding/FastLogin#1358）
+- 为 SQLiteStorage.deleteProfile 添加锁以确保线程安全
+- 统一版本管理 — 使用 ${project.version}
+
 ## v0.0.7
 
 ### Command Namespace Unification / 命令命名空间统一
