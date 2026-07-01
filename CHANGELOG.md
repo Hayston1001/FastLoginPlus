@@ -4,43 +4,31 @@
 
 ### AuthMe 6.0 preJoin Fix / AuthMe 6.0 preJoin 修复
 
-- Fix AuthMe 6.0 preJoin dialog blocking premium players: use AuthMe's DI injector (`ch.jalu.injector`) to get `PendingPremiumCache`, `PremiumLoginVerifier`, and `DataSource` instead of searching `AuthMeApi` fields (these beans are not fields of `AuthMeApi`)
-- Call `markPlayerAsPremium()` during LOGIN phase (VerifyResponseTask) so `auth.isPremium()=true` before preJoin dialog check runs, fixing the deadlock where the dialog blocked the connection before the premium flag could be set
-- Add startup validation: ERROR log when AuthMe 6.0 preJoin is enabled but `enablePremium` is disabled (required for FLP to inject premium state)
-- Document AuthMe 6.0 `enablePremium` requirement in README.md / README_zh.md
+- Fix AuthMe 6.0 preJoin dialog blocking premium players
+- Fix the deadlock where the dialog blocked the connection before the premium flag could be set
+- Add startup validation: ERROR log when AuthMe 6.0 preJoin is enabled but `enablePremium` is disabled
 
-- 修复 AuthMe 6.0 preJoin 对话框阻塞正版玩家：改用 AuthMe 的 DI 注入器（`ch.jalu.injector`）获取 `PendingPremiumCache`、`PremiumLoginVerifier` 和 `DataSource`，而非在 `AuthMeApi` 字段上反射查找（这些 bean 不是 `AuthMeApi` 的字段）
-- 在 LOGIN 阶段（VerifyResponseTask）调用 `markPlayerAsPremium()`，使 preJoin 对话框检查时 `auth.isPremium()` 已为 `true`，修复了对话框阻塞连接导致 premium 标记永远无法写入的死锁
+- 修复 AuthMe 6.0 preJoin 对话框阻塞正版玩家
+- 修复对话框阻塞连接导致 premium 标记永远无法写入的死锁
 - 新增启动验证：当 AuthMe 6.0 的 preJoin 开启但 `enablePremium` 未启用时输出 ERROR 日志
-- 在 README.md / README_zh.md 中添加 AuthMe 6.0 `enablePremium` 配置要求说明
 
 ### Tab Completion / 命令补全
 
-- Add tab completion for `/flp` command subcommands and player names (bukkit + folia)
+- Add tab completion for `/flp` command subcommands (bukkit + folia)
 
-- 为 `/flp` 命令的子命令和玩家名添加 Tab 补全（bukkit + folia）
+- 为 `/flp` 命令的子命令添加 Tab 补全（bukkit + folia）
 
 ### Language Files / 语言文件
 
-- Always save both `messages_en.yml` and `messages_zh.yml` to plugin config directory on startup, so users can see available languages and switch easily
+- Fix `messages_zh.yml` was not saved to the plugin configuration directory
 
-- 启动时始终将 `messages_en.yml` 和 `messages_zh.yml` 保存到插件配置目录，方便用户查看和切换语言
+- 修复 `messages_zh.yml` 未保存到插件配置目录
 
-### Documentation / 文档
+### Build / 构建
 
-- Restore Geyser/Floodgate section in README.md and README_zh.md
-- Optimize comments in config.yml
+- Add version number to JAR filenames
 
-- 在 README.md 和 README_zh.md 中恢复 Geyser/Floodgate 说明段落
-- 优化 config.yml 中的注释
-
-### Build & CI / 构建与 CI
-
-- Add version number to JAR filenames (e.g. `FastLoginPlusBukkit-0.1.1.jar`)
-- Add FastLoginPlusFolia.jar to release workflow
-
-- JAR 文件名包含版本号（如 `FastLoginPlusBukkit-0.1.1.jar`）
-- release workflow 新增 FastLoginPlusFolia.jar
+- JAR 文件名包含版本号
 
 ## v0.1.0
 
