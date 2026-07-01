@@ -48,8 +48,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- Set default for non-git clones -->
-        <git.commit.id>Unknown</git.commit.id>
-
         <maven.compiler.release>8</maven.compiler.release>
 
         <lombook.version>1.18.34</lombook.version>
@@ -98,23 +96,6 @@
                 <!-- Update compiler plugin for old Maven versions like GH runner -->
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.13.0</version>
-            </plugin>
-
-            <plugin>
-                <groupId>pl.project13.maven</groupId>
-                <artifactId>git-commit-id-plugin</artifactId>
-                <version>4.9.10</version>
-                <configuration>
-                    <failOnNoGitDirectory>false</failOnNoGitDirectory>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>get-the-git-infos</id>
-                        <goals>
-                            <goal>revision</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
 
             <plugin>
