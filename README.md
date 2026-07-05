@@ -50,11 +50,11 @@ An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogi
 
 ### AuthMe 6.0
 
-AuthMe 6.0 introduced a **preJoin dialog** (Paper/Folia) that blocks the connection during the configuration phase — before `PlayerJoinEvent`. FLP cannot bypass this dialog.
+AuthMe 6.0 adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP has implemented compatibility support.
 
-**Automatic setup:** FastLoginPlus now automatically enables AuthMe's premium subsystem (`enablePremium: true`) and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
+**Automatic setup:** FastLoginPlus now automatically enables AuthMe's premium automatic login(`enablePremium: true`) and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
 
-> On AuthMe 5.x or servers without Paper's dialog system, no extra configuration is needed.
+> No configuration changes will occur for those not using AuthMe 5.x or the preJoin dialog.
 
 ### Bedrock Player Support (Geyser / Floodgate)
 
