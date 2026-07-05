@@ -184,6 +184,8 @@
                             <archive>
                                 <manifestEntries>
                                     <Multi-Release>true</Multi-Release>
+                                    <Implementation-Version>${project.version}</Implementation-Version>
+                                    <Implementation-Title>${project.name}</Implementation-Title>
                                 </manifestEntries>
                             </archive>
                         </configuration>
