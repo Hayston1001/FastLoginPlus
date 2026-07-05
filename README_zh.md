@@ -52,7 +52,7 @@
 
 AuthMe 6.0 新增了 **preJoin 对话框**（Paper/Folia），在配置阶段就阻塞连接——早于 `PlayerJoinEvent`。FLP 无法绕过此对话框。
 
-**必须配置：** 在 AuthMe 的 `config.yml` 中设置 `enablePremium: true`。这会启用 AuthMe 的正版子系统，允许 FLP 注入已验证的会话数据。否则控制台将输出错误消息。
+**自动配置：** FastLoginPlus 现在会自动启用 AuthMe 的正版子系统（`enablePremium: true`）并注销 AuthMe 自带的正版验证监听器。无需手动配置。
 
 > AuthMe 5.x 或未使用 Paper 对话框系统的服务器不需要额外配置。
 

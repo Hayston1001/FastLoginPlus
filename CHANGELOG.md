@@ -1,5 +1,41 @@
 # FastLoginPlus Changelog
 
+## v0.1.2
+
+### AuthMe 6.0 Auto-Integration / AuthMe 6.0 自动集成
+
+- FLP automatically takes over AuthMe 6.0 premium verification — no manual `enablePremium=true` needed
+- `forceEnablePremium()`: sets `enablePremium=true` via AuthMe's Settings API and persists to config.yml
+- `unregisterPremiumPacketListener()`: unregisters AuthMe's PacketEvents listener so FLP is the sole verifier
+- Lazy re-assert on each premium login to handle `/authme reload` re-registering the listener
+
+- FLP 自动接管 AuthMe 6.0 正版验证——无需手动设置 `enablePremium=true`
+- `forceEnablePremium()`：通过 AuthMe 的 Settings API 设置 `enablePremium=true` 并持久化到 config.yml
+- `unregisterPremiumPacketListener()`：注销 AuthMe 的 PacketEvents 监听器，FLP 成为唯一验证源
+- 每次正版登录时懒式重新断言，防止 `/authme reload` 重新注册监听器
+
+### AuthMe 6.0 First-Time Premium Fix / AuthMe 6.0 首次正版玩家修复
+
+- Fix preJoin dialog not skipped for first-time premium players (getAuth()==null case)
+- Pre-create AuthMe DB record via saveAuth() + updatePremiumUuid() during LOGIN phase
+- Fix premium session not persisted after first login (breaks reconnect)
+- ForceLoginTask now saves onlinemodePreferred=true even when forceLogin returns ALREADY_AUTHENTICATED
+
+- 修复首次正版玩家的 preJoin 对话框未跳过的问题（getAuth()==null 情况）
+- 在 LOGIN 阶段通过 saveAuth() + updatePremiumUuid() 预创建 AuthMe 数据库记录
+- 修复首次登录后正版会话未持久化（导致重连失败）
+- ForceLoginTask 现在即使 forceLogin 返回 ALREADY_AUTHENTICATED 也会保存 onlinemodePreferred=true
+
+### Other Bug Fixes / 其他 Bug 修复
+
+- Fix version check showing "unknown" instead of actual version (add Implementation-Version to JAR manifest)
+- Fix `/flp cracked` command showing wrong message when targeting another player
+- Fix START packet forwarded after source.kick() causing vanilla server to overwrite FLP's kick message
+
+- 修复版本检查显示 "unknown" 而非实际版本（在 JAR manifest 中添加 Implementation-Version）
+- 修复 `/flp cracked` 命令对其他玩家显示错误消息
+- 修复 source.kick() 后 START 包仍被转发导致 vanilla 服务器覆盖 FLP 的踢出消息
+
 ## v0.1.1
 
 ### AuthMe 6.0 preJoin Fix / AuthMe 6.0 preJoin 修复

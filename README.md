@@ -52,7 +52,7 @@ An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogi
 
 AuthMe 6.0 introduced a **preJoin dialog** (Paper/Folia) that blocks the connection during the configuration phase — before `PlayerJoinEvent`. FLP cannot bypass this dialog.
 
-**Required setting:** `enablePremium: true` in AuthMe's `config.yml`. This enables AuthMe's premium subsystem, allowing FLP to inject verified session data. Without it, error messages will be printed to the console.
+**Automatic setup:** FastLoginPlus now automatically enables AuthMe's premium subsystem (`enablePremium: true`) and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
 
 > On AuthMe 5.x or servers without Paper's dialog system, no extra configuration is needed.
 
