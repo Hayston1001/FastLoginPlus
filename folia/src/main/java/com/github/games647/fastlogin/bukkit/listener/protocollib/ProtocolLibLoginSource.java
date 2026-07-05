@@ -53,6 +53,10 @@ class ProtocolLibLoginSource implements LoginSource {
 
     private byte[] verifyToken;
 
+    // Set to true when kick() is called, so NameCheckTask can check it
+    // after onLogin() returns and cancel the START packet.
+    private boolean kicked;
+
     ProtocolLibLoginSource(Player player, Random random, PublicKey serverPublicKey, ClientPublicKey clientKey) {
         this.player = player;
         this.random = random;
@@ -92,6 +96,7 @@ class ProtocolLibLoginSource implements LoginSource {
 
     @Override
     public void kick(String message) {
+        kicked = true;
         ProtocolManager protocolManager = ProtocolLibrary.getProtocolManager();
 
         PacketContainer kickPacket = new PacketContainer(DISCONNECT);
@@ -105,6 +110,11 @@ class ProtocolLibLoginSource implements LoginSource {
             //tell the server that we want to close the connection
             player.kickPlayer("Disconnect");
         }
+    }
+
+    @Override
+    public boolean isKicked() {
+        return kicked;
     }
 
     @Override

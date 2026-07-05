@@ -69,10 +69,22 @@ public class NameCheckTask extends JoinManagement<Player, CommandSender, Protoco
 
     @Override
     public void run() {
+        ProtocolLibLoginSource source = new ProtocolLibLoginSource(player, random, serverKey, clientKey);
         try {
-            super.onLogin(username, new ProtocolLibLoginSource(player, random, serverKey, clientKey));
+            super.onLogin(username, source);
         } finally {
-            ProtocolLibrary.getProtocolManager().getAsynchronousManager().signalPacketTransmission(packetEvent);
+            if (source.isKicked()) {
+                // source.kick() was called inside onLogin — the DISCONNECT packet
+                // has already been sent. Cancel the START packet so the vanilla
+                // server doesn't process it and overwrite our kick message with
+                // "Failed to log in: Invalid session".
+                synchronized (packetEvent.getAsyncMarker().getProcessingLock()) {
+                    packetEvent.setCancelled(true);
+                }
+            } else {
+                ProtocolLibrary.getProtocolManager().getAsynchronousManager()
+                    .signalPacketTransmission(packetEvent);
+            }
         }
     }
 
