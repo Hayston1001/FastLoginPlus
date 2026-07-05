@@ -42,6 +42,7 @@ already-exists-other: '&4Player is already on the premium list'
 
 # Premium removal
 remove-premium: '&2Removed from the list of premium players'
+remove-premium-other: '&2Player has been removed from the premium list'
 not-premium: '&4You are not in the premium list'
 not-premium-other: '&4Player is not in the premium list'
 

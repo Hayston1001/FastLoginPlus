@@ -109,7 +109,7 @@ public class CrackedCommand extends ToggleCommand {
         if (profile.isExistingPlayer() && !profile.isOnlinemodePreferred()) {
             plugin.getCore().sendLocaleMessage("not-premium-other", sender);
         } else {
-            plugin.getCore().sendLocaleMessage("remove-premium", sender);
+            plugin.getCore().sendLocaleMessage("remove-premium-other", sender);
 
             profile.setOnlinemodePreferred(false);
             plugin.getScheduler().runAsync(() -> {

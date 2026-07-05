@@ -42,6 +42,7 @@ already-exists-other: '&4该玩家已在正版玩家列表中'
 
 # 移除 Premium
 remove-premium: '&2已将你从正版玩家列表中移除'
+remove-premium-other: '&2已将该玩家从正版玩家列表中移除'
 not-premium: '&4你不在正版玩家列表中'
 not-premium-other: '&4该玩家不在正版玩家列表中'
 
