@@ -415,4 +415,188 @@ public final class AuthMePremiumIntegrator {
         premiumLoginVerifier = getSingleton.invoke(injector, verifierClass);
         return premiumLoginVerifier;
     }
+
+    /**
+     * Forces AuthMe's {@code settings.enablePremium} to {@code true}.
+     *
+     * <p>This is required because AuthMe 6.0 short-circuits ALL premium checks
+     * (preJoin dialog skip, canBypassWithPremium, PremiumService) when
+     * {@code enablePremium=false}. FLP does the actual Mojang verification via
+     * ProtocolLib, but AuthMe's checks must still be "unlocked" for FLP's
+     * injected state to be read.
+     *
+     * <p>Implementation:
+     * <ol>
+     *   <li>Modify AuthMe's config.yml on disk (persisted across restarts)</li>
+     *   <li>Call Settings.setProperty(ENABLE_PREMIUM, true) to update memory</li>
+     *   <li>Call Settings.save() to persist to disk</li>
+     *   <li>Call PacketEventsService.reload(settings) to re-evaluate listener
+     *       registration with the new setting</li>
+     * </ol>
+     *
+     * @return true if the operation succeeded
+     */
+    public boolean forceEnablePremium() {
+        if (!versionDetector.isAuthMe6()) {
+            return false;
+        }
+        try {
+            Object injector = getAuthMeInjector();
+            if (injector == null) {
+                return false;
+            }
+
+            // 1. Get Settings singleton from AuthMe's DI injector
+            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+            Class<?> settingsClass = Class.forName("fr.xephi.authme.settings.Settings");
+            Object settings = getSingleton.invoke(injector, settingsClass);
+            if (settings == null) {
+                return false;
+            }
+
+            // 2. Check current value
+            Class<?> premiumSettingsClass = Class.forName(
+                "fr.xephi.authme.settings.properties.PremiumSettings");
+            Field enablePremiumField = premiumSettingsClass.getField("ENABLE_PREMIUM");
+            Object enablePremiumProperty = enablePremiumField.get(null);
+
+            Method getProperty = settings.getClass().getMethod("getProperty",
+                Class.forName("ch.jalu.configme.properties.Property"));
+            boolean currentValue = (boolean) getProperty.invoke(settings, enablePremiumProperty);
+
+            if (currentValue) {
+                // Already enabled — nothing to do
+                return true;
+            }
+
+            // 3. setProperty + save (persist to disk so /authme reload keeps it)
+            Method setProperty = settings.getClass().getMethod("setProperty",
+                Class.forName("ch.jalu.configme.properties.Property"), Object.class);
+            setProperty.invoke(settings, enablePremiumProperty, true);
+
+            Method save = settings.getClass().getMethod("save");
+            save.invoke(settings);
+
+            plugin.getLog().info(
+                "FLP has forced AuthMe's enablePremium=true (was false). "
+                + "FLP handles Mojang verification; AuthMe's premium checks are now unlocked.");
+
+            // 4. Reload PacketEventsService so it re-evaluates with enablePremium=true
+            reloadPacketEventsService(injector, settings);
+
+            return true;
+        } catch (Exception e) {
+            plugin.getLog().error("Failed to force-enable AuthMe enablePremium: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Unregisters AuthMe's {@code PremiumVerificationPacketListener} so FLP's
+     * ProtocolLib listener is the sole packet-level Mojang verification.
+     *
+     * <p>When {@code enablePremium=true}, AuthMe registers its own PacketEvents
+     * listener that intercepts START/ENCRYPTION_RESPONSE packets. This conflicts
+     * with FLP's ProtocolLib listener which does the same thing. FLP does the
+     * actual verification and injects results into AuthMe's internal state
+     * (PendingPremiumCache, PremiumLoginVerifier), so AuthMe's own listener is
+     * redundant and must be removed.
+     *
+     * <p>Uses AuthMe's public {@code PacketInterceptionAdapter.unregisterPremiumVerification()}
+     * method — the same method AuthMe itself uses to clean up the listener.
+     *
+     * @return true if the listener was unregistered (or was already unregistered)
+     */
+    public boolean unregisterPremiumPacketListener() {
+        if (!versionDetector.isAuthMe6()) {
+            return false;
+        }
+        try {
+            Object injector = getAuthMeInjector();
+            if (injector == null) {
+                return false;
+            }
+
+            // Get PacketInterceptionAdapter (implemented by PacketEventsListenerRegistry)
+            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+            Class<?> adapterClass = Class.forName(
+                "fr.xephi.authme.platform.PacketInterceptionAdapter");
+            Object adapter = getSingleton.invoke(injector, adapterClass);
+            if (adapter == null) {
+                return false;
+            }
+
+            // Check if the premium verification listener is registered
+            // by reflecting on PacketEventsService.premiumVerificationRegistered
+            Class<?> pesClass = Class.forName(
+                "fr.xephi.authme.listener.packetevents.PacketEventsService");
+            Object pes = getSingleton.invoke(injector, pesClass);
+            if (pes != null) {
+                Field registeredField = pesClass.getDeclaredField("premiumVerificationRegistered");
+                registeredField.setAccessible(true);
+                boolean isRegistered = registeredField.getBoolean(pes);
+                if (!isRegistered) {
+                    // Already unregistered — nothing to do
+                    return true;
+                }
+            }
+
+            // Call unregisterPremiumVerification() on the adapter
+            Method unregister = adapterClass.getMethod("unregisterPremiumVerification");
+            unregister.invoke(adapter);
+
+            // Set premiumVerificationRegistered = false to keep AuthMe's state consistent
+            if (pes != null) {
+                Field registeredField = pesClass.getDeclaredField("premiumVerificationRegistered");
+                registeredField.setAccessible(true);
+                registeredField.setBoolean(pes, false);
+            }
+
+            plugin.getLog().info(
+                "Unregistered AuthMe's PremiumVerificationPacketListener — "
+                + "FLP is now the sole Mojang verification source.");
+            return true;
+        } catch (Exception e) {
+            plugin.getLog().debug("Failed to unregister premium packet listener: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Performs the full AuthMe 6.0 takeover: forces enablePremium=true and
+     * unregisters AuthMe's redundant packet listener. Called at startup after
+     * AuthMe has fully initialized, and can be called again to re-assert
+     * (e.g. after /authme reload).
+     *
+     * @return true if both operations succeeded
+     */
+    public boolean enforceFlpPremiumControl() {
+        if (!versionDetector.isAuthMe6()) {
+            return false;
+        }
+        boolean forced = forceEnablePremium();
+        boolean unregistered = unregisterPremiumPacketListener();
+        return forced && unregistered;
+    }
+
+    /**
+     * Reloads AuthMe's PacketEventsService so it re-evaluates listener
+     * registration with the updated enablePremium setting.
+     *
+     * @param injector AuthMe's DI injector
+     * @param settings AuthMe's Settings singleton
+     */
+    private void reloadPacketEventsService(Object injector, Object settings) throws Exception {
+        Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+        Class<?> pesClass = Class.forName(
+            "fr.xephi.authme.listener.packetevents.PacketEventsService");
+        Object pes = getSingleton.invoke(injector, pesClass);
+        if (pes == null) {
+            return;
+        }
+        // Call reload(settings) which re-reads enablePremium and calls setup()
+        Method reload = pesClass.getMethod("reload",
+            Class.forName("fr.xephi.authme.settings.Settings"));
+        reload.invoke(pes, settings);
+    }
 }

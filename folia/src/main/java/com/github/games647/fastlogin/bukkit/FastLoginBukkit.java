@@ -107,19 +107,13 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         authMeVersionDetector = new AuthMeVersionDetector();
         if (authMeVersionDetector.isAuthMe6()) {
             authMePremiumIntegrator = new AuthMePremiumIntegrator(this, authMeVersionDetector);
-            boolean premiumEnabled = authMePremiumIntegrator.isAuthMePremiumEnabled();
-            boolean preJoinEnabled = authMePremiumIntegrator.isPreJoinDialogEnabled();
             logger.info("AuthMe 6.0+ detected: v{}", authMeVersionDetector.getVersion());
-            logger.info("  enablePremium={}", premiumEnabled);
-            if (premiumEnabled) {
-                logger.info("  FLP will auto-register premium players and inject premium state into AuthMe");
-            } else if (preJoinEnabled) {
-                logger.error("AuthMe 6.0 preJoin dialog is enabled but enablePremium is disabled.");
-                logger.error("  Premium players will be blocked by the login dialog before FLP can act.");
-                logger.error("  Fix: set settings.enablePremium to true in AuthMe's config.yml.");
-            } else {
-                logger.info("  FLP handles all premium detection (AuthMe premium is disabled)");
-            }
+
+            // FLP takes over premium verification: force enablePremium=true
+            // (persisted to AuthMe's config.yml) and unregister AuthMe's
+            // redundant PremiumVerificationPacketListener so FLP's ProtocolLib
+            // listener is the sole Mojang verification source.
+            authMePremiumIntegrator.enforceFlpPremiumControl();
         } else if (authMeVersionDetector.isAuthMePresent()) {
             logger.info("AuthMe 5.x detected — using standard FLP flow");
         }
