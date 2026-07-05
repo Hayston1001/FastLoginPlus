@@ -86,6 +86,16 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                         }
 
                         onForceActionSuccess(session);
+                    } else if (isOnlineMode() && playerProfile != null) {
+                        // forceLogin returned false but this is a verified premium session.
+                        // This happens with AuthMe 6.0: AuthMe's AsynchronousJoin runs
+                        // canBypassWithPremium() before FLP's ForceLoginTask, so the player
+                        // is already authenticated when forceLogin() is called (returns false).
+                        // We still need to persist onlinemodePreferred=true so that future
+                        // reconnects route through requestPremiumLogin instead of startCrackedSession.
+                        playerProfile.setId(session.getUuid());
+                        playerProfile.setOnlinemodePreferred(true);
+                        storage.save(playerProfile);
                     }
                 }
             } else if (playerProfile != null) {

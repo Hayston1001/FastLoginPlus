@@ -217,20 +217,22 @@ public final class AuthMePremiumIntegrator {
 
     /**
      * Directly set the premium UUID in AuthMe's database for the given player.
-     * Used when the player is already registered (by forceRegister) and we want
-     * to mark them as premium without requiring /premium or reconnect.
+     * If the player has no AuthMe DB record (first login), pre-creates one
+     * with the premium UUID already set so that the preJoin dialog is skipped.
      *
      * @param playerName the player name
      * @param mojangUuid the verified Mojang UUID
+     * @return true if a new DB record was pre-created, false if an existing
+     *         record was updated or the operation failed
      */
-    public void markPlayerAsPremium(String playerName, UUID mojangUuid) {
+    public boolean markPlayerAsPremium(String playerName, UUID mojangUuid) {
         if (!versionDetector.isAuthMe6()) {
-            return;
+            return false;
         }
         try {
             Object injector = getAuthMeInjector();
             if (injector == null) {
-                return;
+                return false;
             }
 
             // Get DataSource from AuthMe's DI injector
@@ -238,17 +240,26 @@ public final class AuthMePremiumIntegrator {
             Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
             Object dataSource = getSingleton.invoke(injector, dataSourceClass);
             if (dataSource == null) {
-                return;
+                return false;
             }
+
+            String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
 
             // Get the auth record
             Method getAuth = dataSource.getClass().getMethod("getAuth", String.class);
-            Object auth = getAuth.invoke(dataSource, playerName.toLowerCase(java.util.Locale.ROOT));
+            Object auth = getAuth.invoke(dataSource, lowerName);
             if (auth == null) {
-                return;
+                // First login: no AuthMe DB record yet. Pre-create one with the
+                // premium UUID so that shouldSkipPreJoinDialogForPremium() sees
+                // auth.isPremium()=true during the configuration phase (which
+                // runs BEFORE PlayerJoinEvent where forceRegister would normally
+                // create the record). Without this, AuthMe shows a blocking
+                // register dialog that the player must cancel before FLP can act.
+                preCreatePremiumAuth(dataSource, lowerName, playerName, mojangUuid);
+                return true;
             }
 
-            // Set premium UUID
+            // Set premium UUID on existing record
             Method setPremiumUuid = auth.getClass().getMethod("setPremiumUuid", UUID.class);
             setPremiumUuid.invoke(auth, mojangUuid);
 
@@ -260,8 +271,78 @@ public final class AuthMePremiumIntegrator {
             if (success) {
                 plugin.getLog().info("Marked {} as premium in AuthMe database", playerName);
             }
+            return false;
         } catch (Exception e) {
             plugin.getLog().debug("markPlayerAsPremium failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Pre-creates a PlayerAuth record with the premium UUID already set,
+     * so that AuthMe's preJoin dialog check sees isPremium()=true and
+     * skips the blocking register dialog for first-time premium players.
+     *
+     * <p>Uses reflection to call DataSource.saveAuth(PlayerAuth). The
+     * PlayerAuth is built with a random password (the player never needs
+     * it — premium bypass skips password auth entirely) and the Mojang
+     * UUID as both the premium UUID and the player UUID.
+     *
+     * @param dataSource AuthMe's DataSource singleton
+     * @param lowerName lowercase player name (DB key)
+     * @param playerName original-case player name (for realName field)
+     * @param mojangUuid the verified Mojang UUID
+     */
+    private void preCreatePremiumAuth(Object dataSource, String lowerName,
+                                       String playerName, UUID mojangUuid) throws Exception {
+        // Build: PlayerAuth.builder().name(lowerName).realName(playerName)
+        //   .password(new HashedPassword(randomHash)).uuid(mojangUuid).premiumUuid(mojangUuid).build()
+        Class<?> hashedPasswordClass = Class.forName(
+            "fr.xephi.authme.security.crypts.HashedPassword");
+        java.lang.reflect.Constructor<?> hpCtor =
+            hashedPasswordClass.getConstructor(String.class);
+        Object emptyPassword = hpCtor.newInstance("");
+
+        Class<?> builderClass = Class.forName("fr.xephi.authme.data.auth.PlayerAuth$Builder");
+        Object builder = Class.forName("fr.xephi.authme.data.auth.PlayerAuth")
+            .getMethod("builder").invoke(null);
+
+        Method nameMethod = builderClass.getMethod("name", String.class);
+        nameMethod.invoke(builder, lowerName);
+
+        Method realNameMethod = builderClass.getMethod("realName", String.class);
+        realNameMethod.invoke(builder, playerName);
+
+        Method passwordMethod = builderClass.getMethod("password", hashedPasswordClass);
+        passwordMethod.invoke(builder, emptyPassword);
+
+        Method uuidMethod = builderClass.getMethod("uuid", UUID.class);
+        uuidMethod.invoke(builder, mojangUuid);
+
+        Method premiumUuidMethod = builderClass.getMethod("premiumUuid", UUID.class);
+        premiumUuidMethod.invoke(builder, mojangUuid);
+
+        Method buildMethod = builderClass.getMethod("build");
+        Object playerAuth = buildMethod.invoke(builder);
+
+        Method saveAuth = dataSource.getClass().getMethod("saveAuth",
+            Class.forName("fr.xephi.authme.data.auth.PlayerAuth"));
+        boolean success = (boolean) saveAuth.invoke(dataSource, playerAuth);
+
+        // saveAuth does NOT insert the premium_uuid column (AuthMe's AbstractSqlDataSource
+        // only inserts NAME, NICK_NAME, PASSWORD, SALT, EMAIL, REGISTRATION_DATE,
+        // REGISTRATION_IP, UUID). We must call updatePremiumUuid separately to persist it.
+        if (success) {
+            Method setPremiumUuid = playerAuth.getClass().getMethod("setPremiumUuid", UUID.class);
+            setPremiumUuid.invoke(playerAuth, mojangUuid);
+            Method updatePremium = dataSource.getClass().getMethod(
+                "updatePremiumUuid", playerAuth.getClass());
+            updatePremium.invoke(dataSource, playerAuth);
+            plugin.getLog().info(
+                "Pre-created premium AuthMe record for {} (uuid={})", playerName, mojangUuid);
+        } else {
+            plugin.getLog().warn(
+                "Failed to pre-create premium AuthMe record for {}", playerName);
         }
     }
 

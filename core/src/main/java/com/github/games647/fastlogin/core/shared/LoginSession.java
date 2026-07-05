@@ -68,6 +68,18 @@ public abstract class LoginSession {
         return !registered;
     }
 
+    /**
+     * Sets whether the player is already registered in the auth plugin.
+     * Used by the AuthMe 6.0 compat layer to mark a session as registered
+     * after pre-creating the AuthMe DB record during the LOGIN phase,
+     * so that ForceLoginTask calls forceLogin instead of forceRegister.
+     *
+     * @param registered true if the player has an auth plugin record
+     */
+    public synchronized void setRegistered(boolean registered) {
+        this.registered = registered;
+    }
+
     public StoredProfile getProfile() {
         return profile;
     }

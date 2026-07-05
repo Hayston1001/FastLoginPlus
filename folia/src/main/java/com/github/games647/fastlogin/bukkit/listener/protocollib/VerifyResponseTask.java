@@ -232,7 +232,16 @@ public class VerifyResponseTask implements Runnable {
             integrator.injectVerifiedUuid(requestedUsername, mojangUuid);
             // Mark as premium in DB NOW so shouldSkipPreJoinDialogForPremium()
             // sees auth.isPremium()=true during the configuration phase.
-            integrator.markPlayerAsPremium(requestedUsername, mojangUuid);
+            // For first-time players this also pre-creates the AuthMe DB record
+            // (with premiumUuid set) so the preJoin register dialog is skipped.
+            boolean preCreated = integrator.markPlayerAsPremium(requestedUsername, mojangUuid);
+            if (preCreated) {
+                // The AuthMe DB record now exists, so ForceLoginTask should
+                // call forceLogin (not forceRegister, which AuthMe would reject
+                // with NAME_ALREADY_REGISTERED). Setting registered=true makes
+                // needsRegistration() return false.
+                session.setRegistered(true);
+            }
             plugin.getLog().debug("Injected AuthMe 6.0 premium state for {}", requestedUsername);
         }
 
