@@ -108,13 +108,42 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     public void load() {
         // 1. Load config first to determine language setting
         saveDefaultFile("config.yml");
-        appendMissingKeys("config.yml");
 
         try {
             config = loadFile("config.yml");
         } catch (IOException ioEx) {
             plugin.getLog().error("Failed to load config.yml", ioEx);
             return;
+        }
+
+        // Determine database mode and check consistency
+        String dbMode = config.getString("driver", "sqlite");
+        if ("sqlite".equalsIgnoreCase(dbMode)) {
+            dbMode = "sqlite";
+            boolean hasMysqlKey = config.get("host") != null
+                    || config.get("port") != null
+                    || config.get("username") != null
+                    || config.get("password") != null;
+            if (hasMysqlKey) {
+                plugin.getLog().warn(
+                        "Config conflict: driver='sqlite' but MySQL keys "
+                        + "(host/port/username/password) are also present. "
+                        + "Ignoring MySQL keys, using SQLite.");
+            }
+        } else {
+            dbMode = "mysql";
+        }
+
+        // Restore canonical comments and key order from the bundled template,
+        // while preserving all user-modified values.
+        try {
+            ConfigRefresher.refresh(
+                    getClass().getClassLoader(),
+                    plugin.getPluginFolder().resolve("config.yml"),
+                    config, dbMode);
+        } catch (IOException ioEx) {
+            plugin.getLog().warn("Could not refresh config.yml from template", ioEx);
+            // non-fatal: continue with the config as-is
         }
 
         // 2. Determine language file based on config
