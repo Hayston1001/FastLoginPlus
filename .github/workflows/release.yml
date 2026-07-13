@@ -49,7 +49,7 @@ jobs:
         with:
           body_path: /tmp/release-notes.md
           files: |
-            bukkit/target/FastLoginPlusBukkit-${{ env.VERSION }}.jar
-            folia/target/FastLoginPlusFolia-${{ env.VERSION }}.jar
-            bungee/target/FastLoginPlusBungee-${{ env.VERSION }}.jar
-            velocity/target/FastLoginPlusVelocity-${{ env.VERSION }}.jar
+            bukkit/target/FastLoginPlusBukkit-${{ env.VERSION }}-*.jar
+            folia/target/FastLoginPlusFolia-${{ env.VERSION }}-*.jar
+            bungee/target/FastLoginPlusBungee-${{ env.VERSION }}-*.jar
+            velocity/target/FastLoginPlusVelocity-${{ env.VERSION }}-*.jar
