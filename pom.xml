@@ -89,7 +89,7 @@
 
     <build>
         <!--Just use the project name to replace an old version of the plugin if the user does only copy-paste-->
-        <finalName>${project.name}-${project.version}</finalName>
+        <finalName>${project.name}-${revision}-${git.commit.id.abbrev}</finalName>
 
         <plugins>
             <plugin>
@@ -184,7 +184,7 @@
                             <archive>
                                 <manifestEntries>
                                     <Multi-Release>true</Multi-Release>
-                                    <Implementation-Version>${project.version}</Implementation-Version>
+                                    <Implementation-Version>${revision}-${git.commit.id.abbrev}</Implementation-Version>
                                     <Implementation-Title>${project.name}</Implementation-Title>
                                 </manifestEntries>
                             </archive>
@@ -194,6 +194,29 @@
             </plugin>
 
             <!-- Resolve ${revision} in published POMs -->
+            <plugin>
+                <groupId>io.github.git-commit-id</groupId>
+                <artifactId>git-commit-id-maven-plugin</artifactId>
+                <version>9.0.1</version>
+                <executions>
+                    <execution>
+                        <id>git-info</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>revision</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <generateGitPropertiesFile>true</generateGitPropertiesFile>
+                    <generateGitPropertiesFilename>
+                        ${project.build.outputDirectory}/git.properties
+                    </generateGitPropertiesFilename>
+                    <shortCommitLength>7</shortCommitLength>
+                    <failOnNoGitDirectory>false</failOnNoGitDirectory>
+                </configuration>
+            </plugin>
+
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>flatten-maven-plugin</artifactId>
