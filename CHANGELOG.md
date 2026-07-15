@@ -34,6 +34,10 @@
 
 ## v0.1.2
 
+> This version features the most comprehensive support for AuthMe. Users using **FLP with AuthMe** are RECOMMENDED to update as soon as possible. Subsequent versions will focus on **other bug fixes and user experience improvements**.
+> 
+> 这是对 Authme 支持最完善的一个版本, 建议使用 **flp 搭配 Authme** 的用户尽快更新. 接下来的版本将聚焦于其他 bug 修复和使用体验优化.
+
 ### AuthMe 6.0 Auto-Integration / AuthMe 6.0 自动集成
 
 - FLP automatically takes over AuthMe 6.0 premium verification — no manual `enablePremium=true` needed
@@ -100,9 +104,9 @@
 
 ## v0.1.0
 
-> **v0.1.0 marks the first major release of FastLoginPlus** — a consolidated upgrade covering new platforms, security hardening, and important bug fixes accumulated since the fork.
+> **v0.1.0 marks the first major release of FastLoginPlus** — a consolidated upgrade covering new platforms, security hardening, and important bug fixes accumulated since the fork. **But this is NOT a stable release**.
 >
-> **v0.1.0 是 FastLoginPlus 的首个里程碑版本** —— 涵盖新平台支持、安全加固以及 fork 以来积累的重要修复。
+> **v0.1.0 是 FastLoginPlus 的首个重要更新版本** —— 涵盖新平台支持、安全加固以及 fork 以来积累的重要修复。**但这不会是一个稳定版本**
 
 ### Folia Platform Support / Folia 平台支持
 
