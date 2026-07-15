@@ -56,7 +56,9 @@ public class UltraAuthHook implements AuthPlugin<Player> {
         CompletableFuture<Boolean> future = new CompletableFuture<>();
         player.getScheduler().run(plugin, task -> {
             if (UltraAuthAPI.isAuthenticated(player)) {
-                plugin.getLog().warn(ALREADY_AUTHENTICATED, player);
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().warn(ALREADY_AUTHENTICATED, player);
+                }
                 future.complete(false);
                 return;
             }

@@ -145,7 +145,9 @@ public class VerifyResponseTask implements Runnable {
         MojangResolver resolver = plugin.getCore().getResolver();
         InetAddress address = socketAddress.getAddress();
 
-        plugin.getLog().info("Verifying session for {} ...", requestedUsername);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Verifying session for {} ...", requestedUsername);
+        }
         for (int attempt = 1; attempt <= retryCount; attempt++) {
             try {
                 Optional<Verification> response = resolver.hasJoined(requestedUsername, serverId, address);
@@ -203,7 +205,9 @@ public class VerifyResponseTask implements Runnable {
 
     private void encryptConnection(BukkitLoginSession session, String requestedUsername,
                                    Verification verification, SecretKey loginKey) {
-        plugin.getLog().info("Profile {} has a verified premium account", requestedUsername);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Profile {} has a verified premium account", requestedUsername);
+        }
         String realUsername = verification.getName();
         if (realUsername == null) {
             disconnect("invalid-session", "Username field null for {}", requestedUsername);

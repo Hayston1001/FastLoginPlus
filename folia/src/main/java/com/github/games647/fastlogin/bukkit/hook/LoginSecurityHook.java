@@ -55,7 +55,9 @@ public class LoginSecurityHook implements AuthPlugin<Player> {
     public boolean forceLogin(Player player) {
         PlayerSession session = LoginSecurity.getSessionManager().getPlayerSession(player);
         if (session.isAuthorized()) {
-            plugin.getLog().warn(ALREADY_AUTHENTICATED, player);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().warn(ALREADY_AUTHENTICATED, player);
+            }
             return true;
         }
 

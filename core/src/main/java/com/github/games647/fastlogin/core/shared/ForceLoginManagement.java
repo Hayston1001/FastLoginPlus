@@ -46,12 +46,16 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     @Override
     public void run() {
         if (!isOnline(player)) {
-            core.getPlugin().getLog().info("Player {} disconnected", player);
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("Player {} disconnected", player);
+            }
             return;
         }
 
         if (session == null) {
-            core.getPlugin().getLog().info("No valid session found for {}", player);
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("No valid session found for {}", player);
+            }
             return;
         }
 
@@ -110,7 +114,9 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     }
 
     public boolean forceRegister(P player) {
-        core.getPlugin().getLog().info("Register player {}", getName(player));
+        if (core.isDebug()) {
+            core.getPlugin().getLog().info("Register player {}", getName(player));
+        }
 
         String generatedPassword = core.getPasswordGenerator().getRandomPassword(player);
         boolean success = core.getAuthPluginHook().forceRegister(player, generatedPassword);
@@ -125,7 +131,9 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     }
 
     public boolean forceLogin(P player) {
-        core.getPlugin().getLog().info("Logging player {} in", getName(player));
+        if (core.isDebug()) {
+            core.getPlugin().getLog().info("Logging player {} in", getName(player));
+        }
 
         boolean success = core.getAuthPluginHook().forceLogin(player);
         if (success) {

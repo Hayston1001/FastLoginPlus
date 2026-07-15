@@ -146,6 +146,15 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             // non-fatal: continue with the config as-is
         }
 
+        // Reload the refreshed config so the in-memory object matches the
+        // canonical template structure (correct commenting, key order, etc.)
+        try {
+            config = loadFile("config.yml");
+        } catch (IOException ioEx) {
+            plugin.getLog().error("Failed to reload config.yml after refresh", ioEx);
+            return;
+        }
+
         // 2. Determine language file based on config
         String language = config.getString("language", "en");
         String messagesFile = "messages_" + language + ".yml";
@@ -366,6 +375,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     public Configuration getConfig() {
         return config;
+    }
+
+    public boolean isDebug() {
+        return config != null && config.get("debug", false);
     }
 
     public PasswordGenerator<P> getPasswordGenerator() {

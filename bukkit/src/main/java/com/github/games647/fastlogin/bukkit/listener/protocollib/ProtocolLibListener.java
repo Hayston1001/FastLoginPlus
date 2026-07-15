@@ -118,7 +118,9 @@ public class ProtocolLibListener extends PacketAdapter {
 
         try {
             if (packetType == START) {
-                plugin.getLog().info("Login request received from {}", sender.getAddress());
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("Login request received from {}", sender.getAddress());
+                }
                 if (plugin.getFloodgateService() != null) {
                     boolean success = processFloodgateTasks(packetEvent);
                     if (!success) {

@@ -70,9 +70,11 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             }
         } else {
             profile.setFloodgate(FloodgateState.FALSE);
-            core.getPlugin().getLog().info(
-                    "Player {} will be migrated to the v2 database schema as a JAVA user", username
-            );
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info(
+                        "Player {} will be migrated to the v2 database schema as a JAVA user", username
+                );
+            }
         }
 
         callFastLoginPreLoginEvent(username, source, profile);
@@ -81,7 +83,9 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
         profile.setLastIp(ip);
         if (profile.isExistingPlayer()) {
             if (profile.isOnlinemodePreferred()) {
-                core.getPlugin().getLog().info("Requesting premium login for registered player: {}", username);
+                if (core.isDebug()) {
+                    core.getPlugin().getLog().info("Requesting premium login for registered player: {}", username);
+                }
                 requestPremiumLogin(source, profile, username, true);
             } else {
                 if (isValidUsername(source, profile)) {
@@ -96,7 +100,9 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     private void performNewPlayerLogin(String username, S source, String ip, StoredProfile profile) {
         try {
             if (core.hasFailedLogin(ip, username)) {
-                core.getPlugin().getLog().info("Second attempt login -> cracked {}", username);
+                if (core.isDebug()) {
+                    core.getPlugin().getLog().info("Second attempt login -> cracked {}", username);
+                }
 
                 //first login request failed so make a cracked session
                 startCrackedSession(source, profile, username);
@@ -132,7 +138,9 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
 
     protected boolean isValidUsername(LoginSource source, StoredProfile profile) {
         if (bedrockService != null && bedrockService.isUsernameForbidden(profile)) {
-            core.getPlugin().getLog().info("Floodgate Prefix detected on cracked player");
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("Floodgate Prefix detected on cracked player");
+            }
             source.kick("Your username contains illegal characters");
             return false;
         }
@@ -141,7 +149,9 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     }
 
     private boolean isUsernameAvailable(S source, String username, StoredProfile profile) throws Exception {
-        core.getPlugin().getLog().info("GameProfile {} uses a premium username", username);
+        if (core.isDebug()) {
+            core.getPlugin().getLog().info("GameProfile {} uses a premium username", username);
+        }
         if (core.getConfig().get("autoRegister", false) && (authHook == null || !authHook.isRegistered(username))) {
             requestPremiumLogin(source, profile, username, false);
             return true;
@@ -162,13 +172,18 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             StoredProfile storedProfile = core.getStorage().loadProfile(profile.getId());
             if (storedProfile != null) {
                 if (storedProfile.getFloodgate() == FloodgateState.TRUE) {
-                    core.getPlugin().getLog()
-                            .info("Player {} is already stored by FastLogin as a Bedrock Edition player.", username);
+                    if (core.isDebug()) {
+                        core.getPlugin().getLog()
+                                .info("Player {} is already stored by FastLogin"
+                                        + " as a Bedrock Edition player.", username);
+                    }
                     return false;
                 }
 
                 //uuid exists in the database
-                core.getPlugin().getLog().info("GameProfile {} changed it's username", profile);
+                if (core.isDebug()) {
+                    core.getPlugin().getLog().info("GameProfile {} changed it's username", profile);
+                }
 
                 //update the username to the new one in the database
                 storedProfile.setPlayerName(username);

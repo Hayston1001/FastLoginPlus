@@ -90,7 +90,9 @@ public class BungeeListener implements PluginMessageListener {
         String playerName = message.getPlayerName();
         Type type = message.getType();
 
-        plugin.getLog().info("Player info {} command for {} from proxy", type, playerName);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Player info {} command for {} from proxy", type, playerName);
+        }
         if (type == Type.LOGIN) {
             onLoginMessage(player, playerName);
         } else if (type == Type.REGISTER) {
@@ -128,7 +130,9 @@ public class BungeeListener implements PluginMessageListener {
 
         // only start a new login task if the join event fired earlier. This event then didn't
         boolean result = plugin.getBungeeManager().didJoinEventFired(player);
-        plugin.getLog().info("Delaying force login until join event fired?: {}", result);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Delaying force login until join event fired?: {}", result);
+        }
         if (result) {
             Runnable forceLoginTask = new ForceLoginTask(plugin.getCore(), player, session);
             // Folia: use AsyncScheduler

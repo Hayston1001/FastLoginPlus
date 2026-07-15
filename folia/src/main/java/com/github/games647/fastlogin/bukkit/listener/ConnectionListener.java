@@ -94,9 +94,11 @@ public class ConnectionListener implements Listener {
             }
 
             String sessionId = plugin.getSessionId(player.spigot().getRawAddress());
-            plugin.getLog().info("No on-going login session for player: {} with ID {}. ", player, sessionId);
-            plugin.getLog().info("Setups using Minecraft proxies will start delayed "
-                + "when the command from the proxy is received");
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("No on-going login session for player: {} with ID {}. ", player, sessionId);
+                plugin.getLog().info("Setups using Minecraft proxies will start delayed "
+                    + "when the command from the proxy is received");
+            }
         } else {
             Runnable forceLoginTask = new ForceLoginTask(plugin.getCore(), player, session);
             // Folia: use AsyncScheduler instead of Bukkit.getScheduler()

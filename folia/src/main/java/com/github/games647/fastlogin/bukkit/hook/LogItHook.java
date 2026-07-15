@@ -56,7 +56,9 @@ public class LogItHook implements AuthPlugin<Player> {
     public boolean forceLogin(Player player) {
         SessionManager sessionManager = LogItCore.getInstance().getSessionManager();
         if (sessionManager.isSessionAlive(player)) {
-            plugin.getLog().warn(ALREADY_AUTHENTICATED, player);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().warn(ALREADY_AUTHENTICATED, player);
+            }
             return false;
         }
 
