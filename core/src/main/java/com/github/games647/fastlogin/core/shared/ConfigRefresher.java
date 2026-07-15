@@ -33,7 +33,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,14 +49,6 @@ import net.md_5.bungee.config.Configuration;
  */
 public final class ConfigRefresher {
 
-    /**
-     * Keys that only make sense when {@code driver: 'mysql'}.
-     * In sqlite mode these stay commented out even if the user has values for them.
-     */
-    private static final Set<String> MYSQL_KEYS = new HashSet<>(Arrays.asList(
-            "host", "port", "username", "password", "useSSL"
-    ));
-
     private ConfigRefresher() {
         // utility class
     }
@@ -73,12 +64,10 @@ public final class ConfigRefresher {
      * @param classLoader to load the template resource from the JAR
      * @param configPath  path to the user's config.yml on disk
      * @param userConfig  the parsed user Configuration (with all values)
-     * @param dbMode      {@code "sqlite"} or {@code "mysql"} — controls which
-     *                    database section is uncommented
      * @throws IOException if reading the template or writing the file fails
      */
     public static void refresh(ClassLoader classLoader, Path configPath,
-                               Configuration userConfig, String dbMode)
+                               Configuration userConfig)
             throws IOException {
         // 1. Flatten user config into a dotted-key map
         Map<String, Object> userValues = new LinkedHashMap<>();
@@ -89,11 +78,6 @@ public final class ConfigRefresher {
         if (templateLines == null) {
             return;
         }
-
-        // Pre-scan: collect all active (non-commented) keys in the template.
-        // This prevents tryUncomment from uncommenting a key that already has
-        // an active line (e.g. "#ip-addresses:" followed by "ip-addresses: []").
-        Set<String> activeKeys = collectActiveKeys(templateLines);
 
         // 3. Walk template line by line, substituting user values
         List<String> output = new ArrayList<>();
@@ -106,20 +90,7 @@ public final class ConfigRefresher {
 
             // Keep comments and blank lines as-is
             if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                // In sqlite mode, MySQL-specific keys must stay commented
-                if ("sqlite".equals(dbMode) && isMysqlKey(trimmed)) {
-                    output.add(line);
-                    continue;
-                }
-                // Check if this is a commented-out config key (#key: value)
-                String uncommented = tryUncomment(trimmed, sectionPath,
-                        userValues, consumedKeys, activeKeys);
-                if (uncommented != null) {
-                    String pad = line.substring(0, getIndentLevel(line));
-                    output.add(pad + uncommented);
-                } else {
-                    output.add(line);
-                }
+                output.add(line);
                 continue;
             }
 
@@ -248,121 +219,7 @@ public final class ConfigRefresher {
         Files.write(configPath, sb.toString().getBytes(StandardCharsets.UTF_8));
     }
 
-    /**
-     * Try to uncomment a commented-out config key.
-     * If the trimmed line is {@code #key: value} and the user has a value for
-     * that key (and it was not already consumed by an active line), return the
-     * uncommented key-value string. Otherwise return null.
-     *
-     * @param trimmed      the trimmed comment line (starts with #)
-     * @param sectionPath  the current section path
-     * @param userValues   the flattened user config values
-     * @param consumedKeys keys already matched by active template lines
-     * @param activeKeys   all active (non-commented) keys in the template
-     * @return the uncommented line, or null to keep the comment as-is
-     */
-    private static String tryUncomment(String trimmed, List<String> sectionPath,
-                                       Map<String, Object> userValues,
-                                       Set<String> consumedKeys,
-                                       Set<String> activeKeys) {
-        if (!trimmed.startsWith("#")) {
-            return null;
-        }
-        String uncommented = trimmed.substring(1).trim();
-        int cIdx = uncommented.indexOf(':');
-        if (cIdx <= 0) {
-            return null;
-        }
-        String potKey = uncommented.substring(0, cIdx).trim();
-        // Must look like a YAML key: non-empty, no spaces
-        if (potKey.isEmpty() || potKey.contains(" ")) {
-            return null;
-        }
-        String fk = sectionPath.isEmpty() ? potKey
-                : String.join(".", sectionPath) + "." + potKey;
-        // Skip if this key already has an active line in the template
-        if (activeKeys.contains(fk)) {
-            return null;
-        }
-        Object uv = userValues.get(fk);
-        if (uv == null || consumedKeys.contains(fk)) {
-            return null;
-        }
-        String newYaml = toScalarYaml(uv);
-        String restVal = uncommented.substring(cIdx + 1).trim();
-        boolean tq = restVal.startsWith("'") || restVal.startsWith("\"");
-        if (tq && !isQuoted(newYaml)) {
-            newYaml = "'" + newYaml.replace("'", "''") + "'";
-        }
-        consumedKeys.add(fk);
-        return potKey + ": " + newYaml;
-    }
-
-    /**
-     * Check if a comment line is a MySQL-specific config key.
-     *
-     * @param trimmed the trimmed comment line (starts with #)
-     * @return true if the line is {@code #mysqlKey: ...} where mysqlKey is in MYSQL_KEYS
-     */
-    private static boolean isMysqlKey(String trimmed) {
-        if (!trimmed.startsWith("#")) {
-            return false;
-        }
-        String uncommented = trimmed.substring(1).trim();
-        int cIdx = uncommented.indexOf(':');
-        if (cIdx <= 0) {
-            return false;
-        }
-        return MYSQL_KEYS.contains(uncommented.substring(0, cIdx).trim());
-    }
-
     // ---- internal helpers ------------------------------------------------
-
-    /**
-     * Pre-scan template lines to collect all active (non-commented) keys.
-     * Used to prevent tryUncomment from uncommenting a key that already has
-     * an active line in the template.
-     *
-     * @param lines the template lines
-     * @return set of dotted key paths for all active keys
-     */
-    private static Set<String> collectActiveKeys(List<String> lines) {
-        Set<String> keys = new HashSet<>();
-        List<String> section = new ArrayList<>();
-        List<Integer> indents = new ArrayList<>();
-
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                continue;
-            }
-
-            int indent = getIndentLevel(line);
-            while (!indents.isEmpty() && indent <= indents.get(indents.size() - 1)) {
-                indents.remove(indents.size() - 1);
-                section.remove(section.size() - 1);
-            }
-
-            int colonIdx = trimmed.indexOf(':');
-            if (colonIdx <= 0) {
-                continue;
-            }
-
-            String key = trimmed.substring(0, colonIdx).trim();
-            String rest = trimmed.substring(colonIdx + 1).trim();
-
-            String fullKey = section.isEmpty() ? key
-                    : String.join(".", section) + "." + key;
-            keys.add(fullKey);
-
-            // Track section headers (no value on same line, not a list key)
-            if (rest.isEmpty()) {
-                section.add(key);
-                indents.add(indent);
-            }
-        }
-        return keys;
-    }
 
     /**
      * Recursively flatten a BungeeCord Configuration into dotted-key map.

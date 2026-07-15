@@ -183,30 +183,28 @@ autoRegisterFloodgate: false
 # Database
 # ========================================
 
-# --- SQLite ---
-# Best for: single proxy + single backend server (small/private servers)
-# Pros: zero setup, single file, no external service needed
-# Cons: not suitable for multi-server networks (file-based, cannot be shared across servers)
+# Database driver: 'sqlite' (default) or 'mysql'
 driver: 'sqlite'
+
+# Database name or file path
+# For SQLite: file path (e.g. '{pluginDir}/FastLogin.db')
+# For MySQL: database name (e.g. 'fastloginplus')
 database: '{pluginDir}/FastLogin.db'
 
-# --- MySQL/MariaDB ---
-# Best for: proxy networks with multiple backend servers (recommended for production)
-# To use MySQL: change driver to 'mysql' and database to your DB name above,
-# then uncomment the lines below
-#host: '127.0.0.1'
-#port: 3306
-#username: 'myUser'
-#password: 'myPassword'
+# MySQL connection settings (only used when driver: 'mysql')
+host: '127.0.0.1'
+port: 3306
+username: 'myUser'
+password: 'myPassword'
 
 # Connection pool settings (seconds)
-#timeout: 30
-#lifetime: 30
+timeout: 30
+lifetime: 30
 
-# SSL for MySQL
-#useSSL: false
-#sslMode=Required
-#allowPublicKeyRetrieval=false
+# SSL for MySQL (only used when driver: 'mysql')
+useSSL: false
+sslMode: Required
+allowPublicKeyRetrieval: false
 
 # ========================================
 # Proxies
