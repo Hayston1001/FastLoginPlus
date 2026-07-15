@@ -192,11 +192,10 @@ database: '{pluginDir}/FastLogin.db'
 
 # --- MySQL/MariaDB ---
 # Best for: proxy networks with multiple backend servers (recommended for production)
-# Uncomment the lines below AND comment out the SQLite driver above to use
-#driver: 'mysql'
+# To use MySQL: change driver to 'mysql' and database to your DB name above,
+# then uncomment the lines below
 #host: '127.0.0.1'
 #port: 3306
-#database: 'fastloginplus'
 #username: 'myUser'
 #password: 'myPassword'
 

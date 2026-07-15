@@ -144,6 +144,7 @@ public final class ConfigRefresher {
             // Build the full dotted key path
             String fullKey = sectionPath.isEmpty() ? key
                     : String.join(".", sectionPath) + "." + key;
+
             consumedKeys.add(fullKey);
 
             if (rest.isEmpty()) {
@@ -200,7 +201,25 @@ public final class ConfigRefresher {
             }
         }
 
-        // 4. Append user-only top-level keys that don't exist in the template
+        // 4. Append user-only top-level keys and write back
+        appendRemainingAndWrite(userValues, consumedKeys, output, configPath);
+    }
+
+    /**
+     * Append user-only top-level keys that don't exist in the template,
+     * then write the output lines back to the config file.
+     *
+     * @param userValues   flattened user config values
+     * @param consumedKeys keys already matched by template lines
+     * @param output       the output lines to write
+     * @param configPath   path to the config file
+     * @throws IOException if writing the file fails
+     */
+    private static void appendRemainingAndWrite(Map<String, Object> userValues,
+                                                Set<String> consumedKeys,
+                                                List<String> output,
+                                                Path configPath)
+            throws IOException {
         List<String> remaining = new ArrayList<>();
         for (String k : userValues.keySet()) {
             if (!consumedKeys.contains(k) && !k.contains(".")) {
@@ -218,7 +237,7 @@ public final class ConfigRefresher {
             }
         }
 
-        // 5. Write back (UTF-8, LF line endings)
+        // Write back (UTF-8, LF line endings)
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < output.size(); i++) {
             sb.append(output.get(i));
