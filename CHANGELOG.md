@@ -1,5 +1,37 @@
 # FastLoginPlus Changelog
 
+## v0.2.0
+
+### Config Refresher / 配置刷新器
+
+- Restore comments and keys in config.yml from the template each startup, keeping the config file aligned with the latest version and more portable
+
+- 在每次启动时从模板恢复 config.yml 的注释和键,使得配置文件与最新版本一致,也更具可迁移性
+
+### Log Output Optimization / 日志输出优化
+
+- Add `debug: false` option to config.yml to reduce log verbosity
+
+- 在 config.yml 中添加 `debug: false` 选项以减少日志冗余
+
+### Git Hash in JAR Names / JAR 文件名加入 Git 哈希
+
+- Include git commit hash in JAR file names and MANIFEST to make file versions clearer
+
+- 在 JAR 文件名和 MANIFEST 中包含 git 提交哈希使得文件版本更明确
+
+### Bug Fixes / Bug 修复
+
+- Fix `sslMode` and `allowPublicKeyRetrieval` using invalid `=` syntax
+
+- 修复 `sslMode` 和 `allowPublicKeyRetrieval` 使用无效的 `=` 语法
+
+### Docs / 文档
+
+- Optimized the configuration file structure and comments
+
+- 优化了配置文件结构和注释
+
 ## v0.1.2
 
 ### AuthMe 6.0 Auto-Integration / AuthMe 6.0 自动集成
