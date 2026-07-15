@@ -90,6 +90,11 @@ public final class ConfigRefresher {
             return;
         }
 
+        // Pre-scan: collect all active (non-commented) keys in the template.
+        // This prevents tryUncomment from uncommenting a key that already has
+        // an active line (e.g. "#ip-addresses:" followed by "ip-addresses: []").
+        Set<String> activeKeys = collectActiveKeys(templateLines);
+
         // 3. Walk template line by line, substituting user values
         List<String> output = new ArrayList<>();
         List<String> sectionPath = new ArrayList<>();
@@ -108,7 +113,7 @@ public final class ConfigRefresher {
                 }
                 // Check if this is a commented-out config key (#key: value)
                 String uncommented = tryUncomment(trimmed, sectionPath,
-                        userValues, consumedKeys);
+                        userValues, consumedKeys, activeKeys);
                 if (uncommented != null) {
                     String pad = line.substring(0, getIndentLevel(line));
                     output.add(pad + uncommented);
@@ -234,11 +239,13 @@ public final class ConfigRefresher {
      * @param sectionPath  the current section path
      * @param userValues   the flattened user config values
      * @param consumedKeys keys already matched by active template lines
+     * @param activeKeys   all active (non-commented) keys in the template
      * @return the uncommented line, or null to keep the comment as-is
      */
     private static String tryUncomment(String trimmed, List<String> sectionPath,
                                        Map<String, Object> userValues,
-                                       Set<String> consumedKeys) {
+                                       Set<String> consumedKeys,
+                                       Set<String> activeKeys) {
         if (!trimmed.startsWith("#")) {
             return null;
         }
@@ -254,6 +261,10 @@ public final class ConfigRefresher {
         }
         String fk = sectionPath.isEmpty() ? potKey
                 : String.join(".", sectionPath) + "." + potKey;
+        // Skip if this key already has an active line in the template
+        if (activeKeys.contains(fk)) {
+            return null;
+        }
         Object uv = userValues.get(fk);
         if (uv == null || consumedKeys.contains(fk)) {
             return null;
@@ -287,6 +298,52 @@ public final class ConfigRefresher {
     }
 
     // ---- internal helpers ------------------------------------------------
+
+    /**
+     * Pre-scan template lines to collect all active (non-commented) keys.
+     * Used to prevent tryUncomment from uncommenting a key that already has
+     * an active line in the template.
+     *
+     * @param lines the template lines
+     * @return set of dotted key paths for all active keys
+     */
+    private static Set<String> collectActiveKeys(List<String> lines) {
+        Set<String> keys = new HashSet<>();
+        List<String> section = new ArrayList<>();
+        List<Integer> indents = new ArrayList<>();
+
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                continue;
+            }
+
+            int indent = getIndentLevel(line);
+            while (!indents.isEmpty() && indent <= indents.get(indents.size() - 1)) {
+                indents.remove(indents.size() - 1);
+                section.remove(section.size() - 1);
+            }
+
+            int colonIdx = trimmed.indexOf(':');
+            if (colonIdx <= 0) {
+                continue;
+            }
+
+            String key = trimmed.substring(0, colonIdx).trim();
+            String rest = trimmed.substring(colonIdx + 1).trim();
+
+            String fullKey = section.isEmpty() ? key
+                    : String.join(".", section) + "." + key;
+            keys.add(fullKey);
+
+            // Track section headers (no value on same line, not a list key)
+            if (rest.isEmpty()) {
+                section.add(key);
+                indents.add(indent);
+            }
+        }
+        return keys;
+    }
 
     /**
      * Recursively flatten a BungeeCord Configuration into dotted-key map.
