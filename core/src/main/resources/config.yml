@@ -202,6 +202,9 @@ lifetime: 30
 useSSL: false
 sslMode: Required
 allowPublicKeyRetrieval: false
+# Local path to MySQL server's RSA public key file (alternative to allowPublicKeyRetrieval)
+# Only needed if allowPublicKeyRetrieval is false and server uses caching_sha2_password
+ServerRSAPublicKeyFile:
 
 # ========================================
 # Proxies
