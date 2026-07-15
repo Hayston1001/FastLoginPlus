@@ -33,11 +33,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import net.md_5.bungee.config.Configuration;
@@ -58,8 +56,7 @@ public final class ConfigRefresher {
      *
      * <p>After this call the on-disk file has canonical comments and key order
      * from the bundled template, but every value is taken from the user's
-     * existing config. Keys that only exist in the user's config (not in the
-     * template) are appended at the end.</p>
+     * existing config.</p>
      *
      * @param classLoader to load the template resource from the JAR
      * @param configPath  path to the user's config.yml on disk
@@ -83,7 +80,6 @@ public final class ConfigRefresher {
         List<String> output = new ArrayList<>();
         List<String> sectionPath = new ArrayList<>();
         List<Integer> indentStack = new ArrayList<>();
-        Set<String> consumedKeys = new HashSet<>();
 
         for (String line : templateLines) {
             String trimmed = line.trim();
@@ -115,8 +111,6 @@ public final class ConfigRefresher {
             // Build the full dotted key path
             String fullKey = sectionPath.isEmpty() ? key
                     : String.join(".", sectionPath) + "." + key;
-
-            consumedKeys.add(fullKey);
 
             if (rest.isEmpty()) {
                 // No value on the same line — section header or list key
@@ -172,43 +166,19 @@ public final class ConfigRefresher {
             }
         }
 
-        // 4. Append user-only top-level keys and write back
-        appendRemainingAndWrite(userValues, consumedKeys, output, configPath);
+        // 4. Write back
+        writeOutput(output, configPath);
     }
 
     /**
-     * Append user-only top-level keys that don't exist in the template,
-     * then write the output lines back to the config file.
+     * Write the output lines back to the config file.
      *
-     * @param userValues   flattened user config values
-     * @param consumedKeys keys already matched by template lines
-     * @param output       the output lines to write
-     * @param configPath   path to the config file
+     * @param output     the output lines to write
+     * @param configPath path to the config file
      * @throws IOException if writing the file fails
      */
-    private static void appendRemainingAndWrite(Map<String, Object> userValues,
-                                                Set<String> consumedKeys,
-                                                List<String> output,
-                                                Path configPath)
+    private static void writeOutput(List<String> output, Path configPath)
             throws IOException {
-        List<String> remaining = new ArrayList<>();
-        for (String k : userValues.keySet()) {
-            if (!consumedKeys.contains(k) && !k.contains(".")) {
-                remaining.add(k);
-            }
-        }
-        if (!remaining.isEmpty()) {
-            output.add("");
-            output.add("# ========================================");
-            output.add("# User-added keys (not in bundled template)");
-            output.add("# ========================================");
-            for (String k : remaining) {
-                Object val = userValues.get(k);
-                output.add(k + ": " + toScalarYaml(val));
-            }
-        }
-
-        // Write back (UTF-8, LF line endings)
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < output.size(); i++) {
             sb.append(output.get(i));
