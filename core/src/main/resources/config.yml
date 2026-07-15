@@ -32,7 +32,7 @@
 # ========================================
 # Language
 # ========================================
-# Language file to use. Built-in options: "en" (English), "zh" (中文)
+# Language file to use. Built-in options: "en"(English), "zh"(中文)
 # You can also use a custom value, e.g. "ja" -> loads messages_ja.yml
 # Missing keys will be auto-filled on startup.
 language: en
@@ -40,7 +40,7 @@ language: en
 # ========================================
 # Update Check
 # ========================================
-# Check for new versions on GitHub. Logs to console; notifies OPs on login.
+# Check for new versions on GitHub. Logs to console; notifies OPs on login
 check-update: true
 # Check interval in hours
 update-check-interval: 24
@@ -48,7 +48,7 @@ update-check-interval: 24
 # ========================================
 # Anti-bot
 # ========================================
-# Simple anti-bot protection. For serious protection, use a dedicated firewall.
+# Simple anti-bot protection. For serious protection, use a dedicated firewall
 anti-bot:
   enabled: true
   # Total connections allowed in the time window
@@ -76,75 +76,74 @@ anti-bot:
 
   # --- Trusted IPs ---
   # IPs that bypass all anti-bot checks
-  trusted-ips: []
-  #  - '127.0.0.1'
+  # trusted-ips:
+  #   - '127.0.0.1'
+  trusted-ips:
 
 # ========================================
 # Premium Detection
 # ========================================
-
 # Auto-register new premium players on first join
 autoRegister: true
 
 # Enable auto-login for premium players
 autoLogin: true
 
-# Use premium UUID for premium players.
-# Bukkit-side implementation uses ProtocolLib reflection to set the UUID.
-# BungeeCord/Velocity-side uses native proxy API, no special requirements.
+# Use premium UUID for premium players
+# Bukkit-side implementation uses ProtocolLib reflection to set the UUID
+# BungeeCord/Velocity-side uses native proxy API, no special requirements
 premiumUuid: true
 
-# Query Mojang API for new players and detect name changes by UUID.
+# Query Mojang API for new players and detect name changes by UUID
 # If a player's name is not in the database but their UUID is (under an old name),
-# the old record is updated with the new name and they log in as premium.
+# the old record is updated with the new name and they log in as premium
 nameChangeCheck: true
 
-# Respect auth plugin per-IP registration limit
-respectIpLimit: false
-
 # If an offline player uses a premium username but fails authentication, 
-# remember them so they can join in offline mode next time (not recommended).
+# remember them so they can join in offline mode next time (not recommended)
 secondAttemptCracked: false
 
 # ========================================
 # Offline Whitelist
 # ========================================
-# Only allow known players (already in database) to join as cracked/offline.
-# New offline players will be kicked. Premium players are unaffected
-# Existing cracked players in the database can still join normally.
-# Use /flp cracked to add offline players to the database.
-# Use /flp delete to remove offline players from the database.
+# When enabled, offline players not present in the database will be denied entry (custom kick message available)
+# Offline players already in the database may still join
+# No restrictions apply to online players
+# Use /flp cracked <player> to add offline players to the database
+# Use /flp delete <player> to remove offline players from the database
 offline-whitelist: false
 
 # ========================================
 # Skin
 # ========================================
-
 # Forward premium skin to the player
-# Even when enabled, SkinsRestorer custom skins take priority (if SR is installed).
+# Even when enabled, SkinsRestorer custom skins take priority (if SR is installed)
 forwardSkin: true
 
 # ========================================
 # Command Behavior
 # ========================================
-
 # Show warning before /flp premium command takes effect
 premium-warning: true
 
-# Kick the player from the server after they confirm /flp premium, forcing them to reconnect.
-
+# Kick the player from the server after they confirm /flp premium, forcing them to reconnect
 kick-toggle: true
 
 # ========================================
 # Advanced
 # ========================================
+# Enable verbose logging for troubleshooting.
+debug: false
 
 # Auto-register players in flp DB but missing from auth plugin DB
 auto-register-unknown: true
 
+# Respect auth plugin per-IP registration limit
+respectIpLimit: false
+
 # ======[[ Spigot+ProtocolLib users only ]]======
-# Alternative session resolver that doesn't send server IP to Mojang.
-# Useful behind DNAT / transparent reverse proxy.
+# Alternative session resolver that doesn't send server IP to Mojang
+# Useful behind DNAT / transparent reverse proxy
 useProxyAgnosticResolver: true
 
 # ======[[ Spigot+ProtocolLib users only ]]======
@@ -159,9 +158,9 @@ mojang-retry-delay: 1000
 verifyClientKeys: false
 
 # IP addresses for rotating Mojang API requests (to avoid rate limits)
-#ip-addresses:
-#    - 192-168-0-2
-ip-addresses: []
+# ip-addresses:
+#   - 192-168-0-2
+ip-addresses:
 
 # Max Mojang name->UUID requests per 10 minutes (per IP)
 mojang-request-limit: 600
@@ -169,26 +168,24 @@ mojang-request-limit: 600
 # ========================================
 # Floodgate / Bedrock
 # ========================================
-
 # Auto-login for Floodgate (Bedrock) players. Values: false / true / linked / no-conflict
 autoLoginFloodgate: false
 
 # Allow Bedrock players to join even if their name conflicts with a Java premium account
 allowFloodgateNameConflict: false
 
-# Auto-register Floodgate players. Requires autoLoginFloodgate.
+# Auto-register Floodgate players. Requires autoLoginFloodgate
 autoRegisterFloodgate: false
 
 # ========================================
 # Database
 # ========================================
-
 # Database driver: 'sqlite' (default) or 'mysql'
 driver: 'sqlite'
 
 # Database name or file path
-# For SQLite: file path (e.g. '{pluginDir}/FastLogin.db')
-# For MySQL: database name (e.g. 'fastloginplus')
+# For SQLite: file path (e.g. database: '{pluginDir}/FastLogin.db')
+# For MySQL: database name (e.g. database: 'fastloginplus')
 database: '{pluginDir}/FastLogin.db'
 
 # MySQL connection settings (only used when driver: 'mysql')
@@ -210,5 +207,7 @@ allowPublicKeyRetrieval: false
 # Proxies
 # ========================================
 # HTTP proxies for Mojang API requests (workaround for rate limits)
+# proxies:
+#   - 'xyz.com:1337'
 proxies:
-  # - 'xyz.com:1337'
+
