@@ -5,7 +5,7 @@ name: FastLoginPlus
 # ${-} will be automatically replaced by Maven
 main: com.github.games647.fastlogin.bungee.FastLoginBungee
 
-version: ${project.version}
+version: ${revision}-${git.commit.id.abbrev}
 author: Hayston, games647
 
 softDepends:

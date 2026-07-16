@@ -91,13 +91,6 @@
                     <transformers>
                         <transformer
                                 implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                        <transformer
-                                implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                            <manifestEntries>
-                                <Implementation-Version>${project.version}</Implementation-Version>
-                                <Implementation-Title>${project.name}</Implementation-Title>
-                            </manifestEntries>
-                        </transformer>
                     </transformers>
                     <artifactSet>
                         <includes>
@@ -111,12 +104,6 @@
                         </includes>
                     </artifactSet>
                     <filters>
-                        <filter>
-                            <artifact>*:*</artifact>
-                            <excludes>
-                                <exclude>META-INF/MANIFEST.MF</exclude>
-                            </excludes>
-                        </filter>
                         <filter>
                             <artifact>org.mariadb.jdbc:*</artifact>
                             <includes>
