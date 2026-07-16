@@ -43,7 +43,7 @@
     </description>
 
     <properties>
-        <revision>0.2.0</revision>
+        <revision>0.2.1</revision>
 
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 

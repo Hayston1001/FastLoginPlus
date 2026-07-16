@@ -1,5 +1,17 @@
 # FastLoginPlus Changelog
 
+## v0.2.1
+
+### Version Format Unification / 版本格式统一
+
+- All plugin descriptors (plugin.yml, bungee.yml, velocity-plugin.json) now use `${revision}-${git.commit.id.abbrev}` format consistently
+- Removed redundant `ManifestResourceTransformer` from bungee/velocity shade config
+- Removed `META-INF/MANIFEST.MF` exclusion from shade filters that was causing MANIFEST loss
+
+- 所有插件描述文件（plugin.yml、bungee.yml、velocity-plugin.json）现在统一使用 `${revision}-${git.commit.id.abbrev}` 格式
+- 移除了 bungee/velocity shade 配置中多余的 `ManifestResourceTransformer`
+- 移除了 shade filter 中导致 MANIFEST 丢失的 `META-INF/MANIFEST.MF` 排除规则
+
 ## v0.2.0
 
 ### Config Refresher / 配置刷新器
