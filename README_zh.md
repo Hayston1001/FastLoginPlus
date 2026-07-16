@@ -18,7 +18,7 @@
 
 ### 改进之处(FastLoginPlus 新增)
 
-* **AuthMe 6.0 兼容** — 自动检测 AuthMe 版本, 无需用户配置
+* **[AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 兼容** — 自动检测 AuthMeReloaded 版本, 无需用户配置
 * **离线白名单** — 阻止未知离线玩家, 正版玩家通过 Mojang API 自动放行.替代上游的 `switchMode`(该功能会误踢首次加入的正版玩家)
 * **多层反机器人** — 每 IP 速率限制、突发检测、临时封禁、可信 IP 白名单, 以及 `FastLoginAntiBotEvent` 供其他插件集成
 * **Folia 支持** — 独立模块, 使用 Folia 兼容的调度器(`Entity.getScheduler()`、`Bukkit.getAsyncScheduler()`)
@@ -48,15 +48,15 @@
 
 需要后端安装登录插件(如 AuthMe、LoginSecurity、CrazyLogin).[完整列表](https://github.com/TuxCoding/FastLogin#supported-auth-plugins).
 
-### AuthMe 6.0
+## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 支持
 
-AuthMe 6.0 新增了 **preJoin 对话框(Paper) 以及enablePremium 配置**, FLP 针对此进行了适配.
+AuthMeReloaded 6.0 新增了 **preJoin 对话框(Paper) 以及enablePremium 配置**, FLP 针对此进行了适配.
 
-**自动配置：** FastLoginPlus 现在会自动启用 AuthMe 的正版自动登录(`enablePremium: true`)并注销 AuthMe 自带的正版验证监听器.无需手动配置.
+**自动配置：** FastLoginPlus 现在会自动启用 AuthMeReloaded 的正版自动登录(`enablePremium: true`)并注销 AuthMeReloaded 自带的正版验证监听器.无需手动配置.
 
-> 未使用 AuthMe 5.x 或未使用对话框(preJoin)的不会改变配置.
+> 未使用 AuthMeReloaded 5.x 或未使用对话框(preJoin)的不会改变配置.
 
-### 基岩版玩家支持(Geyser / Floodgate)
+## 基岩版玩家支持(Geyser / Floodgate)
 
 FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入离线模式 Java 服务器.
 

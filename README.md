@@ -18,7 +18,7 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 ### Improvements (new in FastLoginPlus)
 
-* **AuthMe 6.0 compatibility** — auto-detects AuthMe version without user config
+* **[AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 compatibility** — auto-detects AuthMeReloaded version without user config
 * **Offline Whitelist** — block unknown cracked players, allow premium via Mojang API. Replaces upstream `switchMode` which kicked new premium players
 * **Multi-layer anti-bot** — per-IP rate limiting, burst detection, temporary IP ban, trusted IP whitelist, and `FastLoginAntiBotEvent` for plugin integration
 * **Folia support** — dedicated module with Folia-compatible scheduler (`Entity.getScheduler()`, `Bukkit.getAsyncScheduler()`)
@@ -48,15 +48,15 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin). See [full list](https://github.com/TuxCoding/FastLogin#supported-auth-plugins).
 
-### AuthMe 6.0
+## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 Support
 
-AuthMe 6.0 adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP has implemented compatibility support.
+AuthMeReloaded 6.0 adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP has implemented compatibility support.
 
-**Automatic setup:** FastLoginPlus now automatically enables AuthMe's premium automatic login(`enablePremium: true`) and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
+**Automatic setup:** FastLoginPlus now automatically enables AuthMeReloaded's premium automatic login(`enablePremium: true`) and unregisters AuthMeReloaded's own premium verification listener. No manual configuration is needed.
 
-> No configuration changes will occur for those not using AuthMe 5.x or the preJoin dialog.
+> No configuration changes will occur for those not using AuthMeReloaded 5.x or the preJoin dialog.
 
-### Bedrock Player Support (Geyser / Floodgate)
+## Bedrock Player Support (Geyser / Floodgate)
 
 FastLoginPlus works with [Geyser](https://geysermc.org/) to allow Bedrock players to join your offline-mode Java server.
 
