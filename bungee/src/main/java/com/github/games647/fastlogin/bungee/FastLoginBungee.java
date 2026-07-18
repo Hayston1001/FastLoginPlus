@@ -52,6 +52,7 @@ import com.github.games647.fastlogin.core.UpdateChecker;
 import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
+import com.github.games647.fastlogin.core.web.WebServer;
 import com.google.common.collect.MapMaker;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
@@ -113,6 +114,65 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
 
         registerHook();
         scheduleUpdateCheck();
+
+        // Start web management panel if enabled
+        startWebPanel();
+    }
+
+    private void startWebPanel() {
+        try {
+            // Read web config from core config
+            net.md_5.bungee.config.Configuration config = core.getConfig();
+            if (config == null) {
+                return;
+            }
+
+            boolean enabled = config.get("web.enabled", false);
+            if (!enabled) {
+                return;
+            }
+
+            String host = config.get("web.host", "127.0.0.1");
+            int port = config.get("web.port", 8080);
+            String token = config.get("web.token", "");
+
+            // Auto-generate token if empty
+            if (token == null || token.isEmpty()) {
+                token = generateRandomToken();
+                logger.info("Web panel token auto-generated: {}", token);
+                logger.info("Add this to your config.yml under web.token to persist it");
+            }
+
+            if (token.length() < 16) {
+                logger.warn("Web panel token is too short (minimum 16 characters). Disabling web panel.");
+                return;
+            }
+
+            String version = getClass().getPackage().getImplementationVersion();
+            if (version == null) {
+                version = "unknown";
+            }
+
+            WebServer webServer = new WebServer(logger, core.getStorage(), core.getAntiBotService(), version);
+            webServer.setOnlinePlayersSupplier(() ->
+                getProxy().getPlayers().stream()
+                    .map(ProxiedPlayer::getName)
+                    .collect(java.util.stream.Collectors.toList()));
+            webServer.start(host, port, token);
+        } catch (Exception e) {
+            logger.error("Failed to start web management panel", e);
+        }
+    }
+
+    private String generateRandomToken() {
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        byte[] bytes = new byte[16];
+        random.nextBytes(bytes);
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
     @Override

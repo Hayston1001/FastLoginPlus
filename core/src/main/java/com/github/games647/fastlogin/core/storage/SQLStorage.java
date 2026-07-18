@@ -74,6 +74,15 @@ public abstract class SQLStorage implements AuthStorage {
     protected static final String DELETE_BY_NAME = "DELETE FROM `" + PREMIUM_TABLE
             + "` WHERE `Name`=?";
 
+    // Web UI queries - pagination and search
+    protected static final String LOAD_ALL_PAGED = "SELECT * FROM `" + PREMIUM_TABLE
+            + "` ORDER BY `LastLogin` DESC LIMIT ? OFFSET ?";
+    protected static final String SEARCH_BY_NAME = "SELECT * FROM `" + PREMIUM_TABLE
+            + "` WHERE `Name` LIKE ? ORDER BY `LastLogin` DESC LIMIT ? OFFSET ?";
+    protected static final String COUNT_ALL = "SELECT COUNT(*) FROM `" + PREMIUM_TABLE + "`";
+    protected static final String COUNT_SEARCH = "SELECT COUNT(*) FROM `" + PREMIUM_TABLE
+            + "` WHERE `Name` LIKE ?";
+
     protected final Logger log;
     protected final HikariDataSource dataSource;
 
@@ -224,6 +233,92 @@ public abstract class SQLStorage implements AuthStorage {
             log.error("Failed to delete profile: {}", name, ex);
         }
         return false;
+    }
+
+    /**
+     * Load profiles with pagination.
+     *
+     * @param offset the offset (0-based)
+     * @param limit  the maximum number of results
+     * @return a list of stored profiles
+     */
+    public java.util.List<StoredProfile> loadAllProfiles(int offset, int limit) {
+        java.util.List<StoredProfile> profiles = new java.util.ArrayList<>();
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement stmt = con.prepareStatement(LOAD_ALL_PAGED)) {
+            stmt.setInt(1, limit);
+            stmt.setInt(2, offset);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    parseResult(rs).ifPresent(profiles::add);
+                }
+            }
+        } catch (SQLException ex) {
+            log.error("Failed to load profiles", ex);
+        }
+        return profiles;
+    }
+
+    /**
+     * Search profiles by name with pagination.
+     *
+     * @param query  the search query (prefix match)
+     * @param offset the offset (0-based)
+     * @param limit  the maximum number of results
+     * @return a list of matching stored profiles
+     */
+    public java.util.List<StoredProfile> searchProfiles(String query, int offset, int limit) {
+        java.util.List<StoredProfile> profiles = new java.util.ArrayList<>();
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement stmt = con.prepareStatement(SEARCH_BY_NAME)) {
+            stmt.setString(1, query + "%");
+            stmt.setInt(2, limit);
+            stmt.setInt(3, offset);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    parseResult(rs).ifPresent(profiles::add);
+                }
+            }
+        } catch (SQLException ex) {
+            log.error("Failed to search profiles", ex);
+        }
+        return profiles;
+    }
+
+    /**
+     * Count total profiles or profiles matching a search query.
+     *
+     * @param query the search query, or null to count all
+     * @return the count
+     */
+    public int countProfiles(String query) {
+        String sql = (query != null && !query.isEmpty()) ? COUNT_SEARCH : COUNT_ALL;
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement stmt = con.prepareStatement(sql)) {
+            if (query != null && !query.isEmpty()) {
+                stmt.setString(1, query + "%");
+            }
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1);
+                }
+            }
+        } catch (SQLException ex) {
+            log.error("Failed to count profiles", ex);
+        }
+        return 0;
+    }
+
+    /**
+     * Get the database type (e.g., "sqlite", "mysql").
+     *
+     * @return the database type string
+     */
+    public String getDatabaseType() {
+        return dataSource.getJdbcUrl().contains("sqlite") ? "SQLite" : "MySQL";
     }
 
     /**

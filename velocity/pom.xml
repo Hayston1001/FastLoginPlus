@@ -87,6 +87,15 @@
                             <pattern>org.sqlite</pattern>
                             <shadedPattern>fastlogin.sqlite</shadedPattern>
                         </relocation>
+                        <!-- Javalin and Jetty for web panel -->
+                        <relocation>
+                            <pattern>io.javalin</pattern>
+                            <shadedPattern>fastlogin.javalin</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>org.eclipse.jetty</pattern>
+                            <shadedPattern>fastlogin.jetty</shadedPattern>
+                        </relocation>
                     </relocations>
                     <transformers>
                         <transformer
@@ -170,6 +179,13 @@
                     <artifactId>gson</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- Web management panel -->
+        <dependency>
+            <groupId>com.github.games647</groupId>
+            <artifactId>fastloginplus.web</artifactId>
+            <version>${project.version}</version>
         </dependency>
 
         <!--Velocity api-->

@@ -86,6 +86,15 @@
                             <pattern>io.papermc.lib</pattern>
                             <shadedPattern>fastlogin.paperlib</shadedPattern>
                         </relocation>
+                        <!-- Javalin and Jetty for web panel -->
+                        <relocation>
+                            <pattern>io.javalin</pattern>
+                            <shadedPattern>fastlogin.javalin</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>org.eclipse.jetty</pattern>
+                            <shadedPattern>fastlogin.jetty</shadedPattern>
+                        </relocation>
                     </relocations>
                     <!-- Rename the service file too to let SLF4J api find our own relocated jdk logger -->
                     <!-- Located in META-INF/services -->
@@ -161,6 +170,13 @@
         <dependency>
             <groupId>com.github.games647</groupId>
             <artifactId>fastloginplus.core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- Web management panel -->
+        <dependency>
+            <groupId>com.github.games647</groupId>
+            <artifactId>fastloginplus.web</artifactId>
             <version>${project.version}</version>
         </dependency>
 

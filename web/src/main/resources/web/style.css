@@ -1,0 +1,488 @@
+/* FastLoginPlus Web Panel Styles */
+
+:root {
+    --primary-color: #4a9eff;
+    --primary-hover: #3a8eef;
+    --danger-color: #ff4757;
+    --danger-hover: #ff3747;
+    --success-color: #2ed573;
+    --warning-color: #ffa502;
+    --bg-color: #1a1a2e;
+    --bg-secondary: #16213e;
+    --bg-card: #0f3460;
+    --text-color: #eee;
+    --text-muted: #aaa;
+    --border-color: #333;
+    --input-bg: #2a2a4a;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+.screen {
+    display: none;
+}
+
+.screen.active {
+    display: block;
+}
+
+/* Login Screen */
+.login-container {
+    max-width: 400px;
+    margin: 100px auto;
+    padding: 40px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    text-align: center;
+}
+
+.login-container h1 {
+    margin-bottom: 10px;
+    color: var(--primary-color);
+}
+
+.login-container p {
+    margin-bottom: 20px;
+    color: var(--text-muted);
+}
+
+.login-container input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 15px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    color: var(--text-color);
+    font-size: 16px;
+}
+
+.login-container button {
+    width: 100%;
+    padding: 12px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.login-container button:hover {
+    background: var(--primary-hover);
+}
+
+.error {
+    color: var(--danger-color);
+    margin-top: 10px;
+    min-height: 20px;
+}
+
+/* Header */
+header {
+    background: var(--bg-secondary);
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+
+header h1 {
+    font-size: 20px;
+    color: var(--primary-color);
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+#status-info {
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+#logout-btn {
+    padding: 8px 16px;
+    background: var(--danger-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#logout-btn:hover {
+    background: var(--danger-hover);
+}
+
+/* Tabs */
+.tabs {
+    background: var(--bg-secondary);
+    padding: 0 20px;
+    display: flex;
+    gap: 5px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.tab {
+    padding: 12px 20px;
+    background: none;
+    color: var(--text-muted);
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+    border-bottom: 2px solid transparent;
+}
+
+.tab:hover {
+    color: var(--text-color);
+}
+
+.tab.active {
+    color: var(--primary-color);
+    border-bottom-color: var(--primary-color);
+}
+
+/* Main Content */
+main {
+    padding: 20px;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Toolbar */
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.toolbar button {
+    padding: 8px 16px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.toolbar button:hover {
+    background: var(--primary-hover);
+}
+
+.toolbar input {
+    padding: 8px 12px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    color: var(--text-color);
+    font-size: 14px;
+}
+
+.toolbar span {
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+/* Tables */
+.table-container {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--bg-secondary);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+th {
+    background: var(--bg-card);
+    font-weight: 600;
+    font-size: 14px;
+}
+
+td {
+    font-size: 14px;
+}
+
+tr:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+}
+
+/* Buttons in table */
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--primary-hover);
+}
+
+.btn-danger {
+    background: var(--danger-color);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: var(--danger-hover);
+}
+
+.btn-success {
+    background: var(--success-color);
+    color: white;
+}
+
+.btn-success:hover {
+    background: #25c46a;
+}
+
+/* Pagination */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.pagination button {
+    padding: 8px 16px;
+    background: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.pagination button:hover:not(:disabled) {
+    background: var(--primary-hover);
+}
+
+.pagination button:disabled {
+    background: var(--border-color);
+    cursor: not-allowed;
+}
+
+.pagination span {
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background: var(--bg-secondary);
+    padding: 20px;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.stat-card h3 {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+
+.stat-value {
+    font-size: 32px;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+/* Ban Form */
+.ban-form {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.ban-form input {
+    padding: 8px 12px;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    color: var(--text-color);
+    font-size: 14px;
+}
+
+.ban-form button {
+    padding: 8px 16px;
+    background: var(--danger-color);
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.ban-form button:hover {
+    background: var(--danger-hover);
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: var(--bg-secondary);
+    padding: 30px;
+    border-radius: 10px;
+    max-width: 400px;
+    text-align: center;
+}
+
+.modal-content p {
+    margin-bottom: 20px;
+    font-size: 16px;
+}
+
+.modal-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+}
+
+.modal-buttons button {
+    padding: 10px 25px;
+    border: none;
+    border-radius: 5px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+#confirm-yes {
+    background: var(--danger-color);
+    color: white;
+}
+
+#confirm-yes:hover {
+    background: var(--danger-hover);
+}
+
+#confirm-no {
+    background: var(--border-color);
+    color: var(--text-color);
+}
+
+#confirm-no:hover {
+    background: #444;
+}
+
+/* Login type badges */
+.badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.badge-premium {
+    background: var(--success-color);
+    color: white;
+}
+
+.badge-cracked {
+    background: var(--warning-color);
+    color: #333;
+}
+
+.badge-bedrock {
+    background: #9b59b6;
+    color: white;
+}
+
+.badge-unknown {
+    background: var(--border-color);
+    color: var(--text-muted);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .toolbar {
+        flex-wrap: wrap;
+    }
+
+    .ban-form {
+        flex-wrap: wrap;
+    }
+
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    header {
+        flex-direction: column;
+        gap: 10px;
+    }
+}

@@ -103,4 +103,37 @@ public class IpBanManager {
     public int banCount() {
         return bans.size();
     }
+
+    /**
+     * Remove a ban for the specified IP address.
+     *
+     * @param address the IP to unban
+     * @return true if the IP was banned and has been removed
+     */
+    public boolean unban(InetAddress address) {
+        return bans.remove(address) != null;
+    }
+
+    /**
+     * Get a list of currently banned IP addresses with their unban times.
+     *
+     * <p>Expired entries are cleaned up lazily during this call.</p>
+     *
+     * @return a list of maps containing "ip" and "unbanTime" keys
+     */
+    public java.util.List<java.util.Map<String, Object>> getBannedIps() {
+        cleanup(); // Clean up expired entries first
+
+        java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
+        long nowMs = ticker.read() / 1_000_000;
+
+        for (java.util.Map.Entry<InetAddress, Long> entry : bans.entrySet()) {
+            java.util.Map<String, Object> banInfo = new java.util.HashMap<>();
+            banInfo.put("ip", entry.getKey().getHostAddress());
+            banInfo.put("remainingMs", entry.getValue() - nowMs);
+            result.add(banInfo);
+        }
+
+        return result;
+    }
 }

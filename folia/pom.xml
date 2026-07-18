@@ -80,6 +80,15 @@
                                 <exclude>com.google.common.collect.Multimap</exclude>
                             </excludes>
                         </relocation>
+                        <!-- Javalin and Jetty for web panel -->
+                        <relocation>
+                            <pattern>io.javalin</pattern>
+                            <shadedPattern>fastlogin.javalin</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>org.eclipse.jetty</pattern>
+                            <shadedPattern>fastlogin.jetty</shadedPattern>
+                        </relocation>
                     </relocations>
                     <transformers>
                         <transformer
@@ -147,6 +156,13 @@
         <dependency>
             <groupId>com.github.games647</groupId>
             <artifactId>fastloginplus.core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- Web management panel -->
+        <dependency>
+            <groupId>com.github.games647</groupId>
+            <artifactId>fastloginplus.web</artifactId>
             <version>${project.version}</version>
         </dependency>
 

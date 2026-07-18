@@ -58,6 +58,7 @@
 
     <modules>
         <module>core</module>
+        <module>web</module>
         <module>bukkit</module>
         <module>folia</module>
         <module>bungee</module>
