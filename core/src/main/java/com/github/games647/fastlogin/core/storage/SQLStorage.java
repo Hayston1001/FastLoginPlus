@@ -77,11 +77,13 @@ public abstract class SQLStorage implements AuthStorage {
     // Web UI queries - pagination and search
     protected static final String LOAD_ALL_PAGED = "SELECT * FROM `" + PREMIUM_TABLE
             + "` ORDER BY `LastLogin` DESC LIMIT ? OFFSET ?";
-    protected static final String SEARCH_BY_NAME = "SELECT * FROM `" + PREMIUM_TABLE
-            + "` WHERE `Name` LIKE ? ORDER BY `LastLogin` DESC LIMIT ? OFFSET ?";
-    protected static final String COUNT_ALL = "SELECT COUNT(*) FROM `" + PREMIUM_TABLE + "`";
+    protected static final String SEARCH_BY_NAME_OR_UUID = "SELECT * FROM `" + PREMIUM_TABLE
+            + "` WHERE LOWER(`Name`) LIKE LOWER(?) OR LOWER(`UUID`) LIKE LOWER(?)"
+            + " ORDER BY `LastLogin` DESC LIMIT ? OFFSET ?";
+    protected static final String COUNT_ALL = "SELECT COUNT(*) FROM `" + PREMIUM_TABLE
+            + "`";
     protected static final String COUNT_SEARCH = "SELECT COUNT(*) FROM `" + PREMIUM_TABLE
-            + "` WHERE `Name` LIKE ?";
+            + "` WHERE LOWER(`Name`) LIKE LOWER(?) OR LOWER(`UUID`) LIKE LOWER(?)";
 
     protected final Logger log;
     protected final HikariDataSource dataSource;
@@ -261,9 +263,9 @@ public abstract class SQLStorage implements AuthStorage {
     }
 
     /**
-     * Search profiles by name with pagination.
+     * Search profiles by name or UUID prefix with pagination.
      *
-     * @param query  the search query (prefix match)
+     * @param query  the search query (prefix match on Name or UUID)
      * @param offset the offset (0-based)
      * @param limit  the maximum number of results
      * @return a list of matching stored profiles
@@ -271,10 +273,12 @@ public abstract class SQLStorage implements AuthStorage {
     public java.util.List<StoredProfile> searchProfiles(String query, int offset, int limit) {
         java.util.List<StoredProfile> profiles = new java.util.ArrayList<>();
         try (Connection con = dataSource.getConnection();
-             PreparedStatement stmt = con.prepareStatement(SEARCH_BY_NAME)) {
-            stmt.setString(1, query + "%");
-            stmt.setInt(2, limit);
-            stmt.setInt(3, offset);
+             PreparedStatement stmt = con.prepareStatement(SEARCH_BY_NAME_OR_UUID)) {
+            String pattern = "%" + query + "%";
+            stmt.setString(1, pattern);
+            stmt.setString(2, pattern);
+            stmt.setInt(3, limit);
+            stmt.setInt(4, offset);
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
@@ -294,16 +298,25 @@ public abstract class SQLStorage implements AuthStorage {
      * @return the count
      */
     public int countProfiles(String query) {
-        String sql = (query != null && !query.isEmpty()) ? COUNT_SEARCH : COUNT_ALL;
-        try (Connection con = dataSource.getConnection();
-             PreparedStatement stmt = con.prepareStatement(sql)) {
+        try (Connection con = dataSource.getConnection()) {
             if (query != null && !query.isEmpty()) {
-                stmt.setString(1, query + "%");
-            }
-
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt(1);
+                try (PreparedStatement stmt = con.prepareStatement(COUNT_SEARCH)) {
+                    String pattern = "%" + query + "%";
+                    stmt.setString(1, pattern);
+                    stmt.setString(2, pattern);
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        if (rs.next()) {
+                            return rs.getInt(1);
+                        }
+                    }
+                }
+            } else {
+                try (PreparedStatement stmt = con.prepareStatement(COUNT_ALL)) {
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        if (rs.next()) {
+                            return rs.getInt(1);
+                        }
+                    }
                 }
             }
         } catch (SQLException ex) {
