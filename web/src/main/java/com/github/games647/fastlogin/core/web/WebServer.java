@@ -52,6 +52,7 @@ public class WebServer {
     private final SQLStorage storage;
     private final AntiBotService antiBot;
     private final String pluginVersion;
+    private final java.nio.file.Path pluginFolder;
 
     private Supplier<List<String>> onlinePlayersSupplier;
     private Javalin app;
@@ -59,11 +60,13 @@ public class WebServer {
     // Simple per-IP rate limiting
     private final ConcurrentHashMap<String, RateCounter> rateLimiters = new ConcurrentHashMap<>();
 
-    public WebServer(Logger log, SQLStorage storage, AntiBotService antiBot, String pluginVersion) {
+    public WebServer(Logger log, SQLStorage storage, AntiBotService antiBot,
+                     String pluginVersion, java.nio.file.Path pluginFolder) {
         this.log = log;
         this.storage = storage;
         this.antiBot = antiBot;
         this.pluginVersion = pluginVersion;
+        this.pluginFolder = pluginFolder;
     }
 
     /**
@@ -134,6 +137,12 @@ public class WebServer {
     }
 
     private void registerRoutes() {
+        // Language API
+        app.get("/api/lang/:code", ctx -> {
+            LangApiHandler handler = new LangApiHandler(log, pluginFolder);
+            handler.handle(ctx);
+        });
+
         // Online players API
         app.get("/api/online", ctx -> {
             OnlineApiHandler handler = new OnlineApiHandler(storage, onlinePlayersSupplier);

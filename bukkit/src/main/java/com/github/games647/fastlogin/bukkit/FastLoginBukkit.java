@@ -218,7 +218,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 version = "unknown";
             }
 
-            WebServer webServer = new WebServer(logger, core.getStorage(), core.getAntiBotService(), version);
+            WebServer webServer = new WebServer(logger,
+                    core.getStorage(), core.getAntiBotService(),
+                    version, getPluginFolder());
             webServer.setOnlinePlayersSupplier(() ->
                 Bukkit.getOnlinePlayers().stream()
                     .map(Player::getName)

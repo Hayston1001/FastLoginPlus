@@ -153,7 +153,9 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
                 version = "unknown";
             }
 
-            WebServer webServer = new WebServer(logger, core.getStorage(), core.getAntiBotService(), version);
+            WebServer webServer = new WebServer(logger,
+                    core.getStorage(), core.getAntiBotService(),
+                    version, getPluginFolder());
             webServer.setOnlinePlayersSupplier(() ->
                 getProxy().getPlayers().stream()
                     .map(ProxiedPlayer::getName)

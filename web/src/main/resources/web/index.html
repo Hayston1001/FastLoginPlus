@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastLoginPlus — 登录</title>
+    <title>FastLoginPlus</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body class="page-login">
     <div class="portal-glow"></div>
@@ -19,15 +19,16 @@
                 <rect x="20" y="20" width="8" height="8" rx="1" fill="currentColor"/>
             </svg>
         </div>
-        <h1>FastLoginPlus</h1>
-        <p class="login-subtitle">输入令牌以连接到服务器面板</p>
+        <h1 data-i18n="login.title"></h1>
+        <p class="login-subtitle" data-i18n="login.subtitle"></p>
         <div class="input-group">
-            <input type="password" id="token-input" name="token" autocomplete="current-password" placeholder="访问令牌" autofocus>
+            <input type="password" id="token-input" name="token" autocomplete="current-password" data-i18n-placeholder="login.placeholder" autofocus>
         </div>
-        <button id="login-btn">连接</button>
+        <button id="login-btn" data-i18n="login.connect"></button>
         <div id="login-error" class="error" role="alert"></div>
-        <p class="login-hint">输入 <code>demo</code> 可预览界面</p>
+        <p class="login-hint" data-i18n-html="login.hint"></p>
     </div>
-    <script src="login.js?v=3"></script>
+    <script src="i18n.js?v=4"></script>
+    <script src="login.js?v=4"></script>
 </body>
 </html>

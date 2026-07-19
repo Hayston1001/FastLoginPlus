@@ -162,7 +162,9 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
                 version = "unknown";
             }
 
-            WebServer webServer = new WebServer(logger, core.getStorage(), core.getAntiBotService(), version);
+            WebServer webServer = new WebServer(logger,
+                    core.getStorage(), core.getAntiBotService(),
+                    version, getPluginFolder());
             webServer.setOnlinePlayersSupplier(() ->
                 server.getAllPlayers().stream()
                     .map(Player::getUsername)

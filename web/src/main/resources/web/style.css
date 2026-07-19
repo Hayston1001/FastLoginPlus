@@ -792,6 +792,35 @@ tbody tr:last-child td {
     }
 }
 
+/* ── Language Selector ────────────────────────────── */
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.lang-selector {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.lang-selector select {
+    padding: 4px 8px;
+    background: var(--bg-overlay);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 12px;
+    cursor: pointer;
+    outline: none;
+}
+
+.lang-selector select:focus {
+    border-color: var(--emerald);
+}
+
 /* ── Reduced Motion ─────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
     .portal-glow {

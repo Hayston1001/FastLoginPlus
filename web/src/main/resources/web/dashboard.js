@@ -36,7 +36,7 @@ async function api(endpoint, options = {}) {
     } catch (error) {
         if (error.message === 'Unauthorized') {
             logout();
-            throw new Error('认证失败，请重新登录');
+            throw new Error(I18n.t('msg.authFailed'));
         }
         throw error;
     }
@@ -78,6 +78,21 @@ const confirmModal = document.getElementById('confirm-modal');
 const confirmMessage = document.getElementById('confirm-message');
 const confirmYes = document.getElementById('confirm-yes');
 const confirmNo = document.getElementById('confirm-no');
+
+// ── Init ───────────────────────────────────────────
+(async () => {
+    await I18n.init();
+
+    // Language selector
+    const langSelect = document.getElementById('lang-select');
+    if (langSelect) {
+        langSelect.value = I18n.getLang();
+        langSelect.addEventListener('change', () => I18n.switchLang(langSelect.value));
+    }
+
+    loadStatus();
+    switchTab('online');
+})();
 
 // ── Logout ─────────────────────────────────────────
 function logout() {
@@ -127,7 +142,7 @@ function switchTab(tabName) {
 async function loadStatus() {
     try {
         const status = await api('/status');
-        statusInfo.textContent = `v${status.version} | ${status.databaseType} | 在线: ${status.onlinePlayers}`;
+        statusInfo.textContent = `v${status.version} | ${status.databaseType} | ${I18n.t('header.status.online')}: ${status.onlinePlayers}`;
     } catch (error) {
         console.error('Failed to load status:', error);
     }
@@ -167,7 +182,7 @@ async function loadOnlinePlayers() {
 }
 
 function renderOnlinePlayers() {
-    onlineCount.textContent = `在线玩家: ${onlinePlayers.length}`;
+    onlineCount.textContent = I18n.t('online.count', {count: onlinePlayers.length});
 
     if (onlinePlayers.length === 0) {
         onlineTbody.innerHTML = '';
@@ -193,12 +208,12 @@ function renderOnlinePlayers() {
 
 function getOnlineActions(player) {
     switch (player.type) {
-        case 'Java 正版':
-            return `<button class="btn-action btn-warning" data-action="cracked" data-name="${escapeHtml(player.name)}">切换为离线</button>`;
-        case 'Java 离线':
+        case 'premium':
+            return `<button class="btn-action btn-warning" data-action="cracked" data-name="${escapeHtml(player.name)}">${I18n.t('online.action.switchCracked')}</button>`;
+        case 'cracked':
             return `
-                <button class="btn-action btn-success" data-action="premium" data-name="${escapeHtml(player.name)}">切换为正版</button>
-                <button class="btn-action btn-danger-action" data-action="delete" data-name="${escapeHtml(player.name)}">删除</button>
+                <button class="btn-action btn-success" data-action="premium" data-name="${escapeHtml(player.name)}">${I18n.t('online.action.switchPremium')}</button>
+                <button class="btn-action btn-danger-action" data-action="delete" data-name="${escapeHtml(player.name)}">${I18n.t('online.action.delete')}</button>
             `;
         default:
             return '—';
@@ -207,12 +222,12 @@ function getOnlineActions(player) {
 
 async function handleOnlineAction(action, name) {
     if (action === 'delete') {
-        showConfirm(`确定要删除玩家 ${name} 的记录吗？`, async () => {
+        showConfirm(I18n.t('msg.deleteConfirm', {name}), async () => {
             try {
                 await api(`/players/${encodeURIComponent(name)}`, { method: 'DELETE' });
                 loadOnlinePlayers();
             } catch (error) {
-                alert(`删除失败: ${error.message}`);
+                alert(I18n.t('msg.deleteFailed', {error: error.message}));
             }
         });
     } else {
@@ -220,7 +235,7 @@ async function handleOnlineAction(action, name) {
             await api(`/players/${encodeURIComponent(name)}/${action}`, { method: 'PUT' });
             loadOnlinePlayers();
         } catch (error) {
-            alert(`操作失败: ${error.message}`);
+            alert(I18n.t('msg.actionFailed', {error: error.message}));
         }
     }
 }
@@ -247,13 +262,13 @@ async function loadPlayers() {
 
 function renderPlayers() {
     if (playersData.players.length === 0) {
-        playersTbody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无数据</td></tr>';
+        playersTbody.innerHTML = `<tr><td colspan="7" class="empty-state">${I18n.t('players.empty')}</td></tr>`;
     } else {
         playersTbody.innerHTML = playersData.players.map(player => `
             <tr>
                 <td>${escapeHtml(player.name)}</td>
                 <td><code class="mono">${escapeHtml(player.uuid || '—')}</code></td>
-                <td>${player.premium ? '<span class="badge badge-premium">正版</span>' : '<span class="badge badge-cracked">离线</span>'}</td>
+                <td>${player.premium ? `<span class="badge badge-premium">${I18n.t('badge.premium')}</span>` : `<span class="badge badge-cracked">${I18n.t('badge.cracked')}</span>`}</td>
                 <td>${getFloodgateBadge(player.floodgate)}</td>
                 <td class="mono">${escapeHtml(player.lastIp || '—')}</td>
                 <td>${formatDate(player.lastLogin)}</td>
@@ -262,7 +277,7 @@ function renderPlayers() {
         `).join('');
     }
 
-    pageInfo.textContent = `第 ${playersData.page} 页，共 ${playersData.totalPages} 页`;
+    pageInfo.textContent = I18n.t('players.page', {current: playersData.page, total: playersData.totalPages});
     prevPageBtn.disabled = playersData.page <= 1;
     nextPageBtn.disabled = playersData.page >= playersData.totalPages;
 
@@ -274,22 +289,22 @@ function renderPlayers() {
 function getPlayerActions(player) {
     const actions = [];
     if (player.premium) {
-        actions.push(`<button class="btn-action btn-warning" data-action="cracked" data-name="${escapeHtml(player.name)}">切换为离线</button>`);
+        actions.push(`<button class="btn-action btn-warning" data-action="cracked" data-name="${escapeHtml(player.name)}">${I18n.t('players.action.switchCracked')}</button>`);
     } else {
-        actions.push(`<button class="btn-action btn-success" data-action="premium" data-name="${escapeHtml(player.name)}">切换为正版</button>`);
-        actions.push(`<button class="btn-action btn-danger-action" data-action="delete" data-name="${escapeHtml(player.name)}">删除</button>`);
+        actions.push(`<button class="btn-action btn-success" data-action="premium" data-name="${escapeHtml(player.name)}">${I18n.t('players.action.switchPremium')}</button>`);
+        actions.push(`<button class="btn-action btn-danger-action" data-action="delete" data-name="${escapeHtml(player.name)}">${I18n.t('players.action.delete')}</button>`);
     }
     return actions.join(' ');
 }
 
 async function handlePlayerAction(action, name) {
     if (action === 'delete') {
-        showConfirm(`确定要删除玩家 ${name} 的记录吗？`, async () => {
+        showConfirm(I18n.t('msg.deleteConfirm', {name}), async () => {
             try {
                 await api(`/players/${encodeURIComponent(name)}`, { method: 'DELETE' });
                 loadPlayers();
             } catch (error) {
-                alert(`删除失败: ${error.message}`);
+                alert(I18n.t('msg.deleteFailed', {error: error.message}));
             }
         });
     } else {
@@ -297,7 +312,7 @@ async function handlePlayerAction(action, name) {
             await api(`/players/${encodeURIComponent(name)}/${action}`, { method: 'PUT' });
             loadPlayers();
         } catch (error) {
-            alert(`操作失败: ${error.message}`);
+            alert(I18n.t('msg.actionFailed', {error: error.message}));
         }
     }
 }
@@ -327,7 +342,7 @@ banBtn.addEventListener('click', async () => {
     const duration = parseInt(banDurationInput.value) || 300;
 
     if (!ip) {
-        alert('请输入 IP 地址');
+        alert(I18n.t('msg.enterIp'));
         return;
     }
 
@@ -339,7 +354,7 @@ banBtn.addEventListener('click', async () => {
         banIpInput.value = '';
         loadBans();
     } catch (error) {
-        alert(`封禁失败: ${error.message}`);
+        alert(I18n.t('msg.banFailed', {error: error.message}));
     }
 });
 
@@ -375,7 +390,7 @@ function renderBans() {
             <td class="mono">${escapeHtml(ban.ip)}</td>
             <td>${formatDuration(ban.remainingMs)}</td>
             <td>
-                <button class="btn-action btn-success btn-unban" data-ip="${escapeHtml(ban.ip)}">解封</button>
+                <button class="btn-action btn-success btn-unban" data-ip="${escapeHtml(ban.ip)}">${I18n.t('antibot.bans.action.unban')}</button>
             </td>
         </tr>
     `).join('');
@@ -386,7 +401,7 @@ function renderBans() {
                 await api(`/antibot/ban/${encodeURIComponent(btn.dataset.ip)}`, { method: 'DELETE' });
                 loadBans();
             } catch (error) {
-                alert(`解封失败: ${error.message}`);
+                alert(I18n.t('msg.unbanFailed', {error: error.message}));
             }
         });
     });
@@ -426,10 +441,10 @@ function mockData(endpoint, options) {
 
     if (endpoint === '/online') {
         return [
-            { name: 'Steve', type: 'Java 正版', lastIp: '192.168.1.100', lastLogin: new Date().toISOString() },
-            { name: 'Alex', type: 'Java 离线', lastIp: '10.0.0.5', lastLogin: new Date(Date.now() - 120000).toISOString() },
-            { name: 'Notch', type: 'Java 正版', lastIp: '172.16.0.1', lastLogin: new Date(Date.now() - 300000).toISOString() },
-            { name: 'SteveBedrock', type: '基岩版', lastIp: null, lastLogin: new Date(Date.now() - 600000).toISOString() },
+            { name: 'Steve', type: 'premium', lastIp: '192.168.1.100', lastLogin: new Date().toISOString() },
+            { name: 'Alex', type: 'cracked', lastIp: '10.0.0.5', lastLogin: new Date(Date.now() - 120000).toISOString() },
+            { name: 'Notch', type: 'premium', lastIp: '172.16.0.1', lastLogin: new Date(Date.now() - 300000).toISOString() },
+            { name: 'SteveBedrock', type: 'bedrock', lastIp: null, lastLogin: new Date(Date.now() - 600000).toISOString() },
         ];
     }
 
@@ -469,37 +484,33 @@ function escapeHtml(text) {
 
 function getLoginTypeBadge(type) {
     switch (type) {
-        case 'Java 正版':  return '<span class="badge badge-premium">Java 正版</span>';
-        case 'Java 离线':  return '<span class="badge badge-cracked">Java 离线</span>';
-        case '基岩版':     return '<span class="badge badge-bedrock">基岩版</span>';
-        default:           return '<span class="badge badge-unknown">未知</span>';
+        case 'premium':  return `<span class="badge badge-premium">${I18n.t('type.premium')}</span>`;
+        case 'cracked':  return `<span class="badge badge-cracked">${I18n.t('type.cracked')}</span>`;
+        case 'bedrock':  return `<span class="badge badge-bedrock">${I18n.t('type.bedrock')}</span>`;
+        default:         return `<span class="badge badge-unknown">${I18n.t('msg.unknown')}</span>`;
     }
 }
 
 function getFloodgateBadge(state) {
     switch (state) {
-        case 'FALSE':  return '<span class="badge badge-cracked">Java</span>';
-        case 'TRUE':   return '<span class="badge badge-bedrock">Bedrock</span>';
-        case 'LINKED': return '<span class="badge badge-bedrock">Linked</span>';
-        default:       return '<span class="badge badge-unknown">Unknown</span>';
+        case 'FALSE':  return `<span class="badge badge-cracked">${I18n.t('floodgate.java')}</span>`;
+        case 'TRUE':   return `<span class="badge badge-bedrock">${I18n.t('floodgate.bedrock')}</span>`;
+        case 'LINKED': return `<span class="badge badge-bedrock">${I18n.t('floodgate.linked')}</span>`;
+        default:       return `<span class="badge badge-unknown">${I18n.t('floodgate.unknown')}</span>`;
     }
 }
 
 function formatDate(instant) {
     if (!instant) return '—';
-    return new Date(instant).toLocaleString('zh-CN');
+    return new Date(instant).toLocaleString();
 }
 
 function formatDuration(ms) {
-    if (ms <= 0) return '已过期';
+    if (ms <= 0) return I18n.t('msg.expired');
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
-    if (hours > 0) return `${hours}小时${minutes % 60}分钟`;
-    if (minutes > 0) return `${minutes}分钟`;
-    return `${seconds}秒`;
+    if (hours > 0) return I18n.t('duration.hours', {h: hours, m: minutes % 60});
+    if (minutes > 0) return I18n.t('duration.minutes', {m: minutes});
+    return I18n.t('duration.seconds', {s: seconds});
 }
-
-// ── Init ───────────────────────────────────────────
-loadStatus();
-switchTab('online');

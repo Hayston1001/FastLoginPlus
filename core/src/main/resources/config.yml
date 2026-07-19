@@ -227,4 +227,8 @@ web:
   # Authentication token (min 16 characters, auto-generated if empty)
   # Access the panel at http://host:port and enter this token
   token: ''
+  # Language for the web panel. Built-in: "en" (English), "zh" (中文)
+  # You can also use a custom value, e.g. "ja" -> loads webui_ja.json from plugin folder
+  # Users can also switch language in the panel (stored in browser localStorage)
+  lang: 'en'
 

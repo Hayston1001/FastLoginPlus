@@ -148,6 +148,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         // Save all built-in language files so users can see what's available
         saveDefaultFile("messages_zh.yml");
 
+        // Save built-in webui language files
+        saveDefaultFile("webui_en.json");
+        saveDefaultFile("webui_zh.json");
+
         // Save the selected language file (falls back to English if not bundled)
         if (!language.equals("en") && !language.equals("zh")) {
             saveDefaultFile(messagesFile, defaultMessagesFile);

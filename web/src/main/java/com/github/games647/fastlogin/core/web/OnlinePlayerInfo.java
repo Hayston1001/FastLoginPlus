@@ -54,18 +54,18 @@ public class OnlinePlayerInfo {
         FloodgateState floodgate = profile.getFloodgate();
 
         if (floodgate == FloodgateState.TRUE || floodgate == FloodgateState.LINKED) {
-            return "基岩版";
+            return "bedrock";
         }
 
         if (floodgate == FloodgateState.NOT_MIGRATED) {
-            return "未知";
+            return "unknown";
         }
 
         // floodgate == FALSE
         if (profile.isOnlinemodePreferred()) {
-            return "Java 正版";
+            return "premium";
         } else {
-            return "Java 离线";
+            return "cracked";
         }
     }
 

@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastLoginPlus 管理面板</title>
+    <title>FastLoginPlus</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3">
+    <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body class="page-dashboard">
     <header>
@@ -21,17 +21,25 @@
             </div>
             <div id="status-info" class="status-badge"></div>
         </div>
-        <button id="logout-btn" class="btn-ghost">断开连接</button>
+        <div class="header-right">
+            <div class="lang-selector">
+                <select id="lang-select">
+                    <option value="en">English</option>
+                    <option value="zh">中文</option>
+                </select>
+            </div>
+            <button id="logout-btn" class="btn-ghost" data-i18n="header.disconnect"></button>
+        </div>
     </header>
 
     <nav class="tabs" role="tablist">
-        <button class="tab active" data-tab="online" role="tab" aria-selected="true">在线玩家</button>
-        <button class="tab" data-tab="players" role="tab" aria-selected="false">玩家数据库</button>
-        <button class="tab" data-tab="antibot" role="tab" aria-selected="false">Anti-bot</button>
+        <button class="tab active" data-tab="online" role="tab" aria-selected="true" data-i18n="tab.online"></button>
+        <button class="tab" data-tab="players" role="tab" aria-selected="false" data-i18n="tab.players"></button>
+        <button class="tab" data-tab="antibot" role="tab" aria-selected="false" data-i18n="tab.antibot"></button>
     </nav>
 
     <main>
-        <!-- 在线玩家 Tab -->
+        <!-- Online Players Tab -->
         <div id="tab-online" class="tab-content active" role="tabpanel">
             <div class="toolbar">
                 <button id="refresh-online-btn" class="btn-secondary">
@@ -39,7 +47,7 @@
                         <path d="M1.5 8a6.5 6.5 0 0 1 11.1-4.6M14.5 8a6.5 6.5 0 0 1-11.1 4.6"/>
                         <path d="M12.6 1v3.4h-3.4M3.4 15v-3.4h3.4"/>
                     </svg>
-                    刷新
+                    <span data-i18n="online.refresh"></span>
                 </button>
                 <span id="online-count" class="count-label"></span>
             </div>
@@ -47,11 +55,11 @@
                 <table id="online-table">
                     <thead>
                         <tr>
-                            <th>玩家名</th>
-                            <th>登录类型</th>
-                            <th>最后 IP</th>
-                            <th>最后登录</th>
-                            <th>操作</th>
+                            <th data-i18n="online.col.name"></th>
+                            <th data-i18n="online.col.type"></th>
+                            <th data-i18n="online.col.ip"></th>
+                            <th data-i18n="online.col.lastLogin"></th>
+                            <th data-i18n="online.col.actions"></th>
                         </tr>
                     </thead>
                     <tbody id="online-tbody">
@@ -64,32 +72,32 @@
                             <path d="M10 42c0-7.7 6.3-14 14-14s14 6.3 14 14"/>
                         </svg>
                     </div>
-                    <p>暂无在线玩家</p>
-                    <p class="empty-hint">玩家加入服务器后将在此显示</p>
+                    <p data-i18n="online.empty"></p>
+                    <p class="empty-hint" data-i18n="online.emptyHint"></p>
                 </div>
             </div>
         </div>
 
-        <!-- 玩家数据库 Tab -->
+        <!-- Player Database Tab -->
         <div id="tab-players" class="tab-content" role="tabpanel">
             <div class="toolbar">
                 <div class="search-bar">
-                    <input type="text" id="search-input" placeholder="输入玩家名或 UUID 的任意部分..." aria-label="搜索玩家">
-                    <button id="search-btn" class="btn-primary">搜索</button>
-                    <button id="reset-search-btn" class="btn-ghost">重置</button>
+                    <input type="text" id="search-input" data-i18n-placeholder="players.search.placeholder" aria-label="Search players">
+                    <button id="search-btn" class="btn-primary" data-i18n="players.search.btn"></button>
+                    <button id="reset-search-btn" class="btn-ghost" data-i18n="players.search.reset"></button>
                 </div>
             </div>
             <div class="table-container">
                 <table id="players-table">
                     <thead>
                         <tr>
-                            <th>玩家名</th>
-                            <th>UUID</th>
-                            <th>模式</th>
-                            <th>Floodgate</th>
-                            <th>最后 IP</th>
-                            <th>最后登录</th>
-                            <th>操作</th>
+                            <th data-i18n="players.col.name"></th>
+                            <th data-i18n="players.col.uuid"></th>
+                            <th data-i18n="players.col.mode"></th>
+                            <th data-i18n="players.col.floodgate"></th>
+                            <th data-i18n="players.col.ip"></th>
+                            <th data-i18n="players.col.lastLogin"></th>
+                            <th data-i18n="players.col.actions"></th>
                         </tr>
                     </thead>
                     <tbody id="players-tbody">
@@ -97,9 +105,9 @@
                 </table>
             </div>
             <div class="pagination">
-                <button id="prev-page-btn" disabled>上一页</button>
-                <span id="page-info">第 1 页，共 1 页</span>
-                <button id="next-page-btn" disabled>下一页</button>
+                <button id="prev-page-btn" disabled data-i18n="players.page.prev"></button>
+                <span id="page-info"></span>
+                <button id="next-page-btn" disabled data-i18n="players.page.next"></button>
             </div>
         </div>
 
@@ -107,63 +115,64 @@
         <div id="tab-antibot" class="tab-content" role="tabpanel">
             <div class="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-label">封禁 IP</div>
+                    <div class="stat-label" data-i18n="antibot.stat.bans"></div>
                     <div id="ban-count" class="stat-value">0</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">限制动作</div>
+                    <div class="stat-label" data-i18n="antibot.stat.action"></div>
                     <div id="limit-action" class="stat-value">-</div>
                 </div>
             </div>
 
             <div class="card">
                 <div class="card-header">
-                    <h3>手动封禁</h3>
+                    <h3 data-i18n="antibot.ban.title"></h3>
                 </div>
                 <div class="ban-form">
-                    <input type="text" id="ban-ip-input" placeholder="IP 地址" aria-label="IP 地址">
-                    <input type="number" id="ban-duration-input" placeholder="时长(秒)" aria-label="封禁时长">
-                    <button id="ban-btn" class="btn-danger">封禁</button>
+                    <input type="text" id="ban-ip-input" data-i18n-placeholder="antibot.ban.ipPlaceholder" aria-label="IP Address">
+                    <input type="number" id="ban-duration-input" data-i18n-placeholder="antibot.ban.durationPlaceholder" aria-label="Ban Duration">
+                    <button id="ban-btn" class="btn-danger" data-i18n="antibot.ban.btn"></button>
                 </div>
             </div>
 
             <div class="card">
                 <div class="card-header">
-                    <h3>当前封禁</h3>
-                    <button id="refresh-bans-btn" class="btn-secondary btn-sm">刷新</button>
+                    <h3 data-i18n="antibot.bans.title"></h3>
+                    <button id="refresh-bans-btn" class="btn-secondary btn-sm" data-i18n="antibot.bans.refresh"></button>
                 </div>
                 <div class="table-container">
                     <table id="bans-table">
                         <thead>
                             <tr>
-                                <th>IP 地址</th>
-                                <th>剩余时间</th>
-                                <th>操作</th>
+                                <th data-i18n="antibot.bans.col.ip"></th>
+                                <th data-i18n="antibot.bans.col.remaining"></th>
+                                <th data-i18n="antibot.bans.col.actions"></th>
                             </tr>
                         </thead>
                         <tbody id="bans-tbody">
                         </tbody>
                     </table>
                     <div id="bans-empty" class="empty-state">
-                        <p>暂无封禁 IP</p>
+                        <p data-i18n="antibot.bans.empty"></p>
                     </div>
                 </div>
             </div>
         </div>
     </main>
 
-    <!-- 确认弹窗 -->
+    <!-- Confirm Modal -->
     <div id="confirm-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-message">
         <div class="modal-backdrop"></div>
         <div class="modal-content">
             <p id="confirm-message"></p>
             <div class="modal-buttons">
-                <button id="confirm-no" class="btn-ghost">取消</button>
-                <button id="confirm-yes" class="btn-danger">确认</button>
+                <button id="confirm-no" class="btn-ghost" data-i18n="modal.cancel"></button>
+                <button id="confirm-yes" class="btn-danger" data-i18n="modal.confirm"></button>
             </div>
         </div>
     </div>
 
-    <script src="dashboard.js?v=3"></script>
+    <script src="i18n.js?v=4"></script>
+    <script src="dashboard.js?v=4"></script>
 </body>
 </html>

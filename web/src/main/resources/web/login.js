@@ -5,16 +5,22 @@ const tokenInput = document.getElementById('token-input');
 const loginBtn = document.getElementById('login-btn');
 const loginError = document.getElementById('login-error');
 
-// 已有 token → 直接跳 dashboard
-if (localStorage.getItem('flp-token')) {
-    location.href = 'dashboard.html';
-}
+// Initialize i18n first, then set up event listeners
+(async () => {
+    await I18n.init();
 
-loginBtn.addEventListener('click', handleLogin);
-tokenInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleLogin();
-    loginError.textContent = '';
-});
+    // 已有 token → 直接跳 dashboard
+    if (localStorage.getItem('flp-token')) {
+        location.href = 'dashboard.html';
+        return;
+    }
+
+    loginBtn.addEventListener('click', handleLogin);
+    tokenInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleLogin();
+        loginError.textContent = '';
+    });
+})();
 
 function handleLogin() {
     const input = tokenInput.value.trim();
@@ -28,12 +34,12 @@ function handleLogin() {
     }
 
     if (input.length < 16) {
-        loginError.textContent = 'Token 至少需要 16 个字符';
+        loginError.textContent = I18n.t('login.error.minLength');
         return;
     }
 
     loginBtn.disabled = true;
-    loginBtn.textContent = '验证中...';
+    loginBtn.textContent = I18n.t('login.verifying');
 
     fetch('/api/status', {
         headers: { 'Authorization': 'Bearer ' + input }
@@ -43,12 +49,12 @@ function handleLogin() {
             localStorage.removeItem('flp-demo');
             location.href = 'dashboard.html';
         } else {
-            loginError.textContent = 'Token 无效';
+            loginError.textContent = I18n.t('login.error.invalid');
         }
     }).catch(() => {
-        loginError.textContent = '无法连接到服务器';
+        loginError.textContent = I18n.t('login.error.connectionFailed');
     }).finally(() => {
         loginBtn.disabled = false;
-        loginBtn.textContent = '连接';
+        loginBtn.textContent = I18n.t('login.connect');
     });
 }
