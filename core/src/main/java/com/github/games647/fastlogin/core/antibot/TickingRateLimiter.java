@@ -29,7 +29,6 @@ import com.google.common.base.Ticker;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Limit the number of requests with a maximum size. Each requests expire after the specified time making it available
@@ -68,8 +67,8 @@ public class TickingRateLimiter implements RateLimiter {
         long nowMilli = ticker.read() / 1_000_000;
         synchronized (this) {
             // having synchronized will limit the amount of concurrency a lot
-            TimeRecord oldest = records.peekFirst();
-            if (oldest != null && oldest.hasExpired(nowMilli)) {
+            TimeRecord oldest;
+            while ((oldest = records.peekFirst()) != null && oldest.hasExpired(nowMilli)) {
                 records.pop();
                 totalRequests -= oldest.getRequestCount();
             }
@@ -89,8 +88,11 @@ public class TickingRateLimiter implements RateLimiter {
 
             int res = latest.compareTo(nowMilli);
             if (res < 0) {
-                // now is before than the record means time jumps
-                throw new IllegalStateException("Time jumped back");
+                // now is before the record — clock jumped back (NTP, VM drift)
+                // Treat as same-window: safest to allow rather than crash
+                latest.hit();
+                totalRequests++;
+                return true;
             }
 
             if (res == 0) {
@@ -137,7 +139,7 @@ public class TickingRateLimiter implements RateLimiter {
                 return -1;
             }
 
-            if (other > firstMinuteRecord + TimeUnit.MINUTES.toMillis(1)) {
+            if (other > firstMinuteRecord + expireTime) {
                 return +1;
             }
 

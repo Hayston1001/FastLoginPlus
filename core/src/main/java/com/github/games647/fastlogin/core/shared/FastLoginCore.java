@@ -213,19 +213,18 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     private AntiBotService createAntiBotService(Configuration botSection) {
         Ticker ticker = Ticker.systemTicker();
+        boolean enabled = botSection.getBoolean("enabled", true);
 
-        // --- global rate limiter (existing) ---
+        // --- global rate limiter ---
         RateLimiter globalLimiter;
-        if (botSection.getBoolean("enabled", true)) {
+        if (enabled) {
             int maxCon = botSection.getInt("connections", 200);
             long expireTime = botSection.getLong("expire", 5) * 60 * 1_000L;
             if (expireTime > MAX_EXPIRE_RATE) {
                 expireTime = MAX_EXPIRE_RATE;
             }
-
             globalLimiter = new TickingRateLimiter(ticker, maxCon, expireTime);
         } else {
-            // no-op rate limiter
             globalLimiter = () -> true;
         }
 
@@ -265,7 +264,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         long banDurationMs = botSection.getLong("ban-duration", 5) * 60 * 1_000L;
         IpBanManager ipBanManager = new IpBanManager(ticker);
 
-        return new AntiBotService(plugin.getLog(), globalLimiter, action,
+        return new AntiBotService(plugin.getLog(), enabled, globalLimiter, action,
                 trustedIpSet, ipBanManager, perIpLimiter, banDurationMs);
     }
 
