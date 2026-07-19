@@ -14,6 +14,7 @@ let playersData = { players: [], total: 0, page: 1, size: 20, totalPages: 1 };
 let bansData = [];
 let onlineRefreshInterval = null;
 let antibotRefreshInterval = null;
+let lastOnlineSnapshot = '';
 
 // ── API Helper ─────────────────────────────────────
 async function api(endpoint, options = {}) {
@@ -153,6 +154,13 @@ async function loadOnlinePlayers() {
     try {
         onlinePlayers = await api('/online');
         renderOnlinePlayers();
+
+        // Detect player list changes → refresh players database
+        const snapshot = onlinePlayers.map(p => p.name).sort().join(',');
+        if (snapshot !== lastOnlineSnapshot) {
+            lastOnlineSnapshot = snapshot;
+            loadPlayers();
+        }
     } catch (error) {
         console.error('Failed to load online players:', error);
     }
