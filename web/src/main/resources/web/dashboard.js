@@ -1,15 +1,24 @@
-// FastLoginPlus Web Panel JavaScript
+// FastLoginPlus — Dashboard
 
-// State
-let token = localStorage.getItem('flp-token') || '';
+// ── State ──────────────────────────────────────────
+const token = localStorage.getItem('flp-token') || '';
+const isDemo = localStorage.getItem('flp-demo') === '1';
+
+if (!token) {
+    location.href = 'index.html';
+}
+
 let currentTab = 'online';
 let onlinePlayers = [];
 let playersData = { players: [], total: 0, page: 1, size: 20, totalPages: 1 };
 let bansData = [];
 let onlineRefreshInterval = null;
+let antibotRefreshInterval = null;
 
-// API Helper
+// ── API Helper ─────────────────────────────────────
 async function api(endpoint, options = {}) {
+    if (isDemo) return mockApi(endpoint, options);
+
     const headers = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
@@ -22,35 +31,29 @@ async function api(endpoint, options = {}) {
         if (!response.ok) {
             throw new Error(data.error || `HTTP ${response.status}`);
         }
-
         return data;
     } catch (error) {
         if (error.message === 'Unauthorized') {
-            showLoginScreen();
+            logout();
             throw new Error('认证失败，请重新登录');
         }
         throw error;
     }
 }
 
-// DOM Elements
-const loginScreen = document.getElementById('login-screen');
-const mainScreen = document.getElementById('main-screen');
-const tokenInput = document.getElementById('token-input');
-const loginBtn = document.getElementById('login-btn');
-const loginError = document.getElementById('login-error');
-const logoutBtn = document.getElementById('logout-btn');
+// ── DOM Elements ───────────────────────────────────
 const statusInfo = document.getElementById('status-info');
+const logoutBtn = document.getElementById('logout-btn');
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
 
-// Online tab elements
+// Online tab
 const refreshOnlineBtn = document.getElementById('refresh-online-btn');
 const onlineCount = document.getElementById('online-count');
 const onlineTbody = document.getElementById('online-tbody');
 const onlineEmpty = document.getElementById('online-empty');
 
-// Players tab elements
+// Players tab
 const searchInput = document.getElementById('search-input');
 const searchBtn = document.getElementById('search-btn');
 const resetSearchBtn = document.getElementById('reset-search-btn');
@@ -59,7 +62,7 @@ const prevPageBtn = document.getElementById('prev-page-btn');
 const nextPageBtn = document.getElementById('next-page-btn');
 const pageInfo = document.getElementById('page-info');
 
-// Anti-bot tab elements
+// Anti-bot tab
 const banCount = document.getElementById('ban-count');
 const limitAction = document.getElementById('limit-action');
 const banIpInput = document.getElementById('ban-ip-input');
@@ -69,83 +72,44 @@ const refreshBansBtn = document.getElementById('refresh-bans-btn');
 const bansTbody = document.getElementById('bans-tbody');
 const bansEmpty = document.getElementById('bans-empty');
 
-// Modal elements
+// Modal
 const confirmModal = document.getElementById('confirm-modal');
 const confirmMessage = document.getElementById('confirm-message');
 const confirmYes = document.getElementById('confirm-yes');
 const confirmNo = document.getElementById('confirm-no');
 
-// Login
-loginBtn.addEventListener('click', handleLogin);
-tokenInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleLogin();
-});
-
-function handleLogin() {
-    const inputToken = tokenInput.value.trim();
-    if (inputToken.length < 16) {
-        loginError.textContent = 'Token 至少需要 16 个字符';
-        return;
-    }
-
-    token = inputToken;
-    // 先验证 token 是否有效，再保存
-    fetch('/api/status', {
-        headers: { 'Authorization': 'Bearer ' + token }
-    }).then(resp => {
-        if (resp.ok) {
-            localStorage.setItem('flp-token', token);
-            showMainScreen();
-        } else {
-            token = '';
-            loginError.textContent = 'Token 无效';
-        }
-    }).catch(() => {
-        token = '';
-        loginError.textContent = '无法连接到服务器';
-    });
-}
-
-logoutBtn.addEventListener('click', () => {
-    token = '';
-    localStorage.removeItem('flp-token');
-    showLoginScreen();
-});
-
-function showLoginScreen() {
-    loginScreen.classList.add('active');
-    mainScreen.classList.remove('active');
+// ── Logout ─────────────────────────────────────────
+function logout() {
     stopOnlineRefresh();
+    stopAntibotRefresh();
+    localStorage.removeItem('flp-token');
+    localStorage.removeItem('flp-demo');
+    location.href = 'index.html';
 }
 
-async function showMainScreen() {
-    loginScreen.classList.remove('active');
-    mainScreen.classList.add('active');
-    loginError.textContent = '';
-    tokenInput.value = '';
+logoutBtn.addEventListener('click', logout);
 
-    await loadStatus();
-    startOnlineRefresh();
-    switchTab('online');
-}
-
-// Tabs
+// ── Tabs ───────────────────────────────────────────
 tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-        switchTab(tab.dataset.tab);
-    });
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
 });
 
 function switchTab(tabName) {
     currentTab = tabName;
-
-    tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
+    tabs.forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tabName);
+        t.setAttribute('aria-selected', t.dataset.tab === tabName);
+    });
     tabContents.forEach(tc => tc.classList.toggle('active', tc.id === `tab-${tabName}`));
 
-    // Load data for the tab
+    // Stop all auto-refresh, then start for the active tab
+    stopOnlineRefresh();
+    stopAntibotRefresh();
+
     switch (tabName) {
         case 'online':
             loadOnlinePlayers();
+            startOnlineRefresh();
             break;
         case 'players':
             loadPlayers();
@@ -153,11 +117,12 @@ function switchTab(tabName) {
         case 'antibot':
             loadAntiBotStats();
             loadBans();
+            startAntibotRefresh();
             break;
     }
 }
 
-// Status
+// ── Status ─────────────────────────────────────────
 async function loadStatus() {
     try {
         const status = await api('/status');
@@ -167,13 +132,11 @@ async function loadStatus() {
     }
 }
 
-// Online Players
+// ── Online Players ─────────────────────────────────
 function startOnlineRefresh() {
     stopOnlineRefresh();
     onlineRefreshInterval = setInterval(() => {
-        if (currentTab === 'online') {
-            loadOnlinePlayers();
-        }
+        if (currentTab === 'online') loadOnlinePlayers();
     }, 5000);
 }
 
@@ -209,13 +172,12 @@ function renderOnlinePlayers() {
         <tr>
             <td>${escapeHtml(player.name)}</td>
             <td>${getLoginTypeBadge(player.type)}</td>
-            <td>${escapeHtml(player.lastIp || '-')}</td>
+            <td class="mono">${escapeHtml(player.lastIp || '-')}</td>
             <td>${formatDate(player.lastLogin)}</td>
             <td>${getOnlineActions(player)}</td>
         </tr>
     `).join('');
 
-    // Add event listeners to action buttons
     onlineTbody.querySelectorAll('.btn-action').forEach(btn => {
         btn.addEventListener('click', () => handleOnlineAction(btn.dataset.action, btn.dataset.name));
     });
@@ -224,14 +186,14 @@ function renderOnlinePlayers() {
 function getOnlineActions(player) {
     switch (player.type) {
         case 'Java 正版':
-            return `<button class="btn-sm btn-warning btn-action" data-action="cracked" data-name="${escapeHtml(player.name)}">切换为离线</button>`;
+            return `<button class="btn-action btn-warning" data-action="cracked" data-name="${escapeHtml(player.name)}">切换为离线</button>`;
         case 'Java 离线':
             return `
-                <button class="btn-sm btn-success btn-action" data-action="premium" data-name="${escapeHtml(player.name)}">切换为正版</button>
-                <button class="btn-sm btn-danger btn-action" data-action="delete" data-name="${escapeHtml(player.name)}">删除</button>
+                <button class="btn-action btn-success" data-action="premium" data-name="${escapeHtml(player.name)}">切换为正版</button>
+                <button class="btn-action btn-danger-action" data-action="delete" data-name="${escapeHtml(player.name)}">删除</button>
             `;
         default:
-            return '-';
+            return '—';
     }
 }
 
@@ -255,47 +217,19 @@ async function handleOnlineAction(action, name) {
     }
 }
 
-// Players Database
-searchBtn.addEventListener('click', () => {
-    playersData.page = 1;
-    loadPlayers();
-});
+// ── Players Database ───────────────────────────────
+searchBtn.addEventListener('click', () => { playersData.page = 1; loadPlayers(); });
+resetSearchBtn.addEventListener('click', () => { searchInput.value = ''; playersData.page = 1; loadPlayers(); });
+searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { playersData.page = 1; loadPlayers(); } });
 
-resetSearchBtn.addEventListener('click', () => {
-    searchInput.value = '';
-    playersData.page = 1;
-    loadPlayers();
-});
-
-searchInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-        playersData.page = 1;
-        loadPlayers();
-    }
-});
-
-prevPageBtn.addEventListener('click', () => {
-    if (playersData.page > 1) {
-        playersData.page--;
-        loadPlayers();
-    }
-});
-
-nextPageBtn.addEventListener('click', () => {
-    if (playersData.page < playersData.totalPages) {
-        playersData.page++;
-        loadPlayers();
-    }
-});
+prevPageBtn.addEventListener('click', () => { if (playersData.page > 1) { playersData.page--; loadPlayers(); } });
+nextPageBtn.addEventListener('click', () => { if (playersData.page < playersData.totalPages) { playersData.page++; loadPlayers(); } });
 
 async function loadPlayers() {
     try {
         const query = searchInput.value.trim();
         let endpoint = `/players?page=${playersData.page}&size=${playersData.size}`;
-        if (query) {
-            endpoint += `&q=${encodeURIComponent(query)}`;
-        }
-
+        if (query) endpoint += `&q=${encodeURIComponent(query)}`;
         playersData = await api(endpoint);
         renderPlayers();
     } catch (error) {
@@ -310,22 +244,20 @@ function renderPlayers() {
         playersTbody.innerHTML = playersData.players.map(player => `
             <tr>
                 <td>${escapeHtml(player.name)}</td>
-                <td><code>${escapeHtml(player.uuid || '-')}</code></td>
+                <td><code class="mono">${escapeHtml(player.uuid || '—')}</code></td>
                 <td>${player.premium ? '<span class="badge badge-premium">正版</span>' : '<span class="badge badge-cracked">离线</span>'}</td>
                 <td>${getFloodgateBadge(player.floodgate)}</td>
-                <td>${escapeHtml(player.lastIp || '-')}</td>
+                <td class="mono">${escapeHtml(player.lastIp || '—')}</td>
                 <td>${formatDate(player.lastLogin)}</td>
                 <td>${getPlayerActions(player)}</td>
             </tr>
         `).join('');
     }
 
-    // Update pagination
     pageInfo.textContent = `第 ${playersData.page} 页，共 ${playersData.totalPages} 页`;
     prevPageBtn.disabled = playersData.page <= 1;
     nextPageBtn.disabled = playersData.page >= playersData.totalPages;
 
-    // Add event listeners
     playersTbody.querySelectorAll('.btn-action').forEach(btn => {
         btn.addEventListener('click', () => handlePlayerAction(btn.dataset.action, btn.dataset.name));
     });
@@ -334,10 +266,10 @@ function renderPlayers() {
 function getPlayerActions(player) {
     const actions = [];
     if (player.premium) {
-        actions.push(`<button class="btn-sm btn-warning btn-action" data-action="cracked" data-name="${escapeHtml(player.name)}">切换为离线</button>`);
+        actions.push(`<button class="btn-action btn-warning" data-action="cracked" data-name="${escapeHtml(player.name)}">切换为离线</button>`);
     } else {
-        actions.push(`<button class="btn-sm btn-success btn-action" data-action="premium" data-name="${escapeHtml(player.name)}">切换为正版</button>`);
-        actions.push(`<button class="btn-sm btn-danger btn-action" data-action="delete" data-name="${escapeHtml(player.name)}">删除</button>`);
+        actions.push(`<button class="btn-action btn-success" data-action="premium" data-name="${escapeHtml(player.name)}">切换为正版</button>`);
+        actions.push(`<button class="btn-action btn-danger-action" data-action="delete" data-name="${escapeHtml(player.name)}">删除</button>`);
     }
     return actions.join(' ');
 }
@@ -362,7 +294,24 @@ async function handlePlayerAction(action, name) {
     }
 }
 
-// Anti-bot
+// ── Anti-bot ───────────────────────────────────────
+function startAntibotRefresh() {
+    stopAntibotRefresh();
+    antibotRefreshInterval = setInterval(() => {
+        if (currentTab === 'antibot') {
+            loadAntiBotStats();
+            loadBans();
+        }
+    }, 5000);
+}
+
+function stopAntibotRefresh() {
+    if (antibotRefreshInterval) {
+        clearInterval(antibotRefreshInterval);
+        antibotRefreshInterval = null;
+    }
+}
+
 refreshBansBtn.addEventListener('click', loadBans);
 
 banBtn.addEventListener('click', async () => {
@@ -415,15 +364,14 @@ function renderBans() {
     bansEmpty.style.display = 'none';
     bansTbody.innerHTML = bansData.map(ban => `
         <tr>
-            <td>${escapeHtml(ban.ip)}</td>
+            <td class="mono">${escapeHtml(ban.ip)}</td>
             <td>${formatDuration(ban.remainingMs)}</td>
             <td>
-                <button class="btn-sm btn-primary btn-unban" data-ip="${escapeHtml(ban.ip)}">解封</button>
+                <button class="btn-action btn-success btn-unban" data-ip="${escapeHtml(ban.ip)}">解封</button>
             </td>
         </tr>
     `).join('');
 
-    // Add event listeners
     bansTbody.querySelectorAll('.btn-unban').forEach(btn => {
         btn.addEventListener('click', async () => {
             try {
@@ -436,7 +384,7 @@ function renderBans() {
     });
 }
 
-// Modal
+// ── Modal ──────────────────────────────────────────
 function showConfirm(message, onConfirm) {
     confirmMessage.textContent = message;
     confirmModal.classList.add('active');
@@ -456,7 +404,54 @@ function showConfirm(message, onConfirm) {
     confirmNo.addEventListener('click', handleNo);
 }
 
-// Utility functions
+// ── Mock Data (Demo Mode) ──────────────────────────
+function mockApi(endpoint, options) {
+    return new Promise(resolve => {
+        setTimeout(() => resolve(mockData(endpoint, options)), 80);
+    });
+}
+
+function mockData(endpoint, options) {
+    if (endpoint === '/status') {
+        return { version: '0.3.0-dev', databaseType: 'SQLite', onlinePlayers: 4 };
+    }
+
+    if (endpoint === '/online') {
+        return [
+            { name: 'Steve', type: 'Java 正版', lastIp: '192.168.1.100', lastLogin: new Date().toISOString() },
+            { name: 'Alex', type: 'Java 离线', lastIp: '10.0.0.5', lastLogin: new Date(Date.now() - 120000).toISOString() },
+            { name: 'Notch', type: 'Java 正版', lastIp: '172.16.0.1', lastLogin: new Date(Date.now() - 300000).toISOString() },
+            { name: 'SteveBedrock', type: '基岩版', lastIp: null, lastLogin: new Date(Date.now() - 600000).toISOString() },
+        ];
+    }
+
+    if (endpoint.startsWith('/players')) {
+        const allPlayers = [
+            { name: 'Steve', uuid: '8667ba71-b85a-4004-af54-457a9734eed7', premium: true, floodgate: 'FALSE', lastIp: '192.168.1.100', lastLogin: new Date().toISOString() },
+            { name: 'Alex', uuid: '6ab43178-89fd-4905-97e5-7e71ef0632c2', premium: false, floodgate: 'FALSE', lastIp: '10.0.0.5', lastLogin: new Date(Date.now() - 120000).toISOString() },
+            { name: 'Notch', uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5', premium: true, floodgate: 'FALSE', lastIp: '172.16.0.1', lastLogin: new Date(Date.now() - 300000).toISOString() },
+            { name: 'jeb_', uuid: '853c80ef-3c37-49fd-aa49-938b674adae6', premium: true, floodgate: 'FALSE', lastIp: '10.0.0.99', lastLogin: new Date(Date.now() - 86400000).toISOString() },
+            { name: 'SteveBedrock', uuid: null, premium: false, floodgate: 'TRUE', lastIp: null, lastLogin: new Date(Date.now() - 600000).toISOString() },
+            { name: 'TestPlayer', uuid: null, premium: false, floodgate: 'FALSE', lastIp: '192.168.1.200', lastLogin: new Date(Date.now() - 172800000).toISOString() },
+        ];
+        return { players: allPlayers, total: allPlayers.length, page: 1, size: 20, totalPages: 1 };
+    }
+
+    if (endpoint === '/antibot/stats') {
+        return { banCount: 2, action: 'DELAY' };
+    }
+
+    if (endpoint === '/antibot/bans') {
+        return [
+            { ip: '45.33.32.156', remainingMs: 180000 },
+            { ip: '104.236.228.48', remainingMs: 45000 },
+        ];
+    }
+
+    return { success: true };
+}
+
+// ── Utility ────────────────────────────────────────
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -466,34 +461,25 @@ function escapeHtml(text) {
 
 function getLoginTypeBadge(type) {
     switch (type) {
-        case 'Java 正版':
-            return '<span class="badge badge-premium">Java 正版</span>';
-        case 'Java 离线':
-            return '<span class="badge badge-cracked">Java 离线</span>';
-        case '基岩版':
-            return '<span class="badge badge-bedrock">基岩版</span>';
-        default:
-            return '<span class="badge badge-unknown">未知</span>';
+        case 'Java 正版':  return '<span class="badge badge-premium">Java 正版</span>';
+        case 'Java 离线':  return '<span class="badge badge-cracked">Java 离线</span>';
+        case '基岩版':     return '<span class="badge badge-bedrock">基岩版</span>';
+        default:           return '<span class="badge badge-unknown">未知</span>';
     }
 }
 
 function getFloodgateBadge(state) {
     switch (state) {
-        case 'FALSE':
-            return '<span class="badge badge-cracked">Java</span>';
-        case 'TRUE':
-            return '<span class="badge badge-bedrock">Bedrock</span>';
-        case 'LINKED':
-            return '<span class="badge badge-bedrock">Linked</span>';
-        default:
-            return '<span class="badge badge-unknown">Unknown</span>';
+        case 'FALSE':  return '<span class="badge badge-cracked">Java</span>';
+        case 'TRUE':   return '<span class="badge badge-bedrock">Bedrock</span>';
+        case 'LINKED': return '<span class="badge badge-bedrock">Linked</span>';
+        default:       return '<span class="badge badge-unknown">Unknown</span>';
     }
 }
 
 function formatDate(instant) {
-    if (!instant) return '-';
-    const date = new Date(instant);
-    return date.toLocaleString('zh-CN');
+    if (!instant) return '—';
+    return new Date(instant).toLocaleString('zh-CN');
 }
 
 function formatDuration(ms) {
@@ -501,19 +487,11 @@ function formatDuration(ms) {
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
-
-    if (hours > 0) {
-        return `${hours}小时${minutes % 60}分钟`;
-    }
-    if (minutes > 0) {
-        return `${minutes}分钟`;
-    }
+    if (hours > 0) return `${hours}小时${minutes % 60}分钟`;
+    if (minutes > 0) return `${minutes}分钟`;
     return `${seconds}秒`;
 }
 
-// Initialize
-if (token) {
-    showMainScreen();
-} else {
-    showLoginScreen();
-}
+// ── Init ───────────────────────────────────────────
+loadStatus();
+switchTab('online');

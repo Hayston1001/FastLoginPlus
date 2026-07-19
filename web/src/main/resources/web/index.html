@@ -3,148 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FastLoginPlus 管理面板</title>
-    <link rel="stylesheet" href="style.css">
+    <title>FastLoginPlus — 登录</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=3">
 </head>
-<body>
-    <div id="app">
-        <!-- Token 输入界面 -->
-        <div id="login-screen" class="screen active">
-            <div class="login-container">
-                <h1>FastLoginPlus 管理面板</h1>
-                <p>请输入访问令牌以继续</p>
-                <input type="password" id="token-input" name="token" autocomplete="current-password" placeholder="输入 Token...">
-                <button id="login-btn">登录</button>
-                <div id="login-error" class="error"></div>
-            </div>
+<body class="page-login">
+    <div class="portal-glow"></div>
+    <div class="login-container">
+        <div class="login-icon">
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                <rect x="8" y="8" width="32" height="32" rx="4" stroke="currentColor" stroke-width="2.5"/>
+                <rect x="16" y="16" width="16" height="16" rx="2" fill="currentColor" opacity="0.3"/>
+                <rect x="20" y="20" width="8" height="8" rx="1" fill="currentColor"/>
+            </svg>
         </div>
-
-        <!-- 主界面 -->
-        <div id="main-screen" class="screen">
-            <header>
-                <h1>FastLoginPlus 管理面板</h1>
-                <div class="header-right">
-                    <span id="status-info"></span>
-                    <button id="logout-btn">退出</button>
-                </div>
-            </header>
-
-            <nav class="tabs">
-                <button class="tab active" data-tab="online">在线玩家</button>
-                <button class="tab" data-tab="players">玩家数据库</button>
-                <button class="tab" data-tab="antibot">Anti-bot</button>
-            </nav>
-
-            <main>
-                <!-- 在线玩家 Tab -->
-                <div id="tab-online" class="tab-content active">
-                    <div class="toolbar">
-                        <button id="refresh-online-btn">刷新</button>
-                        <span id="online-count"></span>
-                    </div>
-                    <div class="table-container">
-                        <table id="online-table">
-                            <thead>
-                                <tr>
-                                    <th>玩家名</th>
-                                    <th>登录类型</th>
-                                    <th>最后 IP</th>
-                                    <th>最后登录</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="online-tbody">
-                            </tbody>
-                        </table>
-                        <div id="online-empty" class="empty-state">暂无在线玩家</div>
-                    </div>
-                </div>
-
-                <!-- 玩家数据库 Tab -->
-                <div id="tab-players" class="tab-content">
-                    <div class="toolbar">
-                        <input type="text" id="search-input" placeholder="搜索玩家名...">
-                        <button id="search-btn">搜索</button>
-                        <button id="reset-search-btn">重置</button>
-                    </div>
-                    <div class="table-container">
-                        <table id="players-table">
-                            <thead>
-                                <tr>
-                                    <th>玩家名</th>
-                                    <th>UUID</th>
-                                    <th>模式</th>
-                                    <th>Floodgate</th>
-                                    <th>最后 IP</th>
-                                    <th>最后登录</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="players-tbody">
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="pagination">
-                        <button id="prev-page-btn" disabled>上一页</button>
-                        <span id="page-info">第 1 页，共 1 页</span>
-                        <button id="next-page-btn" disabled>下一页</button>
-                    </div>
-                </div>
-
-                <!-- Anti-bot Tab -->
-                <div id="tab-antibot" class="tab-content">
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <h3>封禁 IP 数</h3>
-                            <div id="ban-count" class="stat-value">0</div>
-                        </div>
-                        <div class="stat-card">
-                            <h3>限制动作</h3>
-                            <div id="limit-action" class="stat-value">-</div>
-                        </div>
-                    </div>
-                    <div class="toolbar">
-                        <h3>手动封禁</h3>
-                    </div>
-                    <div class="ban-form">
-                        <input type="text" id="ban-ip-input" placeholder="IP 地址">
-                        <input type="number" id="ban-duration-input" placeholder="时长(秒)" value="300">
-                        <button id="ban-btn">封禁</button>
-                    </div>
-                    <div class="toolbar">
-                        <h3>当前封禁列表</h3>
-                        <button id="refresh-bans-btn">刷新</button>
-                    </div>
-                    <div class="table-container">
-                        <table id="bans-table">
-                            <thead>
-                                <tr>
-                                    <th>IP 地址</th>
-                                    <th>剩余时间</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="bans-tbody">
-                            </tbody>
-                        </table>
-                        <div id="bans-empty" class="empty-state">暂无封禁 IP</div>
-                    </div>
-                </div>
-            </main>
+        <h1>FastLoginPlus</h1>
+        <p class="login-subtitle">输入令牌以连接到服务器面板</p>
+        <div class="input-group">
+            <input type="password" id="token-input" name="token" autocomplete="current-password" placeholder="访问令牌" autofocus>
         </div>
+        <button id="login-btn">连接</button>
+        <div id="login-error" class="error" role="alert"></div>
+        <p class="login-hint">输入 <code>demo</code> 可预览界面</p>
     </div>
-
-    <!-- 确认弹窗 -->
-    <div id="confirm-modal" class="modal">
-        <div class="modal-content">
-            <p id="confirm-message"></p>
-            <div class="modal-buttons">
-                <button id="confirm-yes">确认</button>
-                <button id="confirm-no">取消</button>
-            </div>
-        </div>
-    </div>
-
-    <script src="app.js"></script>
+    <script src="login.js?v=3"></script>
 </body>
 </html>
