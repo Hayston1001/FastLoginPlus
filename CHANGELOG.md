@@ -7,10 +7,18 @@
 - Anti-bot module audit — 6 bug fixes: clock jump back no longer throws in TickingRateLimiter, batch expire stale records, compareTo uses correct expireTime, global rate limit checked before per-IP, periodic cleanup every 100 connections, sanitize usernames in log messages
 - Fix `forwardSkin: false` not working on Paper — PaperCacheListener now checks config before setting skin
 - Fix SkinsRestorer skin overwritten by Paper filledProfileCache — set empty placeholder textures to prevent `complete(true)` pulling stale skin
+- Guard against null `floodgate_data_handler` in ProtocolLib pipeline — prevent NPE if Floodgate renames/removes the handler
 
 - 反机器人模块审计 — 6 个 bug 修复：TickingRateLimiter 时钟回退不再抛异常、批量过期陈旧记录、compareTo 使用正确的 expireTime、全局限制在每 IP 限制之前检查、每 100 连接定期清理、日志中用户名消毒
 - 修复 Paper 上 `forwardSkin: false` 无效 — PaperCacheListener 现在在设置皮肤前检查配置
 - 修复 SkinsRestorer 皮肤被 Paper filledProfileCache 覆盖 — 设置空占位纹理防止 `complete(true)` 拉取旧皮肤
+- 防止 ProtocolLib pipeline 中 `floodgate_data_handler` 为 null — 避免 Floodgate 重命名/移除 handler 时 NPE
+
+### Code Cleanup / 代码清理
+
+- Remove 22 redundant default values from config `getXxx()` calls across all modules (ConfigRefresher guarantees keys exist)
+
+- 移除 22 处 config `getXxx()` 调用中的冗余默认值（ConfigRefresher 保证键已存在）
 
 ### Session Retry Improvement / 会话重试改进
 
