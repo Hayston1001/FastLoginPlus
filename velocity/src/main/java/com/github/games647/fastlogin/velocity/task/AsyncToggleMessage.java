@@ -80,7 +80,7 @@ public class AsyncToggleMessage implements Runnable {
         core.getPlugin().getProxy().getEventManager().fire(
             new VelocityFastLoginPremiumToggleEvent(playerProfile, reason));
 
-        if (isPlayerSender && core.getConfig().getBoolean("kick-toggle", true)) {
+        if (isPlayerSender && core.getConfig().getBoolean("kick-toggle")) {
             TextComponent msg = LegacyComponentSerializer.legacyAmpersand()
                 .deserialize(core.getMessage("remove-premium"));
             sender.disconnect(msg);

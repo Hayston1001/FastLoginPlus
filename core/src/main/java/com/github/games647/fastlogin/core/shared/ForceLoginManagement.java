@@ -71,9 +71,9 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 } else {
                     boolean success = true;
                     String playerName = getName(player);
-                    if (core.getConfig().get("autoLogin", true)) {
+                    if ((boolean) core.getConfig().get("autoLogin")) {
                         if (session.needsRegistration()
-                                || (core.getConfig().get("auto-register-unknown", false)
+                                || ((boolean) core.getConfig().get("auto-register-unknown")
                                 && !authPlugin.isRegistered(playerName))) {
                             success = forceRegister(player);
                         } else if (!callFastLoginAutoLoginEvent(session, playerProfile).isCancelled()) {

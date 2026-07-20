@@ -111,8 +111,8 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
 
             Configuration config = core.getConfig();
             Optional<Profile> premiumUUID = Optional.empty();
-            if (config.get("nameChangeCheck", false) || config.get("autoRegister", false)
-                    || config.get("offline-whitelist", false)) {
+            if ((boolean) config.get("nameChangeCheck") || (boolean) config.get("autoRegister")
+                    || (boolean) config.get("offline-whitelist")) {
                 premiumUUID = core.getResolver().findProfile(username);
             }
 
@@ -120,7 +120,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                     || (!isNameChanged(source, username, premiumUUID.get())
                     && !isUsernameAvailable(source, username, profile))) {
                 //nothing detected the player as premium -> start a cracked session
-                if (core.getConfig().get("offline-whitelist", false)) {
+                if ((boolean) core.getConfig().get("offline-whitelist")) {
                     source.kick(core.getMessage("offline-whitelist-kick-message"));
                     return;
                 }
@@ -152,12 +152,12 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
         if (core.isDebug()) {
             core.getPlugin().getLog().info("GameProfile {} uses a premium username", username);
         }
-        if (core.getConfig().get("autoRegister", false) && (authHook == null || !authHook.isRegistered(username))) {
+        if ((boolean) core.getConfig().get("autoRegister") && (authHook == null || !authHook.isRegistered(username))) {
             requestPremiumLogin(source, profile, username, false);
             return true;
         }
 
-        if (core.getConfig().get("offline-whitelist", false)) {
+        if ((boolean) core.getConfig().get("offline-whitelist")) {
             // Only gate access — registration is autoRegister's responsibility
             requestPremiumLogin(source, profile, username, true);
             return true;
@@ -168,7 +168,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
 
     private boolean isNameChanged(S source, String username, Profile profile) {
         //user not exists in the db
-        if (core.getConfig().get("nameChangeCheck", false)) {
+        if ((boolean) core.getConfig().get("nameChangeCheck")) {
             StoredProfile storedProfile = core.getStorage().loadProfile(profile.getId());
             if (storedProfile != null) {
                 if (storedProfile.getFloodgate() == FloodgateState.TRUE) {

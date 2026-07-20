@@ -138,7 +138,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         }
 
         // 2. Determine language file based on config
-        String language = config.getString("language", "en");
+        String language = config.getString("language");
         String messagesFile = "messages_" + language + ".yml";
         String defaultMessagesFile = "messages_en.yml";
 
@@ -178,7 +178,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         }
 
         // Initialize the resolver based on the config parameter
-        this.resolver = this.config.getBoolean("useProxyAgnosticResolver", false)
+        this.resolver = this.config.getBoolean("useProxyAgnosticResolver")
             ? new ProxyAgnosticMojangResolver() : new MojangResolver();
 
         antiBot = createAntiBotService(config.getSection("anti-bot"));
@@ -202,7 +202,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         resolver.setProxySelector(new RotatingProxySelector(proxies));
         resolver.setOutgoingAddresses(addresses);
 
-        if (config.getBoolean("check-update", true)) {
+        if (config.getBoolean("check-update")) {
             String currentVersion = plugin.getClass().getPackage().getImplementationVersion();
             if (currentVersion == null) {
                 currentVersion = "unknown";
@@ -213,13 +213,13 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     private AntiBotService createAntiBotService(Configuration botSection) {
         Ticker ticker = Ticker.systemTicker();
-        boolean enabled = botSection.getBoolean("enabled", true);
+        boolean enabled = botSection.getBoolean("enabled");
 
         // --- global rate limiter ---
         RateLimiter globalLimiter;
         if (enabled) {
-            int maxCon = botSection.getInt("connections", 200);
-            long expireTime = botSection.getLong("expire", 5) * 60 * 1_000L;
+            int maxCon = botSection.getInt("connections");
+            long expireTime = botSection.getLong("expire") * 60 * 1_000L;
             if (expireTime > MAX_EXPIRE_RATE) {
                 expireTime = MAX_EXPIRE_RATE;
             }
@@ -230,7 +230,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
         // --- action ---
         Action action = Action.Ignore;
-        switch (botSection.getString("action", "ignore")) {
+        switch (botSection.getString("action")) {
             case "ignore":
                 action = Action.Ignore;
                 break;
@@ -253,15 +253,15 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         TrustedIpSet trustedIpSet = new TrustedIpSet(trustedIps);
 
         // --- per-IP rate limiter ---
-        int burstLimit = botSection.getInt("burst-limit", 10);
-        long burstWindowMs = botSection.getLong("burst-window", 10) * 1_000L;
-        int perIpConnLimit = botSection.getInt("per-ip-connections", 20);
-        long perIpExpireMs = botSection.getLong("per-ip-expire", 5) * 60 * 1_000L;
+        int burstLimit = botSection.getInt("burst-limit");
+        long burstWindowMs = botSection.getLong("burst-window") * 1_000L;
+        int perIpConnLimit = botSection.getInt("per-ip-connections");
+        long perIpExpireMs = botSection.getLong("per-ip-expire") * 60 * 1_000L;
         PerIpRateLimiter perIpLimiter = new PerIpRateLimiter(ticker, burstLimit, burstWindowMs,
                 perIpConnLimit, perIpExpireMs);
 
         // --- IP ban manager ---
-        long banDurationMs = botSection.getLong("ban-duration", 5) * 60 * 1_000L;
+        long banDurationMs = botSection.getLong("ban-duration") * 60 * 1_000L;
         IpBanManager ipBanManager = new IpBanManager(ticker);
 
         return new AntiBotService(plugin.getLog(), enabled, globalLimiter, action,
@@ -320,27 +320,27 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         HikariConfig databaseConfig = new HikariConfig();
         String database = config.getString("database");
 
-        databaseConfig.setConnectionTimeout(config.getInt("timeout", 30) * 1_000L);
-        databaseConfig.setMaxLifetime(config.getInt("lifetime", 30) * 1_000L);
+        databaseConfig.setConnectionTimeout(config.getInt("timeout") * 1_000L);
+        databaseConfig.setMaxLifetime(config.getInt("lifetime") * 1_000L);
 
         if (type.contains("sqlite")) {
             storage = new SQLiteStorage(plugin, database, databaseConfig);
         } else {
-            String host = config.get("host", "");
-            int port = config.get("port", 3306);
-            boolean useSSL = config.get("useSSL", false);
+            String host = (String) config.get("host");
+            int port = (int) config.get("port");
+            boolean useSSL = (boolean) config.get("useSSL");
 
             if (useSSL) {
-                boolean publicKeyRetrieval = config.getBoolean("allowPublicKeyRetrieval", false);
+                boolean publicKeyRetrieval = config.getBoolean("allowPublicKeyRetrieval");
                 String rsaPublicKeyFile = config.getString("ServerRSAPublicKeyFile");
-                String sslMode = config.getString("sslMode", "Required");
+                String sslMode = config.getString("sslMode");
 
                 databaseConfig.addDataSourceProperty("allowPublicKeyRetrieval", publicKeyRetrieval);
                 databaseConfig.addDataSourceProperty("serverRSAPublicKeyFile", rsaPublicKeyFile);
                 databaseConfig.addDataSourceProperty("sslMode", sslMode);
             }
 
-            databaseConfig.setUsername(config.get("username", ""));
+            databaseConfig.setUsername((String) config.get("username"));
             databaseConfig.setPassword(config.getString("password"));
             storage = new MySQLStorage(plugin, type, host, port, database, databaseConfig, useSSL);
         }
@@ -359,7 +359,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     public boolean isDebug() {
-        return config != null && config.get("debug", false);
+        return config != null && (boolean) config.get("debug");
     }
 
     public PasswordGenerator<P> getPasswordGenerator() {
@@ -376,7 +376,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     public boolean hasFailedLogin(String ip, String username) {
-        if (!config.get("secondAttemptCracked", false)) {
+        if (!(boolean) config.get("secondAttemptCracked")) {
             return false;
         }
 
@@ -400,7 +400,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     public int getUpdateCheckInterval() {
-        return config.getInt("update-check-interval", 24);
+        return config.getInt("update-check-interval");
     }
 
     public void setAuthPluginHook(AuthPlugin<P> authPlugin) {
