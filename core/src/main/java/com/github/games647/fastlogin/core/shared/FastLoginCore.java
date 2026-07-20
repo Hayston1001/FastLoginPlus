@@ -439,10 +439,6 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         }
     }
 
-    private void appendMissingKeys(String fileName) {
-        appendMissingKeys(fileName, fileName);
-    }
-
     /**
      * Compare the user's language file against the default (English) and append any missing keys.
      * @param defaultFile the default resource file in the jar (e.g. messages_en.yml)

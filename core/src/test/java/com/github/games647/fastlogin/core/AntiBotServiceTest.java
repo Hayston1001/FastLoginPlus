@@ -31,7 +31,6 @@ import com.github.games647.fastlogin.core.antibot.IpBanManager;
 import com.github.games647.fastlogin.core.antibot.PerIpRateLimiter;
 import com.github.games647.fastlogin.core.antibot.TickingRateLimiter;
 import com.github.games647.fastlogin.core.antibot.TrustedIpSet;
-import com.google.common.base.Ticker;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
