@@ -50,10 +50,29 @@
         <!-- Set default for non-git clones -->
         <maven.compiler.release>8</maven.compiler.release>
 
-        <lombook.version>1.18.34</lombook.version>
-
         <floodgate.version>2.2.5-SNAPSHOT</floodgate.version>
         <geyser.version>2.10.1-SNAPSHOT</geyser.version>
+
+        <!-- Shared across bukkit + folia -->
+        <protocollib.version>5.3.0</protocollib.version>
+        <protocolsupport.version>master-66b494a8dd-1</protocolsupport.version>
+        <datafixerupper.version>7.1.15</datafixerupper.version>
+        <netty.version>4.1.103.Final</netty.version>
+        <placeholderapi.version>2.11.6</placeholderapi.version>
+        <authme.version>5.6.0</authme.version>
+        <loginsecurity.version>3.3.0</loginsecurity.version>
+        <skinsrestorer.version>15.11.0</skinsrestorer.version>
+        <bouncycastle.version>1.78.1</bouncycastle.version>
+        <logit.version>9e3581db27</logit.version>
+        <passky.version>v3.0.0</passky.version>
+        <xauth.version>2.6</xauth.version>
+        <crazycore.version>10.7.7</crazycore.version>
+        <crazylogin.version>7.23</crazylogin.version>
+        <ultraauth.version>2.0.2</ultraauth.version>
+
+        <!-- Shared across bungee + velocity -->
+        <sqlite.version>3.42.0.0</sqlite.version>
+        <mariadb.version>3.4.0</mariadb.version>
     </properties>
 
     <modules>
@@ -293,7 +312,7 @@
         <dependency>
             <groupId>org.geysermc.geyser</groupId>
             <artifactId>common</artifactId>
-            <version>2.2.1-SNAPSHOT</version>
+            <version>${geyser.version}</version>
             <scope>provided</scope>
         </dependency>
 

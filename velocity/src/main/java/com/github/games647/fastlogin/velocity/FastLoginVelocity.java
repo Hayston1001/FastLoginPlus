@@ -71,7 +71,6 @@ import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
-//TODO: Support for floodgate
 @Plugin(id = "fastloginplus", name = "FastLoginPlus", description = "Login plugin for premium players", url = "",
         version = PomData.VERSION, authors = {"Hayston", "games647"})
 public class FastLoginVelocity implements PlatformPlugin<CommandSource> {

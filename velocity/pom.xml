@@ -194,7 +194,7 @@
         <dependency>
             <groupId>org.mariadb.jdbc</groupId>
             <artifactId>mariadb-java-client</artifactId>
-            <version>3.4.0</version>
+            <version>${mariadb.version}</version>
             <exclusions>
                 <!-- Exclude JNA implementation for WAFFLE - Windows Authentication Framework (mariadb)-->
                 <exclusion>
@@ -207,7 +207,7 @@
         <dependency>
             <groupId>org.xerial</groupId>
             <artifactId>sqlite-jdbc</artifactId>
-            <version>3.42.0.0</version>
+            <version>${sqlite.version}</version>
             <scope>compile</scope>
         </dependency>
 
