@@ -70,6 +70,7 @@ public class FloodgateAuthTask
     }
 
     @Override
+    @SuppressWarnings("deprecation") // Connection.getAddress() deprecated for Unix socket support
     protected InetSocketAddress getAddress(ProxiedPlayer player) {
         return player.getAddress();
     }

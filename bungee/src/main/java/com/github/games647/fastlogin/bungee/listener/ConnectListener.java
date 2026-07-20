@@ -128,6 +128,7 @@ public class ConnectListener implements Listener {
             return;
         }
 
+        @SuppressWarnings("deprecation") // Connection.getAddress() deprecated for Unix socket support
         InetSocketAddress address = preLoginEvent.getConnection().getAddress();
         String username = connection.getName();
 
@@ -148,7 +149,7 @@ public class ConnectListener implements Listener {
                 return;
             case Block:
                 String message = plugin.getCore().getMessage("kick-antibot");
-                preLoginEvent.setCancelReason(TextComponent.fromLegacyText(message));
+                preLoginEvent.setReason(TextComponent.fromLegacy(message));
                 preLoginEvent.setCancelled(true);
                 break;
             case Continue:

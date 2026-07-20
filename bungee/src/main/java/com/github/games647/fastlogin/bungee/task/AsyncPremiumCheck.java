@@ -80,6 +80,7 @@ public class AsyncPremiumCheck extends JoinManagement<ProxiedPlayer, CommandSend
         source.enableOnlinemode();
         plugin.getSession().put(source.getConnection(), new BungeeLoginSession(username, registered, profile));
 
+        @SuppressWarnings("deprecation") // Connection.getAddress() deprecated for Unix socket support
         String ip = source.getAddress().getAddress().getHostAddress();
         plugin.getCore().addLoginAttempt(ip, username);
     }

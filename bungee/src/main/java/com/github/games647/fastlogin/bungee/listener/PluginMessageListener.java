@@ -105,7 +105,7 @@ public class PluginMessageListener implements Listener {
                 if (playerName.equals(forPlayer.getName()) && premiumWarning
                         && !core.getPendingConfirms().contains(forPlayer.getUniqueId())) {
                     String message = core.getMessage("premium-warning");
-                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                    forPlayer.sendMessage(TextComponent.fromLegacy(message));
                     core.getPendingConfirms().add(forPlayer.getUniqueId());
                     return;
                 }
@@ -126,21 +126,21 @@ public class PluginMessageListener implements Listener {
                 StoredProfile profile = core.getStorage().loadProfile(playerName);
                 if (profile == null || !profile.isExistingPlayer()) {
                     String message = core.getMessage("delete-not-found");
-                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                    forPlayer.sendMessage(TextComponent.fromLegacy(message));
                     return;
                 }
                 if (profile.isOnlinemodePreferred()) {
                     String message = core.getMessage("delete-premium-denied");
-                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                    forPlayer.sendMessage(TextComponent.fromLegacy(message));
                     return;
                 }
                 boolean deleted = core.getStorage().deleteProfile(playerName);
                 if (deleted) {
                     String message = core.getMessage("delete-success");
-                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                    forPlayer.sendMessage(TextComponent.fromLegacy(message));
                 } else {
                     String message = core.getMessage("delete-fail");
-                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                    forPlayer.sendMessage(TextComponent.fromLegacy(message));
                 }
             });
         }

@@ -78,7 +78,7 @@ public class AsyncToggleMessage implements Runnable {
                 new BungeeFastLoginPremiumToggleEvent(playerProfile, reason));
 
         if (isPlayerSender && core.getConfig().getBoolean("kick-toggle")) {
-            sender.disconnect(TextComponent.fromLegacyText(core.getMessage("remove-premium")));
+            sender.disconnect(TextComponent.fromLegacy(core.getMessage("remove-premium")));
         } else {
             sendMessage("remove-premium");
         }
@@ -103,10 +103,10 @@ public class AsyncToggleMessage implements Runnable {
     private void sendMessage(String localeId) {
         String message = core.getMessage(localeId);
         if (isPlayerSender) {
-            sender.sendMessage(TextComponent.fromLegacyText(message));
+            sender.sendMessage(TextComponent.fromLegacy(message));
         } else {
             CommandSender console = ProxyServer.getInstance().getConsole();
-            console.sendMessage(TextComponent.fromLegacyText(message));
+            console.sendMessage(TextComponent.fromLegacy(message));
         }
     }
 }
