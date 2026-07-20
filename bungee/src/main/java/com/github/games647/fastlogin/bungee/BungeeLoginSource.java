@@ -61,13 +61,12 @@ public class BungeeLoginSource implements LoginSource {
         } else {
             preLoginEvent.setReason(
                     TextComponent.fromArray(
-                            TextComponent.fromLegacy(message)
+                            TextComponent.fromLegacyText(message)
                     ));
         }
     }
 
     @Override
-    @SuppressWarnings("deprecation") // Connection.getAddress() deprecated for Unix socket support
     public InetSocketAddress getAddress() {
         return connection.getAddress();
     }

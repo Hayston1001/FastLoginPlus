@@ -198,7 +198,7 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
 
     @Override
     public void sendMessage(CommandSender receiver, String message) {
-        receiver.sendMessage(TextComponent.fromLegacy(message));
+        receiver.sendMessage(TextComponent.fromLegacyText(message));
     }
 
     @Override
