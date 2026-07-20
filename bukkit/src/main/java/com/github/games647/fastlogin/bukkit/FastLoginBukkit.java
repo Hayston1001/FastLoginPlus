@@ -163,8 +163,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         pluginManager.registerEvents(new ConnectionListener(this), this);
 
-        //if server is using paper - we need to add one more listener to correct the user cache usage
-        if (isPaper() && getConfig().getBoolean("forwardSkin")) {
+        // On Paper, profile.complete(true) is called right after AsyncPlayerPreLoginEvent.
+        // This listener sets the skin during the event so that complete(true) sees textures
+        // and skips Paper's filledProfileCache (which may hold a stale skin).
+        // forwardSkin is checked inside the listener — when false, skin setting is skipped.
+        if (isPaper()) {
             pluginManager.registerEvents(new PaperCacheListener(this), this);
         }
 

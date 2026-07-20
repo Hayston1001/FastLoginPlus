@@ -44,10 +44,16 @@ public class PaperCacheListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
-    //if paper is used - player skin must be set at pre login, otherwise user cache is used
-    // user cache makes premium name change basically impossible
+    // On Paper, profile.complete(true) is called right after AsyncPlayerPreLoginEvent.
+    // If the profile lacks textures at that point, Paper fills them from its filledProfileCache
+    // (which may contain a stale skin from a previous session).
+    // Setting the skin here ensures the profile already has correct textures before complete(true).
     public void onAsyncPlayerPreLogin(AsyncPlayerPreLoginEvent event) {
         if (event.getLoginResult() != Result.ALLOWED) {
+            return;
+        }
+
+        if (!plugin.getConfig().getBoolean("forwardSkin")) {
             return;
         }
 
