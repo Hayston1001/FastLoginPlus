@@ -187,7 +187,9 @@ public class VerifyResponseTask implements Runnable {
 
                 if (attempt < retryCount) {
                     try {
-                        Thread.sleep(retryDelay);
+                        // Exponential backoff: base delay * 2^(attempt-1), capped at 10 seconds
+                        long backoff = Math.min(retryDelay * (1L << (attempt - 1)), 10_000L);
+                        Thread.sleep(backoff);
                     } catch (InterruptedException interrupted) {
                         Thread.currentThread().interrupt();
                         disconnect("session-retry-exhausted",
