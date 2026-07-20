@@ -356,7 +356,9 @@ public class ProtocolLibListener extends PacketAdapter {
 
         // remove real Floodgate data handler
         ChannelHandler floodgateHandler = channel.pipeline().get("floodgate_data_handler");
-        channel.pipeline().remove(floodgateHandler);
+        if (floodgateHandler != null) {
+            channel.pipeline().remove(floodgateHandler);
+        }
 
         return true;
     }

@@ -1,5 +1,33 @@
 # FastLoginPlus Changelog
 
+## v0.3.0
+
+### Bug Fixes(Major) / Bug 修复(主要)
+
+- Anti-bot module audit — 6 bug fixes: clock jump back no longer throws in TickingRateLimiter, batch expire stale records, compareTo uses correct expireTime, global rate limit checked before per-IP, periodic cleanup every 100 connections, sanitize usernames in log messages
+- Fix `forwardSkin: false` not working on Paper — PaperCacheListener now checks config before setting skin
+- Fix SkinsRestorer skin overwritten by Paper filledProfileCache — set empty placeholder textures to prevent `complete(true)` pulling stale skin
+
+- 反机器人模块审计 — 6 个 bug 修复：TickingRateLimiter 时钟回退不再抛异常、批量过期陈旧记录、compareTo 使用正确的 expireTime、全局限制在每 IP 限制之前检查、每 100 连接定期清理、日志中用户名消毒
+- 修复 Paper 上 `forwardSkin: false` 无效 — PaperCacheListener 现在在设置皮肤前检查配置
+- 修复 SkinsRestorer 皮肤被 Paper filledProfileCache 覆盖 — 设置空占位纹理防止 `complete(true)` 拉取旧皮肤
+
+### Session Retry Improvement / 会话重试改进
+
+- Exponential backoff for Mojang session retry
+
+- Mojang 会话重试改为指数退避
+
+### Build / 构建
+
+- Centralize 19 shared dependency versions into parent pom.xml properties
+- Add FloodgateServiceTest (17 tests) and FloodgateManagementTest (15 tests)
+- Upgrade maven-compiler-plugin 3.13.0 → 3.15.0
+
+- 将 19 个共享依赖版本集中到父 pom.xml 属性
+- 新增 FloodgateServiceTest（17 个测试）和 FloodgateManagementTest（15 个测试）
+- maven-compiler-plugin 3.13.0 → 3.15.0
+
 ## v0.2.1
 
 ### Version Format Unification / 版本格式统一
