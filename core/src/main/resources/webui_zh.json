@@ -2,15 +2,16 @@
   "login.title": "FastLoginPlus",
   "login.subtitle": "输入令牌以连接到服务器面板",
   "login.placeholder": "访问令牌",
-  "login.connect": "连接",
+  "login.login": "登入",
   "login.verifying": "验证中...",
   "login.error.minLength": "Token 至少需要 16 个字符",
   "login.error.invalid": "Token 无效",
   "login.error.connectionFailed": "无法连接到服务器",
   "login.hint": "输入 <code>demo</code> 可预览界面",
 
-  "header.disconnect": "断开连接",
+  "header.logout": "登出",
   "header.status.online": "在线",
+  "header.disconnected": "未连接",
 
   "tab.online": "在线玩家",
   "tab.players": "玩家数据库",
@@ -21,6 +22,9 @@
   "online.empty": "暂无在线玩家",
   "online.emptyHint": "玩家加入服务器后将在此显示",
   "online.col.name": "玩家名",
+  "online.col.uuid": "UUID",
+  "online.col.mode": "模式",
+  "online.col.client": "客户端",
   "online.col.type": "登录类型",
   "online.col.ip": "最后 IP",
   "online.col.lastLogin": "最后登录",
@@ -78,6 +82,8 @@
   "msg.authFailed": "认证失败，请重新登录",
   "msg.expired": "已过期",
   "msg.unknown": "未知",
+  "msg.connectionRestored": "连接已恢复",
+  "msg.reconnectFailed": "重连失败，请稍后再试",
 
   "type.premium": "Java 正版",
   "type.cracked": "Java 离线",
@@ -96,5 +102,10 @@
   "duration.minutes": "{m}分钟",
   "duration.seconds": "{s}秒",
 
-  "lang.selector": "语言"
+  "lang.selector": "语言",
+
+  "disconnect.title": "服务器已断开连接",
+  "disconnect.message": "无法连接到服务器，请检查服务器是否正在运行以及您的网络连接。",
+  "disconnect.reconnect": "重新连接",
+  "disconnect.reconnecting": "正在重连..."
 }

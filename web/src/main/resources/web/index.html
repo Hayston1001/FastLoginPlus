@@ -1,12 +1,30 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FastLoginPlus</title>
-    <link rel="stylesheet" href="style.css?v=7">
+    <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body class="page-login">
+    <div class="login-controls">
+        <div class="lang-selector">
+            <select id="lang-select" aria-label="Language selector">
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+            </select>
+        </div>
+        <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <svg class="icon-sun" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="10" cy="10" r="4"/>
+                <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.93 4.93l1.41 1.41M13.66 13.66l1.41 1.41M4.93 15.07l1.41-1.41M13.66 6.34l1.41-1.41"/>
+            </svg>
+            <svg class="icon-moon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+        </button>
+    </div>
+
     <div class="portal-glow"></div>
     <div class="login-container">
         <div class="login-icon">
@@ -21,11 +39,12 @@
         <div class="input-group">
             <input type="password" id="token-input" name="token" autocomplete="current-password" data-i18n-placeholder="login.placeholder" autofocus>
         </div>
-        <button id="login-btn" data-i18n="login.connect"></button>
+        <button id="login-btn" data-i18n="login.login"></button>
         <div id="login-error" class="error" role="alert"></div>
         <p class="login-hint" data-i18n-html="login.hint"></p>
     </div>
-    <script src="i18n.js?v=7"></script>
-    <script src="login.js?v=7"></script>
+    <script src="i18n.js?v=10"></script>
+    <script src="theme.js?v=10"></script>
+    <script src="login.js?v=10"></script>
 </body>
 </html>

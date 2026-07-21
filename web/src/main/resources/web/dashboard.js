@@ -13,11 +13,50 @@ let currentTab = 'online';
 let onlinePlayers = [];
 let playersData = { players: [], total: 0, page: 1, size: 20, totalPages: 1 };
 let bansData = [];
-let onlineRefreshInterval = null;
-let antibotRefreshInterval = null;
 let statusRefreshInterval = null;
 let lastOnlineSnapshot = '';
 let searchDebounceTimer = null;
+let isConnected = true;
+let connectionCheckFailures = 0;
+const MAX_FAILURES = 3; // Show disconnect after 3 consecutive failures
+
+// ── Countdown Timer ──────────────────────────────
+let countdownTimer = null;
+let countdownSeconds = 5;
+
+function startCountdown() {
+    stopCountdown();
+    countdownSeconds = 5;
+    updateTimerDisplay();
+    countdownTimer = setInterval(() => {
+        countdownSeconds--;
+        if (countdownSeconds <= 0) {
+            statusInfo.setAttribute('data-timer', 'R');
+            // Trigger actual data refresh for current tab
+            if (currentTab === 'online') loadOnlinePlayers();
+            else if (currentTab === 'antibot') { loadAntiBotStats(); loadBans(); }
+            countdownSeconds = 5;
+            setTimeout(() => {
+                if (countdownTimer) updateTimerDisplay();
+            }, 500);
+        } else {
+            updateTimerDisplay();
+        }
+    }, 1000);
+}
+
+function stopCountdown() {
+    if (countdownTimer) {
+        clearInterval(countdownTimer);
+        countdownTimer = null;
+    }
+}
+
+function updateTimerDisplay() {
+    if (statusInfo) {
+        statusInfo.setAttribute('data-timer', String(countdownSeconds));
+    }
+}
 
 // ── Toast System ───────────────────────────────────
 function showToast(type, message, duration) {
@@ -100,14 +139,82 @@ async function api(endpoint, options = {}) {
         if (!response.ok) {
             throw new Error(data.error || `HTTP ${response.status}`);
         }
+
+        // Connection successful
+        updateConnectionStatus(true);
         return data;
     } catch (error) {
         if (error.message === 'Unauthorized') {
             logout();
             throw new Error(I18n.t('msg.authFailed'));
         }
+
+        // Network error (not auth error) — track connection failures
+        if (error.name === 'TypeError' || error.message.includes('Failed to fetch')) {
+            connectionCheckFailures++;
+            if (connectionCheckFailures >= MAX_FAILURES) {
+                updateConnectionStatus(false);
+            }
+        }
+
         throw error;
     }
+}
+
+// ── Connection Status ──────────────────────────────
+function updateConnectionStatus(connected) {
+    const overlayEl = document.getElementById('disconnect-overlay');
+
+    if (connected) {
+        connectionCheckFailures = 0;
+        if (!isConnected) {
+            isConnected = true;
+            if (statusInfo) {
+                statusInfo.classList.remove('disconnected');
+            }
+            if (overlayEl) {
+                overlayEl.style.display = 'none';
+            }
+            showToast('success', I18n.t('msg.connectionRestored'));
+            startCountdown();
+        }
+    } else {
+        isConnected = false;
+        stopCountdown();
+        if (statusInfo) {
+            statusInfo.classList.add('disconnected');
+            statusInfo.textContent = I18n.t('header.disconnected');
+        }
+        if (overlayEl) {
+            overlayEl.style.display = 'flex';
+        }
+    }
+}
+
+// ── Reconnect ──────────────────────────────────────
+function attemptReconnect() {
+    const reconnectBtn = document.getElementById('reconnect-btn');
+    if (reconnectBtn) {
+        reconnectBtn.disabled = true;
+        reconnectBtn.textContent = I18n.t('disconnect.reconnecting');
+    }
+
+    // Try to load status
+    loadStatus().then(() => {
+        updateConnectionStatus(true);
+        if (reconnectBtn) {
+            reconnectBtn.disabled = false;
+            reconnectBtn.textContent = I18n.t('disconnect.reconnect');
+        }
+        // Reload current tab data
+        switchTab(currentTab);
+    }).catch(() => {
+        if (reconnectBtn) {
+            reconnectBtn.disabled = false;
+            reconnectBtn.textContent = I18n.t('disconnect.reconnect');
+        }
+        showToast('error', I18n.t('msg.reconnectFailed'));
+    });
 }
 
 // ── DOM Elements ───────────────────────────────────
@@ -115,6 +222,16 @@ const statusInfo = document.getElementById('status-info');
 const logoutBtn = document.getElementById('logout-btn');
 const tabs = document.querySelectorAll('.tab');
 const tabContents = document.querySelectorAll('.tab-content');
+
+// Sidebar (mobile)
+const menuToggle = document.getElementById('menu-toggle');
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebar-overlay');
+const sidebarClose = document.getElementById('sidebar-close');
+
+// Connection status
+const disconnectOverlay = document.getElementById('disconnect-overlay');
+const reconnectBtn = document.getElementById('reconnect-btn');
 
 // Online tab
 const refreshOnlineBtn = document.getElementById('refresh-online-btn');
@@ -165,8 +282,16 @@ const confirmNo = document.getElementById('confirm-no');
         }
     });
 
+    // Reconnect button
+    if (reconnectBtn) {
+        reconnectBtn.addEventListener('click', attemptReconnect);
+    }
+
     loadStatus();
-    switchTab('online');
+    // Restore saved tab, default to 'online'
+    const savedTab = localStorage.getItem('flp-tab') || 'online';
+    switchTab(savedTab);
+    startCountdown();
 
     // Refresh status every 30s
     statusRefreshInterval = setInterval(loadStatus, 30000);
@@ -174,37 +299,51 @@ const confirmNo = document.getElementById('confirm-no');
 
 // ── Logout ─────────────────────────────────────────
 function logout() {
-    stopOnlineRefresh();
-    stopAntibotRefresh();
+    stopCountdown();
     if (statusRefreshInterval) clearInterval(statusRefreshInterval);
     localStorage.removeItem('flp-token');
     localStorage.removeItem('flp-demo');
+    localStorage.removeItem('flp-tab');
     location.href = 'index.html';
 }
 
 logoutBtn.addEventListener('click', logout);
 
+// ── Sidebar (mobile) ───────────────────────────────
+function openSidebar() {
+    if (sidebar) sidebar.classList.add('open');
+    if (sidebarOverlay) sidebarOverlay.classList.add('active');
+}
+
+function closeSidebar() {
+    if (sidebar) sidebar.classList.remove('open');
+    if (sidebarOverlay) sidebarOverlay.classList.remove('active');
+}
+
+if (menuToggle) menuToggle.addEventListener('click', openSidebar);
+if (sidebarClose) sidebarClose.addEventListener('click', closeSidebar);
+if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar);
+
 // ── Tabs ───────────────────────────────────────────
 tabs.forEach(tab => {
-    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+    tab.addEventListener('click', () => {
+        switchTab(tab.dataset.tab);
+        closeSidebar(); // close sidebar on mobile when tab is clicked
+    });
 });
 
 function switchTab(tabName) {
     currentTab = tabName;
+    localStorage.setItem('flp-tab', tabName);
     tabs.forEach(t => {
         t.classList.toggle('active', t.dataset.tab === tabName);
         t.setAttribute('aria-selected', t.dataset.tab === tabName);
     });
     tabContents.forEach(tc => tc.classList.toggle('active', tc.id === `tab-${tabName}`));
 
-    // Stop all auto-refresh, then start for the active tab
-    stopOnlineRefresh();
-    stopAntibotRefresh();
-
     switch (tabName) {
         case 'online':
             loadOnlinePlayers();
-            startOnlineRefresh();
             break;
         case 'players':
             loadPlayers();
@@ -212,7 +351,6 @@ function switchTab(tabName) {
         case 'antibot':
             loadAntiBotStats();
             loadBans();
-            startAntibotRefresh();
             break;
     }
 }
@@ -221,27 +359,17 @@ function switchTab(tabName) {
 async function loadStatus() {
     try {
         const status = await api('/status');
-        statusInfo.textContent = `v${status.version} | ${status.databaseType} | ${I18n.t('header.status.online')}: ${status.onlinePlayers}`;
+        if (isConnected) {
+            statusInfo.classList.remove('disconnected');
+            statusInfo.setAttribute('data-timer', String(countdownSeconds));
+            statusInfo.textContent = `v${status.version} | ${status.databaseType} | ${I18n.t('header.status.online')} ${status.onlinePlayers}`;
+        }
     } catch (error) {
         console.error('Failed to load status:', error);
     }
 }
 
 // ── Online Players ─────────────────────────────────
-function startOnlineRefresh() {
-    stopOnlineRefresh();
-    onlineRefreshInterval = setInterval(() => {
-        if (currentTab === 'online') loadOnlinePlayers();
-    }, 5000);
-}
-
-function stopOnlineRefresh() {
-    if (onlineRefreshInterval) {
-        clearInterval(onlineRefreshInterval);
-        onlineRefreshInterval = null;
-    }
-}
-
 refreshOnlineBtn.addEventListener('click', loadOnlinePlayers);
 
 async function loadOnlinePlayers() {
@@ -270,15 +398,19 @@ function renderOnlinePlayers() {
     }
 
     onlineEmpty.style.display = 'none';
-    onlineTbody.innerHTML = onlinePlayers.map(player => `
+    onlineTbody.innerHTML = onlinePlayers.map(player => {
+        const isPremium = player.type === 'premium';
+        const isBedrock = player.type === 'bedrock';
+        return `
         <tr>
             <td data-label="${I18n.t('online.col.name')}">${escapeHtml(player.name)}</td>
-            <td data-label="${I18n.t('online.col.type')}">${getLoginTypeBadge(player.type)}</td>
+            <td data-label="${I18n.t('online.col.uuid')}"><code class="mono">${escapeHtml(player.uuid || '—')}</code></td>
+            <td data-label="${I18n.t('online.col.mode')}">${isPremium ? `<span class="badge badge-premium">${I18n.t('badge.premium')}</span>` : `<span class="badge badge-cracked">${I18n.t('badge.cracked')}</span>`}</td>
+            <td data-label="${I18n.t('online.col.client')}">${isBedrock ? `<span class="badge badge-bedrock">${I18n.t('floodgate.bedrock')}</span>` : `<span class="badge badge-java">${I18n.t('floodgate.java')}</span>`}</td>
             <td data-label="${I18n.t('online.col.ip')}" class="mono">${escapeHtml(player.lastIp || '-')}</td>
-            <td data-label="${I18n.t('online.col.lastLogin')}">${formatDate(player.lastLogin)}</td>
             <td data-label="${I18n.t('online.col.actions')}">${getOnlineActions(player)}</td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 
     onlineTbody.querySelectorAll('.btn-action').forEach(btn => {
         btn.addEventListener('click', () => handleOnlineAction(btn.dataset.action, btn.dataset.name));
@@ -290,10 +422,7 @@ function getOnlineActions(player) {
         case 'premium':
             return `<button class="btn-action btn-warning" data-action="cracked" data-name="${escapeHtml(player.name)}">${I18n.t('online.action.switchCracked')}</button>`;
         case 'cracked':
-            return `
-                <button class="btn-action btn-success" data-action="premium" data-name="${escapeHtml(player.name)}">${I18n.t('online.action.switchPremium')}</button>
-                <button class="btn-action btn-danger-action" data-action="delete" data-name="${escapeHtml(player.name)}">${I18n.t('online.action.delete')}</button>
-            `;
+            return `<span class="btn-group"><button class="btn-action btn-success" data-action="premium" data-name="${escapeHtml(player.name)}">${I18n.t('online.action.switchPremium')}</button><button class="btn-action btn-danger-action" data-action="delete" data-name="${escapeHtml(player.name)}">${I18n.t('online.action.delete')}</button></span>`;
         default:
             return '—';
     }
@@ -399,7 +528,7 @@ function getPlayerActions(player) {
         actions.push(`<button class="btn-action btn-success" data-action="premium" data-name="${escapeHtml(player.name)}">${I18n.t('players.action.switchPremium')}</button>`);
         actions.push(`<button class="btn-action btn-danger-action" data-action="delete" data-name="${escapeHtml(player.name)}">${I18n.t('players.action.delete')}</button>`);
     }
-    return actions.join(' ');
+    return actions.length > 1 ? `<span class="btn-group">${actions.join('')}</span>` : actions.join('');
 }
 
 async function handlePlayerAction(action, name) {
@@ -425,23 +554,6 @@ async function handlePlayerAction(action, name) {
 }
 
 // ── Anti-bot ───────────────────────────────────────
-function startAntibotRefresh() {
-    stopAntibotRefresh();
-    antibotRefreshInterval = setInterval(() => {
-        if (currentTab === 'antibot') {
-            loadAntiBotStats();
-            loadBans();
-        }
-    }, 5000);
-}
-
-function stopAntibotRefresh() {
-    if (antibotRefreshInterval) {
-        clearInterval(antibotRefreshInterval);
-        antibotRefreshInterval = null;
-    }
-}
-
 refreshBansBtn.addEventListener('click', loadBans);
 
 banBtn.addEventListener('click', async () => {
@@ -561,10 +673,10 @@ function mockData(endpoint, options) {
 
     if (endpoint === '/online') {
         return [
-            { name: 'Steve', type: 'premium', lastIp: '192.168.1.100', lastLogin: new Date().toISOString() },
-            { name: 'Alex', type: 'cracked', lastIp: '10.0.0.5', lastLogin: new Date(Date.now() - 120000).toISOString() },
-            { name: 'Notch', type: 'premium', lastIp: '172.16.0.1', lastLogin: new Date(Date.now() - 300000).toISOString() },
-            { name: 'SteveBedrock', type: 'bedrock', lastIp: null, lastLogin: new Date(Date.now() - 600000).toISOString() },
+            { name: 'Steve', uuid: '8667ba71-b85a-4004-af54-457a9734eed7', type: 'premium', lastIp: '192.168.1.100' },
+            { name: 'Alex', uuid: '6ab43178-89fd-4905-97e5-7e71ef0632c2', type: 'cracked', lastIp: '10.0.0.5' },
+            { name: 'Notch', uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5', type: 'premium', lastIp: '172.16.0.1' },
+            { name: 'SteveBedrock', uuid: null, type: 'bedrock', lastIp: null },
         ];
     }
 

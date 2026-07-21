@@ -1,4 +1,4 @@
-// FastLoginPlus — Login Page v2
+// FastLoginPlus — Login Page v3
 
 const DEMO_TOKEN = 'demo';
 const tokenInput = document.getElementById('token-input');
@@ -17,6 +17,13 @@ function showLoginError(message) {
 // Initialize i18n first, then set up event listeners
 (async () => {
     await I18n.init();
+
+    // Language selector
+    const langSelect = document.getElementById('lang-select');
+    if (langSelect) {
+        langSelect.value = I18n.getLang();
+        langSelect.addEventListener('change', () => I18n.switchLang(langSelect.value));
+    }
 
     // Already have token → go to dashboard
     if (localStorage.getItem('flp-token')) {
@@ -64,6 +71,6 @@ function handleLogin() {
         showLoginError(I18n.t('login.error.connectionFailed'));
     }).finally(() => {
         loginBtn.disabled = false;
-        loginBtn.textContent = I18n.t('login.connect');
+        loginBtn.textContent = I18n.t('login.login');
     });
 }
