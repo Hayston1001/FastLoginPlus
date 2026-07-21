@@ -1,4 +1,5 @@
-// FastLoginPlus — Dashboard
+// FastLoginPlus — Dashboard v2
+// Improvements: toast notifications, skeleton loaders, debounced search, row flash
 
 // ── State ──────────────────────────────────────────
 const token = localStorage.getItem('flp-token') || '';
@@ -14,7 +15,74 @@ let playersData = { players: [], total: 0, page: 1, size: 20, totalPages: 1 };
 let bansData = [];
 let onlineRefreshInterval = null;
 let antibotRefreshInterval = null;
+let statusRefreshInterval = null;
 let lastOnlineSnapshot = '';
+let searchDebounceTimer = null;
+
+// ── Toast System ───────────────────────────────────
+function showToast(type, message, duration) {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+
+    duration = duration || (type === 'success' ? 3000 : 5000);
+
+    const icons = {
+        success: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 6L8 14L4 10"/></svg>',
+        error:   '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><path d="M7 7l6 6M13 7l-6 6"/></svg>',
+        warning: '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 2L2 18h16L10 2z"/><path d="M10 8v4M10 14.5v1"/></svg>',
+        info:    '<svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7"/><path d="M10 6v5M10 13.5v1"/></svg>'
+    };
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+        <div class="toast-icon">${icons[type] || icons.info}</div>
+        <div class="toast-body">
+            <div class="toast-message">${escapeHtml(message)}</div>
+        </div>
+        <button class="toast-close" aria-label="Close notification">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M3 3l8 8M11 3l-8 8"/>
+            </svg>
+        </button>
+    `;
+
+    container.appendChild(toast);
+
+    const closeBtn = toast.querySelector('.toast-close');
+    let timer;
+
+    const remove = () => {
+        clearTimeout(timer);
+        toast.classList.add('removing');
+        setTimeout(() => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 200);
+    };
+
+    closeBtn.addEventListener('click', remove);
+    timer = setTimeout(remove, duration);
+}
+
+// ── Skeleton Loader ────────────────────────────────
+function showTableSkeleton(tbody, columns) {
+    columns = columns || 5;
+    tbody.innerHTML = '';
+    for (let i = 0; i < 5; i++) {
+        const tr = document.createElement('tr');
+        tr.className = 'skeleton-row';
+        for (let j = 0; j < columns; j++) {
+            const td = document.createElement('td');
+            td.innerHTML = '<div class="skeleton-cell"></div>';
+            tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+    }
+}
+
+function hideTableSkeleton(tbody) {
+    tbody.innerHTML = '';
+}
 
 // ── API Helper ─────────────────────────────────────
 async function api(endpoint, options = {}) {
@@ -90,14 +158,25 @@ const confirmNo = document.getElementById('confirm-no');
         langSelect.addEventListener('change', () => I18n.switchLang(langSelect.value));
     }
 
+    // Escape key closes modal
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && confirmModal.classList.contains('active')) {
+            closeModal();
+        }
+    });
+
     loadStatus();
     switchTab('online');
+
+    // Refresh status every 30s
+    statusRefreshInterval = setInterval(loadStatus, 30000);
 })();
 
 // ── Logout ─────────────────────────────────────────
 function logout() {
     stopOnlineRefresh();
     stopAntibotRefresh();
+    if (statusRefreshInterval) clearInterval(statusRefreshInterval);
     localStorage.removeItem('flp-token');
     localStorage.removeItem('flp-demo');
     location.href = 'index.html';
@@ -193,11 +272,11 @@ function renderOnlinePlayers() {
     onlineEmpty.style.display = 'none';
     onlineTbody.innerHTML = onlinePlayers.map(player => `
         <tr>
-            <td>${escapeHtml(player.name)}</td>
-            <td>${getLoginTypeBadge(player.type)}</td>
-            <td class="mono">${escapeHtml(player.lastIp || '-')}</td>
-            <td>${formatDate(player.lastLogin)}</td>
-            <td>${getOnlineActions(player)}</td>
+            <td data-label="${I18n.t('online.col.name')}">${escapeHtml(player.name)}</td>
+            <td data-label="${I18n.t('online.col.type')}">${getLoginTypeBadge(player.type)}</td>
+            <td data-label="${I18n.t('online.col.ip')}" class="mono">${escapeHtml(player.lastIp || '-')}</td>
+            <td data-label="${I18n.t('online.col.lastLogin')}">${formatDate(player.lastLogin)}</td>
+            <td data-label="${I18n.t('online.col.actions')}">${getOnlineActions(player)}</td>
         </tr>
     `).join('');
 
@@ -225,17 +304,19 @@ async function handleOnlineAction(action, name) {
         showConfirm(I18n.t('msg.deleteConfirm', {name}), async () => {
             try {
                 await api(`/players/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                showToast('success', I18n.t('msg.deleteSuccess', {name: name}));
                 loadOnlinePlayers();
             } catch (error) {
-                alert(I18n.t('msg.deleteFailed', {error: error.message}));
+                showToast('error', I18n.t('msg.deleteFailed', {error: error.message}));
             }
         });
     } else {
         try {
             await api(`/players/${encodeURIComponent(name)}/${action}`, { method: 'PUT' });
+            showToast('success', I18n.t('msg.updateSuccess', {name: name}));
             loadOnlinePlayers();
         } catch (error) {
-            alert(I18n.t('msg.actionFailed', {error: error.message}));
+            showToast('error', I18n.t('msg.actionFailed', {error: error.message}));
         }
     }
 }
@@ -243,19 +324,43 @@ async function handleOnlineAction(action, name) {
 // ── Players Database ───────────────────────────────
 searchBtn.addEventListener('click', () => { playersData.page = 1; loadPlayers(); });
 resetSearchBtn.addEventListener('click', () => { searchInput.value = ''; playersData.page = 1; loadPlayers(); });
-searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { playersData.page = 1; loadPlayers(); } });
+
+// Debounced search on input
+searchInput.addEventListener('input', () => {
+    clearTimeout(searchDebounceTimer);
+    const query = searchInput.value.trim();
+    if (query.length === 0 || query.length >= 2) {
+        searchDebounceTimer = setTimeout(() => {
+            playersData.page = 1;
+            loadPlayers();
+        }, 300);
+    }
+});
+
+searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        clearTimeout(searchDebounceTimer);
+        playersData.page = 1;
+        loadPlayers();
+    }
+});
 
 prevPageBtn.addEventListener('click', () => { if (playersData.page > 1) { playersData.page--; loadPlayers(); } });
 nextPageBtn.addEventListener('click', () => { if (playersData.page < playersData.totalPages) { playersData.page++; loadPlayers(); } });
 
 async function loadPlayers() {
     try {
+        showTableSkeleton(playersTbody, 7);
+
         const query = searchInput.value.trim();
         let endpoint = `/players?page=${playersData.page}&size=${playersData.size}`;
         if (query) endpoint += `&q=${encodeURIComponent(query)}`;
         playersData = await api(endpoint);
+
+        hideTableSkeleton(playersTbody);
         renderPlayers();
     } catch (error) {
+        hideTableSkeleton(playersTbody);
         console.error('Failed to load players:', error);
     }
 }
@@ -266,13 +371,13 @@ function renderPlayers() {
     } else {
         playersTbody.innerHTML = playersData.players.map(player => `
             <tr>
-                <td>${escapeHtml(player.name)}</td>
-                <td><code class="mono">${escapeHtml(player.uuid || '—')}</code></td>
-                <td>${player.premium ? `<span class="badge badge-premium">${I18n.t('badge.premium')}</span>` : `<span class="badge badge-cracked">${I18n.t('badge.cracked')}</span>`}</td>
-                <td>${getFloodgateBadge(player.floodgate)}</td>
-                <td class="mono">${escapeHtml(player.lastIp || '—')}</td>
-                <td>${formatDate(player.lastLogin)}</td>
-                <td>${getPlayerActions(player)}</td>
+                <td data-label="${I18n.t('players.col.name')}">${escapeHtml(player.name)}</td>
+                <td data-label="${I18n.t('players.col.uuid')}"><code class="mono">${escapeHtml(player.uuid || '—')}</code></td>
+                <td data-label="${I18n.t('players.col.mode')}">${player.premium ? `<span class="badge badge-premium">${I18n.t('badge.premium')}</span>` : `<span class="badge badge-cracked">${I18n.t('badge.cracked')}</span>`}</td>
+                <td data-label="${I18n.t('players.col.floodgate')}">${getFloodgateBadge(player.floodgate)}</td>
+                <td data-label="${I18n.t('players.col.ip')}" class="mono">${escapeHtml(player.lastIp || '—')}</td>
+                <td data-label="${I18n.t('players.col.lastLogin')}">${formatDate(player.lastLogin)}</td>
+                <td data-label="${I18n.t('players.col.actions')}">${getPlayerActions(player)}</td>
             </tr>
         `).join('');
     }
@@ -302,17 +407,19 @@ async function handlePlayerAction(action, name) {
         showConfirm(I18n.t('msg.deleteConfirm', {name}), async () => {
             try {
                 await api(`/players/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                showToast('success', I18n.t('msg.deleteSuccess', {name: name}));
                 loadPlayers();
             } catch (error) {
-                alert(I18n.t('msg.deleteFailed', {error: error.message}));
+                showToast('error', I18n.t('msg.deleteFailed', {error: error.message}));
             }
         });
     } else {
         try {
             await api(`/players/${encodeURIComponent(name)}/${action}`, { method: 'PUT' });
+            showToast('success', I18n.t('msg.updateSuccess', {name: name}));
             loadPlayers();
         } catch (error) {
-            alert(I18n.t('msg.actionFailed', {error: error.message}));
+            showToast('error', I18n.t('msg.actionFailed', {error: error.message}));
         }
     }
 }
@@ -342,7 +449,7 @@ banBtn.addEventListener('click', async () => {
     const duration = parseInt(banDurationInput.value) || 300;
 
     if (!ip) {
-        alert(I18n.t('msg.enterIp'));
+        showToast('warning', I18n.t('msg.enterIp'));
         return;
     }
 
@@ -351,10 +458,13 @@ banBtn.addEventListener('click', async () => {
             method: 'POST',
             body: JSON.stringify({ ip, duration })
         });
+        showToast('success', I18n.t('msg.banSuccess', {ip: ip}));
         banIpInput.value = '';
+        banDurationInput.value = '';
         loadBans();
+        loadAntiBotStats();
     } catch (error) {
-        alert(I18n.t('msg.banFailed', {error: error.message}));
+        showToast('error', I18n.t('msg.banFailed', {error: error.message}));
     }
 });
 
@@ -387,9 +497,9 @@ function renderBans() {
     bansEmpty.style.display = 'none';
     bansTbody.innerHTML = bansData.map(ban => `
         <tr>
-            <td class="mono">${escapeHtml(ban.ip)}</td>
-            <td>${formatDuration(ban.remainingMs)}</td>
-            <td>
+            <td data-label="${I18n.t('antibot.bans.col.ip')}" class="mono">${escapeHtml(ban.ip)}</td>
+            <td data-label="${I18n.t('antibot.bans.col.remaining')}">${formatDuration(ban.remainingMs)}</td>
+            <td data-label="${I18n.t('antibot.bans.col.actions')}">
                 <button class="btn-action btn-success btn-unban" data-ip="${escapeHtml(ban.ip)}">${I18n.t('antibot.bans.action.unban')}</button>
             </td>
         </tr>
@@ -399,38 +509,48 @@ function renderBans() {
         btn.addEventListener('click', async () => {
             try {
                 await api(`/antibot/ban/${encodeURIComponent(btn.dataset.ip)}`, { method: 'DELETE' });
+                showToast('success', I18n.t('msg.unbanSuccess', {ip: btn.dataset.ip}));
                 loadBans();
+                loadAntiBotStats();
             } catch (error) {
-                alert(I18n.t('msg.unbanFailed', {error: error.message}));
+                showToast('error', I18n.t('msg.unbanFailed', {error: error.message}));
             }
         });
     });
 }
 
 // ── Modal ──────────────────────────────────────────
+let currentConfirmCallback = null;
+
 function showConfirm(message, onConfirm) {
     confirmMessage.textContent = message;
     confirmModal.classList.add('active');
-
-    const handleYes = () => {
-        confirmModal.classList.remove('active');
-        confirmYes.removeEventListener('click', handleYes);
-        onConfirm();
-    };
-
-    const handleNo = () => {
-        confirmModal.classList.remove('active');
-        confirmNo.removeEventListener('click', handleNo);
-    };
-
-    confirmYes.addEventListener('click', handleYes);
-    confirmNo.addEventListener('click', handleNo);
+    currentConfirmCallback = onConfirm;
+    confirmYes.focus();
 }
+
+function closeModal() {
+    confirmModal.classList.remove('active');
+    currentConfirmCallback = null;
+}
+
+confirmYes.addEventListener('click', () => {
+    if (currentConfirmCallback) {
+        const cb = currentConfirmCallback;
+        closeModal();
+        cb();
+    }
+});
+
+confirmNo.addEventListener('click', closeModal);
+
+// Click backdrop to dismiss
+confirmModal.querySelector('.modal-backdrop').addEventListener('click', closeModal);
 
 // ── Mock Data (Demo Mode) ──────────────────────────
 function mockApi(endpoint, options) {
     return new Promise(resolve => {
-        setTimeout(() => resolve(mockData(endpoint, options)), 80);
+        setTimeout(() => resolve(mockData(endpoint, options)), 400);
     });
 }
 

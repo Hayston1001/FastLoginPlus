@@ -1,15 +1,24 @@
-// FastLoginPlus — Login Page
+// FastLoginPlus — Login Page v2
 
 const DEMO_TOKEN = 'demo';
 const tokenInput = document.getElementById('token-input');
 const loginBtn = document.getElementById('login-btn');
 const loginError = document.getElementById('login-error');
 
+// Simple inline toast for login page (before i18n is fully loaded)
+function showLoginError(message) {
+    loginError.textContent = message;
+    // Shake animation for visual feedback
+    loginBtn.style.animation = 'none';
+    loginBtn.offsetHeight; // trigger reflow
+    loginBtn.style.animation = 'shake 0.4s var(--ease)';
+}
+
 // Initialize i18n first, then set up event listeners
 (async () => {
     await I18n.init();
 
-    // 已有 token → 直接跳 dashboard
+    // Already have token → go to dashboard
     if (localStorage.getItem('flp-token')) {
         location.href = 'dashboard.html';
         return;
@@ -34,7 +43,7 @@ function handleLogin() {
     }
 
     if (input.length < 16) {
-        loginError.textContent = I18n.t('login.error.minLength');
+        showLoginError(I18n.t('login.error.minLength'));
         return;
     }
 
@@ -49,10 +58,10 @@ function handleLogin() {
             localStorage.removeItem('flp-demo');
             location.href = 'dashboard.html';
         } else {
-            loginError.textContent = I18n.t('login.error.invalid');
+            showLoginError(I18n.t('login.error.invalid'));
         }
     }).catch(() => {
-        loginError.textContent = I18n.t('login.error.connectionFailed');
+        showLoginError(I18n.t('login.error.connectionFailed'));
     }).finally(() => {
         loginBtn.disabled = false;
         loginBtn.textContent = I18n.t('login.connect');

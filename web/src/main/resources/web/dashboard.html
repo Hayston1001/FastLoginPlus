@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FastLoginPlus</title>
-    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body class="page-dashboard">
+    <div id="toast-container" class="toast-container"></div>
+
     <header>
         <div class="header-left">
             <div class="header-brand">
@@ -20,7 +22,7 @@
         </div>
         <div class="header-right">
             <div class="lang-selector">
-                <select id="lang-select">
+                <select id="lang-select" aria-label="Language selector">
                     <option value="en">English</option>
                     <option value="zh">中文</option>
                 </select>
@@ -169,7 +171,7 @@
         </div>
     </div>
 
-    <script src="i18n.js?v=4"></script>
-    <script src="dashboard.js?v=4"></script>
+    <script src="i18n.js?v=7"></script>
+    <script src="dashboard.js?v=7"></script>
 </body>
 </html>
