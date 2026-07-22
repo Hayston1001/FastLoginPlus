@@ -106,6 +106,11 @@
     box-sizing: border-box;
 }
 
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
 body {
     font-family: var(--font-body);
     background: var(--bg);
@@ -320,8 +325,7 @@ body.page-login {
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;
-    transition: background var(--duration-fast) var(--ease),
-                transform var(--duration-fast) var(--ease);
+    transition: background 0.4s ease-out, transform var(--duration-fast) var(--ease);
 }
 
 #login-btn:hover { background: var(--primary-hover); }
@@ -356,6 +360,35 @@ body.page-login {
 }
 
 /* Login page top-right controls */
+.github-link {
+    position: absolute;
+    top: var(--space-lg);
+    left: var(--space-lg);
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-md);
+    color: #94A3B8;
+    transition: background 0.4s ease-out, color 0.4s ease-out;
+}
+
+.github-link:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #E2E8F0;
+}
+
+[data-theme="light"] .github-link {
+    color: var(--text-muted);
+}
+
+[data-theme="light"] .github-link:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--text);
+}
+
 .login-controls {
     position: absolute;
     top: var(--space-lg);
@@ -418,7 +451,7 @@ body.page-login {
     border-radius: var(--radius-md);
     color: #94A3B8;
     cursor: pointer;
-    transition: all var(--duration-normal) var(--ease);
+    transition: background 0.4s ease-out, color 0.4s ease-out, border-color 0.4s ease-out;
     padding: 0;
 }
 
@@ -668,12 +701,15 @@ header .theme-toggle:hover {
 }
 
 [data-theme="light"] .header-tabs .tab.active {
-    color: var(--text);
+    color: #16A34A;
 }
 
 [data-theme="light"] .header-tabs .tab:hover {
     color: var(--text);
-    background: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .header-tabs .tab.active:hover {
+    color: #16A34A;
 }
 
 [data-theme="light"] .hamburger {
@@ -704,8 +740,7 @@ header .theme-toggle:hover {
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: color var(--duration-fast) var(--ease),
-                border-color var(--duration-fast) var(--ease);
+    transition: color 0.4s ease-out, background 0.4s ease-out, border-color 0.4s ease-out;
     white-space: nowrap;
     margin-bottom: -1px;
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
@@ -778,6 +813,7 @@ header .theme-toggle:hover {
     cursor: pointer;
     border-radius: var(--radius-sm);
     padding: 0;
+    transition: background 0.4s ease-out, color 0.4s ease-out;
 }
 
 .sidebar-close:hover {
@@ -840,8 +876,12 @@ header .theme-toggle:hover {
 }
 
 [data-theme="light"] .sidebar-tabs .tab:hover {
-    background: rgba(0, 0, 0, 0.04);
     color: var(--text);
+}
+
+[data-theme="light"] .sidebar-tabs .tab.active:hover {
+    background: rgba(22, 163, 74, 0.08);
+    color: #16A34A;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -852,7 +892,7 @@ button {
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: all var(--duration-fast) var(--ease);
+    transition: background 0.4s ease-out, color 0.4s ease-out, border-color 0.4s ease-out, transform var(--duration-fast) var(--ease);
     outline: none;
 }
 
@@ -887,6 +927,12 @@ button {
 .btn-secondary:hover {
     background: var(--bg-hover);
     border-color: var(--text-dim);
+}
+
+#refresh-online-btn:hover,
+#refresh-bans-btn:hover {
+    border-color: var(--primary);
+    background: var(--primary-dim);
 }
 .btn-secondary:active { transform: scale(0.98); }
 
@@ -934,7 +980,7 @@ button {
     border-radius: var(--radius-sm);
     font-weight: 500;
     cursor: pointer;
-    transition: all var(--duration-fast) var(--ease);
+    transition: background 0.4s ease-out, color 0.4s ease-out, border-color 0.4s ease-out, transform var(--duration-fast) var(--ease);
 }
 
 .btn-action:active { transform: scale(0.96); }
@@ -1010,13 +1056,19 @@ main {
     font-size: 13px;
     outline: none;
     box-shadow: var(--shadow-sm);
-    transition: border-color var(--duration-fast) var(--ease),
-                box-shadow var(--duration-fast) var(--ease);
+    transition: border-color 0.4s ease-out,
+                box-shadow 0.4s ease-out,
+                background 0.4s ease-out;
 }
 
 .search-bar input:focus {
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+    background: var(--primary-dim);
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.2);
+}
+
+.search-bar input:hover {
+    border-color: var(--primary);
 }
 
 .search-bar input::placeholder { color: var(--text-dim); }
@@ -1088,7 +1140,7 @@ th {
 td { font-size: 13.5px; }
 
 tbody tr {
-    transition: background var(--duration-fast) var(--ease);
+    transition: background 0.4s ease-out;
 }
 
 tbody tr:hover { background: var(--bg-hover); }
@@ -1361,7 +1413,7 @@ tr.row-updated {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
-    max-width: 380px;
+    max-width: 300px;
     width: calc(100% - var(--space-lg) * 2);
     pointer-events: none;
 }
@@ -1401,7 +1453,8 @@ tr.row-updated {
 .toast-body { flex: 1; min-width: 0; }
 
 .toast-message {
-    font-size: 13.5px;
+    font-size: 14.5px;
+    font-weight: 600;
     color: var(--text);
     line-height: 1.4;
     word-break: break-word;
@@ -1430,10 +1483,10 @@ tr.row-updated {
 .toast-warning .toast-icon  { color: var(--warning); }
 .toast-info .toast-icon     { color: var(--info); }
 
-.toast-success { border-left: 3px solid var(--success); }
-.toast-error   { border-left: 3px solid var(--danger); }
-.toast-warning { border-left: 3px solid var(--warning); }
-.toast-info   { border-left: 3px solid var(--info); }
+.toast-success { box-shadow: inset 3px 0 0 var(--success), var(--shadow-lg); }
+.toast-error   { box-shadow: inset 3px 0 0 var(--danger), var(--shadow-lg); }
+.toast-warning { box-shadow: inset 3px 0 0 var(--warning), var(--shadow-lg); }
+.toast-info    { box-shadow: inset 3px 0 0 var(--info), var(--shadow-lg); }
 
 /* ════════════════════════════════════════════════════════
    DISCONNECT OVERLAY
@@ -1565,6 +1618,30 @@ tr.row-updated {
     background: #1C1C1F;
 }
 
+[data-theme="light"] th {
+    background: #E8ECE9;
+}
+
+/* Zebra striping */
+tbody tr:nth-child(even) {
+    background: rgba(0, 0, 0, 0.02);
+}
+
+[data-theme="dark"] tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* Hover must beat zebra striping */
+[data-theme="dark"] tbody tr:hover,
+[data-theme="dark"] tbody tr:nth-child(even):hover {
+    background: #142E1E;
+}
+
+[data-theme="light"] tbody tr:hover,
+[data-theme="light"] tbody tr:nth-child(even):hover {
+    background: #DCFCE7;
+}
+
 /* Dark theme modal */
 [data-theme="dark"] .modal-backdrop {
     background: rgba(0, 0, 0, 0.6);
@@ -1596,6 +1673,7 @@ tr.row-updated {
         border-radius: var(--radius-sm);
         padding: 0;
         flex-shrink: 0;
+        transition: background 0.4s ease-out, color 0.4s ease-out;
     }
 
     .hamburger:hover {
@@ -1685,7 +1763,15 @@ tr.row-updated {
         box-shadow: var(--shadow-sm);
     }
 
+    tbody tr:nth-child(even) {
+        background: var(--bg-card);
+    }
+
     tbody tr:hover { background: var(--bg-card); }
+    [data-theme="dark"] tbody tr:hover,
+    [data-theme="dark"] tbody tr:nth-child(even):hover,
+    [data-theme="light"] tbody tr:hover,
+    [data-theme="light"] tbody tr:nth-child(even):hover { background: var(--bg-card); }
 
     td {
         display: flex;
