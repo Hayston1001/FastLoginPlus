@@ -144,8 +144,8 @@ public class VerifyResponseTask implements Runnable {
 
         String requestedUsername = session.getRequestUsername();
         InetSocketAddress socketAddress = player.getAddress();
-        int retryCount = Math.max(1, (int) plugin.getCore().getConfig().get("mojang-retry-count"));
-        long retryDelay = (long) plugin.getCore().getConfig().get("mojang-retry-delay");
+        int retryCount = Math.max(1, ((Number) plugin.getCore().getConfig().get("mojang-retry-count")).intValue());
+        long retryDelay = ((Number) plugin.getCore().getConfig().get("mojang-retry-delay")).longValue();
 
         MojangResolver resolver = plugin.getCore().getResolver();
         InetAddress address = socketAddress.getAddress();

@@ -1,5 +1,13 @@
 # FastLoginPlus Changelog
 
+## v0.3.1 (Hotfix)
+
+### Bug Fix(Critical) / Bug 修复(紧急)
+
+- Fix `ClassCastException: Integer cannot be cast to Long` on login — SnakeYAML parses small numeric config values (e.g. `mojang-retry-delay: 500`) as `Integer`, but the code directly cast to `(long)` which crashes. Use `Number.longValue()`/`intValue()` for safe conversion across all numeric config reads
+
+- 修复登录时 `ClassCastException: Integer cannot be cast to Long` — SnakeYAML 将较小的数值配置（如 `mojang-retry-delay: 500`）解析为 `Integer`，但代码直接强转 `(long)` 导致崩溃。所有数值配置读取改用 `Number.longValue()`/`intValue()` 安全转换
+
 ## v0.3.0
 
 ### Bug Fixes(Major) / Bug 修复(主要)
