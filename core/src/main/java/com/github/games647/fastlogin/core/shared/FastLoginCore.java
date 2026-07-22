@@ -327,7 +327,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             storage = new SQLiteStorage(plugin, database, databaseConfig);
         } else {
             String host = (String) config.get("host");
-            int port = (int) config.get("port");
+            int port = ((Number) config.get("port")).intValue();
             boolean useSSL = (boolean) config.get("useSSL");
 
             if (useSSL) {
