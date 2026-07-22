@@ -221,7 +221,18 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 Bukkit.getOnlinePlayers().stream()
                     .map(Player::getName)
                     .collect(java.util.stream.Collectors.toList()));
-            webServer.start(host, port, token);
+
+            // Set TCCL to the plugin classloader so Javalin's ServiceLoader
+            // can discover SLF4J's SPI provider inside the shaded JAR.
+            // Bukkit's TCCL is the server classloader, which cannot see
+            // META-INF/services files bundled in plugin JARs.
+            ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
+            try {
+                webServer.start(host, port, token);
+            } finally {
+                Thread.currentThread().setContextClassLoader(originalTccl);
+            }
         } catch (Exception e) {
             logger.error("Failed to start web management panel", e);
         }
