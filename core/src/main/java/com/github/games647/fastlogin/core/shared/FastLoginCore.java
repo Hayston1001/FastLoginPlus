@@ -116,6 +116,17 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             return;
         }
 
+        // Auto-generate web panel token if empty (before ConfigRefresher so it gets persisted)
+        if (config.getBoolean("web.enabled")) {
+            String token = config.getString("web.token");
+            if (token == null || token.isEmpty()) {
+                token = generateRandomToken();
+                config.set("web.token", token);
+                plugin.getLog().info("Web panel token auto-generated: {}", token);
+                plugin.getLog().info("Token has been saved to config.yml");
+            }
+        }
+
         // Restore canonical comments and key order from the bundled template,
         // while preserving all user-modified values.
         try {
@@ -539,6 +550,17 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         }
 
         return config;
+    }
+
+    private static String generateRandomToken() {
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        byte[] bytes = new byte[16];
+        random.nextBytes(bytes);
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
     public void close() {

@@ -84,7 +84,7 @@ public class WebServer {
     /**
      * Start the HTTP server.
      *
-     * @param host  the host to bind to (e.g. "127.0.0.1")
+     * @param host  the host to bind to (empty string or {@code null} for all interfaces)
      * @param port  the port to listen on
      * @param token the Bearer token for authentication
      */
@@ -112,7 +112,7 @@ public class WebServer {
             }
 
             // Rate limiting
-            String clientIp = ctx.ip();
+            String clientIp = normalizeIp(ctx.ip());
             if (!checkRateLimit(clientIp)) {
                 ctx.status(429).json(java.util.Collections.singletonMap("error", "Too many requests"));
             }
@@ -201,6 +201,20 @@ public class WebServer {
             StatusApiHandler handler = new StatusApiHandler(pluginVersion, storage, antiBot, onlinePlayersSupplier);
             handler.handle(ctx);
         });
+    }
+
+    /**
+     * Normalize IPv4-mapped IPv6 addresses (e.g. "::ffff:192.168.1.1") to plain IPv4 ("192.168.1.1").
+     * Pure IPv6 addresses are returned unchanged.
+     *
+     * @param ip the IP address string to normalize
+     * @return the normalized IP address string
+     */
+    private static String normalizeIp(String ip) {
+        if (ip != null && ip.startsWith("::ffff:")) {
+            return ip.substring(7);
+        }
+        return ip;
     }
 
     private boolean checkRateLimit(String ip) {

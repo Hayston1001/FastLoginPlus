@@ -220,11 +220,15 @@ proxies:
 # Embedded web UI for managing players and viewing anti-bot stats
 web:
   enabled: false
-  # Host to bind to (use '127.0.0.1' for local access only)
+  # Host to bind to
+  #   '' (empty)  - all interfaces, IPv4 + IPv6
+  #   '0.0.0.0'   - all interfaces, IPv4 only
+  #   '::'        - all interfaces, IPv4 + IPv6
+  #   '127.0.0.1' - local access only (default)
   host: '127.0.0.1'
   # Port to listen on
   port: 8080
-  # Authentication token (min 16 characters, auto-generated if empty)
+  # Authentication token (min 16 characters, auto-generated on first start if empty)
   # Access the panel at http://host:port and enter this token
   token: ''
   # Language for the web panel. Built-in: "en" (English), "zh" (中文)

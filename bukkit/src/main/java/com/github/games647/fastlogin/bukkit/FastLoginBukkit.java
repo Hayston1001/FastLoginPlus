@@ -204,13 +204,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             int port = config.get("web.port", 8080);
             String token = config.get("web.token", "");
 
-            // Auto-generate token if empty
-            if (token == null || token.isEmpty()) {
-                token = generateRandomToken();
-                logger.info("Web panel token auto-generated: {}", token);
-                logger.info("Add this to your config.yml under web.token to persist it");
-            }
-
             if (token.length() < 16) {
                 logger.warn("Web panel token is too short (minimum 16 characters). Disabling web panel.");
                 return;
@@ -232,17 +225,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         } catch (Exception e) {
             logger.error("Failed to start web management panel", e);
         }
-    }
-
-    private String generateRandomToken() {
-        java.security.SecureRandom random = new java.security.SecureRandom();
-        byte[] bytes = new byte[16];
-        random.nextBytes(bytes);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        return sb.toString();
     }
 
     private void registerCommands() {
