@@ -184,11 +184,11 @@ public class ConnectListener implements Listener {
             if (UNIQUE_ID_SETTER != null) {
                 InitialHandler initialHandler = (InitialHandler) connection;
 
-                if (!plugin.getCore().getConfig().get("premiumUuid", true)) {
+                if (!(boolean) plugin.getCore().getConfig().get("premiumUuid")) {
                     setOfflineId(initialHandler, verifiedUsername);
                 }
 
-                if (!plugin.getCore().getConfig().get("forwardSkin", true)) {
+                if (!(boolean) plugin.getCore().getConfig().get("forwardSkin")) {
                     // this is null on offline mode
                     LoginResult loginProfile = initialHandler.getLoginProfile();
                     loginProfile.setProperties(emptyProperties);

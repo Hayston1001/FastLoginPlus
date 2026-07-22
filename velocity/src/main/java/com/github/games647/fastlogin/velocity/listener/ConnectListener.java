@@ -150,14 +150,14 @@ public class ConnectListener {
 
             StoredProfile playerProfile = session.getProfile();
             playerProfile.setId(verifiedUUID);
-            if (!plugin.getCore().getConfig().get("premiumUuid", true)) {
+            if (!(boolean) plugin.getCore().getConfig().get("premiumUuid")) {
                 UUID offlineUUID = UUIDAdapter.generateOfflineId(event.getUsername());
                 event.setGameProfile(event.getGameProfile().withId(offlineUUID));
                 plugin.getLog().info("Overridden UUID from {} to {} (based of {}) on {}",
                         verifiedUUID, offlineUUID, verifiedUsername, event.getConnection());
             }
 
-            if (!plugin.getCore().getConfig().get("forwardSkin", true)) {
+            if (!(boolean) plugin.getCore().getConfig().get("forwardSkin")) {
                 List<Property> newProp = removeSkin(event.getGameProfile().getProperties());
                 event.setGameProfile(event.getGameProfile().withProperties(newProp));
             }

@@ -84,7 +84,7 @@ public class PerIpRateLimiter {
      *
      * @param nowMs current time in milliseconds
      */
-    void cleanup(long nowMs) {
+    public void cleanup(long nowMs) {
         Iterator<Map.Entry<InetAddress, WindowCounter>> it = windows.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<InetAddress, WindowCounter> entry = it.next();

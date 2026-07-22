@@ -157,11 +157,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         pluginManager.registerEvents(new ConnectionListener(this), this);
 
-        // Folia is based on Paper — always apply PaperCacheListener for skin forwarding
-        if (getConfig().getBoolean("forwardSkin")) {
-            pluginManager.registerEvents(
-                    new com.github.games647.fastlogin.bukkit.listener.PaperCacheListener(this), this);
-        }
+        // Folia is based on Paper — register PaperCacheListener to set skin during
+        // AsyncPlayerPreLoginEvent before profile.complete(true) pulls from filledProfileCache.
+        // forwardSkin is checked inside the listener — when false, skin setting is skipped.
+        pluginManager.registerEvents(
+                new com.github.games647.fastlogin.bukkit.listener.PaperCacheListener(this), this);
 
         registerCommands();
 

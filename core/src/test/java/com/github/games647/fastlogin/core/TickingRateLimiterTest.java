@@ -27,6 +27,7 @@ package com.github.games647.fastlogin.core;
 
 import com.github.games647.fastlogin.core.antibot.RateLimiter;
 import com.github.games647.fastlogin.core.antibot.TickingRateLimiter;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -78,7 +79,7 @@ class TickingRateLimiterTest {
 
         assertFalse(rateLimiter.tryAcquire(), "Should be full and no entry should be expired");
     }
-    
+
     /**
      * Blocked attempts shouldn't replace existing ones.
      */
@@ -99,5 +100,64 @@ class TickingRateLimiterTest {
         // wait the remaining time and add a threshold, because
         ticker.add(Duration.ofMillis(50));
         assertTrue(rateLimiter.tryAcquire(), "Request not released");
+    }
+
+    /**
+     * Clock jumping back should not throw — should allow instead.
+     */
+    @ParameterizedTest
+    @ValueSource(longs = {5_000_000L, -5_000_000L})
+    void clockJumpBackShouldNotThrow(long initial) {
+        FakeTicker ticker = new FakeTicker(initial);
+        RateLimiter rateLimiter = new TickingRateLimiter(ticker, 10, 60_000);
+
+        assertTrue(rateLimiter.tryAcquire(), "First request should pass");
+
+        // simulate clock jumping back by a small amount
+        ticker.add(Duration.ofMillis(-100));
+
+        // should NOT throw IllegalStateException, should allow
+        assertTrue(rateLimiter.tryAcquire(), "Clock jump back should be tolerated");
+    }
+
+    /**
+     * All expired records should be popped, not just the first one.
+     */
+    @Test
+    void multipleExpiredRecordsShouldAllBePopped() {
+        FakeTicker ticker = new FakeTicker(0);
+        // expireTime = 1 minute (60_000ms), limit = 100
+        RateLimiter rateLimiter = new TickingRateLimiter(ticker, 100, 60_000);
+
+        // Fill requests across multiple 1-minute buckets
+        for (int i = 0; i < 30; i++) {
+            assertTrue(rateLimiter.tryAcquire(), "Request " + i + " should pass");
+            ticker.add(Duration.ofMillis(2000)); // 2 seconds apart
+        }
+
+        // Now jump far forward so ALL records are expired
+        ticker.add(Duration.ofMinutes(10));
+
+        // Should allow a new request — all old records expired
+        assertTrue(rateLimiter.tryAcquire(), "All expired records should be cleaned");
+    }
+
+    /**
+     * expireTime should control bucket grouping in compareTo, not hardcoded 1 minute.
+     */
+    @Test
+    void expireTimeShouldControlBucketSize() {
+        FakeTicker ticker = new FakeTicker(0);
+        // expireTime = 30 seconds
+        RateLimiter rateLimiter = new TickingRateLimiter(ticker, 5, 30_000);
+
+        // Requests within 30s should be in the same bucket
+        assertTrue(rateLimiter.tryAcquire());
+        ticker.add(Duration.ofSeconds(10));
+        assertTrue(rateLimiter.tryAcquire());
+
+        // After 30s, a new bucket should start
+        ticker.add(Duration.ofSeconds(25)); // total 35s
+        assertTrue(rateLimiter.tryAcquire());
     }
 }

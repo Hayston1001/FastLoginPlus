@@ -32,8 +32,11 @@ import java.net.InetSocketAddress;
 
 public class AntiBotService {
 
+    private static final int CLEANUP_INTERVAL = 100;
+
     private final Logger logger;
 
+    private final boolean enabled;
     private final RateLimiter globalLimiter;
     private final Action limitReachedAction;
 
@@ -41,11 +44,15 @@ public class AntiBotService {
     private final IpBanManager ipBanManager;
     private final PerIpRateLimiter perIpLimiter;
     private final long banDurationMs;
+    private int connectionCount;
 
-    public AntiBotService(Logger logger, RateLimiter globalLimiter, Action limitReachedAction,
-                          TrustedIpSet trustedIpSet, IpBanManager ipBanManager,
-                          PerIpRateLimiter perIpLimiter, long banDurationMs) {
+    // CHECKSTYLE.OFF: ParameterNumber — 8 params is intentional; enabled flag + all layers
+    public AntiBotService(Logger logger, boolean enabled, RateLimiter globalLimiter,
+                         Action limitReachedAction, TrustedIpSet trustedIpSet,
+                         IpBanManager ipBanManager, PerIpRateLimiter perIpLimiter,
+                         long banDurationMs) {
         this.logger = logger;
+        this.enabled = enabled;
         this.globalLimiter = globalLimiter;
         this.limitReachedAction = limitReachedAction;
         this.trustedIpSet = trustedIpSet;
@@ -53,6 +60,7 @@ public class AntiBotService {
         this.perIpLimiter = perIpLimiter;
         this.banDurationMs = banDurationMs;
     }
+    // CHECKSTYLE.ON: ParameterNumber
 
     /**
      * Check an incoming connection through the multi-layer anti-bot pipeline.
@@ -61,8 +69,8 @@ public class AntiBotService {
      * <ol>
      *   <li>Trusted IP → allow immediately</li>
      *   <li>Banned IP → reject</li>
-     *   <li>Per-IP rate limit → ban + reject if exceeded</li>
      *   <li>Global rate limit → reject if exceeded</li>
+     *   <li>Per-IP rate limit → ban + reject if exceeded</li>
      * </ol>
      *
      * @param clientAddress the client's socket address
@@ -70,6 +78,18 @@ public class AntiBotService {
      * @return the action to take
      */
     public Action onIncomingConnection(InetSocketAddress clientAddress, String username) {
+        if (!enabled) {
+            return Action.Continue;
+        }
+
+        // Periodic cleanup every N connections
+        if (++connectionCount >= CLEANUP_INTERVAL) {
+            connectionCount = 0;
+            long nowMs = System.currentTimeMillis();
+            perIpLimiter.cleanup(nowMs);
+            ipBanManager.cleanup();
+        }
+
         InetAddress address = clientAddress.getAddress();
 
         // 1. trusted IP — always allow
@@ -79,25 +99,51 @@ public class AntiBotService {
 
         // 2. banned IP — reject
         if (ipBanManager.isBanned(address)) {
-            logger.warn("Anti-Bot: banned IP rejected - {} ({})", username, clientAddress);
+            logUsername("Anti-Bot: banned IP rejected - {} ({})", username, clientAddress);
             return limitReachedAction;
         }
 
-        // 3. per-IP rate limit
+        // 3. global rate limit (check before per-IP to avoid wasting per-IP quota)
+        if (!globalLimiter.tryAcquire()) {
+            logUsername("Anti-Bot: global join limit - {} ({})", username, clientAddress);
+            return limitReachedAction;
+        }
+
+        // 4. per-IP rate limit
         if (!perIpLimiter.tryAcquire(address)) {
             ipBanManager.ban(address, banDurationMs);
-            logger.warn("Anti-Bot: per-IP limit exceeded, banning {} ({}) for {}ms",
+            logUsername("Anti-Bot: per-IP limit exceeded, banning {} ({}) for {}ms",
                     username, clientAddress, banDurationMs);
             return limitReachedAction;
         }
 
-        // 4. global rate limit
-        if (!globalLimiter.tryAcquire()) {
-            logger.warn("Anti-Bot: global join limit - {} ({})", username, clientAddress);
-            return limitReachedAction;
-        }
-
         return Action.Continue;
+    }
+
+    /**
+     * Sanitize a username for safe logging.
+     * Strips control characters and limits length to prevent log injection.
+     *
+     * @param username the raw username
+     * @return sanitized username safe for logging
+     */
+    private static String sanitizeUsername(String username) {
+        if (username == null) {
+            return "<null>";
+        }
+        // strip non-printable chars (newlines, ANSI escapes, etc.), limit to 32 chars
+        String sanitized = username.replaceAll("[\\p{Cc}\\p{Cf}]", "");
+        if (sanitized.length() > 32) {
+            sanitized = sanitized.substring(0, 32) + "...";
+        }
+        return sanitized.isEmpty() ? "<empty>" : sanitized;
+    }
+
+    private void logUsername(String format, String username, Object... extraArgs) {
+        Object[] args = new Object[extraArgs.length + 1];
+        args[0] = sanitizeUsername(username);
+        System.arraycopy(extraArgs, 0, args, 1, extraArgs.length);
+        logger.warn(format, args);
     }
 
     public enum Action {

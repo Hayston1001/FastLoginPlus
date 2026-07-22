@@ -144,8 +144,8 @@ public class VerifyResponseTask implements Runnable {
 
         String requestedUsername = session.getRequestUsername();
         InetSocketAddress socketAddress = player.getAddress();
-        int retryCount = plugin.getCore().getConfig().get("mojang-retry-count", 3);
-        long retryDelay = plugin.getCore().getConfig().get("mojang-retry-delay", 1000);
+        int retryCount = Math.max(1, (int) plugin.getCore().getConfig().get("mojang-retry-count"));
+        long retryDelay = (long) plugin.getCore().getConfig().get("mojang-retry-delay");
 
         MojangResolver resolver = plugin.getCore().getResolver();
         InetAddress address = socketAddress.getAddress();
@@ -192,7 +192,9 @@ public class VerifyResponseTask implements Runnable {
 
                 if (attempt < retryCount) {
                     try {
-                        Thread.sleep(retryDelay);
+                        // Exponential backoff: base delay * 2^(attempt-1), capped at 10 seconds
+                        long backoff = Math.min(retryDelay * (1L << (attempt - 1)), 10_000L);
+                        Thread.sleep(backoff);
                     } catch (InterruptedException interrupted) {
                         Thread.currentThread().interrupt();
                         disconnect("session-retry-exhausted",
@@ -337,6 +339,7 @@ public class VerifyResponseTask implements Runnable {
         kickPlayer(plugin.getCore().getMessage(reasonKey));
     }
 
+    @SuppressWarnings("deprecation") // kickPlayer needed — login state, kick(Component) won't work
     private void kickPlayer(String reason) {
         PacketContainer kickPacket = new PacketContainer(DISCONNECT);
         kickPacket.getChatComponents().write(0, WrappedChatComponent.fromText(reason));

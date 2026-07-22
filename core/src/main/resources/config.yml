@@ -150,8 +150,8 @@ useProxyAgnosticResolver: true
 # Session server retry when network error occurs
 # Total attempts per login
 mojang-retry-count: 3
-# Delay between retries in milliseconds
-mojang-retry-delay: 1000
+# Base delay between retries in milliseconds (exponential backoff: delay * 2^(attempt-1), capped at 10s)
+mojang-retry-delay: 500
 
 # ======[[ 1.19+ only ]]======
 # Verify client public key signature

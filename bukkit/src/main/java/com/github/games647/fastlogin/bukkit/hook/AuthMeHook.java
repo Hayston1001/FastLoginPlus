@@ -60,7 +60,7 @@ public class AuthMeHook implements AuthPlugin<Player>, Listener {
         this.plugin = plugin;
         this.authmeAPI = AuthMeApi.getInstance();
 
-        if (plugin.getCore().getConfig().getBoolean("respectIpLimit", false)) {
+        if (plugin.getCore().getConfig().getBoolean("respectIpLimit")) {
             try {
                 Field managementField = this.authmeAPI.getClass().getDeclaredField("management");
                 managementField.setAccessible(true);

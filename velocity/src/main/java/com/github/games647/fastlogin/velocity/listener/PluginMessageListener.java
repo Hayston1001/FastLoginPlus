@@ -100,7 +100,7 @@ public class PluginMessageListener {
             String playerName = changeMessage.getPlayerName();
             boolean isSourceInvoker = changeMessage.isSourceInvoker();
             if (changeMessage.shouldEnable()) {
-                Boolean premiumWarning = plugin.getCore().getConfig().get("premium-warning", true);
+                Boolean premiumWarning = (boolean) plugin.getCore().getConfig().get("premium-warning");
                 if (playerName.equals(sender.getUsername()) && premiumWarning
                     && !core.getPendingConfirms().contains(sender.getUniqueId())) {
                     String message = core.getMessage("premium-warning");
