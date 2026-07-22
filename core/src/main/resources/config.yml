@@ -217,15 +217,17 @@ proxies:
 # ========================================
 # Web Management Panel
 # ========================================
-# Embedded web UI for managing players and viewing anti-bot stats
+# Embedded web UI for managing players and viewing anti-bot stats.
+# In a proxy setup (BungeeCord/Velocity), enable this on the proxy only,
+# not on backend servers (Bukkit/Folia).
 web:
   enabled: false
   # Host to bind to
   #   '' (empty)  - all interfaces, IPv4 + IPv6
   #   '0.0.0.0'   - all interfaces, IPv4 only
   #   '::'        - all interfaces, IPv4 + IPv6
-  #   '127.0.0.1' - local access only (default)
-  host: '127.0.0.1'
+  #   '127.0.0.1' - local access only
+  host: ''
   # Port to listen on
   port: 8080
   # Authentication token (min 16 characters, auto-generated on first start if empty)
