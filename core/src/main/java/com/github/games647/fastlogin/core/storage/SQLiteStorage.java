@@ -137,6 +137,11 @@ public class SQLiteStorage extends SQLStorage {
         return CREATE_TABLE_STMT.replace("AUTO_INCREMENT", "AUTOINCREMENT");
     }
 
+    @Override
+    public String getDatabaseType() {
+        return "SQLite";
+    }
+
     private static String replacePathVariables(Path dataFolder, String input) {
         String pluginFolder = dataFolder.toAbsolutePath().toString();
         return input.replace("{pluginDir}", pluginFolder);

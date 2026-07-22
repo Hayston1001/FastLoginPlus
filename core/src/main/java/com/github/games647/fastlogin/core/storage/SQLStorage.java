@@ -331,7 +331,11 @@ public abstract class SQLStorage implements AuthStorage {
      * @return the database type string
      */
     public String getDatabaseType() {
-        return dataSource.getJdbcUrl().contains("sqlite") ? "SQLite" : "MySQL";
+        String jdbcUrl = dataSource.getJdbcUrl();
+        if (jdbcUrl == null) {
+            return "Unknown";
+        }
+        return jdbcUrl.contains("sqlite") ? "SQLite" : "MySQL";
     }
 
     /**
