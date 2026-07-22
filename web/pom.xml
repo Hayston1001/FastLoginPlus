@@ -68,7 +68,7 @@
                     <archive>
                         <manifestEntries>
                             <Multi-Release>true</Multi-Release>
-                            <Implementation-Version>${revision}-${git.commit.id.abbrev}</Implementation-Version>
+                            <Implementation-Version>${revision}-${buildNumber}</Implementation-Version>
                             <Implementation-Title>${project.name}</Implementation-Title>
                         </manifestEntries>
                     </archive>

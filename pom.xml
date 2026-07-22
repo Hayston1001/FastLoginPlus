@@ -38,6 +38,10 @@
     <version>${revision}</version>
 
     <url>https://github.com/Hayston1001/FastLoginPlus</url>
+    <scm>
+        <developerConnection>scm:git:.</developerConnection>
+        <url>https://github.com/Hayston1001/FastLoginPlus</url>
+    </scm>
     <description>
         Actively maintained fork of FastLogin with updates and feature enhancements
     </description>
@@ -109,7 +113,7 @@
 
     <build>
         <!--Just use the project name to replace an old version of the plugin if the user does only copy-paste-->
-        <finalName>${project.name}-${revision}-${git.commit.id.abbrev}</finalName>
+        <finalName>${project.name}-${revision}-${buildNumber}</finalName>
 
         <plugins>
             <plugin>
@@ -134,6 +138,7 @@
                                 <exclude>src/test/resources/**</exclude>
                                 <exclude>src/main/resources/**</exclude>
                                 <exclude>.java-version</exclude>
+                <exclude>dev_web_server.py</exclude>
                             </excludes>
                         </licenseSet>
                     </licenseSets>
@@ -204,7 +209,7 @@
                             <archive>
                                 <manifestEntries>
                                     <Multi-Release>true</Multi-Release>
-                                    <Implementation-Version>${revision}-${git.commit.id.abbrev}</Implementation-Version>
+                                    <Implementation-Version>${revision}-${buildNumber}</Implementation-Version>
                                     <Implementation-Title>${project.name}</Implementation-Title>
                                 </manifestEntries>
                             </archive>
@@ -213,28 +218,30 @@
                 </executions>
             </plugin>
 
-            <!-- Resolve ${revision} in published POMs -->
+            <!-- Get git commit hash for build versioning -->
             <plugin>
-                <groupId>io.github.git-commit-id</groupId>
-                <artifactId>git-commit-id-maven-plugin</artifactId>
-                <version>9.0.1</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
                 <executions>
                     <execution>
-                        <id>git-info</id>
-                        <phase>initialize</phase>
+                        <id>git-hash</id>
+                        <phase>validate</phase>
                         <goals>
-                            <goal>revision</goal>
+                            <goal>run</goal>
                         </goals>
+                        <configuration>
+                            <target>
+                                <exec executable="git" outputproperty="buildNumber">
+                                    <arg value="rev-parse"/>
+                                    <arg value="--short=7"/>
+                                    <arg value="HEAD"/>
+                                </exec>
+                            </target>
+                            <exportAntProperties>true</exportAntProperties>
+                        </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <generateGitPropertiesFile>true</generateGitPropertiesFile>
-                    <generateGitPropertiesFilename>
-                        ${project.build.outputDirectory}/git.properties
-                    </generateGitPropertiesFilename>
-                    <shortCommitLength>7</shortCommitLength>
-                    <failOnNoGitDirectory>false</failOnNoGitDirectory>
-                </configuration>
             </plugin>
 
             <plugin>
