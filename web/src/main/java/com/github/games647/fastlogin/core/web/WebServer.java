@@ -138,7 +138,7 @@ public class WebServer {
 
     private void registerRoutes() {
         // Language API
-        app.get("/api/lang/:code", ctx -> {
+        app.get("/api/lang/{code}", ctx -> {
             LangApiHandler handler = new LangApiHandler(log, pluginFolder);
             handler.handle(ctx);
         });
@@ -155,22 +155,22 @@ public class WebServer {
             handler.handleList(ctx);
         });
 
-        app.get("/api/players/:name", ctx -> {
+        app.get("/api/players/{name}", ctx -> {
             PlayerApiHandler handler = new PlayerApiHandler(storage);
             handler.handleGet(ctx);
         });
 
-        app.put("/api/players/:name/premium", ctx -> {
+        app.put("/api/players/{name}/premium", ctx -> {
             PlayerApiHandler handler = new PlayerApiHandler(storage);
             handler.handleSetPremium(ctx, true);
         });
 
-        app.put("/api/players/:name/cracked", ctx -> {
+        app.put("/api/players/{name}/cracked", ctx -> {
             PlayerApiHandler handler = new PlayerApiHandler(storage);
             handler.handleSetPremium(ctx, false);
         });
 
-        app.delete("/api/players/:name", ctx -> {
+        app.delete("/api/players/{name}", ctx -> {
             PlayerApiHandler handler = new PlayerApiHandler(storage);
             handler.handleDelete(ctx);
         });
@@ -191,7 +191,7 @@ public class WebServer {
             handler.handleBan(ctx);
         });
 
-        app.delete("/api/antibot/ban/:ip", ctx -> {
+        app.delete("/api/antibot/ban/{ip}", ctx -> {
             AntiBotApiHandler handler = new AntiBotApiHandler(antiBot);
             handler.handleUnban(ctx);
         });
