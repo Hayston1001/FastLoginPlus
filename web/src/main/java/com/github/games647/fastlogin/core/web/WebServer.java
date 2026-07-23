@@ -37,6 +37,10 @@ import com.github.games647.fastlogin.core.storage.SQLStorage;
 
 import io.javalin.Javalin;
 import io.javalin.http.staticfiles.Location;
+import io.javalin.json.JavalinJackson;
+
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 /**
  * Embedded HTTP server for the FastLoginPlus web management panel.
@@ -93,15 +97,21 @@ public class WebServer {
             // Serve static files from classpath
             config.staticFiles.add("/web", Location.CLASSPATH);
 
+            // Configure Jackson for proper Instant/UUID serialization
+            config.jsonMapper(new JavalinJackson().updateMapper(mapper -> {
+                mapper.registerModule(new JavaTimeModule());
+                mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+            }));
+
             // CORS configuration (disabled by default)
             config.plugins.enableCors(cors -> cors.add(it -> it.anyHost()));
         });
 
         // Authentication middleware
         app.before(ctx -> {
-            // Skip static file requests
+            // Skip static file requests and language API (public, no auth needed)
             String path = ctx.path();
-            if (!path.startsWith("/api/")) {
+            if (!path.startsWith("/api/") || path.startsWith("/api/lang/")) {
                 return;
             }
 

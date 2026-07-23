@@ -501,7 +501,7 @@ function renderPlayers() {
         playersTbody.innerHTML = playersData.players.map(player => `
             <tr>
                 <td data-label="${I18n.t('players.col.name')}">${escapeHtml(player.name)}</td>
-                <td data-label="${I18n.t('players.col.uuid')}"><code class="mono">${escapeHtml(player.uuid || '—')}</code></td>
+                <td data-label="${I18n.t('players.col.uuid')}"><code class="mono">${escapeHtml(player.id || '—')}</code></td>
                 <td data-label="${I18n.t('players.col.mode')}">${player.premium ? `<span class="badge badge-premium">${I18n.t('badge.premium')}</span>` : `<span class="badge badge-cracked">${I18n.t('badge.cracked')}</span>`}</td>
                 <td data-label="${I18n.t('players.col.floodgate')}">${getFloodgateBadge(player.floodgate)}</td>
                 <td data-label="${I18n.t('players.col.ip')}" class="mono">${escapeHtml(player.lastIp || '—')}</td>

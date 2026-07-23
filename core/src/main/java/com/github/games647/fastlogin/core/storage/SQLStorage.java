@@ -158,28 +158,40 @@ public abstract class SQLStorage implements AuthStorage {
 
     private Optional<StoredProfile> parseResult(ResultSet resultSet) throws SQLException {
         if (resultSet.next()) {
-            long userId = resultSet.getInt("UserID");
-
-            UUID uuid = Optional.ofNullable(resultSet.getString("UUID")).map(UUIDAdapter::parseId).orElse(null);
-
-            String name = resultSet.getString("Name");
-            boolean premium = resultSet.getBoolean("Premium");
-            int floodgateNum = resultSet.getInt("Floodgate");
-            FloodgateState floodgate;
-
-            // if the player wasn't migrated to the new database format
-            if (resultSet.wasNull()) {
-                floodgate = FloodgateState.NOT_MIGRATED;
-            } else {
-                floodgate = FloodgateState.fromInt(floodgateNum);
-            }
-
-            String lastIp = resultSet.getString("LastIp");
-            Instant lastLogin = resultSet.getTimestamp("LastLogin").toInstant();
-            return Optional.of(new StoredProfile(userId, uuid, name, premium, floodgate, lastIp, lastLogin));
+            return Optional.of(readCurrentRow(resultSet));
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * Read a StoredProfile from the current row without advancing the cursor.
+     * Used by loadAllProfiles/searchProfiles where the caller already called rs.next().
+     *
+     * @param resultSet the ResultSet positioned at the current row
+     * @return the StoredProfile read from the current row
+     * @throws SQLException if a database access error occurs
+     */
+    private StoredProfile readCurrentRow(ResultSet resultSet) throws SQLException {
+        long userId = resultSet.getInt("UserID");
+
+        UUID uuid = Optional.ofNullable(resultSet.getString("UUID")).map(UUIDAdapter::parseId).orElse(null);
+
+        String name = resultSet.getString("Name");
+        boolean premium = resultSet.getBoolean("Premium");
+        int floodgateNum = resultSet.getInt("Floodgate");
+        FloodgateState floodgate;
+
+        // if the player wasn't migrated to the new database format
+        if (resultSet.wasNull()) {
+            floodgate = FloodgateState.NOT_MIGRATED;
+        } else {
+            floodgate = FloodgateState.fromInt(floodgateNum);
+        }
+
+        String lastIp = resultSet.getString("LastIp");
+        Instant lastLogin = resultSet.getTimestamp("LastLogin").toInstant();
+        return new StoredProfile(userId, uuid, name, premium, floodgate, lastIp, lastLogin);
     }
 
     @Override
@@ -253,7 +265,7 @@ public abstract class SQLStorage implements AuthStorage {
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    parseResult(rs).ifPresent(profiles::add);
+                    profiles.add(readCurrentRow(rs));
                 }
             }
         } catch (SQLException ex) {
@@ -282,7 +294,7 @@ public abstract class SQLStorage implements AuthStorage {
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    parseResult(rs).ifPresent(profiles::add);
+                    profiles.add(readCurrentRow(rs));
                 }
             }
         } catch (SQLException ex) {
