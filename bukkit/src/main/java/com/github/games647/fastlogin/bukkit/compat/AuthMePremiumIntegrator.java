@@ -352,10 +352,12 @@ public final class AuthMePremiumIntegrator {
                     plugin.getLog().info("Cleared premium flag for {} in AuthMe 6.0 (DB + caches)", playerName);
                 }
             } else {
-                // AuthMe 5.x: no premium feature, no caches — just forceUnregister
-                // so the player can re-register with their own password.
+                // AuthMe 5.x: no premium feature, no caches.
+                // We can't distinguish FLP-created records (random password) from
+                // self-registered ones — 5.x has no Injector to reach DataSource.
+                // Always forceUnregister; worst case the player re-registers.
                 AuthMeApi api = AuthMeApi.getInstance();
-                if (api != null) {
+                if (api != null && api.isRegistered(lowerName)) {
                     api.forceUnregister(lowerName);
                     plugin.getLog().info("Unregistered {} from AuthMe 5.x", playerName);
                 }
