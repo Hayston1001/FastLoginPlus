@@ -48,13 +48,18 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin). See [full list](https://github.com/TuxCoding/FastLogin#supported-auth-plugins).
 
-## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 Support
+## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 5.x / 6.0 Support
 
-AuthMeReloaded 6.0 adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP has implemented compatibility support.
+FastLoginPlus supports both AuthMeReloaded 5.x and 6.0. When a player switches from premium to cracked via `/cracked`, FLP automatically cleans up the player's AuthMe record so they can log in normally with a password they set themselves.
 
-**Automatic setup:** FastLoginPlus now automatically enables AuthMeReloaded's premium automatic login(`enablePremium: true`) and unregisters AuthMeReloaded's own premium verification listener. No manual configuration is needed.
+**How it works:**
 
-> No configuration changes will occur for those not using AuthMeReloaded 5.x or the preJoin dialog.
+- **AuthMe 6.0** — FLP clears three layers: (1) AuthMe's in-memory caches that remember the player's premium status for up to 5 minutes, (2) the `premium_uuid` stored in AuthMe's database, and (3) if FLP originally created the account for this player (auto-registered first-time premium player with no password), it force-unregisters them from AuthMe so they can register their own password.
+- **AuthMe 5.x** — Simpler: FLP directly removes the player's AuthMe record. Since AuthMe 5.x has no premium feature, FLP auto-registered the player with a randomly generated password they never saw — deleting the record lets them re-register with a password they actually know.
+
+**Why this matters:** Without this cleanup, after `/cracked` the player reconnects and AuthMe asks for a password they don't have (FLP auto-registered them), making them stuck.
+
+> AuthMeReloaded 6.0 also adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP automatically enables `enablePremium: true` and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
 
 ## Bedrock Player Support (Geyser / Floodgate)
 

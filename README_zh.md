@@ -48,13 +48,18 @@
 
 需要后端安装登录插件(如 AuthMe、LoginSecurity、CrazyLogin).[完整列表](https://github.com/TuxCoding/FastLogin#supported-auth-plugins).
 
-## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 支持
+## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 5.x / 6.0 支持
 
-AuthMeReloaded 6.0 新增了 **preJoin 对话框(Paper) 以及enablePremium 配置**, FLP 针对此进行了适配.
+FastLoginPlus 同时支持 AuthMeReloaded 5.x 和 6.0。当玩家通过 `/cracked` 从正版切换为离线时，FLP 会自动清理该玩家在 AuthMe 中的记录，确保重进后能用自己的密码正常登录。
 
-**自动配置：** FastLoginPlus 现在会自动启用 AuthMeReloaded 的正版自动登录(`enablePremium: true`)并注销 AuthMeReloaded 自带的正版验证监听器.无需手动配置.
+**具体做了什么：**
 
-> 未使用 AuthMeReloaded 5.x 或未使用对话框(preJoin)的不会改变配置.
+- **AuthMe 6.0** — FLP 清理三层状态：(1) AuthMe 内存里记住"这个玩家是正版"的缓存（最长缓存5分钟），(2) AuthMe 数据库里的 `premium_uuid` 字段，以及 (3) 如果这个账号是 FLP 帮玩家自动创建的（首次进服的正版玩家，密码是空的），FLP 直接把这个账号删掉，让玩家自己重新注册。
+- **AuthMe 5.x** — 更简单：直接删除玩家在 AuthMe 的账号。因为 5.x 没有正版功能，FLP 之前是用随机生成的密码帮玩家自动注册的——玩家根本不知道密码是多少，删掉重来最直接。
+
+**为什么需要这个：** 如果没有这些清理，玩家 `/cracked` 后重进服务器，AuthMe 会弹出一个登录框要求输入密码——但 FLP 之前帮他注册时用的是随机密码，玩家不知道，直接卡住进不去。
+
+> AuthMeReloaded 6.0 还新增了 **preJoin 对话框(Paper) 以及 enablePremium 配置**，FLP 会自动启用 `enablePremium: true` 并注销 AuthMe 自带的正版验证监听器。无需手动配置。
 
 ## 基岩版玩家支持(Geyser / Floodgate)
 
