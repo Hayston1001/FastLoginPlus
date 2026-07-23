@@ -83,15 +83,21 @@ public class PlayerApiHandler {
 
         int offset = (page - 1) * size;
 
-        List<StoredProfile> players;
+        List<StoredProfile> profiles;
         int total;
 
         if (query != null && !query.isEmpty()) {
-            players = storage.searchProfiles(query, offset, size);
+            profiles = storage.searchProfiles(query, offset, size);
             total = storage.countProfiles(query);
         } else {
-            players = storage.loadAllProfiles(offset, size);
+            profiles = storage.loadAllProfiles(offset, size);
             total = storage.countProfiles(null);
+        }
+
+        // Convert to explicit DTOs so displayUuid is guaranteed in JSON output
+        List<PlayerEntry> players = new java.util.ArrayList<>();
+        for (StoredProfile p : profiles) {
+            players.add(new PlayerEntry(p));
         }
 
         Map<String, Object> response = new HashMap<>();
