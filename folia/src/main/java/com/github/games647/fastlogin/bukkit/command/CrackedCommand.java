@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.bukkit.command;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
+import com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator;
 import com.github.games647.fastlogin.bukkit.event.BukkitFastLoginPremiumToggleEvent;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import org.bukkit.command.Command;
@@ -72,6 +73,13 @@ public class CrackedCommand extends ToggleCommand {
             profile.setId(null);
             plugin.getScheduler().runAsync(() -> {
                 plugin.getCore().getStorage().save(profile);
+
+                // Clear AuthMe premium state so the player doesn't bypass on next join
+                AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
+                if (integrator != null && integrator.isAuthMePremiumEnabled()) {
+                    integrator.clearPlayerPremium(sender.getName());
+                }
+
                 plugin.getServer().getPluginManager().callEvent(
                         new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
                 );
