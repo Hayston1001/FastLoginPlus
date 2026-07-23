@@ -84,6 +84,7 @@
   "msg.unknown": "未知",
   "msg.connectionRestored": "连接已恢复",
   "msg.reconnectFailed": "重连失败，请稍后再试",
+  "msg.loadFailed": "加载数据失败，请检查服务器状态",
 
   "type.premium": "Java 正版",
   "type.cracked": "Java 离线",

@@ -190,7 +190,8 @@ public abstract class SQLStorage implements AuthStorage {
         }
 
         String lastIp = resultSet.getString("LastIp");
-        Instant lastLogin = resultSet.getTimestamp("LastLogin").toInstant();
+        java.sql.Timestamp ts = resultSet.getTimestamp("LastLogin");
+        Instant lastLogin = (ts != null) ? ts.toInstant() : java.time.Instant.EPOCH;
         return new StoredProfile(userId, uuid, name, premium, floodgate, lastIp, lastLogin);
     }
 
@@ -268,7 +269,7 @@ public abstract class SQLStorage implements AuthStorage {
                     profiles.add(readCurrentRow(rs));
                 }
             }
-        } catch (SQLException ex) {
+        } catch (Exception ex) {
             log.error("Failed to load profiles", ex);
         }
         return profiles;
@@ -297,7 +298,7 @@ public abstract class SQLStorage implements AuthStorage {
                     profiles.add(readCurrentRow(rs));
                 }
             }
-        } catch (SQLException ex) {
+        } catch (Exception ex) {
             log.error("Failed to search profiles", ex);
         }
         return profiles;

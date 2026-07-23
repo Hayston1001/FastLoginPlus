@@ -84,6 +84,7 @@
   "msg.unknown": "Unknown",
   "msg.connectionRestored": "Connection restored",
   "msg.reconnectFailed": "Reconnection failed, please try again later",
+  "msg.loadFailed": "Failed to load data. Please check server status.",
 
   "type.premium": "Java Premium",
   "type.cracked": "Java Cracked",

@@ -366,6 +366,10 @@ async function loadStatus() {
         }
     } catch (error) {
         console.error('Failed to load status:', error);
+        // Directly mark as disconnected — don't rely on api()'s 3-failure counter
+        // because the error may be HTTP 500 (not TypeError) or we may be on a tab
+        // whose countdown timer doesn't trigger API calls.
+        updateConnectionStatus(false);
     }
 }
 
@@ -490,6 +494,7 @@ async function loadPlayers() {
         renderPlayers();
     } catch (error) {
         hideTableSkeleton(playersTbody);
+        showToast('error', I18n.t('msg.loadFailed'));
         console.error('Failed to load players:', error);
     }
 }
