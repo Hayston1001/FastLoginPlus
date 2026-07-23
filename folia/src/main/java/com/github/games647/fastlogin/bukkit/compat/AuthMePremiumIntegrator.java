@@ -279,6 +279,56 @@ public final class AuthMePremiumIntegrator {
     }
 
     /**
+     * Clears the premium UUID for a player in AuthMe's database.
+     * Used when a player switches from premium to cracked mode via /cracked command.
+     * No-op if AuthMe 6.0 is not present, or if the player has no AuthMe record.
+     *
+     * @param playerName the player name
+     */
+    public void clearPlayerPremium(String playerName) {
+        if (!versionDetector.isAuthMe6()) {
+            return;
+        }
+        try {
+            Object injector = getAuthMeInjector();
+            if (injector == null) {
+                return;
+            }
+
+            // Get DataSource from AuthMe's DI injector
+            Class<?> dataSourceClass = Class.forName("fr.xephi.authme.datasource.DataSource");
+            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+            Object dataSource = getSingleton.invoke(injector, dataSourceClass);
+            if (dataSource == null) {
+                return;
+            }
+
+            String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
+
+            // Get the auth record
+            Method getAuth = dataSource.getClass().getMethod("getAuth", String.class);
+            Object auth = getAuth.invoke(dataSource, lowerName);
+            if (auth == null) {
+                // No AuthMe record — nothing to clear
+                return;
+            }
+
+            // Set premium UUID to null
+            Method setPremiumUuid = auth.getClass().getMethod("setPremiumUuid", UUID.class);
+            setPremiumUuid.invoke(auth, (UUID) null);
+
+            // Persist to database (SET premium_uuid = NULL)
+            Method updatePremium = dataSource.getClass().getMethod(
+                "updatePremiumUuid", auth.getClass());
+            updatePremium.invoke(dataSource, auth);
+
+            plugin.getLog().info("Cleared premium flag for {} in AuthMe database", playerName);
+        } catch (Exception e) {
+            plugin.getLog().debug("clearPlayerPremium failed: {}", e.getMessage());
+        }
+    }
+
+    /**
      * Pre-creates a PlayerAuth record with the premium UUID already set,
      * so that AuthMe's preJoin dialog check sees isPremium()=true and
      * skips the blocking register dialog for first-time premium players.
