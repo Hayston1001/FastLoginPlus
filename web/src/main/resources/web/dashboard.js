@@ -201,7 +201,6 @@ function attemptReconnect() {
 
     // Try to load status
     loadStatus().then(() => {
-        updateConnectionStatus(true);
         if (reconnectBtn) {
             reconnectBtn.disabled = false;
             reconnectBtn.textContent = I18n.t('disconnect.reconnect');
@@ -370,6 +369,7 @@ async function loadStatus() {
         // because the error may be HTTP 500 (not TypeError) or we may be on a tab
         // whose countdown timer doesn't trigger API calls.
         updateConnectionStatus(false);
+        throw error;
     }
 }
 

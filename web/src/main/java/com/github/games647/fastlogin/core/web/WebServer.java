@@ -40,6 +40,7 @@ import io.javalin.http.staticfiles.Location;
 import io.javalin.json.JavalinJackson;
 
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 /**
@@ -100,6 +101,7 @@ public class WebServer {
             // Configure Jackson for proper Instant/UUID serialization
             config.jsonMapper(new JavalinJackson().updateMapper(mapper -> {
                 mapper.registerModule(new JavaTimeModule());
+                mapper.registerModule(new Jdk8Module());
                 mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
             }));
 
