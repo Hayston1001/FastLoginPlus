@@ -98,6 +98,22 @@ public class StoredProfile extends Profile {
     }
 
     /**
+     * Returns the UUID for display in the WebUI.
+     * For premium players this is the Mojang UUID; for cracked players
+     * it computes the deterministic offline-mode UUID from the player name.
+     *
+     * @return the UUID string, never null
+     */
+    public synchronized String getDisplayUuid() {
+        if (id != null) {
+            return id.toString();
+        }
+        return UUID.nameUUIDFromBytes(
+            ("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        ).toString();
+    }
+
+    /**
      * @return whether the online mode should be enabled for this player
      * @deprecated {@link #isOnlinemodePreferred()} is recommended, because the name represents more its
      * meaning

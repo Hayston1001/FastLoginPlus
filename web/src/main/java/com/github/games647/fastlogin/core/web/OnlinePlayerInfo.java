@@ -26,7 +26,6 @@
 package com.github.games647.fastlogin.core.web;
 
 import java.time.Instant;
-import java.util.UUID;
 
 import com.github.games647.fastlogin.core.shared.FloodgateState;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -44,7 +43,7 @@ public class OnlinePlayerInfo {
 
     public OnlinePlayerInfo(StoredProfile profile) {
         this.name = profile.getName();
-        this.uuid = profile.getOptId().map(UUID::toString).orElse("");
+        this.uuid = profile.getDisplayUuid();
         this.type = determineLoginType(profile);
         this.lastIp = profile.getLastIp();
         this.lastLogin = profile.getLastLogin();

@@ -498,7 +498,7 @@ function renderPlayers() {
         playersTbody.innerHTML = playersData.players.map(player => `
             <tr>
                 <td data-label="${I18n.t('players.col.name')}">${escapeHtml(player.name)}</td>
-                <td data-label="${I18n.t('players.col.uuid')}"><code class="mono">${escapeHtml(player.id || '—')}</code></td>
+                <td data-label="${I18n.t('players.col.uuid')}"><code class="mono">${escapeHtml(player.displayUuid)}</code></td>
                 <td data-label="${I18n.t('players.col.mode')}">${player.premium ? `<span class="badge badge-premium">${I18n.t('badge.premium')}</span>` : `<span class="badge badge-cracked">${I18n.t('badge.cracked')}</span>`}</td>
                 <td data-label="${I18n.t('players.col.floodgate')}">${getFloodgateBadge(player.floodgate)}</td>
                 <td data-label="${I18n.t('players.col.ip')}" class="mono">${escapeHtml(player.lastIp || '—')}</td>
@@ -671,20 +671,20 @@ function mockData(endpoint, options) {
     if (endpoint === '/online') {
         return [
             { name: 'Steve', uuid: '8667ba71-b85a-4004-af54-457a9734eed7', type: 'premium', lastIp: '192.168.1.100' },
-            { name: 'Alex', uuid: '6ab43178-89fd-4905-97e5-7e71ef0632c2', type: 'cracked', lastIp: '10.0.0.5' },
+            { name: 'Alex', uuid: '1e6a5cd6-e89b-3b2c-a456-9abcdef01234', type: 'cracked', lastIp: '10.0.0.5' },
             { name: 'Notch', uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5', type: 'premium', lastIp: '172.16.0.1' },
-            { name: 'SteveBedrock', uuid: null, type: 'bedrock', lastIp: null },
+            { name: 'SteveBedrock', uuid: '3c7d8e9f-a0b1-4c2d-8e3f-56789abcdef0', type: 'bedrock', lastIp: null },
         ];
     }
 
     if (endpoint.startsWith('/players')) {
         const allPlayers = [
-            { name: 'Steve', uuid: '8667ba71-b85a-4004-af54-457a9734eed7', premium: true, floodgate: 'FALSE', lastIp: '192.168.1.100', lastLogin: new Date().toISOString() },
-            { name: 'Alex', uuid: '6ab43178-89fd-4905-97e5-7e71ef0632c2', premium: false, floodgate: 'FALSE', lastIp: '10.0.0.5', lastLogin: new Date(Date.now() - 120000).toISOString() },
-            { name: 'Notch', uuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5', premium: true, floodgate: 'FALSE', lastIp: '172.16.0.1', lastLogin: new Date(Date.now() - 300000).toISOString() },
-            { name: 'jeb_', uuid: '853c80ef-3c37-49fd-aa49-938b674adae6', premium: true, floodgate: 'FALSE', lastIp: '10.0.0.99', lastLogin: new Date(Date.now() - 86400000).toISOString() },
-            { name: 'SteveBedrock', uuid: null, premium: false, floodgate: 'TRUE', lastIp: null, lastLogin: new Date(Date.now() - 600000).toISOString() },
-            { name: 'TestPlayer', uuid: null, premium: false, floodgate: 'FALSE', lastIp: '192.168.1.200', lastLogin: new Date(Date.now() - 172800000).toISOString() },
+            { name: 'Steve', id: '8667ba71-b85a-4004-af54-457a9734eed7', displayUuid: '8667ba71-b85a-4004-af54-457a9734eed7', premium: true, floodgate: 'FALSE', lastIp: '192.168.1.100', lastLogin: new Date().toISOString() },
+            { name: 'Alex', id: null, displayUuid: '1e6a5cd6-e89b-3b2c-a456-9abcdef01234', premium: false, floodgate: 'FALSE', lastIp: '10.0.0.5', lastLogin: new Date(Date.now() - 120000).toISOString() },
+            { name: 'Notch', id: '069a79f4-44e9-4726-a5be-fca90e38aaf5', displayUuid: '069a79f4-44e9-4726-a5be-fca90e38aaf5', premium: true, floodgate: 'FALSE', lastIp: '172.16.0.1', lastLogin: new Date(Date.now() - 300000).toISOString() },
+            { name: 'jeb_', id: '853c80ef-3c37-49fd-aa49-938b674adae6', displayUuid: '853c80ef-3c37-49fd-aa49-938b674adae6', premium: true, floodgate: 'FALSE', lastIp: '10.0.0.99', lastLogin: new Date(Date.now() - 86400000).toISOString() },
+            { name: 'SteveBedrock', id: null, displayUuid: '3c7d8e9f-a0b1-4c2d-8e3f-56789abcdef0', premium: false, floodgate: 'TRUE', lastIp: null, lastLogin: new Date(Date.now() - 600000).toISOString() },
+            { name: 'TestPlayer', id: null, displayUuid: '2b4d6f8a-1c3e-5d7b-9f0a-123456789abc', premium: false, floodgate: 'FALSE', lastIp: '192.168.1.200', lastLogin: new Date(Date.now() - 172800000).toISOString() },
         ];
         return { players: allPlayers, total: allPlayers.length, page: 1, size: 20, totalPages: 1 };
     }
