@@ -105,17 +105,20 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         // Detect AuthMe version and initialize compatibility layer
         authMeVersionDetector = new AuthMeVersionDetector();
-        if (authMeVersionDetector.isAuthMe6()) {
+        if (authMeVersionDetector.isAuthMePresent()) {
             authMePremiumIntegrator = new AuthMePremiumIntegrator(this, authMeVersionDetector);
-            logger.info("AuthMe 6.0+ detected: v{}", authMeVersionDetector.getVersion());
+            if (authMeVersionDetector.isAuthMe6()) {
+                logger.info("AuthMe 6.0+ detected: v{}", authMeVersionDetector.getVersion());
 
-            // FLP takes over premium verification: force enablePremium=true
-            // (persisted to AuthMe's config.yml) and unregister AuthMe's
-            // redundant PremiumVerificationPacketListener so FLP's ProtocolLib
-            // listener is the sole Mojang verification source.
-            authMePremiumIntegrator.enforceFlpPremiumControl();
-        } else if (authMeVersionDetector.isAuthMePresent()) {
-            logger.info("AuthMe 5.x detected — using standard FLP flow");
+                // FLP takes over premium verification: force enablePremium=true
+                // (persisted to AuthMe's config.yml) and unregister AuthMe's
+                // redundant PremiumVerificationPacketListener so FLP's ProtocolLib
+                // listener is the sole Mojang verification source.
+                authMePremiumIntegrator.enforceFlpPremiumControl();
+            } else {
+                logger.info("AuthMe 5.x detected: v{} — using standard FLP flow",
+                    authMeVersionDetector.getVersion());
+            }
         }
 
         if (getServer().getOnlineMode()) {
