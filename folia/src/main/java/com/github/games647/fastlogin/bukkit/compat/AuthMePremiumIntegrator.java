@@ -279,9 +279,12 @@ public final class AuthMePremiumIntegrator {
     }
 
     /**
-     * Clears the premium UUID for a player in AuthMe's database.
-     * Used when a player switches from premium to cracked mode via /cracked command.
-     * No-op if AuthMe 6.0 is not present, or if the player has no AuthMe record.
+     * Clears all premium state for a player in AuthMe when they switch to cracked mode.
+     * This includes the database record AND in-memory caches (PendingPremiumCache,
+     * PremiumLoginVerifier) to prevent AuthMe's canBypassWithPremium() from re-enabling
+     * premium from stale cached state.
+     *
+     * <p>No-op if AuthMe 6.0 is not present, or if the player has no AuthMe record.
      *
      * @param playerName the player name
      */
@@ -290,12 +293,36 @@ public final class AuthMePremiumIntegrator {
             return;
         }
         try {
+            String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
+
+            // 1. Clear PendingPremiumCache (5-minute TTL).
+            //    If left uncleared, canBypassWithPremium() will find the pending entry
+            //    and call finalizePendingPremium() which re-sets premium_uuid in the DB.
+            Object cache = getPendingPremiumCache();
+            if (cache != null) {
+                Method removePending = cache.getClass().getMethod("removePending", String.class);
+                removePending.invoke(cache, lowerName);
+                plugin.getLog().debug("Removed {} from AuthMe PendingPremiumCache", playerName);
+            }
+
+            // 2. Clear PremiumLoginVerifier verified session (60-second TTL).
+            //    This is the companion check in canBypassWithPremium()'s v3 path.
+            Object verifier = getPremiumLoginVerifier();
+            if (verifier != null) {
+                Field verifiedField = verifier.getClass().getDeclaredField("verified");
+                verifiedField.setAccessible(true);
+                @SuppressWarnings("unchecked")
+                java.util.concurrent.ConcurrentHashMap<String, Object> verifiedMap =
+                    (java.util.concurrent.ConcurrentHashMap<String, Object>) verifiedField.get(verifier);
+                verifiedMap.remove(lowerName);
+                plugin.getLog().debug("Removed {} from AuthMe PremiumLoginVerifier", playerName);
+            }
+
+            // 3. Clear premium_uuid in AuthMe's database.
             Object injector = getAuthMeInjector();
             if (injector == null) {
                 return;
             }
-
-            // Get DataSource from AuthMe's DI injector
             Class<?> dataSourceClass = Class.forName("fr.xephi.authme.datasource.DataSource");
             Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
             Object dataSource = getSingleton.invoke(injector, dataSourceClass);
@@ -303,26 +330,21 @@ public final class AuthMePremiumIntegrator {
                 return;
             }
 
-            String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
-
-            // Get the auth record
             Method getAuth = dataSource.getClass().getMethod("getAuth", String.class);
             Object auth = getAuth.invoke(dataSource, lowerName);
             if (auth == null) {
-                // No AuthMe record — nothing to clear
+                // No AuthMe record — caches are already cleared above, nothing more to do
                 return;
             }
 
-            // Set premium UUID to null
             Method setPremiumUuid = auth.getClass().getMethod("setPremiumUuid", UUID.class);
             setPremiumUuid.invoke(auth, (UUID) null);
 
-            // Persist to database (SET premium_uuid = NULL)
             Method updatePremium = dataSource.getClass().getMethod(
                 "updatePremiumUuid", auth.getClass());
             updatePremium.invoke(dataSource, auth);
 
-            plugin.getLog().info("Cleared premium flag for {} in AuthMe database", playerName);
+            plugin.getLog().info("Cleared premium flag for {} in AuthMe (DB + caches)", playerName);
         } catch (Exception e) {
             plugin.getLog().debug("clearPlayerPremium failed: {}", e.getMessage());
         }
