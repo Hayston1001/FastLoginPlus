@@ -222,6 +222,19 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     .map(Player::getName)
                     .collect(java.util.stream.Collectors.toList()));
 
+            // Premium toggle listener: kick player if kick-toggle is enabled
+            webServer.setPremiumToggleListener((playerName, premium) -> {
+                Player player = Bukkit.getPlayerExact(playerName);
+                if (player != null && core.getConfig().getBoolean("kick-toggle")) {
+                    String msg = core.getMessage("remove-premium");
+                    getScheduler().getSyncExecutor().execute(() -> {
+                        if (player.isOnline()) {
+                            player.kickPlayer(msg != null ? msg : "");
+                        }
+                    });
+                }
+            });
+
             // Set TCCL to the plugin classloader so Javalin's ServiceLoader
             // can discover SLF4J's SPI provider inside the shaded JAR.
             // Bukkit's TCCL is the server classloader, which cannot see

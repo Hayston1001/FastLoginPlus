@@ -153,6 +153,17 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
                 getProxy().getPlayers().stream()
                     .map(ProxiedPlayer::getName)
                     .collect(java.util.stream.Collectors.toList()));
+
+            // Premium toggle listener: kick player if kick-toggle is enabled
+            webServer.setPremiumToggleListener((playerName, premium) -> {
+                ProxiedPlayer player = getProxy().getPlayer(playerName);
+                if (player != null && core.getConfig().getBoolean("kick-toggle")) {
+                    String msg = core.getMessage("remove-premium");
+                    player.disconnect(
+                        new net.md_5.bungee.api.chat.TextComponent(msg != null ? msg : ""));
+                }
+            });
+
             webServer.start(host, port, token);
         } catch (Exception e) {
             logger.error("Failed to start web management panel", e);

@@ -22,11 +22,11 @@ const MAX_FAILURES = 3; // Show disconnect after 3 consecutive failures
 
 // ── Countdown Timer ──────────────────────────────
 let countdownTimer = null;
-let countdownSeconds = 5;
+let countdownSeconds = 3;
 
 function startCountdown() {
     stopCountdown();
-    countdownSeconds = 5;
+    countdownSeconds = 3;
     updateTimerDisplay();
     countdownTimer = setInterval(() => {
         countdownSeconds--;
@@ -35,7 +35,7 @@ function startCountdown() {
             // Trigger actual data refresh for current tab
             if (currentTab === 'online') loadOnlinePlayers();
             else if (currentTab === 'antibot') { loadAntiBotStats(); loadBans(); }
-            countdownSeconds = 5;
+            countdownSeconds = 3;
             setTimeout(() => {
                 if (countdownTimer) updateTimerDisplay();
             }, 500);
@@ -169,9 +169,6 @@ function updateConnectionStatus(connected) {
         connectionCheckFailures = 0;
         if (!isConnected) {
             isConnected = true;
-            if (statusInfo) {
-                statusInfo.classList.remove('disconnected');
-            }
             if (overlayEl) {
                 overlayEl.style.display = 'none';
             }
@@ -181,10 +178,6 @@ function updateConnectionStatus(connected) {
     } else {
         isConnected = false;
         stopCountdown();
-        if (statusInfo) {
-            statusInfo.classList.add('disconnected');
-            statusInfo.textContent = I18n.t('header.disconnected');
-        }
         if (overlayEl) {
             overlayEl.style.display = 'flex';
         }
@@ -359,7 +352,6 @@ async function loadStatus() {
     try {
         const status = await api('/status');
         if (isConnected) {
-            statusInfo.classList.remove('disconnected');
             statusInfo.setAttribute('data-timer', String(countdownSeconds));
             statusInfo.textContent = `v${status.version} | ${status.databaseType} | ${I18n.t('header.status.online')} ${status.onlinePlayers}`;
         }

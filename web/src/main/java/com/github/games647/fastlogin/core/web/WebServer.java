@@ -60,6 +60,7 @@ public class WebServer {
     private final java.nio.file.Path pluginFolder;
 
     private Supplier<List<String>> onlinePlayersSupplier;
+    private PremiumToggleListener premiumToggleListener;
     private Javalin app;
 
     // Simple per-IP rate limiting
@@ -84,6 +85,18 @@ public class WebServer {
      */
     public void setOnlinePlayersSupplier(Supplier<List<String>> supplier) {
         this.onlinePlayersSupplier = supplier;
+    }
+
+    /**
+     * Set the callback invoked when premium status is toggled via the WebUI.
+     *
+     * <p>Platform code should implement this to kick the player
+     * (per {@code kick-toggle} config) and fire toggle events.</p>
+     *
+     * @param listener the callback, or {@code null} to disable
+     */
+    public void setPremiumToggleListener(PremiumToggleListener listener) {
+        this.premiumToggleListener = listener;
     }
 
     /**
@@ -173,12 +186,12 @@ public class WebServer {
         });
 
         app.put("/api/players/{name}/premium", ctx -> {
-            PlayerApiHandler handler = new PlayerApiHandler(storage);
+            PlayerApiHandler handler = new PlayerApiHandler(storage, premiumToggleListener);
             handler.handleSetPremium(ctx, true);
         });
 
         app.put("/api/players/{name}/cracked", ctx -> {
-            PlayerApiHandler handler = new PlayerApiHandler(storage);
+            PlayerApiHandler handler = new PlayerApiHandler(storage, premiumToggleListener);
             handler.handleSetPremium(ctx, false);
         });
 

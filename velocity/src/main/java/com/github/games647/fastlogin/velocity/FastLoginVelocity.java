@@ -161,6 +161,18 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
                 server.getAllPlayers().stream()
                     .map(Player::getUsername)
                     .collect(java.util.stream.Collectors.toList()));
+
+            // Premium toggle listener: kick player if kick-toggle is enabled
+            webServer.setPremiumToggleListener((playerName, premium) -> {
+                server.getPlayer(playerName).ifPresent(player -> {
+                    if (core.getConfig().getBoolean("kick-toggle")) {
+                        String msg = core.getMessage("remove-premium");
+                        player.disconnect(
+                            net.kyori.adventure.text.Component.text(msg != null ? msg : ""));
+                    }
+                });
+            });
+
             webServer.start(host, port, token);
         } catch (Exception e) {
             logger.error("Failed to start web management panel", e);

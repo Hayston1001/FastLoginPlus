@@ -42,9 +42,22 @@ import io.javalin.http.Context;
 public class PlayerApiHandler {
 
     private final SQLStorage storage;
+    private final PremiumToggleListener toggleListener;
 
     public PlayerApiHandler(SQLStorage storage) {
         this.storage = storage;
+        this.toggleListener = null;
+    }
+
+    /**
+     * Creates a handler with a premium toggle listener for kick-on-toggle support.
+     *
+     * @param storage        the storage backend
+     * @param toggleListener callback invoked after premium status is toggled via the WebUI
+     */
+    public PlayerApiHandler(SQLStorage storage, PremiumToggleListener toggleListener) {
+        this.storage = storage;
+        this.toggleListener = toggleListener;
     }
 
     /**
@@ -124,7 +137,19 @@ public class PlayerApiHandler {
         }
 
         profile.setOnlinemodePreferred(premium);
+
+        // When switching to cracked (offline mode), clear the premium UUID
+        // so the player uses offline-mode UUID on next login
+        if (!premium) {
+            profile.setId(null);
+        }
+
         storage.save(profile);
+
+        // Notify platform so it can kick the player if kick-toggle is enabled
+        if (toggleListener != null) {
+            toggleListener.onPremiumToggle(name, premium);
+        }
 
         Map<String, Object> response = new HashMap<>();
         response.put("success", true);
