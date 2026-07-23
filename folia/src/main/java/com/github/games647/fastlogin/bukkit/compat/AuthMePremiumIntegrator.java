@@ -337,16 +337,54 @@ public final class AuthMePremiumIntegrator {
                 return;
             }
 
-            Method setPremiumUuid = auth.getClass().getMethod("setPremiumUuid", UUID.class);
-            setPremiumUuid.invoke(auth, (UUID) null);
+            // If the AuthMe record was created by FLP (empty password hash from
+            // preCreatePremiumAuth), delete the entire record so the player can
+            // register with their own password on rejoin. Otherwise just clear
+            // the premium flag — the player knows their own password.
+            boolean flpCreated = isFlpCreatedRecord(auth);
+            if (flpCreated) {
+                AuthMeApi api = AuthMeApi.getInstance();
+                if (api != null) {
+                    api.forceUnregister(lowerName);
+                    plugin.getLog().info("Unregistered {} from AuthMe (FLP-created record)", playerName);
+                }
+            } else {
+                Method setPremiumUuid = auth.getClass().getMethod("setPremiumUuid", UUID.class);
+                setPremiumUuid.invoke(auth, (UUID) null);
 
-            Method updatePremium = dataSource.getClass().getMethod(
-                "updatePremiumUuid", auth.getClass());
-            updatePremium.invoke(dataSource, auth);
+                Method updatePremium = dataSource.getClass().getMethod(
+                    "updatePremiumUuid", auth.getClass());
+                updatePremium.invoke(dataSource, auth);
 
-            plugin.getLog().info("Cleared premium flag for {} in AuthMe (DB + caches)", playerName);
+                plugin.getLog().info("Cleared premium flag for {} in AuthMe (DB + caches)", playerName);
+            }
         } catch (Exception e) {
             plugin.getLog().debug("clearPlayerPremium failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Checks whether the given PlayerAuth record was created by FLP (via
+     * preCreatePremiumAuth) rather than by the player themselves. FLP-created
+     * records have an empty password hash — the player never set a password.
+     *
+     * @param auth the PlayerAuth object (from AuthMe via reflection)
+     * @return true if the record's password hash is empty
+     */
+    private boolean isFlpCreatedRecord(Object auth) {
+        try {
+            // auth.getPassword() → HashedPassword, hashedPassword.getHash() → String
+            Method getPassword = auth.getClass().getMethod("getPassword");
+            Object hashedPassword = getPassword.invoke(auth);
+            if (hashedPassword == null) {
+                return false;
+            }
+            Method getHash = hashedPassword.getClass().getMethod("getHash");
+            String hash = (String) getHash.invoke(hashedPassword);
+            return hash == null || hash.isEmpty();
+        } catch (Exception e) {
+            plugin.getLog().debug("isFlpCreatedRecord check failed: {}", e.getMessage());
+            return false;
         }
     }
 
