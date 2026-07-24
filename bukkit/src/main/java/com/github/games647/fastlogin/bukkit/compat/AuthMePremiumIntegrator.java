@@ -68,6 +68,8 @@ public final class AuthMePremiumIntegrator {
     private Object authMeInjector;
     private Object pendingPremiumCache;
     private Object premiumLoginVerifier;
+    private Object dataSource;
+    private Object playerCache;
 
     public AuthMePremiumIntegrator(FastLoginBukkit plugin, AuthMeVersionDetector versionDetector) {
         this.plugin = plugin;
@@ -330,20 +332,30 @@ public final class AuthMePremiumIntegrator {
                     playerName, e.getMessage());
             }
 
-            // 3. Force-unregister the player's AuthMe record.
-            //    We always forceUnregister for /cracked because:
-            //    - If FLP created the record (empty or random password), the
-            //      player doesn't know the password → must re-register.
-            //    - If the player self-registered before FLP marked them premium,
-            //      they chose to switch to cracked and accept re-registration.
-            //    isFlpCreatedRecord() was unreliable: forceRegister() (autoRegister
-            //    config path) also creates non-empty password hashes that are
-            //    indistinguishable from user-created ones.
+            // 3. Delete the player's AuthMe database record and in-memory cache.
+            //    We use direct reflection on DataSource.removeAuth() and
+            //    PlayerCache.removePlayer() instead of AuthMeApi.forceUnregister()
+            //    because the AuthMe API schedules its work asynchronously via
+            //    Management.runTask() → BukkitService.runTaskOptionallyAsync().
+            //    That double-async (FLP async → AuthMe async) means the record
+            //    deletion races with the player's kick and reconnect.
             try {
-                AuthMeApi api = AuthMeApi.getInstance();
-                if (api != null && api.isRegistered(lowerName)) {
-                    api.forceUnregister(lowerName);
-                    plugin.getLog().info("Unregistered {} from AuthMe 6.0 (switched to cracked)", playerName);
+                // a) Delete from AuthMe's database (synchronous)
+                Object ds = getDataSource();
+                if (ds != null) {
+                    Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
+                    boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
+                    if (removed) {
+                        plugin.getLog().info("Removed {} from AuthMe 6.0 database (switched to cracked)", playerName);
+                    }
+                }
+
+                // b) Remove from AuthMe's in-memory player cache (synchronous)
+                Object cache = getPlayerCache();
+                if (cache != null) {
+                    Method removePlayer = cache.getClass().getMethod("removePlayer", String.class);
+                    removePlayer.invoke(cache, lowerName);
+                    plugin.getLog().debug("Removed {} from AuthMe PlayerCache", playerName);
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to unregister {} from AuthMe 6.0: {}",
@@ -501,6 +513,44 @@ public final class AuthMePremiumIntegrator {
         Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
         premiumLoginVerifier = getSingleton.invoke(injector, verifierClass);
         return premiumLoginVerifier;
+    }
+
+    /**
+     * Gets the {@code DataSource} singleton from AuthMe's DI injector.
+     *
+     * @return the DataSource instance, or null if not found
+     */
+    private Object getDataSource() throws Exception {
+        if (dataSource != null) {
+            return dataSource;
+        }
+        Object injector = getAuthMeInjector();
+        if (injector == null) {
+            return null;
+        }
+        Class<?> dsClass = Class.forName("fr.xephi.authme.datasource.DataSource");
+        Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+        dataSource = getSingleton.invoke(injector, dsClass);
+        return dataSource;
+    }
+
+    /**
+     * Gets the {@code PlayerCache} singleton from AuthMe's DI injector.
+     *
+     * @return the PlayerCache instance, or null if not found
+     */
+    private Object getPlayerCache() throws Exception {
+        if (playerCache != null) {
+            return playerCache;
+        }
+        Object injector = getAuthMeInjector();
+        if (injector == null) {
+            return null;
+        }
+        Class<?> cacheClass = Class.forName("fr.xephi.authme.data.auth.PlayerCache");
+        Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+        playerCache = getSingleton.invoke(injector, cacheClass);
+        return playerCache;
     }
 
     /**
