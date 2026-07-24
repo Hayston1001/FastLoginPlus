@@ -342,24 +342,37 @@ public final class AuthMePremiumIntegrator {
             try {
                 // a) Delete from AuthMe's database (synchronous)
                 Object ds = getDataSource();
-                if (ds != null) {
+                if (ds == null) {
+                    plugin.getLog().warn("Cannot clear AuthMe DB for {}: DataSource not available", playerName);
+                } else {
                     Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
                     boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
-                    if (removed) {
-                        plugin.getLog().info("Removed {} from AuthMe 6.0 database (switched to cracked)", playerName);
+                    plugin.getLog().info("AuthMe removeAuth({}) = {} (switched to cracked)", playerName, removed);
+                    if (!removed) {
+                        // Record might not exist or delete failed — verify
+                        Method getAuth = ds.getClass().getMethod("getAuth", String.class);
+                        Object auth = getAuth.invoke(ds, lowerName);
+                        if (auth != null) {
+                            plugin.getLog().warn(
+                                "AuthMe record for {} still exists after removeAuth returned false! "
+                                + "The DB delete did not take effect.", playerName);
+                        }
                     }
                 }
 
                 // b) Remove from AuthMe's in-memory player cache (synchronous)
-                Object cache = getPlayerCache();
-                if (cache != null) {
-                    Method removePlayer = cache.getClass().getMethod("removePlayer", String.class);
-                    removePlayer.invoke(cache, lowerName);
+                Object pc = getPlayerCache();
+                if (pc == null) {
+                    plugin.getLog().debug("Cannot clear AuthMe PlayerCache for {}: not available", playerName);
+                } else {
+                    Method removePlayer = pc.getClass().getMethod("removePlayer", String.class);
+                    removePlayer.invoke(pc, lowerName);
                     plugin.getLog().debug("Removed {} from AuthMe PlayerCache", playerName);
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to unregister {} from AuthMe 6.0: {}",
                     playerName, e.getMessage());
+                plugin.getLog().debug("AuthMe unregister exception trace", e);
             }
         } else {
             // AuthMe 5.x: no premium feature, no caches.
