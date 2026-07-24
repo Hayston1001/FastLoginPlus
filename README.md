@@ -1,6 +1,6 @@
 # FastLoginPlus
 
-[中文→](README_zh.md)
+[中文→](https://github.com/Hayston1001/FastLoginPlus/blob/main/README_zh.md)
 
 > **Auto-detect and login premium Minecraft players on offline-mode servers** — no password needed, no client mods required. Actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin).
 
@@ -21,12 +21,12 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 * **[AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 compatibility** — auto-detects AuthMeReloaded version without user config
 * **Offline Whitelist** — block unknown cracked players, allow premium via Mojang API. Replaces upstream `switchMode` which kicked new premium players
 * **Multi-layer anti-bot** — per-IP rate limiting, burst detection, temporary IP ban, trusted IP whitelist, and `FastLoginAntiBotEvent` for plugin integration
-* **Folia support** — dedicated module with Folia-compatible scheduler (`Entity.getScheduler()`, `Bukkit.getAsyncScheduler()`)
+* **[Folia](https://papermc.io/downloads/folia) support** — dedicated module with Folia-compatible scheduler
 * **Auto update check** — checks GitHub Releases on startup and periodically; notifies OPs in-game when a new version is available
 * **Multi-language** — built-in English and Chinese, custom language files supported, bilingual config comments
 * **SQLite on proxy platforms** — BungeeCord and Velocity now bundle SQLite JDBC driver; upstream only supports MySQL/MariaDB on proxies
 * **Session retry** — Mojang verification retries on network errors instead of failing immediately
-* **SkinsRestorer compatibility** — no longer overrides skins set via SkinsRestorer
+* **[SkinsRestorer](https://modrinth.com/plugin/skinsrestorer) compatibility** — no longer overrides skins set via SkinsRestorer
 * **Log readability** — human-readable login flow messages instead of raw packet dumps
 
 ## Quick Start
@@ -46,20 +46,11 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 | BungeeCord / Waterfall | 17+ | — |
 | Velocity | 17+ | — |
 
-An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin). See [full list](https://github.com/TuxCoding/FastLogin#supported-auth-plugins).
+An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin) [SeeFullList→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
 
 ## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 5.x / 6.0 Support
 
-FastLoginPlus supports both AuthMeReloaded 5.x and 6.0. When a player switches from premium to cracked via `/cracked`, FLP automatically cleans up the player's AuthMe record so they can log in normally with a password they set themselves.
-
-**How it works:**
-
-- **AuthMe 6.0** — FLP clears three layers: (1) AuthMe's in-memory caches that remember the player's premium status for up to 5 minutes, (2) the `premium_uuid` stored in AuthMe's database, and (3) if FLP originally created the account for this player (auto-registered first-time premium player with no password), it force-unregisters them from AuthMe so they can register their own password.
-- **AuthMe 5.x** — Simpler: FLP directly removes the player's AuthMe record. Since AuthMe 5.x has no premium feature, FLP auto-registered the player with a randomly generated password they never saw — deleting the record lets them re-register with a password they actually know.
-
-**Why this matters:** Without this cleanup, after `/cracked` the player reconnects and AuthMe asks for a password they don't have (FLP auto-registered them), making them stuck.
-
-> AuthMeReloaded 6.0 also adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP automatically enables `enablePremium: true` and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
+FastLoginPlus supports both AuthMeReloaded 5.x and 6.0. AuthMeReloaded 6.0 adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP automatically enables `enablePremium: true` and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
 
 ## Bedrock Player Support (Geyser / Floodgate)
 
@@ -81,6 +72,9 @@ FastLoginPlus works with [Geyser](https://geysermc.org/) to allow Bedrock player
 | `/flp delete <player>` | Delete player record | `fastloginplus.bukkit.command.delete` | op |
 
 Add `.other` suffix for targeting other players (default: op).
+
+> When a player switches from premium to cracked via `/flp cracked`, FLP will automatically purge the player’s records stored in AuthMeReloaded, ensuring the player can log in normally with their own password upon rejoining. Without this cleanup process, AuthMeReloaded will prompt the player for login credentials after they re-enter the server. However, when the player previously joined as a premium user, FLP automatically registered their account with a random password unknown to the player.  
+> For login plugins other than AuthMe, FLP does not have equivalent handling logic for the time being, requiring manual intervention.
 
 ## PlaceholderAPI
 
