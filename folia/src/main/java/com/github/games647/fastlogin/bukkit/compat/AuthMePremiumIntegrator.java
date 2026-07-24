@@ -293,21 +293,28 @@ public final class AuthMePremiumIntegrator {
         if (!versionDetector.isAuthMePresent()) {
             return;
         }
-        try {
-            String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
 
-            if (versionDetector.isAuthMe6()) {
-                // AuthMe 6.0: clear caches + DB premium flag + forceUnregister if FLP-created
+        String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
 
-                // 1. Clear PendingPremiumCache (5-minute TTL).
+        if (versionDetector.isAuthMe6()) {
+            // AuthMe 6.0: clear caches + DB premium flag + forceUnregister.
+            // Each step is independent — a failure in one does not skip the others.
+
+            // 1. Clear PendingPremiumCache (5-minute TTL).
+            try {
                 Object cache = getPendingPremiumCache();
                 if (cache != null) {
                     Method removePending = cache.getClass().getMethod("removePending", String.class);
                     removePending.invoke(cache, lowerName);
                     plugin.getLog().debug("Removed {} from AuthMe PendingPremiumCache", playerName);
                 }
+            } catch (Exception e) {
+                plugin.getLog().warn("Failed to clear AuthMe PendingPremiumCache for {}: {}",
+                    playerName, e.getMessage());
+            }
 
-                // 2. Clear PremiumLoginVerifier verified session (60-second TTL).
+            // 2. Clear PremiumLoginVerifier verified session (60-second TTL).
+            try {
                 Object verifier = getPremiumLoginVerifier();
                 if (verifier != null) {
                     Field verifiedField = verifier.getClass().getDeclaredField("verified");
@@ -318,77 +325,43 @@ public final class AuthMePremiumIntegrator {
                     verifiedMap.remove(lowerName);
                     plugin.getLog().debug("Removed {} from AuthMe PremiumLoginVerifier", playerName);
                 }
+            } catch (Exception e) {
+                plugin.getLog().warn("Failed to clear AuthMe PremiumLoginVerifier for {}: {}",
+                    playerName, e.getMessage());
+            }
 
-                // 3. Clear premium_uuid in AuthMe's database, or forceUnregister.
-                Object injector = getAuthMeInjector();
-                if (injector == null) {
-                    return;
+            // 3. Force-unregister the player's AuthMe record.
+            //    We always forceUnregister for /cracked because:
+            //    - If FLP created the record (empty or random password), the
+            //      player doesn't know the password → must re-register.
+            //    - If the player self-registered before FLP marked them premium,
+            //      they chose to switch to cracked and accept re-registration.
+            //    isFlpCreatedRecord() was unreliable: forceRegister() (autoRegister
+            //    config path) also creates non-empty password hashes that are
+            //    indistinguishable from user-created ones.
+            try {
+                AuthMeApi api = AuthMeApi.getInstance();
+                if (api != null && api.isRegistered(lowerName)) {
+                    api.forceUnregister(lowerName);
+                    plugin.getLog().info("Unregistered {} from AuthMe 6.0 (switched to cracked)", playerName);
                 }
-                Class<?> dataSourceClass = Class.forName("fr.xephi.authme.datasource.DataSource");
-                Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
-                Object dataSource = getSingleton.invoke(injector, dataSourceClass);
-                if (dataSource == null) {
-                    return;
-                }
-
-                Method getAuth = dataSource.getClass().getMethod("getAuth", String.class);
-                Object auth = getAuth.invoke(dataSource, lowerName);
-                if (auth == null) {
-                    return; // No record — caches already cleared, nothing more to do
-                }
-
-                if (isFlpCreatedRecord(auth)) {
-                    AuthMeApi api = AuthMeApi.getInstance();
-                    if (api != null) {
-                        api.forceUnregister(lowerName);
-                        plugin.getLog().info("Unregistered {} from AuthMe 6.0 (FLP-created record)", playerName);
-                    }
-                } else {
-                    Method setPremiumUuid = auth.getClass().getMethod("setPremiumUuid", UUID.class);
-                    setPremiumUuid.invoke(auth, (UUID) null);
-                    Method updatePremium = dataSource.getClass().getMethod(
-                        "updatePremiumUuid", auth.getClass());
-                    updatePremium.invoke(dataSource, auth);
-                    plugin.getLog().info("Cleared premium flag for {} in AuthMe 6.0 (DB + caches)", playerName);
-                }
-            } else {
-                // AuthMe 5.x: no premium feature, no caches.
-                // We can't distinguish FLP-created records (random password) from
-                // self-registered ones — 5.x has no Injector to reach DataSource.
-                // Always forceUnregister; worst case the player re-registers.
+            } catch (Exception e) {
+                plugin.getLog().warn("Failed to unregister {} from AuthMe 6.0: {}",
+                    playerName, e.getMessage());
+            }
+        } else {
+            // AuthMe 5.x: no premium feature, no caches.
+            // Always forceUnregister; worst case the player re-registers.
+            try {
                 AuthMeApi api = AuthMeApi.getInstance();
                 if (api != null && api.isRegistered(lowerName)) {
                     api.forceUnregister(lowerName);
                     plugin.getLog().info("Unregistered {} from AuthMe 5.x", playerName);
                 }
+            } catch (Exception e) {
+                plugin.getLog().warn("Failed to unregister {} from AuthMe 5.x: {}",
+                    playerName, e.getMessage());
             }
-        } catch (Exception e) {
-            plugin.getLog().debug("clearPlayerPremium failed: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Checks whether the given PlayerAuth record was created by FLP (via
-     * preCreatePremiumAuth) rather than by the player themselves. FLP-created
-     * records have an empty password hash — the player never set a password.
-     *
-     * @param auth the PlayerAuth object (from AuthMe via reflection)
-     * @return true if the record's password hash is empty
-     */
-    private boolean isFlpCreatedRecord(Object auth) {
-        try {
-            // auth.getPassword() → HashedPassword, hashedPassword.getHash() → String
-            Method getPassword = auth.getClass().getMethod("getPassword");
-            Object hashedPassword = getPassword.invoke(auth);
-            if (hashedPassword == null) {
-                return false;
-            }
-            Method getHash = hashedPassword.getClass().getMethod("getHash");
-            String hash = (String) getHash.invoke(hashedPassword);
-            return hash == null || hash.isEmpty();
-        } catch (Exception e) {
-            plugin.getLog().debug("isFlpCreatedRecord check failed: {}", e.getMessage());
-            return false;
         }
     }
 
