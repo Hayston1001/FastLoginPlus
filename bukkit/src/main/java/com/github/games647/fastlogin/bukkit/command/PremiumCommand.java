@@ -92,7 +92,7 @@ public class PremiumCommand extends ToggleCommand {
 
                 plugin.getScheduler().getSyncExecutor().execute(() -> {
                     if (plugin.getCore().getConfig().getBoolean("kick-toggle")) {
-                        player.kickPlayer(plugin.getCore().getMessage("remove-premium"));
+                        player.kickPlayer(plugin.getCore().getMessage("add-premium"));
                     } else {
                         plugin.getCore().sendLocaleMessage("add-premium", sender);
                     }
