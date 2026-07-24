@@ -76,7 +76,7 @@ public class CrackedCommand extends ToggleCommand {
 
                 // Clear AuthMe premium state so the player doesn't bypass on next join
                 AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
-                if (integrator != null && integrator.isAuthMePremiumEnabled()) {
+                if (integrator != null) {
                     integrator.clearPlayerPremium(sender.getName());
                 }
 
