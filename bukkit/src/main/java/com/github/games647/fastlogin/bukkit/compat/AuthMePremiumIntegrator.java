@@ -292,7 +292,10 @@ public final class AuthMePremiumIntegrator {
      * @param playerName the player name
      */
     public void clearPlayerPremium(String playerName) {
+        plugin.getLog().info("[FLP] clearPlayerPremium called for: {}", playerName);
+
         if (!versionDetector.isAuthMePresent()) {
+            plugin.getLog().warn("[FLP] clearPlayerPremium: AuthMe not present, aborting");
             return;
         }
 

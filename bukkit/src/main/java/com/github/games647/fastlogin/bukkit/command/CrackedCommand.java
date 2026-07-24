@@ -78,6 +78,9 @@ public class CrackedCommand extends ToggleCommand {
                 AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
                 if (integrator != null) {
                     integrator.clearPlayerPremium(sender.getName());
+                } else {
+                    plugin.getLog().warn("[FLP] CrackedCommand: authMePremiumIntegrator is null, "
+                        + "skipping AuthMe cleanup for {}", sender.getName());
                 }
 
                 plugin.getServer().getPluginManager().callEvent(
