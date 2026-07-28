@@ -66,10 +66,7 @@
                             <pattern>org.slf4j</pattern>
                             <shadedPattern>fastlogin.slf4j</shadedPattern>
                         </relocation>
-                        <relocation>
-                            <pattern>org.sqlite</pattern>
-                            <shadedPattern>fastlogin.sqlite</shadedPattern>
-                        </relocation>
+
                     </relocations>
                     <!-- Rename the service file too to let SLF4J api find our own relocated jdk logger -->
                     <!-- Located in META-INF/services -->
