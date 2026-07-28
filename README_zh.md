@@ -2,7 +2,7 @@
 
 [English→](https://github.com/Hayston1001/FastLoginPlus#FastLoginPlus)
 
-> **在离线模式 Minecraft 服务器上自动检测并登录正版玩家** — 无需密码, 无需客户端 Mod.基于 [FastLogin](https://github.com/TuxCoding/FastLogin) 的活跃维护分支.
+> **在离线模式 Minecraft 服务器上自动检测并登录正版玩家** — 无需密码, 无需客户端 Mod. 基于 [FastLogin](https://github.com/TuxCoding/FastLogin) 的活跃维护分支.
 
 许多 Minecraft 服务器运行在"离线模式"(不走 Mojang 认证)以允许盗版客户端加入, 但这迫使所有玩家——包括已购游戏的正版玩家——每次进入都要输密码.FastLoginPlus 在登录时通过 Mojang API 检查玩家身份：如果是正版, 直接跳过登录插件, 自动使用正版 UUID 和皮肤.
 
@@ -35,7 +35,19 @@
 
 **Folia：** 将 `FastLoginPlusFolia.jar` 放入 `plugins/` → 设置 `online-mode=false`
 
-**BungeeCord / Velocity：** 在代理和后端都安装 → 配置 `allowed-proxies.txt` → 启用 IP 转发 → 两端都设 `online-mode=false`
+**BungeeCord / Velocity：** 在代理和后端都安装 → 启用 IP 转发 → 两端都设 `online-mode=false` → 将代理的 ID 复制到后端的 `allowed-proxies.txt`（详见下方说明）
+
+<details>
+<summary>代理 ID 配置（点击展开）</summary>
+
+后端只接受来自受信任代理的登录指令。每个代理有一个唯一 UUID，需要加入后端的白名单：
+
+- **Velocity** — FLP 首次启动时自动生成 UUID 到 `plugins/fastloginplus/proxyId.txt`。从该文件复制 UUID。
+- **BungeeCord** — 使用 BungeeCord 自身的实例 UUID，在 `bungee/config.yml` 的 `connection_uuid` 字段中。
+
+将 UUID 粘贴到每个后端服务器的 `plugins/fastloginplus/allowed-proxies.txt` 中，每行一个 UUID。添加后重启后端。
+
+</details>
 
 ## 环境要求
 

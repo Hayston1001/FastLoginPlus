@@ -35,7 +35,19 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 **Folia:** drop `FastLoginPlusFolia.jar` in `plugins/` → set `online-mode=false`
 
-**BungeeCord / Velocity:** install on both proxy and backend → configure `allowed-proxies.txt` → enable IP forwarding → set `online-mode=false` on both
+**BungeeCord / Velocity:** install on both proxy and backend → enable IP forwarding → set `online-mode=false` on both → copy the proxy's ID into the backend's `allowed-proxies.txt` (see details below)
+
+<details>
+<summary>Proxy ID setup (click to expand)</summary>
+
+The backend only accepts login commands from trusted proxies. Each proxy has a unique UUID that must be added to the backend's whitelist:
+
+- **Velocity** — FLP auto-generates a UUID to `plugins/fastloginplus/proxyId.txt` on first start. Copy the UUID from that file.
+- **BungeeCord** — uses BungeeCord's own instance UUID from `bungee/config.yml` (the `connection_uuid` field).
+
+Paste the UUID into `plugins/fastloginplus/allowed-proxies.txt` on every backend server, one UUID per line. Restart the backends after adding the UUID.
+
+</details>
 
 ## Requirements
 
