@@ -85,15 +85,22 @@ public class CrackedCommand extends ToggleCommand {
                 + "skipping AuthMe cleanup for {}", playerName);
         }
 
+        // Always save profile locally, even in proxy setups.
+        // In proxy mode the backend's profile DB is separate from the proxy's DB —
+        // the proxy handles its own DB, but the backend must update its own record
+        // so that on the next reconnect it sees onlinemodePreferred=false and routes
+        // the player through startCrackedSession() instead of re-verifying with Mojang.
+        plugin.getScheduler().runAsync(() -> {
+            plugin.getCore().getStorage().save(profile);
+        });
+
         // Forward to proxy if enabled; proxy handles profile persistence + kick
         if (forwardCrackedCommand(sender, playerName)) {
             return;
         }
 
-        // Local path (no proxy): save profile + kick
+        // Local path (no proxy): event + kick
         plugin.getScheduler().runAsync(() -> {
-            plugin.getCore().getStorage().save(profile);
-
             plugin.getServer().getPluginManager().callEvent(
                     new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
             );
@@ -113,10 +120,6 @@ public class CrackedCommand extends ToggleCommand {
             return;
         }
 
-        if (forwardCrackedCommand(sender, args[0])) {
-            return;
-        }
-
         //todo: load async
         StoredProfile profile = plugin.getCore().getStorage().loadProfile(args[0]);
         if (profile == null) {
@@ -127,16 +130,30 @@ public class CrackedCommand extends ToggleCommand {
         //existing player is already cracked
         if (profile.isExistingPlayer() && !profile.isOnlinemodePreferred()) {
             plugin.getCore().sendLocaleMessage("not-premium-other", sender);
-        } else {
-            plugin.getCore().sendLocaleMessage("remove-premium-other", sender);
-
-            profile.setOnlinemodePreferred(false);
-            plugin.getScheduler().runAsync(() -> {
-                plugin.getCore().getStorage().save(profile);
-                plugin.getServer().getPluginManager().callEvent(
-                        new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER));
-            });
+            return;
         }
+
+        plugin.getCore().sendLocaleMessage("remove-premium-other", sender);
+
+        profile.setOnlinemodePreferred(false);
+        profile.setId(null);
+
+        // Always save locally — same reasoning as onCrackedSelf():
+        // backend profile must be updated even in proxy setups.
+        plugin.getScheduler().runAsync(() -> {
+            plugin.getCore().getStorage().save(profile);
+        });
+
+        // Forward to proxy if enabled; proxy handles proxy DB + kick
+        if (forwardCrackedCommand(sender, args[0])) {
+            return;
+        }
+
+        // Local path (no proxy): event
+        plugin.getScheduler().runAsync(() -> {
+            plugin.getServer().getPluginManager().callEvent(
+                    new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER));
+        });
     }
 
     private boolean forwardCrackedCommand(CommandSender sender, String target) {

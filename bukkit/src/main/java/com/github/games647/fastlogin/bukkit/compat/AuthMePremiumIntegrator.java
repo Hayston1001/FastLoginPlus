@@ -335,30 +335,31 @@ public final class AuthMePremiumIntegrator {
                     playerName, e.getMessage());
             }
 
-            // 3. Delete the player's AuthMe database record and in-memory cache.
-            //    We use direct reflection on DataSource.removeAuth() and
-            //    PlayerCache.removePlayer() instead of AuthMeApi.forceUnregister()
-            //    because the AuthMe API schedules its work asynchronously via
-            //    Management.runTask() → BukkitService.runTaskOptionallyAsync().
-            //    That double-async (FLP async → AuthMe async) means the record
-            //    deletion races with the player's kick and reconnect.
+            // 3. Delete the player's AuthMe database record, with cascade fallback.
+            //    Tier 1: removeAuth() — delete entire record (best outcome).
+            //    Tier 2: clear premium_uuid + reset password (if removeAuth fails
+            //            but the record still exists). This ensures isPremium()=false
+            //            so AuthMe's preJoin dialog won't be skipped, AND the player
+            //            won't be locked out by an unknown password.
+            //    We use direct reflection on DataSource instead of AuthMeApi because
+            //    the AuthMe API dispatches asynchronously (Management.runTask() →
+            //    BukkitService.runTaskOptionallyAsync()), causing a race with the kick.
             try {
-                // a) Delete from AuthMe's database (synchronous)
                 Object ds = getDataSource();
                 if (ds == null) {
                     plugin.getLog().warn("Cannot clear AuthMe DB for {}: DataSource not available", playerName);
                 } else {
+                    // Tier 1: try to delete the entire record
                     Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
                     boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
                     plugin.getLog().info("AuthMe removeAuth({}) = {} (switched to cracked)", playerName, removed);
+
                     if (!removed) {
-                        // Record might not exist or delete failed — verify
+                        // Tier 2: record still exists — clear premium_uuid + reset password
                         Method getAuth = ds.getClass().getMethod("getAuth", String.class);
                         Object auth = getAuth.invoke(ds, lowerName);
                         if (auth != null) {
-                            plugin.getLog().warn(
-                                "AuthMe record for {} still exists after removeAuth returned false! "
-                                + "The DB delete did not take effect.", playerName);
+                            fallbackClearAuthMeRecord(ds, auth, playerName);
                         }
                     }
                 }
@@ -379,18 +380,75 @@ public final class AuthMePremiumIntegrator {
             }
         } else {
             // AuthMe 5.x: no premium feature, no caches.
-            // Always forceUnregister; worst case the player re-registers.
+            // Try synchronous reflection first (direct DataSource access),
+            // fall back to async AuthMeApi if reflection fails.
+            try {
+                // Try to get DataSource from AuthMe plugin via reflection
+                Plugin authMePlugin = Bukkit.getPluginManager().getPlugin("AuthMe");
+                if (authMePlugin != null) {
+                    Field databaseField = authMePlugin.getClass().getDeclaredField("database");
+                    databaseField.setAccessible(true);
+                    Object ds = databaseField.get(authMePlugin);
+                    if (ds != null) {
+                        Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
+                        boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
+                        plugin.getLog().info(
+                            "AuthMe 5.x removeAuth({}) = {} (synchronous)", playerName, removed);
+                        if (removed) {
+                            return; // done synchronously
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                plugin.getLog().debug(
+                    "AuthMe 5.x synchronous cleanup failed for {}, falling back to async API: {}",
+                    playerName, e.getMessage());
+            }
+
+            // Fallback: async AuthMeApi
             try {
                 AuthMeApi api = AuthMeApi.getInstance();
                 if (api != null && api.isRegistered(lowerName)) {
                     api.forceUnregister(lowerName);
-                    plugin.getLog().info("Unregistered {} from AuthMe 5.x", playerName);
+                    plugin.getLog().info("Unregistered {} from AuthMe 5.x (async fallback)", playerName);
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to unregister {} from AuthMe 5.x: {}",
                     playerName, e.getMessage());
             }
         }
+    }
+
+    /**
+     * Fallback for when {@link #clearPlayerPremium(String)} cannot delete the
+     * AuthMe database record (removeAuth returns false). Clears the premium UUID
+     * so that {@code isPremium()=false} (AuthMe's preJoin dialog will be shown)
+     * and resets the password to an empty hash so the player can re-register.
+     *
+     * @param ds AuthMe's DataSource singleton
+     * @param auth the PlayerAuth record (non-null)
+     * @param playerName the player name (for logging)
+     */
+    private void fallbackClearAuthMeRecord(Object ds, Object auth, String playerName) throws Exception {
+        plugin.getLog().warn(
+            "AuthMe record for {} still exists after removeAuth returned false. "
+            + "Falling back to clear premium flag + reset password.", playerName);
+
+        // Clear premium UUID → isPremium() = false
+        Method setPremiumUuid = auth.getClass().getMethod("setPremiumUuid", UUID.class);
+        setPremiumUuid.invoke(auth, (UUID) null);
+        Method updatePremium = ds.getClass().getMethod("updatePremiumUuid", auth.getClass());
+        updatePremium.invoke(ds, auth);
+        plugin.getLog().info("Cleared premium flag for {} in AuthMe (fallback)", playerName);
+
+        // Reset password to empty → player can re-register
+        Class<?> hashedPwClass = Class.forName("fr.xephi.authme.security.crypts.HashedPassword");
+        Object emptyHash = hashedPwClass.getConstructor(String.class).newInstance("");
+        Method setPassword = auth.getClass().getMethod("setPassword", hashedPwClass);
+        setPassword.invoke(auth, emptyHash);
+        Method saveAuth = ds.getClass().getMethod("saveAuth", auth.getClass());
+        saveAuth.invoke(ds, auth);
+        plugin.getLog().info("Reset password for {} in AuthMe (fallback)", playerName);
     }
 
     /**
