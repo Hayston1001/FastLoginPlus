@@ -292,7 +292,14 @@ public final class AuthMePremiumIntegrator {
      * @param playerName the player name
      */
     public void clearPlayerPremium(String playerName) {
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("[FLP] clearPlayerPremium called for: {}", playerName);
+        }
+
         if (!versionDetector.isAuthMePresent()) {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().warn("[FLP] clearPlayerPremium: AuthMe not present, aborting");
+            }
             return;
         }
 
@@ -349,7 +356,10 @@ public final class AuthMePremiumIntegrator {
                     // Tier 1: try to delete the entire record
                     Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
                     boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
-                    plugin.getLog().info("AuthMe removeAuth({}) = {} (switched to cracked)", playerName, removed);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info(
+                            "AuthMe removeAuth({}) = {} (switched to cracked)", playerName, removed);
+                    }
 
                     if (!removed) {
                         // Tier 2: record still exists — clear premium_uuid + reset password
@@ -389,8 +399,10 @@ public final class AuthMePremiumIntegrator {
                     if (ds != null) {
                         Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
                         boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
-                        plugin.getLog().info(
-                            "AuthMe 5.x removeAuth({}) = {} (synchronous)", playerName, removed);
+                        if (plugin.getCore().isDebug()) {
+                            plugin.getLog().info(
+                                "AuthMe 5.x removeAuth({}) = {} (synchronous)", playerName, removed);
+                        }
                         if (removed) {
                             return; // done synchronously
                         }
@@ -407,7 +419,10 @@ public final class AuthMePremiumIntegrator {
                 AuthMeApi api = AuthMeApi.getInstance();
                 if (api != null && api.isRegistered(lowerName)) {
                     api.forceUnregister(lowerName);
-                    plugin.getLog().info("Unregistered {} from AuthMe 5.x (async fallback)", playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info(
+                            "Unregistered {} from AuthMe 5.x (async fallback)", playerName);
+                    }
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to unregister {} from AuthMe 5.x: {}",
@@ -480,7 +495,9 @@ public final class AuthMePremiumIntegrator {
         setPremiumUuid.invoke(auth, (UUID) null);
         Method updatePremium = ds.getClass().getMethod("updatePremiumUuid", auth.getClass());
         updatePremium.invoke(ds, auth);
-        plugin.getLog().info("Cleared premium flag for {} in AuthMe (fallback)", playerName);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Cleared premium flag for {} in AuthMe (fallback)", playerName);
+        }
 
         // Reset password to empty → player can re-register
         Class<?> hashedPwClass = Class.forName("fr.xephi.authme.security.crypts.HashedPassword");
@@ -489,7 +506,9 @@ public final class AuthMePremiumIntegrator {
         setPassword.invoke(auth, emptyHash);
         Method saveAuth = ds.getClass().getMethod("saveAuth", auth.getClass());
         saveAuth.invoke(ds, auth);
-        plugin.getLog().info("Reset password for {} in AuthMe (fallback)", playerName);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Reset password for {} in AuthMe (fallback)", playerName);
+        }
     }
 
     /**
