@@ -181,7 +181,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             premiumPlaceholder.register();
         }
 
-        skinsRestorerCompat = new SkinsRestorerCompat(logger);
+        skinsRestorerCompat = new SkinsRestorerCompat(this);
 
         scheduleUpdateCheck();
     }

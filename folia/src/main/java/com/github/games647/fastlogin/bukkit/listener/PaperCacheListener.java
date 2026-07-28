@@ -68,8 +68,10 @@ public class PaperCacheListener implements Listener {
             // filledProfileCache (which may hold a stale skin). SR's SkinProperty.tryParse
             // rejects empty values, so hasOnlineProperties() → false and SR applies its skin.
             if (plugin.getSkinsRestorerCompat().hasCustomSkin(session.getUuid())) {
-                plugin.getLog().debug("Skipping FastLogin skin for {} — SkinsRestorer custom skin detected",
-                        session.getUsername());
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("Skipping FastLogin skin for {} — SkinsRestorer custom skin detected",
+                    session.getUsername());
+                }
                 event.getPlayerProfile().setProperty(new ProfileProperty(Textures.KEY, "", ""));
                 break;
             }

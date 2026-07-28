@@ -249,7 +249,9 @@ public class VerifyResponseTask implements Runnable {
                 // needsRegistration() return false.
                 session.setRegistered(true);
             }
-            plugin.getLog().debug("Injected AuthMe 6.0 premium state for {}", requestedUsername);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Injected AuthMe 6.0 premium state for {}", requestedUsername);
+            }
         }
 
         // Schedule Netty pipeline modifications on the channel's event loop thread.
@@ -322,7 +324,9 @@ public class VerifyResponseTask implements Runnable {
     }
 
     private boolean enableEncryption(SecretKey loginKey) throws IllegalArgumentException {
-        plugin.getLog().debug("Enabling onlinemode encryption for {}", player.getAddress());
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Enabling onlinemode encryption for {}", player.getAddress());
+        }
         // Initialize method reflections
         if (encryptKeyMethod == null || encryptMethod == null) {
             Class<?> networkManagerClass = MinecraftReflection.getNetworkManagerClass();

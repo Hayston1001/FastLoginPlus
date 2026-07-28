@@ -62,7 +62,9 @@ public class BungeeListener implements PluginMessageListener {
         LoginActionMessage loginMessage = new LoginActionMessage();
         loginMessage.readFrom(dataInput);
 
-        plugin.getLog().debug("Received plugin message {}", loginMessage);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Received plugin message {}", loginMessage);
+        }
 
         Player targetPlayer = player;
         if (!loginMessage.getPlayerName().equals(player.getName())) {

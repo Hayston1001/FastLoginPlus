@@ -171,7 +171,9 @@ public class ProtocolLibListener extends PacketAdapter {
     private @NotNull PacketType getOverriddenType(PacketType packetType) {
         if (packetType.isDynamic()) {
             String vanillaName = packetType.getPacketClass().getName();
-            plugin.getLog().debug("Overriding packet type for unregistered packet type to fix ProtocolLib bug");
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Overriding packet type for unregistered packet type to fix ProtocolLib bug");
+            }
             if (vanillaName.endsWith("ServerboundHelloPacket")) {
                 return START;
             }

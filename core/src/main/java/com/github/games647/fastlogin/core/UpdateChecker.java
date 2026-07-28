@@ -46,11 +46,13 @@ public class UpdateChecker {
 
     private final Logger logger;
     private final String currentVersion;
+    private final boolean debug;
     private volatile String latestVersion;
 
-    public UpdateChecker(Logger logger, String currentVersion) {
+    public UpdateChecker(Logger logger, String currentVersion, boolean debug) {
         this.logger = logger;
         this.currentVersion = currentVersion;
+        this.debug = debug;
     }
 
     public String getCurrentVersion() {
@@ -77,7 +79,9 @@ public class UpdateChecker {
                 return true;
             }
         } catch (Exception e) {
-            logger.debug("Update check failed", e);
+            if (debug) {
+                logger.info("Update check failed", e);
+            }
         }
         return false;
     }

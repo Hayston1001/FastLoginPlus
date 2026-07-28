@@ -98,7 +98,9 @@ public final class AuthMePremiumIntegrator {
             YamlConfiguration config = YamlConfiguration.loadConfiguration(authMeConfig);
             return config.getBoolean("settings.enablePremium", false);
         } catch (Exception e) {
-            plugin.getLog().debug("Could not read AuthMe enablePremium: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Could not read AuthMe enablePremium: {}", e.getMessage());
+            }
             return false;
         }
     }
@@ -125,7 +127,9 @@ public final class AuthMePremiumIntegrator {
             YamlConfiguration config = YamlConfiguration.loadConfiguration(authMeConfig);
             return config.getBoolean("settings.registration.dialog.preJoin.enable", true);
         } catch (Exception e) {
-            plugin.getLog().debug("Could not read AuthMe preJoin setting: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Could not read AuthMe preJoin setting: {}", e.getMessage());
+            }
             return false;
         }
     }
@@ -157,7 +161,9 @@ public final class AuthMePremiumIntegrator {
             plugin.getLog().info("Auto-registered {} in AuthMe (premium)", player.getName());
             return true;
         } catch (Exception e) {
-            plugin.getLog().debug("AuthMe forceRegister failed: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("AuthMe forceRegister failed: {}", e.getMessage());
+            }
             return false;
         }
     }
@@ -183,9 +189,13 @@ public final class AuthMePremiumIntegrator {
             Method addPending = cache.getClass().getMethod(
                 "addPending", String.class, UUID.class);
             addPending.invoke(cache, playerName, mojangUuid);
-            plugin.getLog().debug("Injected pending premium for {} into AuthMe", playerName);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Injected pending premium for {} into AuthMe", playerName);
+            }
         } catch (Exception e) {
-            plugin.getLog().debug("PendingPremiumCache injection failed: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("PendingPremiumCache injection failed: {}", e.getMessage());
+            }
         }
     }
 
@@ -211,9 +221,13 @@ public final class AuthMePremiumIntegrator {
             Method storeVerified = verifier.getClass().getMethod(
                 "storeVerified", String.class, UUID.class);
             storeVerified.invoke(verifier, playerName, mojangUuid);
-            plugin.getLog().debug("Injected verified UUID for {} into AuthMe", playerName);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Injected verified UUID for {} into AuthMe", playerName);
+            }
         } catch (Exception e) {
-            plugin.getLog().debug("PremiumLoginVerifier injection failed: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("PremiumLoginVerifier injection failed: {}", e.getMessage());
+            }
         }
     }
 
@@ -275,7 +289,9 @@ public final class AuthMePremiumIntegrator {
             }
             return false;
         } catch (Exception e) {
-            plugin.getLog().debug("markPlayerAsPremium failed: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("markPlayerAsPremium failed: {}", e.getMessage());
+            }
             return false;
         }
     }
@@ -315,7 +331,9 @@ public final class AuthMePremiumIntegrator {
                 if (cache != null) {
                     Method removePending = cache.getClass().getMethod("removePending", String.class);
                     removePending.invoke(cache, lowerName);
-                    plugin.getLog().debug("Removed {} from AuthMe PendingPremiumCache", playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Removed {} from AuthMe PendingPremiumCache", playerName);
+                    }
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to clear AuthMe PendingPremiumCache for {}: {}",
@@ -332,7 +350,9 @@ public final class AuthMePremiumIntegrator {
                     java.util.concurrent.ConcurrentHashMap<String, Object> verifiedMap =
                         (java.util.concurrent.ConcurrentHashMap<String, Object>) verifiedField.get(verifier);
                     verifiedMap.remove(lowerName);
-                    plugin.getLog().debug("Removed {} from AuthMe PremiumLoginVerifier", playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Removed {} from AuthMe PremiumLoginVerifier", playerName);
+                    }
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to clear AuthMe PremiumLoginVerifier for {}: {}",
@@ -374,16 +394,22 @@ public final class AuthMePremiumIntegrator {
                 // b) Remove from AuthMe's in-memory player cache (synchronous)
                 Object pc = getPlayerCache();
                 if (pc == null) {
-                    plugin.getLog().debug("Cannot clear AuthMe PlayerCache for {}: not available", playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Cannot clear AuthMe PlayerCache for {}: not available", playerName);
+                    }
                 } else {
                     Method removePlayer = pc.getClass().getMethod("removePlayer", String.class);
                     removePlayer.invoke(pc, lowerName);
-                    plugin.getLog().debug("Removed {} from AuthMe PlayerCache", playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Removed {} from AuthMe PlayerCache", playerName);
+                    }
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to unregister {} from AuthMe 6.0: {}",
                     playerName, e.getMessage());
-                plugin.getLog().debug("AuthMe unregister exception trace", e);
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("AuthMe unregister exception trace", e);
+                }
             }
         } else {
             // AuthMe 5.x: no premium feature, no caches.
@@ -409,9 +435,11 @@ public final class AuthMePremiumIntegrator {
                     }
                 }
             } catch (Exception e) {
-                plugin.getLog().debug(
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info(
                     "AuthMe 5.x synchronous cleanup failed for {}, falling back to async API: {}",
                     playerName, e.getMessage());
+                }
             }
 
             // Fallback: async AuthMeApi
@@ -470,8 +498,10 @@ public final class AuthMePremiumIntegrator {
                 playerName);
             clearPlayerPremium(playerName);
         } catch (Exception e) {
-            plugin.getLog().debug(
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info(
                 "ensureNotPremium check failed for {}: {}", playerName, e.getMessage());
+            }
         }
     }
 
@@ -605,7 +635,9 @@ public final class AuthMePremiumIntegrator {
                 }
             }
         }
-        plugin.getLog().debug("Could not find AuthMe's Injector field");
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Could not find AuthMe's Injector field");
+        }
         return null;
     }
 
@@ -828,7 +860,9 @@ public final class AuthMePremiumIntegrator {
                 + "FLP is now the sole Mojang verification source.");
             return true;
         } catch (Exception e) {
-            plugin.getLog().debug("Failed to unregister premium packet listener: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Failed to unregister premium packet listener: {}", e.getMessage());
+            }
             return false;
         }
     }
