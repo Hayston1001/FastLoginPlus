@@ -293,11 +293,11 @@ public final class AuthMePremiumIntegrator {
      */
     public void clearPlayerPremium(String playerName) {
         if (plugin.getCore().isDebug()) {
-            plugin.getLog().info("[FLP] clearPlayerPremium called for: {}", playerName);
+            plugin.getLog().info("clearPlayerPremium called for: {}", playerName);
         }
 
         if (!versionDetector.isAuthMePresent()) {
-            plugin.getLog().warn("[FLP] clearPlayerPremium: AuthMe not present, aborting");
+            plugin.getLog().warn("clearPlayerPremium: AuthMe not present, aborting");
             return;
         }
 
@@ -441,7 +441,7 @@ public final class AuthMePremiumIntegrator {
     public void ensureNotPremium(String playerName) {
         if (!versionDetector.isAuthMe6()) {
             if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("[FLP] ensureNotPremium: {} skipped (not AuthMe 6.0)", playerName);
+                plugin.getLog().info("ensureNotPremium: {} skipped (not AuthMe 6.0)", playerName);
             }
             return;
         }
@@ -451,7 +451,7 @@ public final class AuthMePremiumIntegrator {
             Object ds = getDataSource();
             if (ds == null) {
                 if (plugin.getCore().isDebug()) {
-                    plugin.getLog().info("[FLP] ensureNotPremium: {} skipped (DataSource null)", playerName);
+                    plugin.getLog().info("ensureNotPremium: {} skipped (DataSource null)", playerName);
                 }
                 return;
             }
@@ -460,7 +460,7 @@ public final class AuthMePremiumIntegrator {
             Object auth = getAuth.invoke(ds, lowerName);
             if (auth == null) {
                 if (plugin.getCore().isDebug()) {
-                    plugin.getLog().info("[FLP] ensureNotPremium: {} clean (no AuthMe record)", playerName);
+                    plugin.getLog().info("ensureNotPremium: {} clean (no AuthMe record)", playerName);
                 }
                 return;
             }
@@ -470,7 +470,7 @@ public final class AuthMePremiumIntegrator {
             if (!premium) {
                 if (plugin.getCore().isDebug()) {
                     plugin.getLog().info(
-                        "[FLP] ensureNotPremium: {} clean (isPremium=false, normal cracked)", playerName);
+                        "ensureNotPremium: {} clean (isPremium=false, normal cracked)", playerName);
                 }
                 return;
             }
@@ -478,7 +478,7 @@ public final class AuthMePremiumIntegrator {
             // Stale premium record from a failed /cracked cleanup
             if (plugin.getCore().isDebug()) {
                 plugin.getLog().info(
-                    "[FLP] ensureNotPremium: {} STALE (isPremium=true) → triggering cleanup",
+                    "ensureNotPremium: {} STALE (isPremium=true) → triggering cleanup",
                     playerName);
             }
             clearPlayerPremium(playerName);

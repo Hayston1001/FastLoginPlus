@@ -293,12 +293,12 @@ public final class AuthMePremiumIntegrator {
      */
     public void clearPlayerPremium(String playerName) {
         if (plugin.getCore().isDebug()) {
-            plugin.getLog().info("[FLP] clearPlayerPremium called for: {}", playerName);
+            plugin.getLog().info("clearPlayerPremium called for: {}", playerName);
         }
 
         if (!versionDetector.isAuthMePresent()) {
             if (plugin.getCore().isDebug()) {
-                plugin.getLog().warn("[FLP] clearPlayerPremium: AuthMe not present, aborting");
+                plugin.getLog().warn("clearPlayerPremium: AuthMe not present, aborting");
             }
             return;
         }
@@ -466,7 +466,7 @@ public final class AuthMePremiumIntegrator {
 
             // Stale premium record from a failed /cracked cleanup
             plugin.getLog().info(
-                "[FLP] Stale premium record for {} detected during cracked login, cleaning up",
+                "Stale premium record for {} detected during cracked login, cleaning up",
                 playerName);
             clearPlayerPremium(playerName);
         } catch (Exception e) {

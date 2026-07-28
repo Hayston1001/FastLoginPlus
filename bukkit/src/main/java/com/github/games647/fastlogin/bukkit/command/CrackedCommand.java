@@ -81,7 +81,7 @@ public class CrackedCommand extends ToggleCommand {
         if (integrator != null) {
             integrator.clearPlayerPremium(playerName);
         } else {
-            plugin.getLog().warn("[FLP] CrackedCommand: authMePremiumIntegrator is null, "
+            plugin.getLog().warn("CrackedCommand: authMePremiumIntegrator is null, "
                 + "skipping AuthMe cleanup for {}", playerName);
         }
 
@@ -120,8 +120,20 @@ public class CrackedCommand extends ToggleCommand {
             return;
         }
 
+        String playerName = args[0];
+
+        // Always clear AuthMe locally — same as onCrackedSelf().
+        // AuthMe is on the backend, the proxy cannot access it.
+        AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
+        if (integrator != null) {
+            integrator.clearPlayerPremium(playerName);
+        } else if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("CrackedCommand: authMePremiumIntegrator is null, "
+                + "skipping AuthMe cleanup for {}", playerName);
+        }
+
         //todo: load async
-        StoredProfile profile = plugin.getCore().getStorage().loadProfile(args[0]);
+        StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
         if (profile == null) {
             sender.sendMessage("Error occurred");
             return;
@@ -145,7 +157,7 @@ public class CrackedCommand extends ToggleCommand {
         });
 
         // Forward to proxy if enabled; proxy handles proxy DB + kick
-        if (forwardCrackedCommand(sender, args[0])) {
+        if (forwardCrackedCommand(sender, playerName)) {
             return;
         }
 
