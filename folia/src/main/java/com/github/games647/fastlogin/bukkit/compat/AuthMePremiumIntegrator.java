@@ -417,6 +417,50 @@ public final class AuthMePremiumIntegrator {
     }
 
     /**
+     * Lightweight check called during cracked-session login to detect and clean
+     * up stale AuthMe premium records left over from a failed
+     * {@link #clearPlayerPremium(String)}. Only triggers full cleanup if the
+     * AuthMe record still has {@code isPremium()=true} — normal cracked players
+     * are not affected.
+     *
+     * @param playerName the player name
+     */
+    public void ensureNotPremium(String playerName) {
+        if (!versionDetector.isAuthMe6()) {
+            return;
+        }
+
+        String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
+        try {
+            Object ds = getDataSource();
+            if (ds == null) {
+                return;
+            }
+
+            Method getAuth = ds.getClass().getMethod("getAuth", String.class);
+            Object auth = getAuth.invoke(ds, lowerName);
+            if (auth == null) {
+                return; // no record — nothing to clean
+            }
+
+            Method isPremium = auth.getClass().getMethod("isPremium");
+            boolean premium = (boolean) isPremium.invoke(auth);
+            if (!premium) {
+                return; // normal cracked player — don't touch
+            }
+
+            // Stale premium record from a failed /cracked cleanup
+            plugin.getLog().info(
+                "[FLP] Stale premium record for {} detected during cracked login, cleaning up",
+                playerName);
+            clearPlayerPremium(playerName);
+        } catch (Exception e) {
+            plugin.getLog().debug(
+                "ensureNotPremium check failed for {}: {}", playerName, e.getMessage());
+        }
+    }
+
+    /**
      * Fallback for when {@link #clearPlayerPremium(String)} cannot delete the
      * AuthMe database record (removeAuth returns false). Clears the premium UUID
      * so that {@code isPremium()=false} (AuthMe's preJoin dialog will be shown)
