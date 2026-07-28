@@ -917,4 +917,45 @@ public final class AuthMePremiumIntegrator {
             Class.forName("fr.xephi.authme.settings.Settings"));
         reload.invoke(pes, settings);
     }
+
+    /**
+     * Closes AuthMe 6.0's blocking preJoin registration dialog for the given
+     * player by completing the pending register response CompletableFuture.
+     *
+     * @param playerId the player's connection UUID (v3 or v4, as assigned by Paper)
+     */
+    public void closePreJoinRegisterDialog(UUID playerId) {
+        if (!versionDetector.isAuthMe6()) {
+            return;
+        }
+        try {
+            Object injector = getAuthMeInjector();
+            if (injector == null) {
+                return;
+            }
+            Class<?> dialogListenerClass = Class.forName(
+                "fr.xephi.authme.listener.PaperDialogFlowListener");
+            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+            Object dialogListener = getSingleton.invoke(injector, dialogListenerClass);
+            if (dialogListener == null) {
+                return;
+            }
+            java.lang.reflect.Field responsesField = dialogListenerClass
+                .getDeclaredField("pendingRegisterResponses");
+            responsesField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>> responses =
+                (java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>>)
+                    responsesField.get(dialogListener);
+            java.util.concurrent.CompletableFuture<String> future = responses.get(playerId);
+            if (future != null) {
+                future.complete(null);
+                plugin.getLog().info("Closed AuthMe preJoin register dialog for {}", playerId);
+            }
+        } catch (Exception e) {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Failed to close AuthMe preJoin dialog: {}", e.getMessage());
+            }
+        }
+    }
 }

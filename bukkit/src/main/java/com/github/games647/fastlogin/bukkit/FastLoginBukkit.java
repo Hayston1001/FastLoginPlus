@@ -37,6 +37,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventPriority;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.geysermc.floodgate.api.FloodgateApi;
@@ -165,6 +166,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         getServer().getScheduler().runTaskLater(this, new DelayedAuthHook(this), 5L);
 
         pluginManager.registerEvents(new ConnectionListener(this), this);
+
+        // Register for Paper's AsyncPlayerConnectionConfigureEvent via reflection
+        // (Paper API is not in compile classpath — we target spigot-api).
+        // This lets us pre-create AuthMe premium records during the configuration
+        // phase, before AuthMe's own handler shows a blocking preJoin dialog.
+        registerPaperConfigureListener();
 
         // On Paper, profile.complete(true) is called right after AsyncPlayerPreLoginEvent.
         // This listener sets the skin during the event so that complete(true) sees textures
@@ -424,5 +431,93 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         } catch (ClassNotFoundException e) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * Dynamically registers a listener for Paper's
+     * {@code AsyncPlayerConnectionConfigureEvent} (LOWEST priority).
+     * <p>
+     * During the configuration phase, this handler asynchronously looks up the
+     * player's premium UUID from Mojang and pre-creates an AuthMe premium
+     * record.  By the time AuthMe's own handler (HIGHEST) checks the database,
+     * the record is ready and {@code shouldSkipPreJoinDialogForPremium()} returns
+     * true — the blocking preJoin dialog is skipped entirely.
+     * <p>
+     * Requires Paper 1.20.5+.  On other platforms (or older Paper) the event
+     * class won't be found and this silently does nothing.
+     */
+    private void registerPaperConfigureListener() {
+        try {
+            Class<?> rawClass = Class.forName(
+                "io.papermc.paper.event.player.AsyncPlayerConnectionConfigureEvent");
+            @SuppressWarnings("unchecked")
+            Class<? extends org.bukkit.event.Event> eventClass =
+                (Class<? extends org.bukkit.event.Event>) rawClass;
+            Bukkit.getPluginManager().registerEvent(
+                eventClass,
+                new org.bukkit.event.Listener() { },
+                EventPriority.LOWEST,
+                (listener, event) -> onPlayerConfigure(event),
+                this
+            );
+            logger.info("Registered Paper configure-phase listener for autoRegister");
+        } catch (ClassNotFoundException e) {
+            logger.info("Paper configure event not available — skipping");
+        } catch (Exception e) {
+            logger.warn("Failed to register Paper configure listener", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void onPlayerConfigure(Object event) {
+        if (!bungeeManager.isEnabled() || !getConfig().getBoolean("autoRegister")) {
+            return;
+        }
+
+        String playerName;
+        UUID connectionUuid;
+        java.net.InetSocketAddress address;
+        try {
+            Object conn = event.getClass().getMethod("getConnection").invoke(event);
+            Object profile = conn.getClass().getMethod("getProfile").invoke(conn);
+            playerName = (String) profile.getClass().getMethod("getName").invoke(profile);
+            connectionUuid = (UUID) profile.getClass().getMethod("getId").invoke(profile);
+            address = (java.net.InetSocketAddress) conn.getClass().getMethod("getClientAddress").invoke(conn);
+        } catch (Exception e) {
+            logger.warn("Failed to extract player info from configure event", e);
+            return;
+        }
+
+        // Run Mojang lookup asynchronously — the configuration phase thread
+        // must not be blocked.  If AuthMe's HIGHEST handler fires before our
+        // async task completes, the dialog flashes briefly and is closed by
+        // closePreJoinRegisterDialog().
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                java.util.Optional<com.github.games647.craftapi.model.Profile> mojang =
+                    core.getResolver().findProfile(playerName);
+                if (!mojang.isPresent()) {
+                    return;
+                }
+                UUID premiumUuid = mojang.get().getId();
+
+                com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+                    getAuthMePremiumIntegrator();
+                if (integrator != null && integrator.isAuthMePremiumEnabled()) {
+                    integrator.injectVerifiedUuid(playerName, premiumUuid);
+                    integrator.markPlayerAsPremium(playerName, premiumUuid);
+                    integrator.closePreJoinRegisterDialog(connectionUuid);
+                }
+
+                // Create session so ForceLoginTask auto-logs the player after join
+                BukkitLoginSession session = new BukkitLoginSession(playerName, true);
+                session.setUuid(premiumUuid);
+                session.setVerifiedPremium(true);
+                putSession(address, session);
+            } catch (Exception e) {
+                logger.warn("AutoRegister in configure phase failed for {}: {}",
+                    playerName, e.getMessage());
+            }
+        });
     }
 }

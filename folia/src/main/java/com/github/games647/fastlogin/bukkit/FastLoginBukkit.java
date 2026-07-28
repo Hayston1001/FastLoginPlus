@@ -37,6 +37,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventPriority;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.geysermc.floodgate.api.FloodgateApi;
@@ -159,6 +160,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         Bukkit.getGlobalRegionScheduler().runDelayed(this, task -> new DelayedAuthHook(this).run(), 5L);
 
         pluginManager.registerEvents(new ConnectionListener(this), this);
+
+        registerPaperConfigureListener();
 
         // Folia is based on Paper — register PaperCacheListener to set skin during
         // AsyncPlayerPreLoginEvent before profile.complete(true) pulls from filledProfileCache.
@@ -364,4 +367,75 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
         return geyserService;
     }
+
+    private void registerPaperConfigureListener() {
+        try {
+            Class<?> rawClass = Class.forName(
+                "io.papermc.paper.event.player.AsyncPlayerConnectionConfigureEvent");
+            @SuppressWarnings("unchecked")
+            Class<? extends org.bukkit.event.Event> eventClass =
+                (Class<? extends org.bukkit.event.Event>) rawClass;
+            Bukkit.getPluginManager().registerEvent(
+                eventClass,
+                new org.bukkit.event.Listener() { },
+                EventPriority.LOWEST,
+                (listener, event) -> onPlayerConfigure(event),
+                this
+            );
+            logger.info("Registered Paper configure-phase listener for autoRegister");
+        } catch (ClassNotFoundException e) {
+            logger.info("Paper configure event not available — skipping");
+        } catch (Exception e) {
+            logger.warn("Failed to register Paper configure listener", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void onPlayerConfigure(Object event) {
+        if (!bungeeManager.isEnabled() || !getConfig().getBoolean("autoRegister")) {
+            return;
+        }
+
+        String playerName;
+        java.util.UUID connectionUuid;
+        java.net.InetSocketAddress address;
+        try {
+            Object conn = event.getClass().getMethod("getConnection").invoke(event);
+            Object profile = conn.getClass().getMethod("getProfile").invoke(conn);
+            playerName = (String) profile.getClass().getMethod("getName").invoke(profile);
+            connectionUuid = (java.util.UUID) profile.getClass().getMethod("getId").invoke(profile);
+            address = (java.net.InetSocketAddress) conn.getClass().getMethod("getClientAddress").invoke(conn);
+        } catch (Exception e) {
+            logger.warn("Failed to extract player info from configure event", e);
+            return;
+        }
+
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                java.util.Optional<com.github.games647.craftapi.model.Profile> mojang =
+                    core.getResolver().findProfile(playerName);
+                if (!mojang.isPresent()) {
+                    return;
+                }
+                java.util.UUID premiumUuid = mojang.get().getId();
+
+                com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+                    getAuthMePremiumIntegrator();
+                if (integrator != null && integrator.isAuthMePremiumEnabled()) {
+                    integrator.injectVerifiedUuid(playerName, premiumUuid);
+                    integrator.markPlayerAsPremium(playerName, premiumUuid);
+                    integrator.closePreJoinRegisterDialog(connectionUuid);
+                }
+
+                BukkitLoginSession session = new BukkitLoginSession(playerName, true);
+                session.setUuid(premiumUuid);
+                session.setVerifiedPremium(true);
+                putSession(address, session);
+            } catch (Exception e) {
+                logger.warn("AutoRegister in configure phase failed for {}: {}",
+                    playerName, e.getMessage());
+            }
+        });
+    }
+
 }
