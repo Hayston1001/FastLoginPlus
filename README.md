@@ -35,7 +35,9 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 **Folia:** drop `FastLoginPlusFolia.jar` in `plugins/` → set `online-mode=false`
 
-**BungeeCord/Velocity:** install on both proxy and backend → enable IP forwarding → set `online-mode=false` on both → copy the proxy's ID into the backend's `allowed-proxies.txt` (see details below)
+### Proxy Configuration
+
+When running behind a proxy (BungeeCord or Velocity), the proxy must be configured to forward player information to backend servers. FLP relies on this to deliver login commands via plugin messages.
 
 <details>
 <summary>Proxy ID setup (click to expand)</summary>
@@ -49,38 +51,31 @@ Paste the UUID into `plugins/fastloginplus/allowed-proxies.txt` on every backend
 
 </details>
 
+#### Velocity
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `velocity.toml` → `player-info-forwarding-mode` | `modern` | **Required**. Without this, Velocity does not forward UUIDs, skins, or IPs — FLP's plugin messages will never reach the backend. |
+| `velocity.toml` → `online-mode` | `false` | FLP handles authentication per-connection via `forceOnlineMode()`; the proxy should not authenticate by default. |
+| Backend `server.properties` → `online-mode` | `false` | The proxy handles authentication; the backend must not repeat it. |
+
+`ping-passthrough` has no effect on FLP — it only controls the server list MOTD/player count display. Set it to whatever you prefer.
+
+#### BungeeCord
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `config.yml` → `ip_forward` | `true` | **Required**. Without this, BungeeCord does not forward UUIDs, skins, or IPs — FLP's plugin messages will never reach the backend. |
+| `config.yml` → `online_mode` | `false` | FLP enables per-connection via `connection.setOnlineMode(true)`; the proxy should not authenticate by default. |
+| Backend `server.properties` → `online-mode` | `false` | The proxy handles authentication; the backend must not repeat it. |
+
 ### Database Storage
 
 In **standalone mode** (no proxy), the database (`FastLogin.db` by default) is stored on each backend server under `plugins/fastloginplus/`.
 
 In **proxy mode** (BungeeCord/Velocity), the database is stored **only on the proxy**. Backend servers do not create a database — they simply execute the login/register commands sent by the proxy via plugin messages. `/flp premium` and `/flp cracked` commands on the backend forward to the proxy, and the proxy handles all profile reads and writes.
 
-### Proxy Configuration (Velocity)
-
-When running behind Velocity, the proxy itself must be configured to forward player information to backend servers. FLP relies on this to deliver login commands via plugin messages.
-
-| Setting | Value | Why |
-|---------|-------|-----|
-| `velocity.toml` → `player-info-forwarding-mode` | `modern` | **Required**. Without this, Velocity does not forward UUIDs, skins, or IPs — FLP's plugin messages will never reach the backend. |
-| `velocity.toml` → `online-mode` | `false` | FLP uses `forceOnlineMode()` to authenticate premium players on a per-connection basis. Setting this to `true` would authenticate all players (including cracked ones) and break the flow. |
-| Backend `server.properties` → `online-mode` | `false` | The proxy handles authentication; the backend must not repeat it. |
-
-`ping-passthrough` has no effect on FLP — it only controls the server list MOTD/player count display. Set it to whatever you prefer.
-
-**Backend setup for modern forwarding (Paper 1.14+):**
-
-```yaml
-# config/paper-global.yml
-proxies:
-  velocity:
-    enabled: true
-    secret: "<copy from velocity/forwarding.secret>"
-    online-mode: false
-```
-
-Also ensure `settings.bungeecord` is `false` in `spigot.yml` — modern and legacy forwarding are mutually exclusive.
-
-## Requirements
+## Environment
 
 | Platform | Java | Notes |
 |----------|------|-------|
