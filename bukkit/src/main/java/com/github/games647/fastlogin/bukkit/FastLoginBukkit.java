@@ -94,6 +94,15 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private AuthMeVersionDetector authMeVersionDetector;
     private AuthMePremiumIntegrator authMePremiumIntegrator;
 
+    // Players cracked while offline — their proxy toggle couldn't be relayed
+    // because no player was online.  Cleared on first configure-event check.
+    private final java.util.Set<String> pendingOfflineCracks =
+        java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public java.util.Set<String> getPendingOfflineCracks() {
+        return pendingOfflineCracks;
+    }
+
     public FastLoginBukkit() {
         this.logger = CommonUtil.initializeLoggerService(getLogger());
         this.scheduler = new BukkitScheduler(this, logger);
@@ -495,6 +504,13 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             address = (java.net.InetSocketAddress) conn.getClass().getMethod("getClientAddress").invoke(conn);
         } catch (Exception e) {
             logger.warn("Failed to extract player info from configure event", e);
+            return;
+        }
+
+        // Skip autoRegister for players whose /flp cracked toggle couldn't
+        // be relayed to the proxy (no online players to forward the message).
+        if (pendingOfflineCracks.remove(playerName)) {
+            logger.info("Skipping autoRegister for {}: pending offline crack", playerName);
             return;
         }
 
