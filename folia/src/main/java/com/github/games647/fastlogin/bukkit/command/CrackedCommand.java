@@ -38,6 +38,8 @@ import static com.github.games647.fastlogin.core.shared.event.FastLoginPremiumTo
 
 public class CrackedCommand extends ToggleCommand {
 
+    private static final String PERM_PREFIX = "fastloginplus.folia.command.";
+
     public CrackedCommand(FastLoginBukkit plugin) {
         super(plugin);
     }
@@ -56,6 +58,11 @@ public class CrackedCommand extends ToggleCommand {
 
     private void onCrackedSelf(CommandSender sender) {
         if (isConsole(sender)) {
+            return;
+        }
+
+        if (!sender.hasPermission(PERM_PREFIX + "cracked")) {
+            plugin.getCore().sendLocaleMessage("no-permission", sender);
             return;
         }
 
@@ -113,7 +120,7 @@ public class CrackedCommand extends ToggleCommand {
     }
 
     private void onCrackedOther(CommandSender sender, Command command, String[] args) {
-        if (!hasOtherPermission(sender, command)) {
+        if (!hasOtherPermission(sender, PERM_PREFIX + "cracked")) {
             return;
         }
 

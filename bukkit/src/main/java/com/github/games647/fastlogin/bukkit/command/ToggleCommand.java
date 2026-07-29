@@ -29,7 +29,6 @@ import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.ChannelMessage;
 import org.bukkit.Bukkit;
-import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -45,8 +44,8 @@ public abstract class ToggleCommand implements CommandExecutor {
         this.plugin = plugin;
     }
 
-    protected boolean hasOtherPermission(CommandSender sender, Command cmd) {
-        if (sender.hasPermission(cmd.getPermission() + ".other")) {
+    protected boolean hasOtherPermission(CommandSender sender, String basePermission) {
+        if (sender.hasPermission(basePermission + ".other")) {
             return true;
         }
 

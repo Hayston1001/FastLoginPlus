@@ -45,6 +45,8 @@ import java.util.stream.Collectors;
  */
 public class FlpCommand implements CommandExecutor, TabCompleter {
 
+    private static final String PERM_PREFIX = "fastloginplus.bukkit.command.";
+
     private final FastLoginBukkit plugin;
     private final PremiumCommand premiumCmd;
     private final CrackedCommand crackedCmd;
@@ -95,6 +97,7 @@ public class FlpCommand implements CommandExecutor, TabCompleter {
             String prefix = args.length == 0 ? "" : args[0].toLowerCase();
             return Arrays.stream(new String[]{"premium", "cracked", "delete"})
                     .filter(s -> s.startsWith(prefix))
+                    .filter(s -> sender.hasPermission(PERM_PREFIX + s))
                     .collect(Collectors.toList());
         }
 
