@@ -82,7 +82,15 @@ public abstract class ToggleCommand implements CommandExecutor {
         } else {
             Optional<? extends Player> optPlayer = Bukkit.getServer().getOnlinePlayers().stream().findFirst();
             if (!optPlayer.isPresent()) {
-                plugin.getLog().info("No player online to relay message — will retry");
+                plugin.getLog().info("No player online to relay message — "
+                    + "caching pending toggle and retrying");
+                // Cache so the configure listener skips autoRegister until the
+                // proxy message is delivered.  Without this, the configure
+                // listener runs on first reconnect (before the retry) and may
+                // re-create a premium record for a cracked player.
+                if (!activate) {
+                    plugin.getPendingOfflineCracks().add(target);
+                }
                 scheduleProxyMessageRetry(target, activate);
                 return;
             }
@@ -102,6 +110,10 @@ public abstract class ToggleCommand implements CommandExecutor {
                 Player sender = optPlayer.get();
                 ChannelMessage message = new ChangePremiumMessage(target, activate, false);
                 plugin.getBungeeManager().sendPluginMessage(sender, message);
+                // Also clear the pending cache — the proxy message is on its way.
+                if (!activate) {
+                    plugin.getPendingOfflineCracks().remove(target);
+                }
                 plugin.getLog().info("Relayed pending toggle for {}", target);
                 taskHolder[0].cancel();
             }
