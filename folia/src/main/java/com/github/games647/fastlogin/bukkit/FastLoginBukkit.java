@@ -424,11 +424,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        // Skip autoRegister for players whose toggle is pending delivery
+        // Pending toggles — cracked skips, premium allows despite UUID mismatch
         Boolean pendingActivate = pendingOfflineToggles.remove(playerName);
-        if (pendingActivate != null) {
-            logger.info("Skipping autoRegister for {}: pending {} toggle",
-                playerName, pendingActivate ? "premium" : "cracked");
+        final boolean isPendingPremium = Boolean.TRUE.equals(pendingActivate);
+        if (pendingActivate != null && !pendingActivate) {
+            logger.info("Skipping autoRegister for {}: pending cracked toggle", playerName);
             return;
         }
 
@@ -448,10 +448,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // premium AuthMe record — that would re-register a cracked
                 // player as premium behind the proxy's back.
                 if (!premiumUuid.equals(connectionUuid)) {
+                    if (!isPendingPremium) {
+                        logger.info(
+                            "Skipping autoRegister for {}: connection UUID {} != premium UUID {}",
+                            playerName, connectionUuid, premiumUuid);
+                        return;
+                    }
                     logger.info(
-                        "Skipping autoRegister for {}: connection UUID {} != premium UUID {}",
+                        "Pending premium toggle for {}: allowing autoRegister "
+                            + "despite UUID mismatch ({} vs {})",
                         playerName, connectionUuid, premiumUuid);
-                    return;
                 }
 
                 com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
