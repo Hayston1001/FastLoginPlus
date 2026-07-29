@@ -62,6 +62,24 @@ public class CrackedCommand extends ToggleCommand {
         Player player = (Player) sender;
         String playerName = sender.getName();
 
+        // Always clear AuthMe locally — AuthMe is on the backend,
+        // the proxy (BungeeCord/Velocity) cannot access it.
+        // This must run even when the command is forwarded to a proxy.
+        AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
+        if (integrator != null) {
+            integrator.clearPlayerPremium(playerName);
+        } else {
+            plugin.getLog().warn("CrackedCommand: authMePremiumIntegrator is null, "
+                + "skipping AuthMe cleanup for {}", playerName);
+        }
+
+        // Forward to proxy if enabled; proxy handles profile persistence,
+        // messages, kick — the backend has no DB in proxy mode.
+        if (forwardCrackedCommand(sender, playerName)) {
+            return;
+        }
+
+        // Local path (no proxy): load profile from local DB
         // todo: load async if
         StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
         if (!profile.isOnlinemodePreferred()) {
@@ -74,30 +92,9 @@ public class CrackedCommand extends ToggleCommand {
         profile.setOnlinemodePreferred(false);
         profile.setId(null);
 
-        // Always clear AuthMe locally — AuthMe is on the backend,
-        // the proxy (BungeeCord/Velocity) cannot access it.
-        // This must run even when the command is forwarded to a proxy.
-        AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
-        if (integrator != null) {
-            integrator.clearPlayerPremium(playerName);
-        } else {
-            plugin.getLog().warn("CrackedCommand: authMePremiumIntegrator is null, "
-                + "skipping AuthMe cleanup for {}", playerName);
-        }
-
-        // Always save profile locally, even in proxy setups.
-        // In proxy mode the backend's profile DB is separate from the proxy's DB —
-        // the proxy handles its own DB, but the backend must update its own record
-        // so that on the next reconnect it sees onlinemodePreferred=false and routes
-        // the player through startCrackedSession() instead of re-verifying with Mojang.
         plugin.getScheduler().runAsync(() -> {
             plugin.getCore().getStorage().save(profile);
         });
-
-        // Forward to proxy if enabled; proxy handles profile persistence + kick
-        if (forwardCrackedCommand(sender, playerName)) {
-            return;
-        }
 
         // Local path (no proxy): event + kick
         plugin.getScheduler().runAsync(() -> {
@@ -132,6 +129,13 @@ public class CrackedCommand extends ToggleCommand {
                 + "skipping AuthMe cleanup for {}", playerName);
         }
 
+        // Forward to proxy if enabled; proxy handles profile persistence,
+        // messages, kick — the backend has no DB in proxy mode.
+        if (forwardCrackedCommand(sender, playerName)) {
+            return;
+        }
+
+        // Local path (no proxy): load profile from local DB
         //todo: load async
         StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
         if (profile == null) {
@@ -150,16 +154,9 @@ public class CrackedCommand extends ToggleCommand {
         profile.setOnlinemodePreferred(false);
         profile.setId(null);
 
-        // Always save locally — same reasoning as onCrackedSelf():
-        // backend profile must be updated even in proxy setups.
         plugin.getScheduler().runAsync(() -> {
             plugin.getCore().getStorage().save(profile);
         });
-
-        // Forward to proxy if enabled; proxy handles proxy DB + kick
-        if (forwardCrackedCommand(sender, playerName)) {
-            return;
-        }
 
         // Local path (no proxy): event
         plugin.getScheduler().runAsync(() -> {
