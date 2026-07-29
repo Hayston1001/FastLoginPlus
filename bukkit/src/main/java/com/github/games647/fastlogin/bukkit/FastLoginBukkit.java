@@ -186,7 +186,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // (including AsyncPlayerConnectionConfigureEvent).
         if (isPaper() && bungeeManager.isEnabled()) {
             org.bukkit.event.player.PlayerLoginEvent.getHandlerList().unregister(connectionListener);
-            logger.info("[FLP] Unregistered PlayerLoginEvent listener to avoid HorriblePlayerLoginEventHack");
+            logger.info("Unregistered PlayerLoginEvent listener to avoid HorriblePlayerLoginEventHack");
         }
 
         // Register for Paper's AsyncPlayerConnectionConfigureEvent via reflection
@@ -469,7 +469,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * class won't be found and this silently does nothing.
      */
     private void registerPaperConfigureListener() {
-        logger.info("[FLP] Attempting to register Paper configure listener...");
+        logger.info("Attempting to register Paper configure listener...");
         try {
             Class<?> rawClass = Class.forName(
                 "io.papermc.paper.event.connection.configuration.AsyncPlayerConnectionConfigureEvent");
