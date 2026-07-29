@@ -13,8 +13,8 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 * Auto-detect premium accounts via Mojang API — skip auth plugin login
 * Premium UUID and skin forwarding
 * Auto-register new premium players
-* BungeeCord / Velocity proxy support
-* Bedrock player support via Geyser / Floodgate
+* BungeeCord/Velocity proxy support
+* Bedrock player support via Geyser/Floodgate
 
 ### Improvements (new in FastLoginPlus)
 
@@ -31,11 +31,11 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 ## Quick Start
 
-**Spigot / Paper:** install ProtocolLib → drop `FastLoginPlusBukkit.jar` in `plugins/` → set `online-mode=false`
+**Spigot/Paper:** install ProtocolLib → drop `FastLoginPlusBukkit.jar` in `plugins/` → set `online-mode=false`
 
 **Folia:** drop `FastLoginPlusFolia.jar` in `plugins/` → set `online-mode=false`
 
-**BungeeCord / Velocity:** install on both proxy and backend → enable IP forwarding → set `online-mode=false` on both → copy the proxy's ID into the backend's `allowed-proxies.txt` (see details below)
+**BungeeCord/Velocity:** install on both proxy and backend → enable IP forwarding → set `online-mode=false` on both → copy the proxy's ID into the backend's `allowed-proxies.txt` (see details below)
 
 <details>
 <summary>Proxy ID setup (click to expand)</summary>
@@ -48,6 +48,12 @@ The backend only accepts login commands from trusted proxies. Each proxy has a u
 Paste the UUID into `plugins/fastloginplus/allowed-proxies.txt` on every backend server, one UUID per line. Restart the backends after adding the UUID.
 
 </details>
+
+### Database Storage
+
+In **standalone mode** (no proxy), the database (`FastLogin.db` by default) is stored on each backend server under `plugins/fastloginplus/`.
+
+In **proxy mode** (BungeeCord/Velocity), the database is stored **only on the proxy**. Backend servers do not create a database — they simply execute the login/register commands sent by the proxy via plugin messages. `/flp premium` and `/flp cracked` commands on the backend forward to the proxy, and the proxy handles all profile reads and writes.
 
 ## Requirements
 
@@ -64,7 +70,7 @@ An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogi
 
 FastLoginPlus supports both AuthMeReloaded 5.x and 6.0. AuthMeReloaded 6.0 adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP automatically enables `enablePremium: true` and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
 
-## Bedrock Player Support (Geyser / Floodgate)
+## Bedrock Player Support (Geyser/Floodgate)
 
 FastLoginPlus works with [Geyser](https://geysermc.org/) to allow Bedrock players to join your offline-mode Java server.
 

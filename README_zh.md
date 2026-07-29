@@ -13,8 +13,8 @@
 * 通过 Mojang API 自动检测正版账号 — 跳过登录插件
 * 正版 UUID 和皮肤转发
 * 自动注册新正版玩家
-* BungeeCord / Velocity 代理支持
-* 通过 Geyser / Floodgate 支持基岩版玩家
+* BungeeCord/Velocity 代理支持
+* 通过 Geyser/Floodgate 支持基岩版玩家
 
 ### 改进之处(FastLoginPlus 新增)
 
@@ -31,31 +31,37 @@
 
 ## 快速开始
 
-**Spigot / Paper：** 安装 ProtocolLib → 将 `FastLoginPlusBukkit.jar` 放入 `plugins/` → 设置 `online-mode=false`
+**Spigot/Paper：** 安装 ProtocolLib → 将 `FastLoginPlusBukkit.jar` 放入 `plugins/` → 设置 `online-mode=false`
 
 **Folia：** 将 `FastLoginPlusFolia.jar` 放入 `plugins/` → 设置 `online-mode=false`
 
-**BungeeCord / Velocity：** 在代理和后端都安装 → 启用 IP 转发 → 两端都设 `online-mode=false` → 将代理的 ID 复制到后端的 `allowed-proxies.txt`（详见下方说明）
+**BungeeCord/Velocity：** 在代理和后端都安装 → 启用 IP 转发 → 两端都设 `online-mode=false` → 将代理的 ID 复制到后端的 `allowed-proxies.txt`(详见下方说明)
 
 <details>
-<summary>代理 ID 配置（点击展开）</summary>
+<summary>代理 ID 配置(点击展开)</summary>
 
-后端只接受来自受信任代理的登录指令。每个代理有一个唯一 UUID，需要加入后端的白名单：
+后端只接受来自受信任代理的登录指令. 每个代理有一个唯一 UUID, 需要加入后端的白名单：
 
-- **Velocity** — FLP 首次启动时自动生成 UUID 到 `plugins/fastloginplus/proxyId.txt`。从该文件复制 UUID。
-- **BungeeCord** — 使用 BungeeCord 自身的实例 UUID，在 `bungee/config.yml` 的 `connection_uuid` 字段中。
+- **Velocity** — FLP 首次启动时自动生成 UUID 到 `plugins/fastloginplus/proxyId.txt`. 从该文件复制 UUID. 
+- **BungeeCord** — 使用 BungeeCord 自身的实例 UUID, 在 `bungee/config.yml` 的 `connection_uuid` 字段中. 
 
-将 UUID 粘贴到每个后端服务器的 `plugins/fastloginplus/allowed-proxies.txt` 中，每行一个 UUID。添加后重启后端。
+将 UUID 粘贴到每个后端服务器的 `plugins/fastloginplus/allowed-proxies.txt` 中, 每行一个 UUID. 添加后重启后端. 
 
 </details>
+
+### 数据库存储
+
+**单端模式**(无代理): 数据库(默认为 `FastLogin.db`)存储在每个后端服务器的 `plugins/fastloginplus/` 目录下.
+
+**代理模式**(BungeeCord/Velocity)：数据库**仅存储在代理端**. 后端服务器不会创建数据库文件——后端只负责接收代理通过插件消息发来的登录/注册指令并执行. 后端的 `/flp premium` 和 `/flp cracked` 命令会转发到代理, 由代理处理所有数据库读写操作. 
 
 ## 环境要求
 
 | 平台 | Java | 备注 |
 |------|------|------|
-| Spigot / Paper | 8+ | 需要 [ProtocolLib 5.3+](https://www.spigotmc.org/resources/protocollib.1997/) 或 [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/) |
+| Spigot/Paper | 8+ | 需要 [ProtocolLib 5.3+](https://www.spigotmc.org/resources/protocollib.1997/) 或 [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/) |
 | Folia | 17+ | 需要 ProtocolLib 5.3+ |
-| BungeeCord / Waterfall | 17+ | — |
+| BungeeCord/Waterfall | 17+ | — |
 | Velocity | 17+ | — |
 
 需要后端安装登录插件(如 AuthMe、LoginSecurity、CrazyLogin) [完整列表→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
@@ -64,7 +70,7 @@
 
 FastLoginPlus 同时支持 AuthMeReloaded 5.x 和 6.0. AuthMeReloaded 6.0 新增了 **preJoin 对话框(Paper) 以及 enablePremium 配置**, FLP 会自动启用 `enablePremium: true` 并注销 AuthMe 自带的正版验证监听器. 无需手动配置. 
 
-## 基岩版玩家支持(Geyser / Floodgate)
+## 基岩版玩家支持(Geyser/Floodgate)
 
 FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入离线模式 Java 服务器.
 
