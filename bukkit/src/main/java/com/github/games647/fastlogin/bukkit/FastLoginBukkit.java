@@ -447,6 +447,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * class won't be found and this silently does nothing.
      */
     private void registerPaperConfigureListener() {
+        logger.info("[FLP] Attempting to register Paper configure listener...");
         try {
             Class<?> rawClass = Class.forName(
                 "io.papermc.paper.event.player.AsyncPlayerConnectionConfigureEvent");
