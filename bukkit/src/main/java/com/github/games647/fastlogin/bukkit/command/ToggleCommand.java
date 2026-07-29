@@ -101,6 +101,9 @@ public abstract class ToggleCommand implements CommandExecutor {
     /**
      * Retries sending the proxy toggle message every 20 ticks (1 second)
      * until a player is online to serve as the relay channel.
+     *
+     * @param target the player name to toggle
+     * @param activate true for premium, false for cracked
      */
     private void scheduleRetry(String target, boolean activate) {
         int taskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, new Runnable() {
