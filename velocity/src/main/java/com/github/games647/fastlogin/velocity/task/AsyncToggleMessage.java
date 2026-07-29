@@ -72,6 +72,16 @@ public class AsyncToggleMessage implements Runnable {
         //existing player is already cracked
         if (playerProfile.isExistingPlayer() && !playerProfile.isOnlinemodePreferred()) {
             sendMessage("not-premium");
+            // Still kick if configured — gives the player feedback even when
+            // already cracked (e.g. console /flp cracked on offline player).
+            if (core.getConfig().getBoolean("kick-toggle")) {
+                Optional<Player> target = core.getPlugin().getProxy().getPlayer(targetPlayer);
+                if (target.isPresent()) {
+                    TextComponent msg = LegacyComponentSerializer.legacyAmpersand()
+                        .deserialize(core.getMessage("remove-premium"));
+                    target.get().disconnect(msg);
+                }
+            }
             return;
         }
 

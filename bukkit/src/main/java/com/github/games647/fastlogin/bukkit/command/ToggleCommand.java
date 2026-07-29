@@ -82,6 +82,12 @@ public abstract class ToggleCommand implements CommandExecutor {
             Optional<? extends Player> optPlayer = Bukkit.getServer().getOnlinePlayers().stream().findFirst();
             if (!optPlayer.isPresent()) {
                 plugin.getLog().info("No player online to send a plugin message to the proxy");
+                // Remember this toggle so the configure listener can honour it
+                // when the player reconnects — otherwise Paper's Mojang lookup
+                // re-creates the premium record before the proxy knows.
+                if (!activate) {
+                    plugin.getPendingOfflineCracks().add(target);
+                }
                 return;
             }
 
