@@ -106,7 +106,8 @@ public abstract class ToggleCommand implements CommandExecutor {
      * @param activate true for premium, false for cracked
      */
     private void scheduleRetry(String target, boolean activate) {
-        int taskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, new Runnable() {
+        final int[] taskIdHolder = new int[1];
+        taskIdHolder[0] = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, new Runnable() {
             @Override
             public void run() {
                 Optional<? extends Player> optPlayer =
@@ -119,8 +120,7 @@ public abstract class ToggleCommand implements CommandExecutor {
                 plugin.getBungeeManager().sendPluginMessage(sender, message);
                 plugin.getLog().info("Relayed pending {} toggle for {}",
                     activate ? "premium" : "cracked", target);
-                // Cancel this repeating task now that the message is delivered
-                Bukkit.getScheduler().cancelTask(taskId);
+                Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
             }
         }, 20L, 20L);
     }
