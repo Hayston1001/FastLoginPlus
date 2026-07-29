@@ -511,6 +511,19 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 }
                 UUID premiumUuid = mojang.get().getId();
 
+                // Guard: if the player's connection UUID doesn't match the
+                // Mojang premium UUID, the proxy assigned an offline UUID.
+                // This means the player is either cracked, or the proxy uses
+                // premiumUuid:false.  In either case we must NOT pre-create a
+                // premium AuthMe record — that would re-register a cracked
+                // player as premium behind the proxy's back.
+                if (!premiumUuid.equals(connectionUuid)) {
+                    logger.info(
+                        "Skipping autoRegister for {}: connection UUID {} != premium UUID {}",
+                        playerName, connectionUuid, premiumUuid);
+                    return;
+                }
+
                 com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
                     getAuthMePremiumIntegrator();
                 if (integrator != null && integrator.isAuthMePremiumEnabled()) {
