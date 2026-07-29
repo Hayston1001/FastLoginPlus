@@ -159,7 +159,13 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // Delay dependency setup using Folia's global region scheduler
         Bukkit.getGlobalRegionScheduler().runDelayed(this, task -> new DelayedAuthHook(this).run(), 5L);
 
-        pluginManager.registerEvents(new ConnectionListener(this), this);
+        ConnectionListener connectionListener = new ConnectionListener(this);
+        pluginManager.registerEvents(connectionListener, this);
+
+        if (bungeeManager.isEnabled()) {
+            org.bukkit.event.player.PlayerLoginEvent.getHandlerList().unregister(connectionListener);
+            logger.info("[FLP] Unregistered PlayerLoginEvent listener to avoid HorriblePlayerLoginEventHack");
+        }
 
         registerPaperConfigureListener();
 
@@ -372,7 +378,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         logger.info("[FLP] Attempting to register Paper configure listener...");
         try {
             Class<?> rawClass = Class.forName(
-                "io.papermc.paper.event.player.AsyncPlayerConnectionConfigureEvent");
+                "io.papermc.paper.event.connection.configuration.AsyncPlayerConnectionConfigureEvent");
             @SuppressWarnings("unchecked")
             Class<? extends org.bukkit.event.Event> eventClass =
                 (Class<? extends org.bukkit.event.Event>) rawClass;

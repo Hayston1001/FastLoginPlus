@@ -165,7 +165,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         //delay dependency setup because we load the plugin very early where plugins are initialized yet
         getServer().getScheduler().runTaskLater(this, new DelayedAuthHook(this), 5L);
 
-        pluginManager.registerEvents(new ConnectionListener(this), this);
+        ConnectionListener connectionListener = new ConnectionListener(this);
+        pluginManager.registerEvents(connectionListener, this);
+
+        // On Paper with a proxy, unregister PlayerLoginEvent to avoid
+        // HorriblePlayerLoginEventHack which disables re-configuration APIs
+        // (including AsyncPlayerConnectionConfigureEvent).
+        if (isPaper() && bungeeManager.isEnabled()) {
+            org.bukkit.event.player.PlayerLoginEvent.getHandlerList().unregister(connectionListener);
+            logger.info("[FLP] Unregistered PlayerLoginEvent listener to avoid HorriblePlayerLoginEventHack");
+        }
 
         // Register for Paper's AsyncPlayerConnectionConfigureEvent via reflection
         // (Paper API is not in compile classpath — we target spigot-api).
@@ -450,7 +459,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         logger.info("[FLP] Attempting to register Paper configure listener...");
         try {
             Class<?> rawClass = Class.forName(
-                "io.papermc.paper.event.player.AsyncPlayerConnectionConfigureEvent");
+                "io.papermc.paper.event.connection.configuration.AsyncPlayerConnectionConfigureEvent");
             @SuppressWarnings("unchecked")
             Class<? extends org.bukkit.event.Event> eventClass =
                 (Class<? extends org.bukkit.event.Event>) rawClass;
