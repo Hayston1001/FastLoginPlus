@@ -55,6 +55,31 @@
 
 **代理模式**(BungeeCord/Velocity)：数据库**仅存储在代理端**. 后端服务器不会创建数据库文件——后端只负责接收代理通过插件消息发来的登录/注册指令并执行. 后端的 `/flp premium` 和 `/flp cracked` 命令会转发到代理, 由代理处理所有数据库读写操作. 
 
+### 代理配置 (Velocity)
+
+使用 Velocity 代理时，代理本身必须正确配置玩家信息转发，FLP 才能把登录指令送达后端。
+
+| 配置 | 值 | 原因 |
+|------|-----|------|
+| `velocity.toml` → `player-info-forwarding-mode` | `modern` | **必须配置**。不配的话 Velocity 不转发 UUID、皮肤、IP —— FLP 的插件消息根本到不了后端。 |
+| `velocity.toml` → `online-mode` | `false` | FLP 用 `forceOnlineMode()` 按需给正版玩家单独开 Mojang 认证。设 `true` 的话所有玩家（包括离线）都会被认证，流程会断。 |
+| 后端 `server.properties` → `online-mode` | `false` | 代理已负责认证，后端不能再做。 |
+
+`ping-passthrough` 跟 FLP 无关 —— 它只管服务器列表显示的 MOTD/玩家数，按自己喜好设就行。
+
+**modern forwarding 对应的后端配置 (Paper 1.14+)：**
+
+```yaml
+# config/paper-global.yml
+proxies:
+  velocity:
+    enabled: true
+    secret: "<从 velocity/forwarding.secret 复制>"
+    online-mode: false
+```
+
+同时确保 `spigot.yml` 里 `settings.bungeecord` 为 `false` —— modern 和 legacy 转发只能二选一。
+
 ## 环境要求
 
 | 平台 | Java | 备注 |

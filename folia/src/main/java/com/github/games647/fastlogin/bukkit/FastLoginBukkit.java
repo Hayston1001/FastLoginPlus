@@ -488,10 +488,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                                 playerName, true, false);
                             bungeeManager.sendPluginMessage(player, msg);
                             pendingOfflineToggles.remove(playerName);
-                            logger.info(
-                                "Relayed pending premium toggle for {} and kicking",
-                                playerName);
-                            player.kickPlayer(core.getMessage("add-premium"));
+                            if (getConfig().getBoolean("kick-toggle")) {
+                                logger.info(
+                                    "Relayed pending premium toggle for {} and kicking",
+                                    playerName);
+                                player.kickPlayer(core.getMessage("add-premium"));
+                            } else {
+                                logger.info(
+                                    "Relayed pending premium toggle for {} (kick disabled)",
+                                    playerName);
+                            }
                         }
                     });
                 }
