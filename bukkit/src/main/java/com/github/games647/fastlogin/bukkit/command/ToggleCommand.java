@@ -69,7 +69,6 @@ public abstract class ToggleCommand implements CommandExecutor {
             return false;
         }
 
-        //console or command block
         sender.sendMessage(plugin.getCore().getMessage("no-console"));
         return true;
     }
@@ -83,10 +82,13 @@ public abstract class ToggleCommand implements CommandExecutor {
             if (!optPlayer.isPresent()) {
                 plugin.getLog().info("No player online to relay message — "
                     + "queuing pending toggle for {}", target);
-                // Store in the pending map — the configure listener will
-                // relay the message through the target player themselves
-                // when they reconnect, then kick from Paper.
+                // The configure listener will skip autoRegister for this name
+                // so Paper doesn't create a conflicting AuthMe record.
                 plugin.getPendingOfflineToggles().put(target, activate);
+                // Retry: deliver the proxy message once any player is online.
+                // The first to come online is usually the target player
+                // themselves (after they go through auth).
+                scheduleRetry(target, activate);
                 return;
             }
 
@@ -94,5 +96,29 @@ public abstract class ToggleCommand implements CommandExecutor {
             ChannelMessage message = new ChangePremiumMessage(target, activate, false);
             plugin.getBungeeManager().sendPluginMessage(sender, message);
         }
+    }
+
+    /**
+     * Retries sending the proxy toggle message every 20 ticks (1 second)
+     * until a player is online to serve as the relay channel.
+     */
+    private void scheduleRetry(String target, boolean activate) {
+        int taskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, new Runnable() {
+            @Override
+            public void run() {
+                Optional<? extends Player> optPlayer =
+                    Bukkit.getServer().getOnlinePlayers().stream().findFirst();
+                if (!optPlayer.isPresent()) {
+                    return;
+                }
+                Player sender = optPlayer.get();
+                ChannelMessage message = new ChangePremiumMessage(target, activate, false);
+                plugin.getBungeeManager().sendPluginMessage(sender, message);
+                plugin.getLog().info("Relayed pending {} toggle for {}",
+                    activate ? "premium" : "cracked", target);
+                // Cancel this repeating task now that the message is delivered
+                Bukkit.getScheduler().cancelTask(taskId);
+            }
+        }, 20L, 20L);
     }
 }
