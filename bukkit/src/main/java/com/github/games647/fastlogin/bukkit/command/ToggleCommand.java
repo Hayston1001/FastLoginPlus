@@ -34,6 +34,7 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.messaging.PluginMessageRecipient;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Optional;
 
@@ -81,13 +82,8 @@ public abstract class ToggleCommand implements CommandExecutor {
         } else {
             Optional<? extends Player> optPlayer = Bukkit.getServer().getOnlinePlayers().stream().findFirst();
             if (!optPlayer.isPresent()) {
-                plugin.getLog().info("No player online to send a plugin message to the proxy");
-                // Remember this toggle so the configure listener can honour it
-                // when the player reconnects — otherwise Paper's Mojang lookup
-                // re-creates the premium record before the proxy knows.
-                if (!activate) {
-                    plugin.getPendingOfflineCracks().add(target);
-                }
+                plugin.getLog().info("No player online to relay message — will retry");
+                scheduleProxyMessageRetry(target, activate);
                 return;
             }
 
@@ -95,5 +91,20 @@ public abstract class ToggleCommand implements CommandExecutor {
             ChannelMessage message = new ChangePremiumMessage(target, activate, false);
             plugin.getBungeeManager().sendPluginMessage(sender, message);
         }
+    }
+
+    private void scheduleProxyMessageRetry(String target, boolean activate) {
+        final BukkitTask[] taskHolder = new BukkitTask[1];
+        taskHolder[0] = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            Optional<? extends Player> optPlayer =
+                Bukkit.getServer().getOnlinePlayers().stream().findFirst();
+            if (optPlayer.isPresent()) {
+                Player sender = optPlayer.get();
+                ChannelMessage message = new ChangePremiumMessage(target, activate, false);
+                plugin.getBungeeManager().sendPluginMessage(sender, message);
+                plugin.getLog().info("Relayed pending toggle for {}", target);
+                taskHolder[0].cancel();
+            }
+        }, 20L, 20L); // check every second
     }
 }

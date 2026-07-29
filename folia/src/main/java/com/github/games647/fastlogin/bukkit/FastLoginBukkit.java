@@ -95,16 +95,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private AuthMeVersionDetector authMeVersionDetector;
     private AuthMePremiumIntegrator authMePremiumIntegrator;
 
-    // Players cracked while offline — their proxy toggle couldn't be relayed
-    // because no player was online.  The configure listener skips autoRegister
-    // for these names.  Cleared on join.
-    private final java.util.Set<String> pendingOfflineCracks =
-        java.util.concurrent.ConcurrentHashMap.newKeySet();
-
-    public java.util.Set<String> getPendingOfflineCracks() {
-        return pendingOfflineCracks;
-    }
-
     public FastLoginBukkit() {
         this.logger = CommonUtil.initializeLoggerService(getLogger());
         this.scheduler = new FoliaScheduler(this, logger);
