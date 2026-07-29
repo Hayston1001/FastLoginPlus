@@ -34,7 +34,6 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.messaging.PluginMessageRecipient;
-import org.bukkit.scheduler.BukkitTask;
 
 import java.util.Optional;
 
@@ -83,15 +82,11 @@ public abstract class ToggleCommand implements CommandExecutor {
             Optional<? extends Player> optPlayer = Bukkit.getServer().getOnlinePlayers().stream().findFirst();
             if (!optPlayer.isPresent()) {
                 plugin.getLog().info("No player online to relay message — "
-                    + "caching pending toggle and retrying");
-                // Cache so the configure listener skips autoRegister until the
-                // proxy message is delivered.  Without this, the configure
-                // listener runs on first reconnect (before the retry) and may
-                // re-create a premium record for a cracked player.
-                if (!activate) {
-                    plugin.getPendingOfflineCracks().add(target);
-                }
-                scheduleProxyMessageRetry(target, activate);
+                    + "queuing pending toggle for {}", target);
+                // Store in the pending map — the configure listener will
+                // relay the message through the target player themselves
+                // when they reconnect, then kick from Paper.
+                plugin.getPendingOfflineToggles().put(target, activate);
                 return;
             }
 
@@ -99,24 +94,5 @@ public abstract class ToggleCommand implements CommandExecutor {
             ChannelMessage message = new ChangePremiumMessage(target, activate, false);
             plugin.getBungeeManager().sendPluginMessage(sender, message);
         }
-    }
-
-    private void scheduleProxyMessageRetry(String target, boolean activate) {
-        final BukkitTask[] taskHolder = new BukkitTask[1];
-        taskHolder[0] = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            Optional<? extends Player> optPlayer =
-                Bukkit.getServer().getOnlinePlayers().stream().findFirst();
-            if (optPlayer.isPresent()) {
-                Player sender = optPlayer.get();
-                ChannelMessage message = new ChangePremiumMessage(target, activate, false);
-                plugin.getBungeeManager().sendPluginMessage(sender, message);
-                // Also clear the pending cache — the proxy message is on its way.
-                if (!activate) {
-                    plugin.getPendingOfflineCracks().remove(target);
-                }
-                plugin.getLog().info("Relayed pending toggle for {}", target);
-                taskHolder[0].cancel();
-            }
-        }, 20L, 20L); // check every second
     }
 }

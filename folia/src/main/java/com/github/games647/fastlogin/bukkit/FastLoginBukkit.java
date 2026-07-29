@@ -25,6 +25,8 @@
  */
 package com.github.games647.fastlogin.bukkit;
 
+import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -95,11 +97,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private AuthMeVersionDetector authMeVersionDetector;
     private AuthMePremiumIntegrator authMePremiumIntegrator;
 
-    private final java.util.Set<String> pendingOfflineCracks =
-        java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.Map<String, Boolean> pendingOfflineToggles =
+        new java.util.concurrent.ConcurrentHashMap<>();
 
-    public java.util.Set<String> getPendingOfflineCracks() {
-        return pendingOfflineCracks;
+    public java.util.Map<String, Boolean> getPendingOfflineToggles() {
+        return pendingOfflineToggles;
     }
 
     public FastLoginBukkit() {

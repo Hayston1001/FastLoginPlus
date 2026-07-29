@@ -25,6 +25,8 @@
  */
 package com.github.games647.fastlogin.bukkit;
 
+import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -94,13 +96,15 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private AuthMeVersionDetector authMeVersionDetector;
     private AuthMePremiumIntegrator authMePremiumIntegrator;
 
-    // Players cracked while offline — their proxy toggle couldn't be relayed
-    // because no player was online.  Cleared on first configure-event check.
-    private final java.util.Set<String> pendingOfflineCracks =
-        java.util.concurrent.ConcurrentHashMap.newKeySet();
+    // Toggles queued while no player was online to relay the proxy message.
+    // Key = player name, Value = true for premium, false for cracked.
+    // The configure listener detects pending toggles on reconnect, relays
+    // the message through the connecting player, and kicks them from Paper.
+    private final java.util.Map<String, Boolean> pendingOfflineToggles =
+        new java.util.concurrent.ConcurrentHashMap<>();
 
-    public java.util.Set<String> getPendingOfflineCracks() {
-        return pendingOfflineCracks;
+    public java.util.Map<String, Boolean> getPendingOfflineToggles() {
+        return pendingOfflineToggles;
     }
 
     public FastLoginBukkit() {
@@ -507,10 +511,21 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        // Skip autoRegister for players whose /flp cracked toggle couldn't
-        // be relayed to the proxy (no online players to forward the message).
-        if (pendingOfflineCracks.remove(playerName)) {
-            logger.info("Skipping autoRegister for {}: pending offline crack", playerName);
+        // Relay pending toggles that were queued while no relay player was
+        // online.  The connecting player IS now online — use them as the
+        // message relay, then kick from Paper so they reconnect with the
+        // updated proxy profile.
+        Boolean pendingActivate = pendingOfflineToggles.remove(playerName);
+        if (pendingActivate != null) {
+            Object playerObj = event.getClass().getMethod("getPlayer").invoke(event);
+            Player player = (Player) playerObj;
+            ChangePremiumMessage msg = new ChangePremiumMessage(
+                playerName, pendingActivate, false);
+            bungeeManager.sendPluginMessage(player, msg);
+            logger.info("Relaying pending {} toggle for {} and kicking",
+                pendingActivate ? "premium" : "cracked", playerName);
+            player.kickPlayer(core.getMessage(
+                pendingActivate ? "add-premium" : "remove-premium"));
             return;
         }
 
