@@ -33,6 +33,7 @@ import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import net.md_5.bungee.config.Configuration;
 
+import java.io.IOException;
 import java.util.Optional;
 
 public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
@@ -113,7 +114,51 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             Optional<Profile> premiumUUID = Optional.empty();
             if ((boolean) config.get("nameChangeCheck") || (boolean) config.get("autoRegister")
                     || (boolean) config.get("offline-whitelist")) {
-                premiumUUID = core.getResolver().findProfile(username);
+                int retryCount = Math.max(1,
+                        ((Number) config.get("mojang-retry-count")).intValue());
+                long retryDelay =
+                        ((Number) config.get("mojang-retry-delay")).longValue();
+
+                for (int attempt = 1; attempt <= retryCount; attempt++) {
+                    try {
+                        premiumUUID = core.getResolver().findProfile(username);
+                        break;
+                    } catch (RateLimitException rateLimitEx) {
+                        core.getPlugin().getLog().error(
+                                "Mojang's rate limit reached for {}."
+                                        + " The public IPv4 address of this server issued"
+                                        + " more than 600 Name -> UUID requests within 10 minutes."
+                                        + " After those 10 minutes we can make requests again.",
+                                username);
+                        break;
+                    } catch (IOException ioEx) {
+                        if (attempt < retryCount) {
+                            core.getPlugin().getLog().warn(
+                                    "Mojang profile lookup failed for {} (attempt {}/{}): {}",
+                                    username, attempt, retryCount, ioEx.getMessage());
+                            try {
+                                long backoff = Math.min(
+                                        retryDelay * (1L << (attempt - 1)), 10_000L);
+                                Thread.sleep(backoff);
+                            } catch (InterruptedException interrupted) {
+                                Thread.currentThread().interrupt();
+                                core.getPlugin().getLog().warn(
+                                        "Interrupted during Mojang profile lookup retry for {}",
+                                        username);
+                                break;
+                            }
+                        } else {
+                            core.getPlugin().getLog().error(
+                                    "Mojang profile lookup exhausted all {} retries for {}",
+                                    retryCount, username, ioEx);
+                        }
+                    } catch (Exception ex) {
+                        core.getPlugin().getLog().error(
+                                "Unexpected error during Mojang profile lookup for {}",
+                                username, ex);
+                        break;
+                    }
+                }
             }
 
             if (!premiumUUID.isPresent()
@@ -127,10 +172,6 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
 
                 startCrackedSession(source, profile, username);
             }
-        } catch (RateLimitException rateLimitEx) {
-            core.getPlugin().getLog().error("Mojang's rate limit reached for {}. The public IPv4 address of this"
-                    + " server issued more than 600 Name -> UUID requests within 10 minutes. After those 10"
-                    + " minutes we can make requests again.", username);
         } catch (Exception ex) {
             core.getPlugin().getLog().error("Failed to check premium state of {}", username, ex);
         }
