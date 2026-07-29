@@ -426,6 +426,26 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
+        // Relay pending toggles queued while no relay player was online
+        Boolean pendingActivate = pendingOfflineToggles.remove(playerName);
+        if (pendingActivate != null) {
+            try {
+                Player player = (Player) event.getClass().getMethod("getPlayer").invoke(event);
+                ChangePremiumMessage msg = new ChangePremiumMessage(
+                    playerName, pendingActivate, false);
+                bungeeManager.sendPluginMessage(player, msg);
+                logger.info("Relaying pending {} toggle for {} and kicking",
+                    pendingActivate ? "premium" : "cracked", playerName);
+                player.kickPlayer(core.getMessage(
+                    pendingActivate ? "add-premium" : "remove-premium"));
+            } catch (Exception e) {
+                logger.warn("Failed to relay pending toggle for {}: {}",
+                    playerName, e.getMessage());
+                pendingOfflineToggles.put(playerName, pendingActivate);
+            }
+            return;
+        }
+
         Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
             try {
                 java.util.Optional<com.github.games647.craftapi.model.Profile> mojang =

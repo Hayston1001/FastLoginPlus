@@ -517,15 +517,21 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // updated proxy profile.
         Boolean pendingActivate = pendingOfflineToggles.remove(playerName);
         if (pendingActivate != null) {
-            Object playerObj = event.getClass().getMethod("getPlayer").invoke(event);
-            Player player = (Player) playerObj;
-            ChangePremiumMessage msg = new ChangePremiumMessage(
-                playerName, pendingActivate, false);
-            bungeeManager.sendPluginMessage(player, msg);
-            logger.info("Relaying pending {} toggle for {} and kicking",
-                pendingActivate ? "premium" : "cracked", playerName);
-            player.kickPlayer(core.getMessage(
-                pendingActivate ? "add-premium" : "remove-premium"));
+            try {
+                Player player = (Player) event.getClass().getMethod("getPlayer").invoke(event);
+                ChangePremiumMessage msg = new ChangePremiumMessage(
+                    playerName, pendingActivate, false);
+                bungeeManager.sendPluginMessage(player, msg);
+                logger.info("Relaying pending {} toggle for {} and kicking",
+                    pendingActivate ? "premium" : "cracked", playerName);
+                player.kickPlayer(core.getMessage(
+                    pendingActivate ? "add-premium" : "remove-premium"));
+            } catch (Exception e) {
+                logger.warn("Failed to relay pending toggle for {}: {}",
+                    playerName, e.getMessage());
+                // Re-queue — the player might reconnect again
+                pendingOfflineToggles.put(playerName, pendingActivate);
+            }
             return;
         }
 
