@@ -25,6 +25,8 @@
  */
 package com.github.games647.fastlogin.bukkit;
 
+import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -425,9 +427,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
 
         // Pending toggles — cracked skips, premium allows despite UUID mismatch
-        Boolean pendingActivate = pendingOfflineToggles.remove(playerName);
+        Boolean pendingActivate = pendingOfflineToggles.get(playerName);
         final boolean isPendingPremium = Boolean.TRUE.equals(pendingActivate);
         if (pendingActivate != null && !pendingActivate) {
+            pendingOfflineToggles.remove(playerName);
             logger.info("Skipping autoRegister for {}: pending cracked toggle", playerName);
             return;
         }
@@ -476,6 +479,22 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 session.setUuid(premiumUuid);
                 session.setVerifiedPremium(true);
                 putSession(address, session);
+
+                if (isPendingPremium) {
+                    Bukkit.getScheduler().runTask(FastLoginBukkit.this, () -> {
+                        Player player = Bukkit.getPlayerExact(playerName);
+                        if (player != null && bungeeManager.isEnabled()) {
+                            ChangePremiumMessage msg = new ChangePremiumMessage(
+                                playerName, true, false);
+                            bungeeManager.sendPluginMessage(player, msg);
+                            pendingOfflineToggles.remove(playerName);
+                            logger.info(
+                                "Relayed pending premium toggle for {} and kicking",
+                                playerName);
+                            player.kickPlayer(core.getMessage("add-premium"));
+                        }
+                    });
+                }
             } catch (Exception e) {
                 logger.warn("AutoRegister in configure phase failed for {}: {}",
                     playerName, e.getMessage());

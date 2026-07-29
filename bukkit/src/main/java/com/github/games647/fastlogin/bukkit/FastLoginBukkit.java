@@ -25,6 +25,8 @@
  */
 package com.github.games647.fastlogin.bukkit;
 
+import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -511,12 +513,13 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         // Pending toggles queued while no relay player was online.
         // - Cracked: skip autoRegister — the player should see the register dialog.
-        // - Premium: proceed with autoRegister despite UUID mismatch — the proxy
-        //   hasn't updated yet but we WANT to pre-create the premium AuthMe record
-        //   so the login dialog (from the cracked-era password) is skipped.
-        Boolean pendingActivate = pendingOfflineToggles.remove(playerName);
+        // - Premium: proceed with autoRegister despite UUID mismatch, then
+        //   schedule a PLAY-phase self-relay + kick.  Don't remove from the
+        //   pending map yet — only clear it once the proxy message is sent.
+        Boolean pendingActivate = pendingOfflineToggles.get(playerName);
         final boolean isPendingPremium = Boolean.TRUE.equals(pendingActivate);
         if (pendingActivate != null && !pendingActivate) {
+            pendingOfflineToggles.remove(playerName);
             logger.info("Skipping autoRegister for {}: pending cracked toggle", playerName);
             return;
         }
@@ -575,6 +578,26 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 session.setUuid(premiumUuid);
                 session.setVerifiedPremium(true);
                 putSession(address, session);
+
+                // For pending premium toggles, send the proxy message now
+                // (the player is connected in PLAY phase) and kick. This
+                // avoids waiting for the retry and eliminates the no-auth
+                // window between configure and proxy kick.
+                if (isPendingPremium) {
+                    Bukkit.getScheduler().runTask(FastLoginBukkit.this, () -> {
+                        Player player = Bukkit.getPlayerExact(playerName);
+                        if (player != null && bungeeManager.isEnabled()) {
+                            ChangePremiumMessage msg = new ChangePremiumMessage(
+                                playerName, true, false);
+                            bungeeManager.sendPluginMessage(player, msg);
+                            pendingOfflineToggles.remove(playerName);
+                            logger.info(
+                                "Relayed pending premium toggle for {} and kicking",
+                                playerName);
+                            player.kickPlayer(core.getMessage("add-premium"));
+                        }
+                    });
+                }
             } catch (Exception e) {
                 logger.warn("AutoRegister in configure phase failed for {}: {}",
                     playerName, e.getMessage());
