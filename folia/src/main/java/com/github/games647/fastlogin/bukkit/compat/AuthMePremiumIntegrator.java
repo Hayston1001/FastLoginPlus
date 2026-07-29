@@ -958,4 +958,48 @@ public final class AuthMePremiumIntegrator {
             }
         }
     }
+
+    /**
+     * Closes AuthMe 6.0's blocking preJoin login dialog for the given player.
+     * This is the LOGIN dialog (for existing records with password), not the
+     * REGISTER dialog.  Needed when a cracked→premium toggle creates a record
+     * that AuthMe's HIGHEST handler sees as non-premium (async timing race)
+     * and shows a login dialog.
+     *
+     * @param playerId the player's connection UUID (v3 or v4, as assigned by Paper)
+     */
+    public void closePreJoinLoginDialog(UUID playerId) {
+        if (!versionDetector.isAuthMe6()) {
+            return;
+        }
+        try {
+            Object injector = getAuthMeInjector();
+            if (injector == null) {
+                return;
+            }
+            Class<?> dialogListenerClass = Class.forName(
+                "fr.xephi.authme.listener.PaperDialogFlowListener");
+            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+            Object dialogListener = getSingleton.invoke(injector, dialogListenerClass);
+            if (dialogListener == null) {
+                return;
+            }
+            java.lang.reflect.Field responsesField = dialogListenerClass
+                .getDeclaredField("pendingLoginResponses");
+            responsesField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>> responses =
+                (java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>>)
+                    responsesField.get(dialogListener);
+            java.util.concurrent.CompletableFuture<String> future = responses.get(playerId);
+            if (future != null) {
+                future.complete(null);
+                plugin.getLog().info("Closed AuthMe preJoin login dialog for {}", playerId);
+            }
+        } catch (Exception e) {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Failed to close AuthMe preJoin login dialog: {}", e.getMessage());
+            }
+        }
+    }
 }

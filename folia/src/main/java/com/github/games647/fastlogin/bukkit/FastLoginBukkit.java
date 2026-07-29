@@ -444,7 +444,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 if (integrator != null && integrator.isAuthMePremiumEnabled()) {
                     integrator.injectVerifiedUuid(playerName, premiumUuid);
                     integrator.markPlayerAsPremium(playerName, premiumUuid);
+                    // Close both register AND login dialogs.  AuthMe may show
+                    // a login dialog for existing records (cracked→premium)
+                    // if the async task hasn't updated the record yet.
                     integrator.closePreJoinRegisterDialog(connectionUuid);
+                    integrator.closePreJoinLoginDialog(connectionUuid);
                 }
 
                 BukkitLoginSession session = new BukkitLoginSession(playerName, true);
