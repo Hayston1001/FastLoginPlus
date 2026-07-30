@@ -42,6 +42,7 @@ public class AsyncToggleMessage implements Runnable {
 
     private final FastLoginCore<ProxiedPlayer, CommandSender, FastLoginBungee> core;
     private final ProxiedPlayer sender;
+    private final String senderName;
     private final String targetPlayer;
     private final boolean toPremium;
     private final boolean isPlayerSender;
@@ -50,6 +51,7 @@ public class AsyncToggleMessage implements Runnable {
              ProxiedPlayer sender, String playerName, boolean toPremium, boolean playerSender) {
         this.core = core;
         this.sender = sender;
+        this.senderName = sender.getName();
         this.targetPlayer = playerName;
         this.toPremium = toPremium;
         this.isPlayerSender = playerSender;
@@ -68,7 +70,8 @@ public class AsyncToggleMessage implements Runnable {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
         //existing player is already cracked
         if (playerProfile.isExistingPlayer() && !playerProfile.isOnlinemodePreferred()) {
-            sendMessage("not-premium");
+            boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+            sendMessage(isSelf ? "not-premium" : "not-premium-other");
             // Still kick if configured
             if (core.getConfig().getBoolean("kick-toggle")) {
                 ProxiedPlayer target = core.getPlugin().getProxy().getPlayer(targetPlayer);
@@ -82,12 +85,13 @@ public class AsyncToggleMessage implements Runnable {
         playerProfile.setOnlinemodePreferred(false);
         playerProfile.setId(null);
         core.getStorage().save(playerProfile);
-        PremiumToggleReason reason = (!isPlayerSender || !sender.getName().equalsIgnoreCase(playerProfile.getName()))
+        PremiumToggleReason reason = (!isPlayerSender || !senderName.equalsIgnoreCase(playerProfile.getName()))
             ? PremiumToggleReason.COMMAND_OTHER : PremiumToggleReason.COMMAND_SELF;
         core.getPlugin().getProxy().getPluginManager().callEvent(
                 new BungeeFastLoginPremiumToggleEvent(playerProfile, reason));
 
-        sendMessage("remove-premium");
+        boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+        sendMessage(isSelf ? "remove-premium" : "remove-premium-other");
 
         // Kick the target player so they reconnect with the updated profile
         if (core.getConfig().getBoolean("kick-toggle")) {
@@ -101,7 +105,8 @@ public class AsyncToggleMessage implements Runnable {
     private void activatePremium() {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
         if (playerProfile.isOnlinemodePreferred()) {
-            sendMessage("already-exists");
+            boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+            sendMessage(isSelf ? "already-exists" : "already-exists-other");
             return;
         }
 
@@ -121,11 +126,12 @@ public class AsyncToggleMessage implements Runnable {
         }
 
         core.getStorage().save(playerProfile);
-        PremiumToggleReason reason = (!isPlayerSender || !sender.getName().equalsIgnoreCase(playerProfile.getName()))
+        PremiumToggleReason reason = (!isPlayerSender || !senderName.equalsIgnoreCase(playerProfile.getName()))
             ? PremiumToggleReason.COMMAND_OTHER : PremiumToggleReason.COMMAND_SELF;
         core.getPlugin().getProxy().getPluginManager().callEvent(
                 new BungeeFastLoginPremiumToggleEvent(playerProfile, reason));
-        sendMessage("add-premium");
+        boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+        sendMessage(isSelf ? "add-premium" : "add-premium-other");
 
         // Kick the target player so they reconnect with the updated profile
         // and the proxy assigns their premium UUID.

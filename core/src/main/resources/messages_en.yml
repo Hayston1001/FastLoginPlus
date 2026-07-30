@@ -51,8 +51,6 @@ player-unknown: '&4Player not in the database'
 
 # Anti-bot
 kick-antibot: '&4Please wait a moment!'
-antibot-banned: '&4Your IP is temporarily banned due to too many connection attempts.'
-antibot-rate-limit: '&4Too many connection attempts. Please wait and try again.'
 
 # Delete command
 delete-specify-player: '&4Usage: /flp delete <player>'

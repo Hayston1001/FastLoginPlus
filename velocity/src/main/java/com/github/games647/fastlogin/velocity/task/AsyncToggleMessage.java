@@ -71,7 +71,8 @@ public class AsyncToggleMessage implements Runnable {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
         //existing player is already cracked
         if (playerProfile.isExistingPlayer() && !playerProfile.isOnlinemodePreferred()) {
-            sendMessage("not-premium");
+            boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+            sendMessage(isSelf ? "not-premium" : "not-premium-other");
             // Still kick if configured — gives the player feedback even when
             // already cracked (e.g. console /flp cracked on offline player).
             if (core.getConfig().getBoolean("kick-toggle")) {
@@ -93,7 +94,8 @@ public class AsyncToggleMessage implements Runnable {
         core.getPlugin().getProxy().getEventManager().fire(
             new VelocityFastLoginPremiumToggleEvent(playerProfile, reason));
 
-        sendMessage("remove-premium");
+        boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+        sendMessage(isSelf ? "remove-premium" : "remove-premium-other");
 
         // Kick the target player so they reconnect with the updated profile
         if (core.getConfig().getBoolean("kick-toggle")) {
@@ -109,7 +111,8 @@ public class AsyncToggleMessage implements Runnable {
     private void activatePremium() {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
         if (playerProfile.isOnlinemodePreferred()) {
-            sendMessage("already-exists");
+            boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+            sendMessage(isSelf ? "already-exists" : "already-exists-other");
             return;
         }
 
@@ -133,7 +136,8 @@ public class AsyncToggleMessage implements Runnable {
             ? PremiumToggleReason.COMMAND_OTHER : PremiumToggleReason.COMMAND_SELF;
         core.getPlugin().getProxy().getEventManager().fire(
             new VelocityFastLoginPremiumToggleEvent(playerProfile, reason));
-        sendMessage("add-premium");
+        boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+        sendMessage(isSelf ? "add-premium" : "add-premium-other");
 
         // Kick the target player so they reconnect with the updated profile
         // and the proxy assigns their premium UUID.
