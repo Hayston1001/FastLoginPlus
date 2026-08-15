@@ -18,7 +18,7 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 ### Improvements (new in FastLoginPlus)
 
-* **[AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 compatibility** — auto-detects AuthMeReloaded version without user config
+* **AuthMeReloaded 6.0 compatibility** — auto-detects AuthMeReloaded version without user config
 * **Offline Whitelist** — block unknown cracked players, allow premium via Mojang API. Replaces upstream `switchMode` which kicked new premium players
 * **Multi-layer anti-bot** — per-IP rate limiting, burst detection, temporary IP ban, trusted IP whitelist, and `FastLoginAntiBotEvent` for plugin integration
 * **[Folia](https://papermc.io/downloads/folia) support** — dedicated module with Folia-compatible scheduler
@@ -86,16 +86,16 @@ In **proxy mode** (BungeeCord/Velocity), the database is stored **only on the pr
 
 An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin) [SeeFullList→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
 
-## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 5.x / 6.0 Support
+## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) Support
 
 FastLoginPlus supports both AuthMeReloaded 5.x and 6.0. AuthMeReloaded 6.0 adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP automatically enables `enablePremium: true` and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
 
-## Bedrock Player Support (Geyser/Floodgate)
+## [Geyser](https://geysermc.org/)/[Floodgate](https://geysermc.org/floodgate/) Support
 
-FastLoginPlus works with [Geyser](https://geysermc.org/) to allow Bedrock players to join your offline-mode Java server.
+FastLoginPlus works with Geyser to allow Bedrock players to join your offline-mode Java server.
 
 - **Geyser only** — Bedrock players join without Xbox authentication. FLP treats them as regular Java players; premium auto-login works if the username matches a paid Java account.
-- **Geyser + [Floodgate](https://geysermc.org/floodgate/)** (recommended) — Bedrock players authenticate via Xbox Live, and their usernames are prefixed (e.g. `Steve` → `.Steve`). This prevents FLP from mistaking a Bedrock player for a premium Java account and avoids username conflicts between platforms.
+- **Geyser + Floodgate** (recommended) — Bedrock players authenticate via Xbox Live, and their usernames are prefixed (e.g. `Steve` → `.Steve`). This prevents FLP from mistaking a Bedrock player for a premium Java account and avoids username conflicts between platforms.
 
 > **Recommendation:** Install Floodgate alongside Geyser for better security and identity separation. FLP does not require Floodgate to function, but it is strongly recommended when both Java and Bedrock players share the same server.
 
