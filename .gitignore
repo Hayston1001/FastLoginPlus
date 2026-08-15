@@ -1,4 +1,7 @@
+# dev
 .worktrees/
+.playwright-mcp/
+dev_web_server.py
 
 # Eclipse
 .classpath
