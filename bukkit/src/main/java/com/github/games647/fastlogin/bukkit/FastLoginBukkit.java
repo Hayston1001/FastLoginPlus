@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.bukkit;
 
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+import com.github.games647.fastlogin.core.message.ChannelMessage;
 
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
@@ -51,6 +52,7 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator;
 import com.github.games647.fastlogin.bukkit.compat.AuthMeVersionDetector;
 import com.github.games647.fastlogin.bukkit.command.FlpCommand;
+import com.github.games647.fastlogin.bukkit.event.BukkitFastLoginPremiumToggleEvent;
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
 import com.github.games647.fastlogin.bukkit.listener.PaperCacheListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.ProtocolLibListener;
@@ -68,6 +70,8 @@ import com.github.games647.fastlogin.core.hooks.bedrock.GeyserService;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.FloodgateState;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
+import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
+import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.github.games647.fastlogin.core.web.WebServer;
 
 /**
@@ -106,6 +110,110 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     public java.util.Map<String, Boolean> getPendingOfflineToggles() {
         return pendingOfflineToggles;
+    }
+
+    /**
+     * Relays a premium toggle to the proxy through any online player, or
+     * queues it for later delivery when no player is online to relay the
+     * plugin message.
+     *
+     * <p>This is the single relay path shared by the console
+     * {@code /premium}/{@code /cracked} commands and the WebUI, so all
+     * premium toggles use the identical proxy flow: proxy-side database
+     * update, Mojang UUID resolution, premium toggle event and kick.</p>
+     *
+     * @param target   the player name to toggle
+     * @param activate {@code true} for premium, {@code false} for cracked
+     */
+    public void relayToggleToProxy(String target, boolean activate) {
+        Optional<? extends Player> optPlayer = Bukkit.getServer().getOnlinePlayers().stream().findFirst();
+        if (!optPlayer.isPresent()) {
+            logger.info("No player online to relay message — queuing pending toggle for {}", target);
+            // The configure listener will skip autoRegister for this name
+            // so Paper doesn't create a conflicting AuthMe record.
+            pendingOfflineToggles.put(target, activate);
+            // Retry: deliver the proxy message once any player is online.
+            // The first to come online is usually the target player
+            // themselves (after they go through auth).
+            scheduleToggleRelayRetry(target, activate);
+            return;
+        }
+
+        ChannelMessage message = new ChangePremiumMessage(target, activate, false);
+        bungeeManager.sendPluginMessage(optPlayer.get(), message);
+    }
+
+    /**
+     * Retries sending the proxy toggle message every 20 ticks (1 second)
+     * until a player is online to serve as the relay channel.
+     *
+     * @param target   the player name to toggle
+     * @param activate {@code true} for premium, {@code false} for cracked
+     */
+    private void scheduleToggleRelayRetry(String target, boolean activate) {
+        final int[] taskIdHolder = new int[1];
+        taskIdHolder[0] = Bukkit.getScheduler().scheduleSyncRepeatingTask(this, new Runnable() {
+            @Override
+            public void run() {
+                Optional<? extends Player> optPlayer =
+                    Bukkit.getServer().getOnlinePlayers().stream().findFirst();
+                if (!optPlayer.isPresent()) {
+                    return;
+                }
+                Player sender = optPlayer.get();
+                ChannelMessage message = new ChangePremiumMessage(target, activate, false);
+                bungeeManager.sendPluginMessage(sender, message);
+                logger.info("Relayed pending {} toggle for {}",
+                    activate ? "premium" : "cracked", target);
+                Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
+            }
+        }, 20L, 20L);
+    }
+
+    /**
+     * Performs a premium toggle against the local database, mirroring the
+     * standalone (no proxy) command path: profile update, premium toggle
+     * event and kick when {@code kick-toggle} is enabled.
+     *
+     * <p>Used by the WebUI when this server is not behind a proxy. When the
+     * player is unknown or already in the requested state, this is a no-op.</p>
+     *
+     * @param playerName the player name to toggle
+     * @param premium    {@code true} to set premium, {@code false} for cracked
+     */
+    public void performLocalPremiumToggle(String playerName, boolean premium) {
+        StoredProfile profile = core.getStorage().loadProfile(playerName);
+        if (profile == null) {
+            return;
+        }
+
+        if (profile.isExistingPlayer() && profile.isOnlinemodePreferred() == premium) {
+            // Already in the requested state
+            return;
+        }
+
+        profile.setOnlinemodePreferred(premium);
+        if (!premium) {
+            // Clear the premium UUID so the player uses the offline-mode
+            // UUID on their next login
+            profile.setId(null);
+        }
+
+        getScheduler().runAsync(() -> {
+            core.getStorage().save(profile);
+            getServer().getPluginManager().callEvent(new BukkitFastLoginPremiumToggleEvent(
+                    Bukkit.getConsoleSender(), profile, PremiumToggleReason.COMMAND_OTHER));
+
+            getScheduler().getSyncExecutor().execute(() -> {
+                if (core.getConfig().getBoolean("kick-toggle")) {
+                    Player target = Bukkit.getPlayerExact(playerName);
+                    if (target != null) {
+                        target.kickPlayer(
+                            core.getMessage(premium ? "add-premium" : "remove-premium"));
+                    }
+                }
+            });
+        });
     }
 
     public FastLoginBukkit() {
@@ -254,16 +362,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     .map(Player::getName)
                     .collect(java.util.stream.Collectors.toList()));
 
-            // Premium toggle listener: kick player if kick-toggle is enabled
+            // Premium toggle listener: perform the full toggle exactly like
+            // the /premium and /cracked commands — relay to the proxy (with
+            // offline queueing) or local database update + event + kick.
             webServer.setPremiumToggleListener((playerName, premium) -> {
-                Player player = Bukkit.getPlayerExact(playerName);
-                if (player != null && core.getConfig().getBoolean("kick-toggle")) {
-                    String msg = core.getMessage("remove-premium");
-                    getScheduler().getSyncExecutor().execute(() -> {
-                        if (player.isOnline()) {
-                            player.kickPlayer(msg != null ? msg : "");
-                        }
-                    });
+                if (bungeeManager.isEnabled()) {
+                    relayToggleToProxy(playerName, premium);
+                } else {
+                    performLocalPremiumToggle(playerName, premium);
                 }
             });
 

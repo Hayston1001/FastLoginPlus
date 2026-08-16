@@ -38,6 +38,7 @@ import org.slf4j.Logger;
 import com.github.games647.fastlogin.bungee.hook.BungeeAuthHook;
 import com.github.games647.fastlogin.bungee.listener.ConnectListener;
 import com.github.games647.fastlogin.bungee.listener.PluginMessageListener;
+import com.github.games647.fastlogin.bungee.task.AsyncToggleMessage;
 import com.github.games647.fastlogin.core.CommonUtil;
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
 import com.github.games647.fastlogin.core.hooks.bedrock.BedrockService;
@@ -154,14 +155,13 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
                     .map(ProxiedPlayer::getName)
                     .collect(java.util.stream.Collectors.toList()));
 
-            // Premium toggle listener: kick player if kick-toggle is enabled
+            // Premium toggle listener: perform the full toggle exactly like
+            // the /premium and /cracked command flow — database update,
+            // Mojang UUID resolution, toggle event and kick. Feedback goes
+            // to the proxy console.
             webServer.setPremiumToggleListener((playerName, premium) -> {
-                ProxiedPlayer player = getProxy().getPlayer(playerName);
-                if (player != null && core.getConfig().getBoolean("kick-toggle")) {
-                    String msg = core.getMessage("remove-premium");
-                    player.disconnect(
-                        new net.md_5.bungee.api.chat.TextComponent(msg != null ? msg : ""));
-                }
+                Runnable task = new AsyncToggleMessage(core, "console", playerName, premium, false);
+                getScheduler().runAsync(task);
             });
 
             webServer.start(host, port, token);

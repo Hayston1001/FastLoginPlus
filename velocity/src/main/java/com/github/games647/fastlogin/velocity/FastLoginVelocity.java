@@ -53,6 +53,7 @@ import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 import com.github.games647.fastlogin.core.web.WebServer;
 import com.github.games647.fastlogin.velocity.listener.ConnectListener;
 import com.github.games647.fastlogin.velocity.listener.PluginMessageListener;
+import com.github.games647.fastlogin.velocity.task.AsyncToggleMessage;
 import com.google.common.collect.MapMaker;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
@@ -162,15 +163,13 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
                     .map(Player::getUsername)
                     .collect(java.util.stream.Collectors.toList()));
 
-            // Premium toggle listener: kick player if kick-toggle is enabled
+            // Premium toggle listener: perform the full toggle exactly like
+            // the /premium and /cracked command flow — database update,
+            // Mojang UUID resolution, toggle event and kick. Feedback goes
+            // to the proxy console.
             webServer.setPremiumToggleListener((playerName, premium) -> {
-                server.getPlayer(playerName).ifPresent(player -> {
-                    if (core.getConfig().getBoolean("kick-toggle")) {
-                        String msg = core.getMessage("remove-premium");
-                        player.disconnect(
-                            net.kyori.adventure.text.Component.text(msg != null ? msg : ""));
-                    }
-                });
+                Runnable task = new AsyncToggleMessage(core, "console", playerName, premium, false);
+                getScheduler().runAsync(task);
             });
 
             webServer.start(host, port, token);

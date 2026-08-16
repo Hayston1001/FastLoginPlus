@@ -130,31 +130,48 @@ public class PlayerApiHandler {
     /**
      * Handle PUT /api/players/:name/premium or /api/players/:name/cracked request.
      *
-     * @param ctx      the Javalin context
-     * @param premium  true to set as premium, false to set as cracked
+     * <p>When a platform toggle listener is registered, the platform performs
+     * the complete toggle operation — the same flow used by the
+     * {@code /premium} and {@code /cracked} commands: relay to the proxy
+     * (with offline queueing when no player can relay the message) or local
+     * database update, toggle event and kick. The WebUI never writes the
+     * database directly in that mode.</p>
+     *
+     * @param ctx     the Javalin context
+     * @param premium true to set as premium, false to set as cracked
      */
     public void handleSetPremium(Context ctx, boolean premium) {
         String name = ctx.pathParam("name");
-        StoredProfile profile = storage.loadProfile(name);
 
-        if (profile == null) {
-            ctx.status(404).json(of("error", "Player not found"));
-            return;
+        // In proxy setups the backend may have no local database (storage is
+        // null there); the existence check is skipped and the platform
+        // listener — which relays to the proxy — is the authority.
+        StoredProfile profile = null;
+        if (storage != null) {
+            profile = storage.loadProfile(name);
+            if (profile == null) {
+                ctx.status(404).json(of("error", "Player not found"));
+                return;
+            }
         }
 
-        profile.setOnlinemodePreferred(premium);
-
-        // When switching to cracked (offline mode), clear the premium UUID
-        // so the player uses offline-mode UUID on next login
-        if (!premium) {
-            profile.setId(null);
-        }
-
-        storage.save(profile);
-
-        // Notify platform so it can kick the player if kick-toggle is enabled
         if (toggleListener != null) {
+            // Platform performs the full toggle exactly like the commands
             toggleListener.onPremiumToggle(name, premium);
+        } else if (profile != null) {
+            // Fallback for embedders without a platform listener: direct DB write
+            profile.setOnlinemodePreferred(premium);
+
+            // When switching to cracked (offline mode), clear the premium UUID
+            // so the player uses offline-mode UUID on next login
+            if (!premium) {
+                profile.setId(null);
+            }
+
+            storage.save(profile);
+        } else {
+            ctx.status(500).json(of("error", "No storage backend configured"));
+            return;
         }
 
         Map<String, Object> response = new HashMap<>();

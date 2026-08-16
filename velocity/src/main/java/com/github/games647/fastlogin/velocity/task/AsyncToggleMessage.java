@@ -50,12 +50,27 @@ public class AsyncToggleMessage implements Runnable {
 
     public AsyncToggleMessage(FastLoginCore<Player, CommandSource, FastLoginVelocity> core,
                               Player sender, String playerName, boolean toPremium, boolean playerSender) {
+        this(core, sender, sender.getUsername(), playerName, toPremium, playerSender);
+    }
+
+    /**
+     * Creates a toggle task without an in-game sender (e.g. triggered by the
+     * WebUI). Feedback messages are sent to the proxy console.
+     *
+     * @param core         the FastLogin core
+     * @param senderName   the name to attribute the toggle to
+     * @param playerName   the player whose premium status is toggled
+     * @param toPremium    {@code true} to enable premium, {@code false} to disable
+     * @param playerSender {@code true} if the toggle was invoked by the target player
+     */
+    public AsyncToggleMessage(FastLoginCore<Player, CommandSource, FastLoginVelocity> core,
+                              String senderName, String playerName, boolean toPremium, boolean playerSender) {
         this.core = core;
-        this.sender = sender;
+        this.sender = null;
+        this.senderName = senderName;
         this.targetPlayer = playerName;
         this.toPremium = toPremium;
         this.isPlayerSender = playerSender;
-        this.senderName = sender.getUsername();
     }
 
     @Override
@@ -153,7 +168,7 @@ public class AsyncToggleMessage implements Runnable {
 
     private void sendMessage(String localeId) {
         String message = core.getMessage(localeId);
-        if (isPlayerSender) {
+        if (isPlayerSender && sender != null) {
             sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
         } else {
             ConsoleCommandSource console = core.getPlugin().getProxy().getConsoleCommandSource();
