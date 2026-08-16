@@ -279,8 +279,12 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     private Configuration loadFile(String fileName) throws IOException {
         ConfigurationProvider configProvider = ConfigurationProvider.getProvider(YamlConfiguration.class);
 
+        // Defaults come from the SELECTED template (config.yml on backends,
+        // config-proxy.yml on proxies) so the in-memory config matches the
+        // trimmed on-disk file — dropped backend-only keys must not sneak
+        // back in via the full template's defaults.
         Configuration defaults;
-        try (InputStream defaultStream = getClass().getClassLoader().getResourceAsStream(fileName)) {
+        try (InputStream defaultStream = getClass().getClassLoader().getResourceAsStream(configTemplate)) {
             defaults = configProvider.load(defaultStream);
         }
 
@@ -446,10 +450,15 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
                 try (InputStream defaultStream = getClass().getClassLoader().getResourceAsStream(resourceFile)) {
                     if (defaultStream != null) {
                         Files.copy(Objects.requireNonNull(defaultStream), configFile);
-                        plugin.getLog().info("Created language file: {}", targetName);
+                        plugin.getLog().info("Created default file: {}", targetName);
                     } else {
-                        plugin.getLog().warn("Bundled resource not found: {}, falling back to English", resourceFile);
-                        saveDefaultFile(targetName, "messages_en.yml");
+                        plugin.getLog().warn("Bundled resource not found: {}", resourceFile);
+                        // Only language files have an English fallback. A missing
+                        // config template must not be replaced by a language file —
+                        // let the subsequent load fail loudly instead.
+                        if (targetName.startsWith("messages_")) {
+                            saveDefaultFile(targetName, "messages_en.yml");
+                        }
                     }
                 }
             }
