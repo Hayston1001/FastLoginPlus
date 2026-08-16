@@ -45,6 +45,8 @@ import java.util.stream.Collectors;
  */
 public class FlpCommand implements CommandExecutor, TabCompleter {
 
+    private static final String PERM_PREFIX = "fastloginplus.folia.command.";
+
     private final FastLoginBukkit plugin;
     private final PremiumCommand premiumCmd;
     private final CrackedCommand crackedCmd;
@@ -95,11 +97,12 @@ public class FlpCommand implements CommandExecutor, TabCompleter {
             String prefix = args.length == 0 ? "" : args[0].toLowerCase();
             return Arrays.stream(new String[]{"premium", "cracked", "delete"})
                     .filter(s -> s.startsWith(prefix))
+                    .filter(s -> sender.hasPermission(PERM_PREFIX + s))
                     .collect(Collectors.toList());
         }
 
-        // Second argument: online player names
-        if (args.length == 2) {
+        // Second argument: online player names (only for senders with .other permission)
+        if (args.length == 2 && sender.hasPermission(PERM_PREFIX + args[0].toLowerCase() + ".other")) {
             String prefix = args[1].toLowerCase();
             return Bukkit.getOnlinePlayers().stream()
                     .map(p -> p.getName())

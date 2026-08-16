@@ -25,6 +25,7 @@
  */
 package com.github.games647.fastlogin.velocity.task;
 
+import com.github.games647.craftapi.model.Profile;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -35,6 +36,8 @@ import com.velocitypowered.api.proxy.ConsoleCommandSource;
 import com.velocitypowered.api.proxy.Player;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+
+import java.util.Optional;
 
 public class AsyncToggleMessage implements Runnable {
 
@@ -68,7 +71,18 @@ public class AsyncToggleMessage implements Runnable {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
         //existing player is already cracked
         if (playerProfile.isExistingPlayer() && !playerProfile.isOnlinemodePreferred()) {
-            sendMessage("not-premium");
+            boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+            sendMessage(isSelf ? "not-premium" : "not-premium-other");
+            // Still kick if configured — gives the player feedback even when
+            // already cracked (e.g. console /flp cracked on offline player).
+            if (core.getConfig().getBoolean("kick-toggle")) {
+                Optional<Player> target = core.getPlugin().getProxy().getPlayer(targetPlayer);
+                if (target.isPresent()) {
+                    TextComponent msg = LegacyComponentSerializer.legacyAmpersand()
+                        .deserialize(core.getMessage("remove-premium"));
+                    target.get().disconnect(msg);
+                }
+            }
             return;
         }
 
@@ -80,29 +94,61 @@ public class AsyncToggleMessage implements Runnable {
         core.getPlugin().getProxy().getEventManager().fire(
             new VelocityFastLoginPremiumToggleEvent(playerProfile, reason));
 
-        if (isPlayerSender && core.getConfig().getBoolean("kick-toggle")) {
-            TextComponent msg = LegacyComponentSerializer.legacyAmpersand()
-                .deserialize(core.getMessage("remove-premium"));
-            sender.disconnect(msg);
-        } else {
-            sendMessage("remove-premium");
+        boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+        sendMessage(isSelf ? "remove-premium" : "remove-premium-other");
+
+        // Kick the target player so they reconnect with the updated profile
+        if (core.getConfig().getBoolean("kick-toggle")) {
+            Optional<Player> target = core.getPlugin().getProxy().getPlayer(targetPlayer);
+            if (target.isPresent()) {
+                TextComponent msg = LegacyComponentSerializer.legacyAmpersand()
+                    .deserialize(core.getMessage("remove-premium"));
+                target.get().disconnect(msg);
+            }
         }
     }
 
     private void activatePremium() {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
         if (playerProfile.isOnlinemodePreferred()) {
-            sendMessage("already-exists");
+            boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+            sendMessage(isSelf ? "already-exists" : "already-exists-other");
             return;
         }
 
         playerProfile.setOnlinemodePreferred(true);
+
+        // Resolve and store the Mojang UUID so the profile carries the
+        // correct premium UUID — without this, on reconnect the proxy may
+        // assign an offline UUID even though online mode is enabled.
+        try {
+            Optional<Profile> mojangProfile = core.getResolver().findProfile(targetPlayer);
+            if (mojangProfile.isPresent()) {
+                playerProfile.setId(mojangProfile.get().getId());
+            }
+        } catch (Exception e) {
+            core.getPlugin().getLog().warn(
+                "Failed to resolve Mojang UUID for {} during premium toggle", targetPlayer, e);
+        }
+
         core.getStorage().save(playerProfile);
         PremiumToggleReason reason = (!isPlayerSender || !senderName.equalsIgnoreCase(playerProfile.getName()))
             ? PremiumToggleReason.COMMAND_OTHER : PremiumToggleReason.COMMAND_SELF;
         core.getPlugin().getProxy().getEventManager().fire(
             new VelocityFastLoginPremiumToggleEvent(playerProfile, reason));
-        sendMessage("add-premium");
+        boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+        sendMessage(isSelf ? "add-premium" : "add-premium-other");
+
+        // Kick the target player so they reconnect with the updated profile
+        // and the proxy assigns their premium UUID.
+        if (core.getConfig().getBoolean("kick-toggle")) {
+            Optional<Player> target = core.getPlugin().getProxy().getPlayer(targetPlayer);
+            if (target.isPresent()) {
+                TextComponent msg = LegacyComponentSerializer.legacyAmpersand()
+                    .deserialize(core.getMessage("add-premium"));
+                target.get().disconnect(msg);
+            }
+        }
     }
 
     private void sendMessage(String localeId) {

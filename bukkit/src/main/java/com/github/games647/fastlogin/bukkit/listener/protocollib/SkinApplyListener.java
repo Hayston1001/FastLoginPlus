@@ -60,8 +60,10 @@ public class SkinApplyListener implements Listener {
             if (session.getUsername().equals(player.getName())) {
                 // Skip if SkinsRestorer has a custom skin for this player — SR skin takes priority
                 if (plugin.getSkinsRestorerCompat().hasCustomSkin(session.getUuid())) {
-                    plugin.getLog().debug("Skipping FastLogin skin for {} — SkinsRestorer custom skin detected",
-                            session.getUsername());
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Skipping FastLogin skin for {} — SkinsRestorer custom skin detected",
+                        session.getUsername());
+                    }
                     break;
                 }
 

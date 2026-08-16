@@ -124,6 +124,15 @@ public class NameCheckTask extends JoinManagement<Player, CommandSender, Protoco
 
     @Override
     public void startCrackedSession(ProtocolLibLoginSource source, StoredProfile profile, String username) {
+        // Belt-and-suspenders: clear any stale AuthMe premium record left over
+        // from a failed /cracked cleanup. Must run BEFORE the session is stored
+        // so AuthMe's preJoin dialog (configuration phase) sees a clean state.
+        com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+            plugin.getAuthMePremiumIntegrator();
+        if (integrator != null) {
+            integrator.ensureNotPremium(username);
+        }
+
         BukkitLoginSession loginSession = new BukkitLoginSession(username, profile);
         plugin.putSession(player.getAddress(), loginSession);
     }

@@ -13,12 +13,12 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 * Auto-detect premium accounts via Mojang API — skip auth plugin login
 * Premium UUID and skin forwarding
 * Auto-register new premium players
-* BungeeCord / Velocity proxy support
-* Bedrock player support via Geyser / Floodgate
+* BungeeCord/Velocity proxy support
+* Bedrock player support via Geyser/Floodgate
 
 ### Improvements (new in FastLoginPlus)
 
-* **[AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 compatibility** — auto-detects AuthMeReloaded version without user config
+* **AuthMeReloaded 6.0 compatibility** — auto-detects AuthMeReloaded version without user config
 * **Offline Whitelist** — block unknown cracked players, allow premium via Mojang API. Replaces upstream `switchMode` which kicked new premium players
 * **Multi-layer anti-bot** — per-IP rate limiting, burst detection, temporary IP ban, trusted IP whitelist, and `FastLoginAntiBotEvent` for plugin integration
 * **[Folia](https://papermc.io/downloads/folia) support** — dedicated module with Folia-compatible scheduler
@@ -31,13 +31,51 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 ## Quick Start
 
-**Spigot / Paper:** install ProtocolLib → drop `FastLoginPlusBukkit.jar` in `plugins/` → set `online-mode=false`
+**Spigot/Paper:** install ProtocolLib → drop `FastLoginPlusBukkit.jar` in `plugins/` → set `online-mode=false`
 
 **Folia:** drop `FastLoginPlusFolia.jar` in `plugins/` → set `online-mode=false`
 
-**BungeeCord / Velocity:** install on both proxy and backend → configure `allowed-proxies.txt` → enable IP forwarding → set `online-mode=false` on both
+### Proxy Configuration
 
-## Requirements
+When running behind a proxy (BungeeCord or Velocity), the proxy must be configured to forward player information to backend servers. FLP relies on this to deliver login commands via plugin messages.
+
+<details>
+<summary>Proxy ID setup (click to expand)</summary>
+
+The backend only accepts login commands from trusted proxies. Each proxy has a unique UUID that must be added to the backend's whitelist:
+
+- **Velocity** — FLP auto-generates a UUID to `plugins/fastloginplus/proxyId.txt` on first start. Copy the UUID from that file.
+- **BungeeCord** — uses BungeeCord's own instance UUID from `bungee/config.yml` (the `connection_uuid` field).
+
+Paste the UUID into `plugins/fastloginplus/allowed-proxies.txt` on every backend server, one UUID per line. Restart the backends after adding the UUID.
+
+</details>
+
+#### Velocity
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `velocity.toml` → `player-info-forwarding-mode` | `modern` | **Required**. Without this, Velocity does not forward UUIDs, skins, or IPs — FLP's plugin messages will never reach the backend. |
+| `velocity.toml` → `online-mode` | `false` | FLP handles authentication per-connection via `forceOnlineMode()`; the proxy should not authenticate by default. |
+| Backend `server.properties` → `online-mode` | `false` | The proxy handles authentication; the backend must not repeat it. |
+
+`ping-passthrough` has no effect on FLP — it only controls the server list MOTD/player count display. Set it to whatever you prefer.
+
+#### BungeeCord
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `config.yml` → `ip_forward` | `true` | **Required**. Without this, BungeeCord does not forward UUIDs, skins, or IPs — FLP's plugin messages will never reach the backend. |
+| `config.yml` → `online_mode` | `false` | FLP enables per-connection via `connection.setOnlineMode(true)`; the proxy should not authenticate by default. |
+| Backend `server.properties` → `online-mode` | `false` | The proxy handles authentication; the backend must not repeat it. |
+
+### Database Storage
+
+In **standalone mode** (no proxy), the database (`FastLogin.db` by default) is stored on each backend server under `plugins/fastloginplus/`.
+
+In **proxy mode** (BungeeCord/Velocity), the database is stored **only on the proxy**. Backend servers do not create a database — they simply execute the login/register commands sent by the proxy via plugin messages. `/flp premium` and `/flp cracked` commands on the backend forward to the proxy, and the proxy handles all profile reads and writes.
+
+## Environment
 
 | Platform | Java | Notes |
 |----------|------|-------|
@@ -48,16 +86,16 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin) [SeeFullList→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
 
-## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 5.x / 6.0 Support
+## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) Support
 
 FastLoginPlus supports both AuthMeReloaded 5.x and 6.0. AuthMeReloaded 6.0 adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP automatically enables `enablePremium: true` and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
 
-## Bedrock Player Support (Geyser / Floodgate)
+## [Geyser](https://geysermc.org/)/[Floodgate](https://geysermc.org/floodgate/) Support
 
-FastLoginPlus works with [Geyser](https://geysermc.org/) to allow Bedrock players to join your offline-mode Java server.
+FastLoginPlus works with Geyser to allow Bedrock players to join your offline-mode Java server.
 
 - **Geyser only** — Bedrock players join without Xbox authentication. FLP treats them as regular Java players; premium auto-login works if the username matches a paid Java account.
-- **Geyser + [Floodgate](https://geysermc.org/floodgate/)** (recommended) — Bedrock players authenticate via Xbox Live, and their usernames are prefixed (e.g. `Steve` → `.Steve`). This prevents FLP from mistaking a Bedrock player for a premium Java account and avoids username conflicts between platforms.
+- **Geyser + Floodgate** (recommended) — Bedrock players authenticate via Xbox Live, and their usernames are prefixed (e.g. `Steve` → `.Steve`). This prevents FLP from mistaking a Bedrock player for a premium Java account and avoids username conflicts between platforms.
 
 > **Recommendation:** Install Floodgate alongside Geyser for better security and identity separation. FLP does not require Floodgate to function, but it is strongly recommended when both Java and Bedrock players share the same server.
 

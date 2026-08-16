@@ -28,7 +28,6 @@ package com.github.games647.fastlogin.bukkit;
 import java.util.UUID;
 
 import org.bukkit.Bukkit;
-import org.slf4j.Logger;
 
 import net.skinsrestorer.api.SkinsRestorerProvider;
 
@@ -42,14 +41,14 @@ public final class SkinsRestorerCompat {
 
     private static final String SR_PLUGIN_NAME = "SkinsRestorer";
 
-    private final Logger logger;
+    private final FastLoginBukkit plugin;
     private volatile boolean available;
 
-    public SkinsRestorerCompat(Logger logger) {
-        this.logger = logger;
+    public SkinsRestorerCompat(FastLoginBukkit plugin) {
+        this.plugin = plugin;
         this.available = Bukkit.getServer().getPluginManager().getPlugin(SR_PLUGIN_NAME) != null;
         if (this.available) {
-            logger.info("SkinsRestorer detected — enabling skin compatibility");
+            plugin.getLog().info("SkinsRestorer detected — enabling skin compatibility");
         }
     }
 
@@ -74,7 +73,9 @@ public final class SkinsRestorerCompat {
                     .isPresent();
         } catch (Exception e) {
             // SR API not initialized (e.g. proxy mode without local DB) — safe to ignore
-            logger.debug("SkinsRestorer API check failed for {}: {}", uuid, e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("SkinsRestorer API check failed for {}: {}", uuid, e.getMessage());
+            }
             return false;
         }
     }

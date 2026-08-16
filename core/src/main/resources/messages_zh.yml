@@ -51,8 +51,6 @@ player-unknown: '&4玩家不在数据库中'
 
 # 反机器人
 kick-antibot: '&4请稍等片刻！'
-antibot-banned: '&4由于连接次数过多，你的 IP 已被临时封禁。'
-antibot-rate-limit: '&4连接次数过多，请稍后再试。'
 
 # 删除命令
 delete-specify-player: '&4用法: /flp delete <玩家名>'

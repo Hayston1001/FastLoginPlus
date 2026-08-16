@@ -38,6 +38,8 @@ import static com.github.games647.fastlogin.core.shared.event.FastLoginPremiumTo
 
 public class CrackedCommand extends ToggleCommand {
 
+    private static final String PERM_PREFIX = "fastloginplus.bukkit.command.";
+
     public CrackedCommand(FastLoginBukkit plugin) {
         super(plugin);
     }
@@ -59,55 +61,90 @@ public class CrackedCommand extends ToggleCommand {
             return;
         }
 
-        Player player = (Player) sender;
-        if (forwardCrackedCommand(sender, sender.getName())) {
+        if (!sender.hasPermission(PERM_PREFIX + "cracked")) {
+            plugin.getCore().sendLocaleMessage("no-permission", sender);
             return;
         }
 
-        // todo: load async if
-        StoredProfile profile = plugin.getCore().getStorage().loadProfile(sender.getName());
-        if (profile.isOnlinemodePreferred()) {
-            plugin.getCore().sendLocaleMessage("remove-premium", sender);
+        Player player = (Player) sender;
+        String playerName = sender.getName();
 
-            profile.setOnlinemodePreferred(false);
-            profile.setId(null);
-            plugin.getScheduler().runAsync(() -> {
-                plugin.getCore().getStorage().save(profile);
-
-                // Clear AuthMe premium state so the player doesn't bypass on next join
-                AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
-                if (integrator != null) {
-                    integrator.clearPlayerPremium(sender.getName());
-                }
-
-                plugin.getServer().getPluginManager().callEvent(
-                        new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
-                );
-
-                plugin.getScheduler().getSyncExecutor().execute(() -> {
-                    if (plugin.getCore().getConfig().getBoolean("kick-toggle")) {
-                        player.kickPlayer(plugin.getCore().getMessage("remove-premium"));
-                    } else {
-                        plugin.getCore().sendLocaleMessage("add-premium", sender);
-                    }
-                });
-            });
+        // Always clear AuthMe locally — AuthMe is on the backend,
+        // the proxy (BungeeCord/Velocity) cannot access it.
+        // This must run even when the command is forwarded to a proxy.
+        AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
+        if (integrator != null) {
+            integrator.clearPlayerPremium(playerName);
         } else {
-            plugin.getCore().sendLocaleMessage("not-premium", sender);
+            plugin.getLog().warn("CrackedCommand: authMePremiumIntegrator is null, "
+                + "skipping AuthMe cleanup for {}", playerName);
         }
+
+        // Forward to proxy if enabled; proxy handles profile persistence,
+        // messages, kick — the backend has no DB in proxy mode.
+        if (forwardCrackedCommand(sender, playerName)) {
+            return;
+        }
+
+        // Local path (no proxy): load profile from local DB
+        // todo: load async if
+        StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
+        if (!profile.isOnlinemodePreferred()) {
+            plugin.getCore().sendLocaleMessage("not-premium", sender);
+            return;
+        }
+
+        plugin.getCore().sendLocaleMessage("remove-premium", sender);
+
+        profile.setOnlinemodePreferred(false);
+        profile.setId(null);
+
+        plugin.getScheduler().runAsync(() -> {
+            plugin.getCore().getStorage().save(profile);
+        });
+
+        // Local path (no proxy): event + kick
+        plugin.getScheduler().runAsync(() -> {
+            plugin.getServer().getPluginManager().callEvent(
+                    new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
+            );
+
+            plugin.getScheduler().getSyncExecutor().execute(() -> {
+                if (plugin.getCore().getConfig().getBoolean("kick-toggle")) {
+                    player.kickPlayer(plugin.getCore().getMessage("remove-premium"));
+                } else {
+                    plugin.getCore().sendLocaleMessage("add-premium", sender);
+                }
+            });
+        });
     }
 
     private void onCrackedOther(CommandSender sender, Command command, String[] args) {
-        if (!hasOtherPermission(sender, command)) {
+        if (!hasOtherPermission(sender, PERM_PREFIX + "cracked")) {
             return;
         }
 
-        if (forwardCrackedCommand(sender, args[0])) {
+        String playerName = args[0];
+
+        // Always clear AuthMe locally — same as onCrackedSelf().
+        // AuthMe is on the backend, the proxy cannot access it.
+        AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
+        if (integrator != null) {
+            integrator.clearPlayerPremium(playerName);
+        } else if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("CrackedCommand: authMePremiumIntegrator is null, "
+                + "skipping AuthMe cleanup for {}", playerName);
+        }
+
+        // Forward to proxy if enabled; proxy handles profile persistence,
+        // messages, kick — the backend has no DB in proxy mode.
+        if (forwardCrackedCommand(sender, playerName)) {
             return;
         }
 
+        // Local path (no proxy): load profile from local DB
         //todo: load async
-        StoredProfile profile = plugin.getCore().getStorage().loadProfile(args[0]);
+        StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
         if (profile == null) {
             sender.sendMessage("Error occurred");
             return;
@@ -116,16 +153,23 @@ public class CrackedCommand extends ToggleCommand {
         //existing player is already cracked
         if (profile.isExistingPlayer() && !profile.isOnlinemodePreferred()) {
             plugin.getCore().sendLocaleMessage("not-premium-other", sender);
-        } else {
-            plugin.getCore().sendLocaleMessage("remove-premium-other", sender);
-
-            profile.setOnlinemodePreferred(false);
-            plugin.getScheduler().runAsync(() -> {
-                plugin.getCore().getStorage().save(profile);
-                plugin.getServer().getPluginManager().callEvent(
-                        new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER));
-            });
+            return;
         }
+
+        plugin.getCore().sendLocaleMessage("remove-premium-other", sender);
+
+        profile.setOnlinemodePreferred(false);
+        profile.setId(null);
+
+        plugin.getScheduler().runAsync(() -> {
+            plugin.getCore().getStorage().save(profile);
+        });
+
+        // Local path (no proxy): event
+        plugin.getScheduler().runAsync(() -> {
+            plugin.getServer().getPluginManager().callEvent(
+                    new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER));
+        });
     }
 
     private boolean forwardCrackedCommand(CommandSender sender, String target) {

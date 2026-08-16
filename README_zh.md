@@ -2,7 +2,7 @@
 
 [English→](https://github.com/Hayston1001/FastLoginPlus#FastLoginPlus)
 
-> **在离线模式 Minecraft 服务器上自动检测并登录正版玩家** — 无需密码, 无需客户端 Mod.基于 [FastLogin](https://github.com/TuxCoding/FastLogin) 的活跃维护分支.
+> **在离线模式 Minecraft 服务器上自动检测并登录正版玩家** — 无需密码, 无需客户端 Mod. 基于 [FastLogin](https://github.com/TuxCoding/FastLogin) 的活跃维护分支.
 
 许多 Minecraft 服务器运行在"离线模式"(不走 Mojang 认证)以允许盗版客户端加入, 但这迫使所有玩家——包括已购游戏的正版玩家——每次进入都要输密码.FastLoginPlus 在登录时通过 Mojang API 检查玩家身份：如果是正版, 直接跳过登录插件, 自动使用正版 UUID 和皮肤.
 
@@ -13,8 +13,8 @@
 * 通过 Mojang API 自动检测正版账号 — 跳过登录插件
 * 正版 UUID 和皮肤转发
 * 自动注册新正版玩家
-* BungeeCord / Velocity 代理支持
-* 通过 Geyser / Floodgate 支持基岩版玩家
+* BungeeCord/Velocity 代理支持
+* 通过 Geyser/Floodgate 支持基岩版玩家
 
 ### 改进之处(FastLoginPlus 新增)
 
@@ -31,19 +31,57 @@
 
 ## 快速开始
 
-**Spigot / Paper：** 安装 ProtocolLib → 将 `FastLoginPlusBukkit.jar` 放入 `plugins/` → 设置 `online-mode=false`
+**Spigot/Paper：** 安装 ProtocolLib → 将 `FastLoginPlusBukkit.jar` 放入 `plugins/` → 设置 `online-mode=false`
 
 **Folia：** 将 `FastLoginPlusFolia.jar` 放入 `plugins/` → 设置 `online-mode=false`
 
-**BungeeCord / Velocity：** 在代理和后端都安装 → 配置 `allowed-proxies.txt` → 启用 IP 转发 → 两端都设 `online-mode=false`
+### 代理配置
+
+使用代理 (BungeeCord 或 Velocity) 时，代理必须正确配置玩家信息转发，FLP 才能把登录指令送达后端。
+
+<details>
+<summary>代理 ID 配置(点击展开)</summary>
+
+后端只接受来自受信任代理的登录指令. 每个代理有一个唯一 UUID, 需要加入后端的白名单：
+
+- **Velocity** — FLP 首次启动时自动生成 UUID 到 `plugins/fastloginplus/proxyId.txt`. 从该文件复制 UUID. 
+- **BungeeCord** — 使用 BungeeCord 自身的实例 UUID, 在 `bungee/config.yml` 的 `connection_uuid` 字段中. 
+
+将 UUID 粘贴到每个后端服务器的 `plugins/fastloginplus/allowed-proxies.txt` 中, 每行一个 UUID. 添加后重启后端. 
+
+</details>
+
+#### Velocity
+
+| 配置 | 值 | 原因 |
+|------|-----|------|
+| `velocity.toml` → `player-info-forwarding-mode` | `modern` | **必须配置**。不配的话 Velocity 不转发 UUID、皮肤、IP —— FLP 的插件消息根本到不了后端。 |
+| `velocity.toml` → `online-mode` | `false` | FLP 通过 `forceOnlineMode()` 逐连接控制认证，代理端不应默认开启在线模式。 |
+| 后端 `server.properties` → `online-mode` | `false` | 代理已负责认证，后端不能再做。 |
+
+`ping-passthrough` 跟 FLP 无关 —— 它只管服务器列表显示的 MOTD/玩家数，按自己喜好设就行。
+
+#### BungeeCord
+
+| 配置 | 值 | 原因 |
+|------|-----|------|
+| `config.yml` → `ip_forward` | `true` | **必须配置**。不配的话 BungeeCord 不转发 UUID、皮肤、IP —— FLP 的插件消息根本到不了后端。 |
+| `config.yml` → `online_mode` | `false` | FLP 通过 `connection.setOnlineMode(true)` 逐连接开启，代理端不应默认开启在线模式。 |
+| 后端 `server.properties` → `online-mode` | `false` | 代理已负责认证，后端不能再做。 |
+
+### 数据库存储
+
+**单端模式**(无代理): 数据库(默认为 `FastLogin.db`)存储在每个后端服务器的 `plugins/fastloginplus/` 目录下.
+
+**代理模式**(BungeeCord/Velocity)：数据库**仅存储在代理端**. 后端服务器不会创建数据库文件——后端只负责接收代理通过插件消息发来的登录/注册指令并执行. 后端的 `/flp premium` 和 `/flp cracked` 命令会转发到代理, 由代理处理所有数据库读写操作. 
 
 ## 环境要求
 
 | 平台 | Java | 备注 |
 |------|------|------|
-| Spigot / Paper | 8+ | 需要 [ProtocolLib 5.3+](https://www.spigotmc.org/resources/protocollib.1997/) 或 [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/) |
+| Spigot/Paper | 8+ | 需要 [ProtocolLib 5.3+](https://www.spigotmc.org/resources/protocollib.1997/) 或 [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/) |
 | Folia | 17+ | 需要 ProtocolLib 5.3+ |
-| BungeeCord / Waterfall | 17+ | — |
+| BungeeCord/Waterfall | 17+ | — |
 | Velocity | 17+ | — |
 
 需要后端安装登录插件(如 AuthMe、LoginSecurity、CrazyLogin) [完整列表→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
@@ -52,7 +90,7 @@
 
 FastLoginPlus 同时支持 AuthMeReloaded 5.x 和 6.0. AuthMeReloaded 6.0 新增了 **preJoin 对话框(Paper) 以及 enablePremium 配置**, FLP 会自动启用 `enablePremium: true` 并注销 AuthMe 自带的正版验证监听器. 无需手动配置. 
 
-## 基岩版玩家支持(Geyser / Floodgate)
+## 基岩版玩家支持(Geyser/Floodgate)
 
 FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入离线模式 Java 服务器.
 

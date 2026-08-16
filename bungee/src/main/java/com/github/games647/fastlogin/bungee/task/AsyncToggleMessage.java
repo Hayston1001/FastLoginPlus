@@ -25,6 +25,7 @@
  */
 package com.github.games647.fastlogin.bungee.task;
 
+import com.github.games647.craftapi.model.Profile;
 import com.github.games647.fastlogin.bungee.FastLoginBungee;
 import com.github.games647.fastlogin.bungee.event.BungeeFastLoginPremiumToggleEvent;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
@@ -35,10 +36,13 @@ import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 
+import java.util.Optional;
+
 public class AsyncToggleMessage implements Runnable {
 
     private final FastLoginCore<ProxiedPlayer, CommandSender, FastLoginBungee> core;
     private final ProxiedPlayer sender;
+    private final String senderName;
     private final String targetPlayer;
     private final boolean toPremium;
     private final boolean isPlayerSender;
@@ -47,6 +51,7 @@ public class AsyncToggleMessage implements Runnable {
              ProxiedPlayer sender, String playerName, boolean toPremium, boolean playerSender) {
         this.core = core;
         this.sender = sender;
+        this.senderName = sender.getName();
         this.targetPlayer = playerName;
         this.toPremium = toPremium;
         this.isPlayerSender = playerSender;
@@ -65,39 +70,77 @@ public class AsyncToggleMessage implements Runnable {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
         //existing player is already cracked
         if (playerProfile.isExistingPlayer() && !playerProfile.isOnlinemodePreferred()) {
-            sendMessage("not-premium");
+            boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+            sendMessage(isSelf ? "not-premium" : "not-premium-other");
+            // Still kick if configured
+            if (core.getConfig().getBoolean("kick-toggle")) {
+                ProxiedPlayer target = core.getPlugin().getProxy().getPlayer(targetPlayer);
+                if (target != null) {
+                    target.disconnect(TextComponent.fromLegacyText(core.getMessage("remove-premium")));
+                }
+            }
             return;
         }
 
         playerProfile.setOnlinemodePreferred(false);
         playerProfile.setId(null);
         core.getStorage().save(playerProfile);
-        PremiumToggleReason reason = (!isPlayerSender || !sender.getName().equalsIgnoreCase(playerProfile.getName()))
+        PremiumToggleReason reason = (!isPlayerSender || !senderName.equalsIgnoreCase(playerProfile.getName()))
             ? PremiumToggleReason.COMMAND_OTHER : PremiumToggleReason.COMMAND_SELF;
         core.getPlugin().getProxy().getPluginManager().callEvent(
                 new BungeeFastLoginPremiumToggleEvent(playerProfile, reason));
 
-        if (isPlayerSender && core.getConfig().getBoolean("kick-toggle")) {
-            sender.disconnect(TextComponent.fromLegacyText(core.getMessage("remove-premium")));
-        } else {
-            sendMessage("remove-premium");
+        boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+        sendMessage(isSelf ? "remove-premium" : "remove-premium-other");
+
+        // Kick the target player so they reconnect with the updated profile
+        if (core.getConfig().getBoolean("kick-toggle")) {
+            ProxiedPlayer target = core.getPlugin().getProxy().getPlayer(targetPlayer);
+            if (target != null) {
+                target.disconnect(TextComponent.fromLegacyText(core.getMessage("remove-premium")));
+            }
         }
     }
 
     private void activatePremium() {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
         if (playerProfile.isOnlinemodePreferred()) {
-            sendMessage("already-exists");
+            boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+            sendMessage(isSelf ? "already-exists" : "already-exists-other");
             return;
         }
 
         playerProfile.setOnlinemodePreferred(true);
+
+        // Resolve and store the Mojang UUID so the profile carries the
+        // correct premium UUID — without this, on reconnect the proxy may
+        // assign an offline UUID even though online mode is enabled.
+        try {
+            Optional<Profile> mojangProfile = core.getResolver().findProfile(targetPlayer);
+            if (mojangProfile.isPresent()) {
+                playerProfile.setId(mojangProfile.get().getId());
+            }
+        } catch (Exception e) {
+            core.getPlugin().getLog().warn(
+                "Failed to resolve Mojang UUID for {} during premium toggle", targetPlayer, e);
+        }
+
         core.getStorage().save(playerProfile);
-        PremiumToggleReason reason = (!isPlayerSender || !sender.getName().equalsIgnoreCase(playerProfile.getName()))
+        PremiumToggleReason reason = (!isPlayerSender || !senderName.equalsIgnoreCase(playerProfile.getName()))
             ? PremiumToggleReason.COMMAND_OTHER : PremiumToggleReason.COMMAND_SELF;
         core.getPlugin().getProxy().getPluginManager().callEvent(
                 new BungeeFastLoginPremiumToggleEvent(playerProfile, reason));
-        sendMessage("add-premium");
+        boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
+        sendMessage(isSelf ? "add-premium" : "add-premium-other");
+
+        // Kick the target player so they reconnect with the updated profile
+        // and the proxy assigns their premium UUID.
+        if (core.getConfig().getBoolean("kick-toggle")) {
+            ProxiedPlayer target = core.getPlugin().getProxy().getPlayer(targetPlayer);
+            if (target != null) {
+                target.disconnect(TextComponent.fromLegacyText(core.getMessage("add-premium")));
+            }
+        }
     }
 
     private void sendMessage(String localeId) {

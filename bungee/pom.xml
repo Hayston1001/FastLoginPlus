@@ -66,10 +66,6 @@
                             <pattern>org.slf4j</pattern>
                             <shadedPattern>fastlogin.slf4j</shadedPattern>
                         </relocation>
-                        <relocation>
-                            <pattern>org.sqlite</pattern>
-                            <shadedPattern>fastlogin.sqlite</shadedPattern>
-                        </relocation>
                         <!-- Javalin and Jetty for web panel -->
                         <relocation>
                             <pattern>io.javalin</pattern>

@@ -38,6 +38,8 @@ import com.github.games647.fastlogin.core.storage.StoredProfile;
 
 public class DeleteCommand implements CommandExecutor {
 
+    private static final String PERM_PREFIX = "fastloginplus.folia.command.";
+
     protected final FastLoginBukkit plugin;
 
     public DeleteCommand(FastLoginBukkit plugin) {
@@ -47,6 +49,11 @@ public class DeleteCommand implements CommandExecutor {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label,
                              String[] args) {
+        if (!sender.hasPermission(PERM_PREFIX + "delete")) {
+            plugin.getCore().sendLocaleMessage("no-permission", sender);
+            return true;
+        }
+
         if (args.length == 0) {
             plugin.getCore().sendLocaleMessage("delete-specify-player", sender);
             return true;

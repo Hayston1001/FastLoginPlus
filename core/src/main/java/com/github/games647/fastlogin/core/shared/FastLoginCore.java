@@ -222,7 +222,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             if (currentVersion == null) {
                 currentVersion = "unknown";
             }
-            updateChecker = new UpdateChecker(plugin.getLog(), currentVersion);
+            updateChecker = new UpdateChecker(plugin.getLog(), currentVersion, isDebug());
         }
     }
 

@@ -98,7 +98,9 @@ public final class AuthMePremiumIntegrator {
             YamlConfiguration config = YamlConfiguration.loadConfiguration(authMeConfig);
             return config.getBoolean("settings.enablePremium", false);
         } catch (Exception e) {
-            plugin.getLog().debug("Could not read AuthMe enablePremium: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Could not read AuthMe enablePremium: {}", e.getMessage());
+            }
             return false;
         }
     }
@@ -125,7 +127,9 @@ public final class AuthMePremiumIntegrator {
             YamlConfiguration config = YamlConfiguration.loadConfiguration(authMeConfig);
             return config.getBoolean("settings.registration.dialog.preJoin.enable", true);
         } catch (Exception e) {
-            plugin.getLog().debug("Could not read AuthMe preJoin setting: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Could not read AuthMe preJoin setting: {}", e.getMessage());
+            }
             return false;
         }
     }
@@ -157,7 +161,9 @@ public final class AuthMePremiumIntegrator {
             plugin.getLog().info("Auto-registered {} in AuthMe (premium)", player.getName());
             return true;
         } catch (Exception e) {
-            plugin.getLog().debug("AuthMe forceRegister failed: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("AuthMe forceRegister failed: {}", e.getMessage());
+            }
             return false;
         }
     }
@@ -183,9 +189,13 @@ public final class AuthMePremiumIntegrator {
             Method addPending = cache.getClass().getMethod(
                 "addPending", String.class, UUID.class);
             addPending.invoke(cache, playerName, mojangUuid);
-            plugin.getLog().debug("Injected pending premium for {} into AuthMe", playerName);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Injected pending premium for {} into AuthMe", playerName);
+            }
         } catch (Exception e) {
-            plugin.getLog().debug("PendingPremiumCache injection failed: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("PendingPremiumCache injection failed: {}", e.getMessage());
+            }
         }
     }
 
@@ -211,9 +221,13 @@ public final class AuthMePremiumIntegrator {
             Method storeVerified = verifier.getClass().getMethod(
                 "storeVerified", String.class, UUID.class);
             storeVerified.invoke(verifier, playerName, mojangUuid);
-            plugin.getLog().debug("Injected verified UUID for {} into AuthMe", playerName);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Injected verified UUID for {} into AuthMe", playerName);
+            }
         } catch (Exception e) {
-            plugin.getLog().debug("PremiumLoginVerifier injection failed: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("PremiumLoginVerifier injection failed: {}", e.getMessage());
+            }
         }
     }
 
@@ -275,7 +289,9 @@ public final class AuthMePremiumIntegrator {
             }
             return false;
         } catch (Exception e) {
-            plugin.getLog().debug("markPlayerAsPremium failed: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("markPlayerAsPremium failed: {}", e.getMessage());
+            }
             return false;
         }
     }
@@ -292,7 +308,12 @@ public final class AuthMePremiumIntegrator {
      * @param playerName the player name
      */
     public void clearPlayerPremium(String playerName) {
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("clearPlayerPremium called for: {}", playerName);
+        }
+
         if (!versionDetector.isAuthMePresent()) {
+            plugin.getLog().warn("clearPlayerPremium: AuthMe not present, aborting");
             return;
         }
 
@@ -308,7 +329,9 @@ public final class AuthMePremiumIntegrator {
                 if (cache != null) {
                     Method removePending = cache.getClass().getMethod("removePending", String.class);
                     removePending.invoke(cache, lowerName);
-                    plugin.getLog().debug("Removed {} from AuthMe PendingPremiumCache", playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Removed {} from AuthMe PendingPremiumCache", playerName);
+                    }
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to clear AuthMe PendingPremiumCache for {}: {}",
@@ -325,37 +348,43 @@ public final class AuthMePremiumIntegrator {
                     java.util.concurrent.ConcurrentHashMap<String, Object> verifiedMap =
                         (java.util.concurrent.ConcurrentHashMap<String, Object>) verifiedField.get(verifier);
                     verifiedMap.remove(lowerName);
-                    plugin.getLog().debug("Removed {} from AuthMe PremiumLoginVerifier", playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Removed {} from AuthMe PremiumLoginVerifier", playerName);
+                    }
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to clear AuthMe PremiumLoginVerifier for {}: {}",
                     playerName, e.getMessage());
             }
 
-            // 3. Delete the player's AuthMe database record and in-memory cache.
-            //    We use direct reflection on DataSource.removeAuth() and
-            //    PlayerCache.removePlayer() instead of AuthMeApi.forceUnregister()
-            //    because the AuthMe API schedules its work asynchronously via
-            //    Management.runTask() → BukkitService.runTaskOptionallyAsync().
-            //    That double-async (FLP async → AuthMe async) means the record
-            //    deletion races with the player's kick and reconnect.
+            // 3. Delete the player's AuthMe database record, with cascade fallback.
+            //    Tier 1: removeAuth() — delete entire record (best outcome).
+            //    Tier 2: clear premium_uuid + reset password (if removeAuth fails
+            //            but the record still exists). This ensures isPremium()=false
+            //            so AuthMe's preJoin dialog won't be skipped, AND the player
+            //            won't be locked out by an unknown password.
+            //    We use direct reflection on DataSource instead of AuthMeApi because
+            //    the AuthMe API dispatches asynchronously (Management.runTask() →
+            //    BukkitService.runTaskOptionallyAsync()), causing a race with the kick.
             try {
-                // a) Delete from AuthMe's database (synchronous)
                 Object ds = getDataSource();
                 if (ds == null) {
                     plugin.getLog().warn("Cannot clear AuthMe DB for {}: DataSource not available", playerName);
                 } else {
+                    // Tier 1: try to delete the entire record
                     Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
                     boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
-                    plugin.getLog().info("AuthMe removeAuth({}) = {} (switched to cracked)", playerName, removed);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info(
+                            "AuthMe removeAuth({}) = {} (switched to cracked)", playerName, removed);
+                    }
+
                     if (!removed) {
-                        // Record might not exist or delete failed — verify
+                        // Tier 2: record still exists — clear premium_uuid + reset password
                         Method getAuth = ds.getClass().getMethod("getAuth", String.class);
                         Object auth = getAuth.invoke(ds, lowerName);
                         if (auth != null) {
-                            plugin.getLog().warn(
-                                "AuthMe record for {} still exists after removeAuth returned false! "
-                                + "The DB delete did not take effect.", playerName);
+                            fallbackClearAuthMeRecord(ds, auth, playerName);
                         }
                     }
                 }
@@ -363,30 +392,165 @@ public final class AuthMePremiumIntegrator {
                 // b) Remove from AuthMe's in-memory player cache (synchronous)
                 Object pc = getPlayerCache();
                 if (pc == null) {
-                    plugin.getLog().debug("Cannot clear AuthMe PlayerCache for {}: not available", playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Cannot clear AuthMe PlayerCache for {}: not available", playerName);
+                    }
                 } else {
                     Method removePlayer = pc.getClass().getMethod("removePlayer", String.class);
                     removePlayer.invoke(pc, lowerName);
-                    plugin.getLog().debug("Removed {} from AuthMe PlayerCache", playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Removed {} from AuthMe PlayerCache", playerName);
+                    }
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to unregister {} from AuthMe 6.0: {}",
                     playerName, e.getMessage());
-                plugin.getLog().debug("AuthMe unregister exception trace", e);
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("AuthMe unregister exception trace", e);
+                }
             }
         } else {
             // AuthMe 5.x: no premium feature, no caches.
-            // Always forceUnregister; worst case the player re-registers.
+            // Try synchronous reflection first (direct DataSource access),
+            // fall back to async AuthMeApi if reflection fails.
+            try {
+                // Try to get DataSource from AuthMe plugin via reflection
+                Plugin authMePlugin = Bukkit.getPluginManager().getPlugin("AuthMe");
+                if (authMePlugin != null) {
+                    Field databaseField = authMePlugin.getClass().getDeclaredField("database");
+                    databaseField.setAccessible(true);
+                    Object ds = databaseField.get(authMePlugin);
+                    if (ds != null) {
+                        Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
+                        boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
+                        if (plugin.getCore().isDebug()) {
+                            plugin.getLog().info(
+                                "AuthMe 5.x removeAuth({}) = {} (synchronous)", playerName, removed);
+                        }
+                        if (removed) {
+                            return; // done synchronously
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info(
+                    "AuthMe 5.x synchronous cleanup failed for {}, falling back to async API: {}",
+                    playerName, e.getMessage());
+                }
+            }
+
+            // Fallback: async AuthMeApi
             try {
                 AuthMeApi api = AuthMeApi.getInstance();
                 if (api != null && api.isRegistered(lowerName)) {
                     api.forceUnregister(lowerName);
-                    plugin.getLog().info("Unregistered {} from AuthMe 5.x", playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info(
+                            "Unregistered {} from AuthMe 5.x (async fallback)", playerName);
+                    }
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to unregister {} from AuthMe 5.x: {}",
                     playerName, e.getMessage());
             }
+        }
+    }
+
+    /**
+     * Lightweight check called during cracked-session login to detect and clean
+     * up stale AuthMe premium records left over from a failed
+     * {@link #clearPlayerPremium(String)}. Only triggers full cleanup if the
+     * AuthMe record still has {@code isPremium()=true} — normal cracked players
+     * are not affected.
+     *
+     * @param playerName the player name
+     */
+    public void ensureNotPremium(String playerName) {
+        if (!versionDetector.isAuthMe6()) {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("ensureNotPremium: {} skipped (not AuthMe 6.0)", playerName);
+            }
+            return;
+        }
+
+        String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
+        try {
+            Object ds = getDataSource();
+            if (ds == null) {
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("ensureNotPremium: {} skipped (DataSource null)", playerName);
+                }
+                return;
+            }
+
+            Method getAuth = ds.getClass().getMethod("getAuth", String.class);
+            Object auth = getAuth.invoke(ds, lowerName);
+            if (auth == null) {
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("ensureNotPremium: {} clean (no AuthMe record)", playerName);
+                }
+                return;
+            }
+
+            Method isPremium = auth.getClass().getMethod("isPremium");
+            boolean premium = (boolean) isPremium.invoke(auth);
+            if (!premium) {
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info(
+                        "ensureNotPremium: {} clean (isPremium=false, normal cracked)", playerName);
+                }
+                return;
+            }
+
+            // Stale premium record from a failed /cracked cleanup
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info(
+                    "ensureNotPremium: {} STALE (isPremium=true) → triggering cleanup",
+                    playerName);
+            }
+            clearPlayerPremium(playerName);
+        } catch (Exception e) {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info(
+                "ensureNotPremium check failed for {}: {}", playerName, e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Fallback for when {@link #clearPlayerPremium(String)} cannot delete the
+     * AuthMe database record (removeAuth returns false). Clears the premium UUID
+     * so that {@code isPremium()=false} (AuthMe's preJoin dialog will be shown)
+     * and resets the password to an empty hash so the player can re-register.
+     *
+     * @param ds AuthMe's DataSource singleton
+     * @param auth the PlayerAuth record (non-null)
+     * @param playerName the player name (for logging)
+     */
+    private void fallbackClearAuthMeRecord(Object ds, Object auth, String playerName) throws Exception {
+        plugin.getLog().warn(
+            "AuthMe record for {} still exists after removeAuth returned false. "
+            + "Falling back to clear premium flag + reset password.", playerName);
+
+        // Clear premium UUID → isPremium() = false
+        Method setPremiumUuid = auth.getClass().getMethod("setPremiumUuid", UUID.class);
+        setPremiumUuid.invoke(auth, (UUID) null);
+        Method updatePremium = ds.getClass().getMethod("updatePremiumUuid", auth.getClass());
+        updatePremium.invoke(ds, auth);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Cleared premium flag for {} in AuthMe (fallback)", playerName);
+        }
+
+        // Reset password to empty → player can re-register
+        Class<?> hashedPwClass = Class.forName("fr.xephi.authme.security.crypts.HashedPassword");
+        Object emptyHash = hashedPwClass.getConstructor(String.class).newInstance("");
+        Method setPassword = auth.getClass().getMethod("setPassword", hashedPwClass);
+        setPassword.invoke(auth, emptyHash);
+        Method saveAuth = ds.getClass().getMethod("saveAuth", auth.getClass());
+        saveAuth.invoke(ds, auth);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Reset password for {} in AuthMe (fallback)", playerName);
         }
     }
 
@@ -484,7 +648,9 @@ public final class AuthMePremiumIntegrator {
                 }
             }
         }
-        plugin.getLog().debug("Could not find AuthMe's Injector field");
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Could not find AuthMe's Injector field");
+        }
         return null;
     }
 
@@ -707,7 +873,9 @@ public final class AuthMePremiumIntegrator {
                 + "FLP is now the sole Mojang verification source.");
             return true;
         } catch (Exception e) {
-            plugin.getLog().debug("Failed to unregister premium packet listener: {}", e.getMessage());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Failed to unregister premium packet listener: {}", e.getMessage());
+            }
             return false;
         }
     }
@@ -748,5 +916,90 @@ public final class AuthMePremiumIntegrator {
         Method reload = pesClass.getMethod("reload",
             Class.forName("fr.xephi.authme.settings.Settings"));
         reload.invoke(pes, settings);
+    }
+
+    /**
+     * Closes AuthMe 6.0's blocking preJoin registration dialog for the given
+     * player by completing the pending register response CompletableFuture.
+     *
+     * @param playerId the player's connection UUID (v3 or v4, as assigned by Paper)
+     */
+    public void closePreJoinRegisterDialog(UUID playerId) {
+        if (!versionDetector.isAuthMe6()) {
+            return;
+        }
+        try {
+            Object injector = getAuthMeInjector();
+            if (injector == null) {
+                return;
+            }
+            Class<?> dialogListenerClass = Class.forName(
+                "fr.xephi.authme.listener.PaperDialogFlowListener");
+            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+            Object dialogListener = getSingleton.invoke(injector, dialogListenerClass);
+            if (dialogListener == null) {
+                return;
+            }
+            java.lang.reflect.Field responsesField = dialogListenerClass
+                .getDeclaredField("pendingRegisterResponses");
+            responsesField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>> responses =
+                (java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>>)
+                    responsesField.get(dialogListener);
+            java.util.concurrent.CompletableFuture<String> future = responses.get(playerId);
+            if (future != null) {
+                future.complete(null);
+                plugin.getLog().info("Closed AuthMe preJoin register dialog for {}", playerId);
+            }
+        } catch (Exception e) {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Failed to close AuthMe preJoin dialog: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Closes AuthMe 6.0's blocking preJoin login dialog for the given player.
+     * This is the LOGIN dialog (for existing records with password), not the
+     * REGISTER dialog.  Needed when a cracked→premium toggle creates a record
+     * that AuthMe's HIGHEST handler sees as non-premium (async timing race)
+     * and shows a login dialog.
+     *
+     * @param playerId the player's connection UUID (v3 or v4, as assigned by Paper)
+     */
+    public void closePreJoinLoginDialog(UUID playerId) {
+        if (!versionDetector.isAuthMe6()) {
+            return;
+        }
+        try {
+            Object injector = getAuthMeInjector();
+            if (injector == null) {
+                return;
+            }
+            Class<?> dialogListenerClass = Class.forName(
+                "fr.xephi.authme.listener.PaperDialogFlowListener");
+            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+            Object dialogListener = getSingleton.invoke(injector, dialogListenerClass);
+            if (dialogListener == null) {
+                return;
+            }
+            java.lang.reflect.Field responsesField = dialogListenerClass
+                .getDeclaredField("pendingLoginResponses");
+            responsesField.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>> responses =
+                (java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>>)
+                    responsesField.get(dialogListener);
+            java.util.concurrent.CompletableFuture<String> future = responses.get(playerId);
+            if (future != null) {
+                future.complete(null);
+                plugin.getLog().info("Closed AuthMe preJoin login dialog for {}", playerId);
+            }
+        } catch (Exception e) {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Failed to close AuthMe preJoin login dialog: {}", e.getMessage());
+            }
+        }
     }
 }

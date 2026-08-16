@@ -43,6 +43,8 @@ import java.util.UUID;
  */
 public class PremiumCommand extends ToggleCommand {
 
+    private static final String PERM_PREFIX = "fastloginplus.bukkit.command.";
+
     public PremiumCommand(FastLoginBukkit plugin) {
         super(plugin);
     }
@@ -61,6 +63,11 @@ public class PremiumCommand extends ToggleCommand {
 
     private void onPremiumSelf(CommandSender sender) {
         if (isConsole(sender)) {
+            return;
+        }
+
+        if (!sender.hasPermission(PERM_PREFIX + "premium")) {
+            plugin.getCore().sendLocaleMessage("no-permission", sender);
             return;
         }
 
@@ -92,7 +99,7 @@ public class PremiumCommand extends ToggleCommand {
 
                 plugin.getScheduler().getSyncExecutor().execute(() -> {
                     if (plugin.getCore().getConfig().getBoolean("kick-toggle")) {
-                        player.kickPlayer(plugin.getCore().getMessage("remove-premium"));
+                        player.kickPlayer(plugin.getCore().getMessage("add-premium"));
                     } else {
                         plugin.getCore().sendLocaleMessage("add-premium", sender);
                     }
@@ -102,7 +109,7 @@ public class PremiumCommand extends ToggleCommand {
     }
 
     private void onPremiumOther(CommandSender sender, Command command, String[] args) {
-        if (!hasOtherPermission(sender, command)) {
+        if (!hasOtherPermission(sender, PERM_PREFIX + "premium")) {
             return;
         }
 

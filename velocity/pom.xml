@@ -83,10 +83,6 @@
                             <pattern>org.mariadb</pattern>
                             <shadedPattern>fastlogin.mariadb</shadedPattern>
                         </relocation>
-                        <relocation>
-                            <pattern>org.sqlite</pattern>
-                            <shadedPattern>fastlogin.sqlite</shadedPattern>
-                        </relocation>
                         <!-- Javalin and Jetty for web panel -->
                         <relocation>
                             <pattern>io.javalin</pattern>

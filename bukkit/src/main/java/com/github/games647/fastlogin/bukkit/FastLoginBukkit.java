@@ -25,6 +25,8 @@
  */
 package com.github.games647.fastlogin.bukkit;
 
+import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -37,6 +39,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventPriority;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.geysermc.floodgate.api.FloodgateApi;
@@ -93,6 +96,17 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     private AuthMeVersionDetector authMeVersionDetector;
     private AuthMePremiumIntegrator authMePremiumIntegrator;
+
+    // Toggles queued while no player was online to relay the proxy message.
+    // Key = player name, Value = true for premium, false for cracked.
+    // The configure listener detects pending toggles on reconnect, relays
+    // the message through the connecting player, and kicks them from Paper.
+    private final java.util.Map<String, Boolean> pendingOfflineToggles =
+        new java.util.concurrent.ConcurrentHashMap<>();
+
+    public java.util.Map<String, Boolean> getPendingOfflineToggles() {
+        return pendingOfflineToggles;
+    }
 
     public FastLoginBukkit() {
         this.logger = CommonUtil.initializeLoggerService(getLogger());
@@ -165,7 +179,22 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         //delay dependency setup because we load the plugin very early where plugins are initialized yet
         getServer().getScheduler().runTaskLater(this, new DelayedAuthHook(this), 5L);
 
-        pluginManager.registerEvents(new ConnectionListener(this), this);
+        ConnectionListener connectionListener = new ConnectionListener(this);
+        pluginManager.registerEvents(connectionListener, this);
+
+        // On Paper with a proxy, unregister PlayerLoginEvent to avoid
+        // HorriblePlayerLoginEventHack which disables re-configuration APIs
+        // (including AsyncPlayerConnectionConfigureEvent).
+        if (isPaper() && bungeeManager.isEnabled()) {
+            org.bukkit.event.player.PlayerLoginEvent.getHandlerList().unregister(connectionListener);
+            logger.info("Unregistered PlayerLoginEvent listener to avoid HorriblePlayerLoginEventHack");
+        }
+
+        // Register for Paper's AsyncPlayerConnectionConfigureEvent via reflection
+        // (Paper API is not in compile classpath — we target spigot-api).
+        // This lets us pre-create AuthMe premium records during the configuration
+        // phase, before AuthMe's own handler shows a blocking preJoin dialog.
+        registerPaperConfigureListener();
 
         // On Paper, profile.complete(true) is called right after AsyncPlayerPreLoginEvent.
         // This listener sets the skin during the event so that complete(true) sees textures
@@ -182,7 +211,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             premiumPlaceholder.register();
         }
 
-        skinsRestorerCompat = new SkinsRestorerCompat(logger);
+        skinsRestorerCompat = new SkinsRestorerCompat(this);
 
         scheduleUpdateCheck();
 
@@ -492,5 +521,161 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         } catch (ClassNotFoundException e) {
             return Optional.empty();
         }
+    }
+
+    /**
+     * Dynamically registers a listener for Paper's
+     * {@code AsyncPlayerConnectionConfigureEvent} (LOWEST priority).
+     * <p>
+     * During the configuration phase, this handler asynchronously looks up the
+     * player's premium UUID from Mojang and pre-creates an AuthMe premium
+     * record.  By the time AuthMe's own handler (HIGHEST) checks the database,
+     * the record is ready and {@code shouldSkipPreJoinDialogForPremium()} returns
+     * true — the blocking preJoin dialog is skipped entirely.
+     * <p>
+     * Requires Paper 1.20.5+.  On other platforms (or older Paper) the event
+     * class won't be found and this silently does nothing.
+     */
+    private void registerPaperConfigureListener() {
+        logger.info("Attempting to register Paper configure listener...");
+        try {
+            Class<?> rawClass = Class.forName(
+                "io.papermc.paper.event.connection.configuration.AsyncPlayerConnectionConfigureEvent");
+            @SuppressWarnings("unchecked")
+            Class<? extends org.bukkit.event.Event> eventClass =
+                (Class<? extends org.bukkit.event.Event>) rawClass;
+            Bukkit.getPluginManager().registerEvent(
+                eventClass,
+                new org.bukkit.event.Listener() { },
+                EventPriority.LOWEST,
+                (listener, event) -> onPlayerConfigure(event),
+                this
+            );
+            logger.info("Registered Paper configure-phase listener for autoRegister");
+        } catch (ClassNotFoundException e) {
+            logger.info("Paper configure event not available — skipping");
+        } catch (Exception e) {
+            logger.warn("Failed to register Paper configure listener", e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void onPlayerConfigure(Object event) {
+        if (!bungeeManager.isEnabled() || !getConfig().getBoolean("autoRegister")) {
+            return;
+        }
+
+        String playerName;
+        UUID connectionUuid;
+        java.net.InetSocketAddress address;
+        try {
+            Object conn = event.getClass().getMethod("getConnection").invoke(event);
+            Object profile = conn.getClass().getMethod("getProfile").invoke(conn);
+            playerName = (String) profile.getClass().getMethod("getName").invoke(profile);
+            connectionUuid = (UUID) profile.getClass().getMethod("getId").invoke(profile);
+            address = (java.net.InetSocketAddress) conn.getClass().getMethod("getClientAddress").invoke(conn);
+        } catch (Exception e) {
+            logger.warn("Failed to extract player info from configure event", e);
+            return;
+        }
+
+        // Pending toggles queued while no relay player was online.
+        // - Cracked: skip autoRegister — the player should see the register dialog.
+        // - Premium: proceed with autoRegister despite UUID mismatch, then
+        //   schedule a PLAY-phase self-relay + kick.  Don't remove from the
+        //   pending map yet — only clear it once the proxy message is sent.
+        Boolean pendingActivate = pendingOfflineToggles.get(playerName);
+        final boolean isPendingPremium = Boolean.TRUE.equals(pendingActivate);
+        if (pendingActivate != null && !pendingActivate) {
+            pendingOfflineToggles.remove(playerName);
+            logger.info("Skipping autoRegister for {}: pending cracked toggle", playerName);
+            return;
+        }
+
+        // Run Mojang lookup asynchronously — the configuration phase thread
+        // must not be blocked.  If AuthMe's HIGHEST handler fires before our
+        // async task completes, the dialog flashes briefly and is closed by
+        // closePreJoinRegisterDialog().
+        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+            try {
+                java.util.Optional<com.github.games647.craftapi.model.Profile> mojang =
+                    core.getResolver().findProfile(playerName);
+                if (!mojang.isPresent()) {
+                    return;
+                }
+                UUID premiumUuid = mojang.get().getId();
+
+                // Guard: if the player's connection UUID doesn't match the
+                // Mojang premium UUID, the proxy assigned an offline UUID.
+                // This means the player is either cracked, or the proxy uses
+                // premiumUuid:false.  In either case we must NOT pre-create a
+                // premium AuthMe record — that would re-register a cracked
+                // player as premium behind the proxy's back.
+                //
+                // EXCEPTION: pending premium toggle — the proxy hasn't updated
+                // yet but the admin explicitly asked to set this player as
+                // premium.  Pre-create the record so AuthMe skips the login
+                // dialog (which asks for the cracked-era password).
+                if (!premiumUuid.equals(connectionUuid)) {
+                    if (!isPendingPremium) {
+                        logger.info(
+                            "Skipping autoRegister for {}: connection UUID {} != premium UUID {}",
+                            playerName, connectionUuid, premiumUuid);
+                        return;
+                    }
+                    logger.info(
+                        "Pending premium toggle for {}: allowing autoRegister "
+                            + "despite UUID mismatch ({} vs {})",
+                        playerName, connectionUuid, premiumUuid);
+                }
+
+                com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+                    getAuthMePremiumIntegrator();
+                if (integrator != null && integrator.isAuthMePremiumEnabled()) {
+                    integrator.injectVerifiedUuid(playerName, premiumUuid);
+                    integrator.markPlayerAsPremium(playerName, premiumUuid);
+                    // Close both register AND login dialogs.  AuthMe may show
+                    // a login dialog for existing records (cracked→premium)
+                    // if the async task hasn't updated the record yet.
+                    integrator.closePreJoinRegisterDialog(connectionUuid);
+                    integrator.closePreJoinLoginDialog(connectionUuid);
+                }
+
+                // Create session so ForceLoginTask auto-logs the player after join
+                BukkitLoginSession session = new BukkitLoginSession(playerName, true);
+                session.setUuid(premiumUuid);
+                session.setVerifiedPremium(true);
+                putSession(address, session);
+
+                // For pending premium toggles, send the proxy message now
+                // (the player is connected in PLAY phase) and kick. This
+                // avoids waiting for the retry and eliminates the no-auth
+                // window between configure and proxy kick.
+                if (isPendingPremium) {
+                    Bukkit.getScheduler().runTask(FastLoginBukkit.this, () -> {
+                        Player player = Bukkit.getPlayerExact(playerName);
+                        if (player != null && bungeeManager.isEnabled()) {
+                            ChangePremiumMessage msg = new ChangePremiumMessage(
+                                playerName, true, false);
+                            bungeeManager.sendPluginMessage(player, msg);
+                            pendingOfflineToggles.remove(playerName);
+                            if (getConfig().getBoolean("kick-toggle")) {
+                                logger.info(
+                                    "Relayed pending premium toggle for {} and kicking",
+                                    playerName);
+                                player.kickPlayer(core.getMessage("add-premium"));
+                            } else {
+                                logger.info(
+                                    "Relayed pending premium toggle for {} (kick disabled)",
+                                    playerName);
+                            }
+                        }
+                    });
+                }
+            } catch (Exception e) {
+                logger.warn("AutoRegister in configure phase failed for {}: {}",
+                    playerName, e.getMessage());
+            }
+        });
     }
 }

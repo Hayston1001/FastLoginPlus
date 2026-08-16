@@ -149,6 +149,15 @@ public class VerifyResponseTask implements Runnable {
             plugin.getLog().info("Verifying session for {} ...", requestedUsername);
         }
         for (int attempt = 1; attempt <= retryCount; attempt++) {
+            // The player may have disconnected (e.g. the user cancelled the connection)
+            // while this async task was queued or during a previous retry. Abort instead
+            // of querying Mojang for a player that is no longer connecting.
+            if (!isConnectionActive()) {
+                plugin.getLog().info("Player {} disconnected during session verification, aborting",
+                        requestedUsername);
+                return;
+            }
+
             try {
                 Optional<Verification> response = resolver.hasJoined(requestedUsername, serverId, address);
                 if (response.isPresent()) {
@@ -249,7 +258,9 @@ public class VerifyResponseTask implements Runnable {
                 // needsRegistration() return false.
                 session.setRegistered(true);
             }
-            plugin.getLog().debug("Injected AuthMe 6.0 premium state for {}", requestedUsername);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Injected AuthMe 6.0 premium state for {}", requestedUsername);
+            }
         }
 
         // Schedule Netty pipeline modifications on the channel's event loop thread.
@@ -322,7 +333,9 @@ public class VerifyResponseTask implements Runnable {
     }
 
     private boolean enableEncryption(SecretKey loginKey) throws IllegalArgumentException {
-        plugin.getLog().debug("Enabling onlinemode encryption for {}", player.getAddress());
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Enabling onlinemode encryption for {}", player.getAddress());
+        }
         // Initialize method reflections
         if (encryptKeyMethod == null || encryptMethod == null) {
             Class<?> networkManagerClass = MinecraftReflection.getNetworkManagerClass();
@@ -368,20 +381,54 @@ public class VerifyResponseTask implements Runnable {
         return true;
     }
 
+    private boolean isConnectionActive() {
+        try {
+            NettyChannelInjector injectorContainer = (NettyChannelInjector) Accessors.getMethodAccessorOrNull(
+                    TemporaryPlayerFactory.class, "getInjectorFromPlayer", Player.class
+            ).invoke(null, player);
+
+            if (injectorContainer == null) {
+                return false;
+            }
+
+            Channel channel = FuzzyReflection.getFieldValue(injectorContainer, Channel.class, true);
+            return channel != null && channel.isActive();
+        } catch (Exception ex) {
+            // Player is gone — the injector/network manager can no longer be resolved
+            return false;
+        }
+    }
+
     private void disconnect(String reasonKey, String logMessage, Object... arguments) {
+        // The async verification can outlive the connection (e.g. the user cancelled the
+        // login while Mojang was still answering). Don't log a scary error or kick a ghost.
+        if (!isConnectionActive()) {
+            plugin.getLog().info("Skipping disconnect for {}: connection already closed",
+                    session.getRequestUsername());
+            return;
+        }
+
         plugin.getLog().error(logMessage, arguments);
         kickPlayer(plugin.getCore().getMessage(reasonKey));
     }
 
     @SuppressWarnings("deprecation") // kickPlayer needed — login state, kick(Component) won't work
     private void kickPlayer(String reason) {
-        PacketContainer kickPacket = new PacketContainer(DISCONNECT);
-        kickPacket.getChatComponents().write(0, WrappedChatComponent.fromText(reason));
-        //send kick packet at login state
-        //the normal event.getPlayer.kickPlayer(String) method does only work at play state
-        ProtocolLibrary.getProtocolManager().sendServerPacket(player, kickPacket);
-        //tell the server that we want to close the connection
-        player.kickPlayer("Disconnect");
+        try {
+            PacketContainer kickPacket = new PacketContainer(DISCONNECT);
+            kickPacket.getChatComponents().write(0, WrappedChatComponent.fromText(reason));
+            //send kick packet at login state
+            //the normal event.getPlayer.kickPlayer(String) method does only work at play state
+            ProtocolLibrary.getProtocolManager().sendServerPacket(player, kickPacket);
+            //tell the server that we want to close the connection
+            player.kickPlayer("Disconnect");
+        } catch (Exception ex) {
+            // The player already disconnected while the async session verification was running
+            // (e.g. the user cancelled the connection). ProtocolLib throws an NPE when resolving
+            // the NetworkManager of a player whose connection is closed — nothing left to kick.
+            plugin.getLog().info("Cannot kick {}: connection already closed ({})",
+                    player.getName(), ex.getClass().getSimpleName());
+        }
     }
 
     //fake a new login packet in order to let the server handle all the other stuff
