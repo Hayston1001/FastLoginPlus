@@ -86,6 +86,8 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
         scheduler = new AsyncScheduler(logger, task -> getProxy().getScheduler().runAsync(this, task));
 
         core = new FastLoginCore<>(this);
+        // Proxies ship a trimmed config template without backend-only keys
+        core.setConfigTemplate("config-proxy.yml");
         core.load();
         if (!core.setupDatabase()) {
             return;

@@ -1,5 +1,17 @@
 # FastLoginPlus Changelog
 
+## Unreleased
+
+### Per-platform config templates / 分平台配置模板
+
+- BungeeCord/Velocity now generate `config.yml` from a dedicated `config-proxy.yml` template: backend-only keys (`verifyClientKeys`, `respectIpLimit`) are no longer present, and comments describe the proxy's role (decision maker: Mojang queries, database, force-login forwarding)
+- Bukkit/Folia config comments now mark which keys lose effect (or only partially apply) when the server runs behind a proxy — `database`, `anti-bot`, Floodgate keys, JoinManagement keys and more
+- ConfigRefresher preserves values for scalar keys written without a template value (e.g. `ServerRSAPublicKeyFile`)
+
+- BungeeCord/Velocity 现在使用专属的 `config-proxy.yml` 模板生成 `config.yml`: 后端专属键(`verifyClientKeys`、`respectIpLimit`)不再出现, 注释描述代理端职责(决策方: Mojang 查询、数据库、转发强制登录)
+- Bukkit/Folia 的配置注释现在标明代理子服模式下失效(或仅部分生效)的键 — `database`、`anti-bot`、Floodgate 相关键、JoinManagement 相关键等
+- ConfigRefresher 现在会保留模板中无默认值的标量键(如 `ServerRSAPublicKeyFile`)的用户值
+
 ## v0.4.0
 
 ### Paper Configure Phase autoRegister / Paper 配置阶段自动注册

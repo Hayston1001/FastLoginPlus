@@ -133,6 +133,7 @@
                                 <exclude>src/test/resources/**</exclude>
                                 <exclude>src/main/resources/**</exclude>
                                 <exclude>.java-version</exclude>
+                                <exclude>.playwright-mcp/**</exclude>
                             </excludes>
                         </licenseSet>
                     </licenseSets>

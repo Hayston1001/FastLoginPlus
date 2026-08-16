@@ -23,7 +23,8 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 * **Multi-layer anti-bot** — per-IP rate limiting, burst detection, temporary IP ban, trusted IP whitelist, and `FastLoginAntiBotEvent` for plugin integration
 * **[Folia](https://papermc.io/downloads/folia) support** — dedicated module with Folia-compatible scheduler
 * **Auto update check** — checks GitHub Releases on startup and periodically; notifies OPs in-game when a new version is available
-* **Multi-language** — built-in English and Chinese, custom language files supported, bilingual config comments
+* **Multi-language** — built-in English and Chinese, custom language files supported
+* **Per-platform config templates** — Bukkit/Folia and BungeeCord/Velocity each generate their own config file: proxies get a trimmed template without backend-only keys, and backend comments mark the keys that lose effect behind a proxy
 * **SQLite on proxy platforms** — BungeeCord and Velocity now bundle SQLite JDBC driver; upstream only supports MySQL/MariaDB on proxies
 * **Session retry** — Mojang verification retries on network errors instead of failing immediately
 * **[SkinsRestorer](https://modrinth.com/plugin/skinsrestorer) compatibility** — no longer overrides skins set via SkinsRestorer
@@ -74,6 +75,17 @@ Paste the UUID into `plugins/fastloginplus/allowed-proxies.txt` on every backend
 In **standalone mode** (no proxy), the database (`FastLogin.db` by default) is stored on each backend server under `plugins/fastloginplus/`.
 
 In **proxy mode** (BungeeCord/Velocity), the database is stored **only on the proxy**. Backend servers do not create a database — they simply execute the login/register commands sent by the proxy via plugin messages. `/flp premium` and `/flp cracked` commands on the backend forward to the proxy, and the proxy handles all profile reads and writes.
+
+### Configuration Templates
+
+FLP ships **two config templates**; each platform generates its `config.yml` from the one that matches its role:
+
+| Template | Used by | Contents |
+|----------|---------|----------|
+| `config.yml` (backend) | Bukkit, Folia | All keys. Comments mark which keys have no effect (or only partial effect) when the server runs **behind a proxy** — e.g. `database`, `anti-bot`, Floodgate keys are ignored on a proxy backend because the proxy owns those functions. |
+| `config-proxy.yml` (proxy) | BungeeCord, Velocity | Proxy-relevant keys only. Backend-only keys (`verifyClientKeys`, `respectIpLimit`) are omitted, and comments describe the proxy's role (decision maker: Mojang API queries, database, force-login forwarding). |
+
+The file on disk is always named `config.yml`. Copying a config file between a proxy and a backend is safe: each platform regenerates the file structure from its own template on startup while preserving your values, and keys missing from the new template are simply dropped (they had no effect there anyway).
 
 ## Environment
 

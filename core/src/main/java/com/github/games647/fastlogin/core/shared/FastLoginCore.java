@@ -95,6 +95,13 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     private MojangResolver resolver;
 
     private Configuration config;
+
+    /**
+     * Bundled config template resource name. Backends (bukkit/folia) use the
+     * full "config.yml"; proxies (bungee/velocity) select the trimmed
+     * "config-proxy.yml" before {@link #load()}.
+     */
+    private String configTemplate = "config.yml";
     private SQLStorage storage;
     private AntiBotService antiBot;
     private PasswordGenerator<P> passwordGenerator = new DefaultPasswordGenerator<>();
@@ -107,7 +114,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     public void load() {
         // 1. Load config first to determine language setting
-        saveDefaultFile("config.yml");
+        saveDefaultFile("config.yml", configTemplate);
 
         try {
             config = loadFile("config.yml");
@@ -122,7 +129,8 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             ConfigRefresher.refresh(
                     getClass().getClassLoader(),
                     plugin.getPluginFolder().resolve("config.yml"),
-                    config);
+                    config,
+                    configTemplate);
         } catch (IOException ioEx) {
             plugin.getLog().warn("Could not refresh config.yml from template", ioEx);
             // non-fatal: continue with the config as-is
@@ -405,6 +413,17 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     public void setAuthPluginHook(AuthPlugin<P> authPlugin) {
         this.authPlugin = authPlugin;
+    }
+
+    /**
+     * Select which bundled template feeds config.yml generation and refresh.
+     * Must be called before {@link #load()}.
+     *
+     * @param configTemplate resource name of the bundled template
+     *                       (e.g. "config.yml", "config-proxy.yml")
+     */
+    public void setConfigTemplate(String configTemplate) {
+        this.configTemplate = configTemplate;
     }
 
     public void saveDefaultFile(String fileName) {

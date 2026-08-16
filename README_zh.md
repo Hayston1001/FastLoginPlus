@@ -23,7 +23,8 @@
 * **多层反机器人** — 每 IP 速率限制、突发检测、临时封禁、可信 IP 白名单, 以及 `FastLoginAntiBotEvent` 供其他插件集成
 * **[Folia](https://papermc.io/downloads/folia) 支持** — 独立模块, 使用 Folia 兼容的调度器
 * **自动更新检查** — 启动时及定期检查 GitHub Releases, 有新版本时游戏内通知 OP
-* **多语言** — 内置中英文, 支持自定义语言文件, 配置注释双语
+* **多语言** — 内置中英文, 支持自定义语言文件
+* **分平台配置模板** — Bukkit/Folia 与 BungeeCord/Velocity 各自生成专属的 config 文件: 代理端使用不含后端专属键的精简模板, 后端模板的注释标明代理模式下失效的配置
 * **代理端 SQLite 支持** — BungeeCord 和 Velocity 内置 SQLite JDBC 驱动, 适用于单代理小型服.上游仅支持 MySQL/MariaDB
 * **会话验证重试** — Mojang 验证遇到网络错误时自动重试, 而非直接失败
 * **[SkinsRestorer](https://modrinth.com/plugin/skinsrestorer) 兼容** — 不再覆盖 SkinsRestorer 设置的皮肤
@@ -74,6 +75,17 @@
 **单端模式**(无代理): 数据库(默认为 `FastLogin.db`)存储在每个后端服务器的 `plugins/fastloginplus/` 目录下.
 
 **代理模式**(BungeeCord/Velocity)：数据库**仅存储在代理端**. 后端服务器不会创建数据库文件——后端只负责接收代理通过插件消息发来的登录/注册指令并执行. 后端的 `/flp premium` 和 `/flp cracked` 命令会转发到代理, 由代理处理所有数据库读写操作. 
+
+### 配置模板
+
+FLP 内置**两套配置模板**；每个平台根据自身角色生成 `config.yml`：
+
+| 模板 | 适用平台 | 内容 |
+|------|---------|------|
+| `config.yml`(后端) | Bukkit、Folia | 全部配置项。注释标明哪些项在**代理子服模式**下不生效(或仅部分生效)——例如 `database`、`anti-bot`、Floodgate 相关配置在代理子服上无效, 因为这些功能由代理端负责。 |
+| `config-proxy.yml`(代理端) | BungeeCord、Velocity | 仅代理端相关配置项。不含后端专属键(`verifyClientKeys`、`respectIpLimit`), 注释描述代理端的职责(决策方：Mojang API 查询、数据库、转发强制登录指令)。 |
+
+磁盘上的文件名始终是 `config.yml`。在代理端与后端之间拷贝配置文件是安全的：每次启动时各平台会按自己的模板重建文件结构并保留你修改过的值, 新模板中不存在的键会被直接移除(它们在该平台本就无效)。
 
 ## 环境要求
 

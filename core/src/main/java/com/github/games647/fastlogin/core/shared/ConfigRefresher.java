@@ -58,20 +58,22 @@ public final class ConfigRefresher {
      * from the bundled template, but every value is taken from the user's
      * existing config.</p>
      *
-     * @param classLoader to load the template resource from the JAR
-     * @param configPath  path to the user's config.yml on disk
-     * @param userConfig  the parsed user Configuration (with all values)
+     * @param classLoader  to load the template resource from the JAR
+     * @param configPath   path to the user's config.yml on disk
+     * @param userConfig   the parsed user Configuration (with all values)
+     * @param templateName bundled template resource name
+     *                     (e.g. "config.yml", "config-proxy.yml")
      * @throws IOException if reading the template or writing the file fails
      */
     public static void refresh(ClassLoader classLoader, Path configPath,
-                               Configuration userConfig)
+                               Configuration userConfig, String templateName)
             throws IOException {
         // 1. Flatten user config into a dotted-key map
         Map<String, Object> userValues = new LinkedHashMap<>();
         flattenConfig(userConfig, "", userValues);
 
         // 2. Read template as raw text lines
-        List<String> templateLines = readResourceLines(classLoader, "config.yml");
+        List<String> templateLines = readResourceLines(classLoader, templateName);
         if (templateLines == null) {
             return;
         }
@@ -113,7 +115,9 @@ public final class ConfigRefresher {
                     : String.join(".", sectionPath) + "." + key;
 
             if (rest.isEmpty()) {
-                // No value on the same line — section header or list key
+                // No value on the same line — section header, list key, or
+                // a scalar whose value sits on its own line (e.g.
+                // "ServerRSAPublicKeyFile:")
                 Object userVal = userValues.get(fullKey);
 
                 if (userVal instanceof List) {
@@ -127,6 +131,11 @@ public final class ConfigRefresher {
                         }
                     }
                     // Do NOT push to section stack — it's a list, not a map
+                } else if (userVal != null && !(userVal instanceof Configuration)) {
+                    // Scalar key written without a value in the template —
+                    // preserve the user's value on the key line
+                    output.add(line.substring(0, line.indexOf(':') + 1)
+                            + " " + toScalarYaml(userVal));
                 } else {
                     // Section header (e.g. "anti-bot:")
                     output.add(line);

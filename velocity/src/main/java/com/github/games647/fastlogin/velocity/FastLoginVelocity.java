@@ -98,6 +98,8 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     public void onProxyInitialization(ProxyInitializeEvent event) {
         scheduler = new AsyncScheduler(logger, task -> server.getScheduler().buildTask(this, task).schedule());
         core = new FastLoginCore<>(this);
+        // Proxies ship a trimmed config template without backend-only keys
+        core.setConfigTemplate("config-proxy.yml");
         core.load();
         loadOrGenerateProxyId();
         if (!core.setupDatabase() || proxyId == null) {

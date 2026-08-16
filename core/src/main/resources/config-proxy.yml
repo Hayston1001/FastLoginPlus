@@ -25,11 +25,13 @@
 #
 
 # ========================================
-# FastLoginPlus Configuration (Bukkit / Folia backend)
+# FastLoginPlus Configuration (BungeeCord / Velocity proxy)
 # ========================================
-# This template ships with the Bukkit/Folia plugin and covers BOTH deployment
-# modes: standalone servers and backends behind a BungeeCord/Velocity proxy.
-# Keys that lose their effect behind a proxy are marked in the comments below.
+# This template ships with the BungeeCord/Velocity plugin. The proxy is the
+# decision maker in proxy deployments: it runs all Mojang API queries, owns
+# the database, and forwards force-login commands to the backends.
+# Backend-only keys (verifyClientKeys, respectIpLimit) and behaviorally inert
+# keys (useProxyAgnosticResolver) are NOT present here.
 # Project: https://github.com/Hayston1001/FastLoginPlus
 
 # ========================================
@@ -43,7 +45,7 @@ language: en
 # ========================================
 # Update Check
 # ========================================
-# Check for new versions on GitHub. Logs to console; notifies OPs on login
+# Check for new versions on GitHub. Logs to console
 check-update: true
 # Check interval in hours
 update-check-interval: 24
@@ -52,8 +54,7 @@ update-check-interval: 24
 # Anti-bot
 # ========================================
 # Simple anti-bot protection. For serious protection, use a dedicated firewall
-# Standalone mode only. Behind a proxy (spigot.yml bungee:true or Velocity
-# forwarding) the proxy enforces anti-bot checks — this section has no effect.
+# Enforced here by the proxy's connection listener.
 anti-bot:
   enabled: true
   # Total connections allowed in the time window
@@ -89,30 +90,28 @@ anti-bot:
 # Premium Detection
 # ========================================
 # Auto-register new premium players on first join
-# Behind a proxy this only pre-registers players during the Paper 1.20.5+
-# configure phase (before the auth plugin's join handlers run); on non-Paper backends it has no effect — the proxy handles registration.
+# Runs on the proxy: Mojang lookup, DB write and online-mode toggle happen
+# here; the backend only executes forceLogin/forceRegister through its auth
+# plugin.
 autoRegister: true
 
 # Enable auto-login for premium players
-# Effective in all modes: behind a proxy the backend still runs
-# forceLogin/forceRegister through the auth plugin on the plugin message.
+# The proxy decides and forwards the force-login command to the backend,
+# which executes it through the auth plugin.
 autoLogin: true
 
 # Use premium UUID for premium players
-# Standalone: true injects the premium UUID into the offline-mode server
-# (ProtocolLib reflection). Behind a proxy this key has NO effect — the proxy
-# decides the UUID before the player reaches this server.
+# The native proxy API handles the premium UUID. false = override the premium
+# UUID with the offline UUID (demote).
 premiumUuid: true
 
 # Query Mojang API for new players and detect name changes by UUID
 # If a player's name is not in the database but their UUID is (under an old name),
 # the old record is updated with the new name and they log in as premium
-# Behind a proxy this has no effect — the proxy detects name changes.
 nameChangeCheck: true
 
 # If an offline player uses a premium username but fails authentication, 
 # remember them so they can join in offline mode next time (not recommended)
-# Behind a proxy this has no effect — the cracked fallback runs on the proxy.
 secondAttemptCracked: false
 
 # ========================================
@@ -123,7 +122,7 @@ secondAttemptCracked: false
 # No restrictions apply to online players
 # Use /flp cracked <player> to add offline players to the database
 # Use /flp delete <player> to remove offline players from the database
-# Behind a proxy this has no effect — the proxy enforces the whitelist.
+# Enforced by the proxy.
 offline-whitelist: false
 
 # ========================================
@@ -131,22 +130,18 @@ offline-whitelist: false
 # ========================================
 # Forward premium skin to the player
 # Even when enabled, SkinsRestorer custom skins take priority (if SR is installed)
-# Behind a proxy: PARTIAL — on Paper/Folia the textures forwarded by the proxy
-# are applied; on non-Paper backends there is no listener, and if the proxy sets
-# forwardSkin:false the skin is already stripped before it reaches this server.
+# false strips the skin from the game profile before forwarding to the backend.
 forwardSkin: true
 
 # ========================================
 # Command Behavior
 # ========================================
 # Show warning before /flp premium command takes effect
-# Standalone only. Behind a proxy the proxy reads ITS OWN copy of this key and
-# asks for confirmation there — this copy is never consulted (either/or).
+# The proxy asks for confirmation when a backend forwards the toggle.
 premium-warning: true
 
 # Kick the player from the server after they confirm /flp premium, forcing them to reconnect
-# Behind a proxy: PARTIAL — the proxy kicks after a normal toggle; this copy only
-# controls the Paper pending-premium-toggle relay kick.
+# The proxy kicks the player after a toggle.
 kick-toggle: true
 
 # ========================================
@@ -156,71 +151,46 @@ kick-toggle: true
 debug: false
 
 # Auto-register players in flp DB but missing from auth plugin DB
-# Effective in all modes.
+# Decided by the proxy; the backend executes the registration through the
+# auth plugin.
 auto-register-unknown: true
 
-# Respect auth plugin per-IP registration limit
-# Bukkit/Folia only. Currently honored by the AuthMe hook — the other
-# auth-plugin hooks do not implement this check yet. Works behind a proxy —
-# the auth plugin runs on the backend.
-respectIpLimit: false
-
-# Alternative session resolver that doesn't send the server IP to Mojang
-# Useful behind DNAT / transparent reverse proxies
-# The behavioral difference only applies to standalone session verification
-# (hasJoined): this variant omits the ip parameter, so the check matches even
-# when the backend observes a different IP than the client connected to.
-# Name→UUID lookups are identical in both resolvers, so proxy scenarios are
-# unaffected either way.
-useProxyAgnosticResolver: true
-
 # ======[[ Mojang API retry ]]======
-# Retry count for Mojang API calls. Standalone: applies to BOTH Name→UUID
-# lookups and session verification (hasJoined). Behind a proxy: NO effect —
-# the Paper configure-phase lookup does not retry and session verification
-# does not run here.
+# Retry count for Name→UUID lookups (findProfile). Session verification is the
+# proxy's native online-mode login and is NOT covered by this retry.
 # Total attempts per request
 mojang-retry-count: 3
 # Base delay between retries in milliseconds (exponential backoff: delay * 2^(attempt-1), capped at 10s)
 mojang-retry-delay: 500
 
-# ======[[ 1.19+ ]]======
-# Verify client public key signature
-# Bukkit/Folia standalone with ProtocolLib only — no effect on
-# BungeeCord/Velocity and no effect behind a proxy (ProtocolLib listeners are
-# not registered there).
-verifyClientKeys: false
-
 # IP addresses for rotating Mojang API requests (to avoid rate limits)
-# Behind a proxy: only used for the Paper configure-phase lookup.
 # ip-addresses:
 #   - 192-168-0-2
 ip-addresses:
 
 # Max Mojang name->UUID requests per 10 minutes (per IP)
-# Behind a proxy: only used for the Paper configure-phase lookup.
 mojang-request-limit: 600
 
 # ========================================
 # Floodgate / Bedrock
 # ========================================
 # Auto-login for Floodgate (Bedrock) players. Values: false / true / linked / no-conflict
-# Behind a proxy this has no effect — the proxy handles Bedrock players.
+# The proxy handles Bedrock players.
 autoLoginFloodgate: false
 
 # Allow Bedrock players to join even if their name conflicts with a Java premium account
-# Behind a proxy this has no effect — the proxy enforces the conflict policy.
+# Enforced by the proxy.
 allowFloodgateNameConflict: false
 
 # Auto-register Floodgate players. Requires autoLoginFloodgate
-# Behind a proxy this has no effect — the proxy handles Bedrock players.
+# The proxy handles Bedrock players.
 autoRegisterFloodgate: false
 
 # ========================================
 # Database
 # ========================================
-# Standalone mode only. Behind a proxy setupDatabase() is skipped entirely —
-# the proxy's database is the single source of truth for premium status.
+# The proxy database is the single source of truth for premium status in
+# proxy deployments. Backends never use their own copy.
 # Database driver: 'sqlite' (default) or 'mysql'
 driver: 'sqlite'
 
@@ -251,7 +221,6 @@ ServerRSAPublicKeyFile:
 # Proxies
 # ========================================
 # HTTP proxies for Mojang API requests (workaround for rate limits)
-# Behind a proxy: only used for the Paper configure-phase lookup.
 # proxies:
 #   - 'xyz.com:1337'
 proxies:
