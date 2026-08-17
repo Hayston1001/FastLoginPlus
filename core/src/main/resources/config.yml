@@ -137,7 +137,7 @@ offline-whitelist: false
 # ========================================
 # Forward premium skin to the player
 # Even when enabled, SkinsRestorer custom skins take priority (if SR is installed)
-# EFFECT  S=full   P=Paper          applies proxy-forwarded textures; non-Paper: none
+# EFFECT  S=full   P=none           the proxy forwards or strips the skin itself
 forwardSkin: true
 
 # ========================================
