@@ -103,7 +103,7 @@ class ConfigRefresherTest {
         assertTrue(output.contains("verifyClientKeys: false"));
         assertTrue(output.contains("respectIpLimit: false"));
         assertTrue(output.contains("useProxyAgnosticResolver: true"));
-        assertTrue(output.contains("FastLoginPlus Configuration (Bukkit / Folia backend)"));
+        assertTrue(output.contains("FastLoginPlus Configuration (Bukkit / Folia)"));
     }
 
     @Test
