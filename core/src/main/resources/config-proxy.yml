@@ -24,6 +24,8 @@
 # SOFTWARE.
 #
 
+# Project: https://github.com/Hayston1001/FastLoginPlus
+
 # ========================================
 # FastLoginPlus Configuration (BungeeCord / Velocity proxy)
 # ========================================
@@ -32,7 +34,6 @@
 # the database, and forwards force-login commands to the backends.
 # Backend-only keys (verifyClientKeys, respectIpLimit) and behaviorally inert
 # keys (useProxyAgnosticResolver) are NOT present here.
-# Project: https://github.com/Hayston1001/FastLoginPlus
 
 # ========================================
 # Language
