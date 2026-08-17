@@ -59,8 +59,7 @@ Paste the UUID into `plugins/fastloginplus/allowed-proxies.txt` on every backend
 | `velocity.toml` → `player-info-forwarding-mode` | `modern` | **Required**. Without this, Velocity does not forward UUIDs, skins, or IPs — FLP's plugin messages will never reach the backend. |
 | `velocity.toml` → `online-mode` | `false` | FLP handles authentication per-connection via `forceOnlineMode()`; the proxy should not authenticate by default. |
 | Backend `server.properties` → `online-mode` | `false` | The proxy handles authentication; the backend must not repeat it. |
-
-`ping-passthrough` has no effect on FLP — it only controls the server list MOTD/player count display. Set it to whatever you prefer.
+| Backend `paper-global.yml` → `proxies.velocity.online-mode` | `false` | Must match `velocity.toml`'s `online-mode`. |
 
 #### BungeeCord
 

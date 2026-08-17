@@ -59,8 +59,7 @@
 | `velocity.toml` → `player-info-forwarding-mode` | `modern` | **必须配置**。不配的话 Velocity 不转发 UUID、皮肤、IP —— FLP 的插件消息根本到不了后端。 |
 | `velocity.toml` → `online-mode` | `false` | FLP 通过 `forceOnlineMode()` 逐连接控制认证，代理端不应默认开启在线模式。 |
 | 后端 `server.properties` → `online-mode` | `false` | 代理已负责认证，后端不能再做。 |
-
-`ping-passthrough` 跟 FLP 无关 —— 它只管服务器列表显示的 MOTD/玩家数，按自己喜好设就行。
+| 后端 `paper-global.yml` → `proxies.velocity.online-mode` | `false` | 必须与 `velocity.toml` 的 `online-mode`。 |
 
 #### BungeeCord
 
