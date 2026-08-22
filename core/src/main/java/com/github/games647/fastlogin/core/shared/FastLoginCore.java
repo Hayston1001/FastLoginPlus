@@ -427,6 +427,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      *                       (e.g. "config.yml", "config-proxy.yml")
      */
     public void setConfigTemplate(String configTemplate) {
+        if (this.config != null) {
+            throw new IllegalStateException(
+                    "setConfigTemplate must be called before load()");
+        }
         this.configTemplate = configTemplate;
     }
 
