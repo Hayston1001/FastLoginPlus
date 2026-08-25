@@ -51,6 +51,7 @@ body:
         - Folia
         - BungeeCord
         - Velocity
+        - All / Shared
     validations:
       required: true
   - type: checkboxes

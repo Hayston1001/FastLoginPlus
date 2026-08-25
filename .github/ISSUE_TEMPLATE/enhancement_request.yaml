@@ -26,7 +26,10 @@ body:
       label: Platform
       description: Server software - choose your proxy software if you have multiple servers
       options:
+        - Bukkit
         - Spigot
+        - Paper
+        - Folia
         - BungeeCord
         - Velocity
         - All / Shared
