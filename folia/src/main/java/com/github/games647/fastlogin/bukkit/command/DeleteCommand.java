@@ -28,7 +28,6 @@ package com.github.games647.fastlogin.bukkit.command;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
@@ -115,42 +114,12 @@ public class DeleteCommand implements CommandExecutor {
             if (!optPlayer.isPresent()) {
                 plugin.getLog().info("No player online to relay delete message — "
                     + "queuing pending delete for {}", targetName);
-                plugin.getPendingOfflineDeletes().add(targetName);
-                scheduleDeleteRetry(targetName);
+                plugin.getPendingRelayStore().queueDelete(targetName);
+                plugin.scheduleDeleteRelay(targetName);
                 return;
             }
             plugin.getBungeeManager().sendPluginMessage(optPlayer.get(),
                     new DeletePremiumMessage(targetName, false));
         }
-    }
-
-    /**
-     * Retries sending the pending delete message every second until a player
-     * is online to serve as the relay channel.  Folia has no global repeating
-     * scheduler, so each retry chains a one-shot delayed task.
-     *
-     * @param targetName the player name to delete
-     */
-    private void scheduleDeleteRetry(String targetName) {
-        plugin.getScheduler().runAsyncDelayed(() -> {
-            java.util.Optional<? extends Player> optPlayer =
-                    plugin.getServer().getOnlinePlayers().stream().findFirst();
-            if (!optPlayer.isPresent()) {
-                // still nobody online — retry in another second
-                if (plugin.getPendingOfflineDeletes().contains(targetName)) {
-                    scheduleDeleteRetry(targetName);
-                }
-                return;
-            }
-            plugin.getScheduler().getSyncExecutor().execute(() -> {
-                Player sender = optPlayer.get();
-                // remove-if-present: never double-send after another retry already relayed it
-                if (plugin.getPendingOfflineDeletes().remove(targetName)) {
-                    plugin.getBungeeManager().sendPluginMessage(sender,
-                            new DeletePremiumMessage(targetName, false));
-                    plugin.getLog().info("Relayed pending delete for {}", targetName);
-                }
-            });
-        }, java.time.Duration.ofSeconds(1));
     }
 }

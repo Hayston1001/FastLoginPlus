@@ -25,11 +25,9 @@
  */
 package com.github.games647.fastlogin.bukkit.command;
 
-import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
@@ -116,40 +114,12 @@ public class DeleteCommand implements CommandExecutor {
             if (!optPlayer.isPresent()) {
                 plugin.getLog().info("No player online to relay delete message — "
                     + "queuing pending delete for {}", targetName);
-                plugin.getPendingOfflineDeletes().add(targetName);
-                scheduleDeleteRetry(targetName);
+                plugin.getPendingRelayStore().queueDelete(targetName);
+                plugin.scheduleDeleteRelay(targetName);
                 return;
             }
             plugin.getBungeeManager().sendPluginMessage(optPlayer.get(),
                     new DeletePremiumMessage(targetName, false));
         }
-    }
-
-    /**
-     * Retries sending the pending delete message every 20 ticks (1 second)
-     * until a player is online to serve as the relay channel.
-     *
-     * @param targetName the player name to delete
-     */
-    private void scheduleDeleteRetry(String targetName) {
-        final int[] taskIdHolder = new int[1];
-        taskIdHolder[0] = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, new Runnable() {
-            @Override
-            public void run() {
-                java.util.Optional<? extends Player> optPlayer =
-                        Bukkit.getServer().getOnlinePlayers().stream().findFirst();
-                if (!optPlayer.isPresent()) {
-                    return;
-                }
-                Player sender = optPlayer.get();
-                // remove-if-present: never double-send after another retry already relayed it
-                if (plugin.getPendingOfflineDeletes().remove(targetName)) {
-                    plugin.getBungeeManager().sendPluginMessage(sender,
-                            new DeletePremiumMessage(targetName, false));
-                    plugin.getLog().info("Relayed pending delete for {}", targetName);
-                }
-                Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
-            }
-        }, 20L, 20L);
     }
 }

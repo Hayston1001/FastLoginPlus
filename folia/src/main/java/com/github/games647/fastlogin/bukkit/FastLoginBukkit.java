@@ -26,6 +26,8 @@
 package com.github.games647.fastlogin.bukkit;
 
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
+import com.github.games647.fastlogin.core.shared.PendingRelayStore;
 
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
@@ -97,21 +99,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private AuthMeVersionDetector authMeVersionDetector;
     private AuthMePremiumIntegrator authMePremiumIntegrator;
 
-    private final java.util.Map<String, Boolean> pendingOfflineToggles =
-        new java.util.concurrent.ConcurrentHashMap<>();
+    // Durable queue for proxy relay messages that could not be sent because
+    // no player was online to serve as the plugin-message carrier.
+    private PendingRelayStore pendingRelayStore;
 
-    public java.util.Map<String, Boolean> getPendingOfflineToggles() {
-        return pendingOfflineToggles;
-    }
-
-    // Deletes queued while no player was online to relay the proxy message.
-    // The retry task relays one pending delete per queued name as soon as
-    // any player comes online; the entry is removed once relayed.
-    private final java.util.Set<String> pendingOfflineDeletes =
-        java.util.concurrent.ConcurrentHashMap.newKeySet();
-
-    public java.util.Set<String> getPendingOfflineDeletes() {
-        return pendingOfflineDeletes;
+    public PendingRelayStore getPendingRelayStore() {
+        return pendingRelayStore;
     }
 
     public FastLoginBukkit() {
@@ -153,6 +146,21 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         bungeeManager = new BungeeManager(this);
         bungeeManager.initialize();
+
+        // Restore the durable relay queue after a restart and resume delivery.
+        pendingRelayStore = new PendingRelayStore(getPluginFolder(), logger);
+        if (pendingRelayStore.load()) {
+            if (bungeeManager.isEnabled()) {
+                logger.info("Restored {} pending toggle(s) and {} pending delete(s) from disk; resuming relay",
+                    pendingRelayStore.toggles().size(), pendingRelayStore.deletes().size());
+                pendingRelayStore.toggles().forEach((name, activate) -> scheduleToggleRelay(name, activate));
+                pendingRelayStore.deletes().forEach(this::scheduleDeleteRelay);
+            } else {
+                logger.warn("Discarding {} pending relay(s): proxy support is disabled",
+                    pendingRelayStore.toggles().size() + pendingRelayStore.deletes().size());
+                pendingRelayStore.clearAll();
+            }
+        }
 
         PluginManager pluginManager = getServer().getPluginManager();
         if (bungeeManager.isEnabled()) {
@@ -437,10 +445,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
 
         // Pending toggles — cracked skips, premium allows despite UUID mismatch
-        Boolean pendingActivate = pendingOfflineToggles.get(playerName);
+        Boolean pendingActivate = pendingRelayStore.getToggle(playerName);
         final boolean isPendingPremium = Boolean.TRUE.equals(pendingActivate);
         if (pendingActivate != null && !pendingActivate) {
-            pendingOfflineToggles.remove(playerName);
+            pendingRelayStore.clearToggle(playerName);
             logger.info("Skipping autoRegister for {}: pending cracked toggle", playerName);
             return;
         }
@@ -497,7 +505,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                             ChangePremiumMessage msg = new ChangePremiumMessage(
                                 playerName, true, false);
                             bungeeManager.sendPluginMessage(player, msg);
-                            pendingOfflineToggles.remove(playerName);
+                            pendingRelayStore.clearToggle(playerName);
                             if (getConfig().getBoolean("kick-toggle")) {
                                 logger.info(
                                     "Relayed pending premium toggle for {} and kicking",
@@ -518,4 +526,68 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         });
     }
 
+    /**
+     * Retries relaying a queued premium/cracked toggle message every second
+     * until a player is online to serve as the relay channel. Folia has no
+     * global repeating scheduler, so each retry chains a one-shot delayed task.
+     *
+     * @param target the player name to toggle
+     * @param activate true for premium, false for cracked
+     */
+    public void scheduleToggleRelay(String target, boolean activate) {
+        scheduler.runAsyncDelayed(() -> {
+            Optional<? extends Player> optPlayer =
+                getServer().getOnlinePlayers().stream().findFirst();
+            if (!optPlayer.isPresent()) {
+                // still nobody online — retry in another second
+                if (pendingRelayStore.containsToggle(target)) {
+                    scheduleToggleRelay(target, activate);
+                }
+                return;
+            }
+
+            scheduler.getSyncExecutor().execute(() -> {
+                Player sender = optPlayer.get();
+                // remove-if-present: never double-send after the configure
+                // listener (or another retry) already relayed the toggle
+                if (pendingRelayStore.clearToggle(target)) {
+                    bungeeManager.sendPluginMessage(sender,
+                            new ChangePremiumMessage(target, activate, false));
+                    logger.info("Relayed pending {} toggle for {}",
+                        activate ? "premium" : "cracked", target);
+                }
+            });
+        }, Duration.ofSeconds(1));
+    }
+
+    /**
+     * Retries relaying a queued delete message every second until a player is
+     * online to serve as the relay channel. Folia has no global repeating
+     * scheduler, so each retry chains a one-shot delayed task.
+     *
+     * @param targetName the player name to delete
+     */
+    public void scheduleDeleteRelay(String targetName) {
+        scheduler.runAsyncDelayed(() -> {
+            Optional<? extends Player> optPlayer =
+                getServer().getOnlinePlayers().stream().findFirst();
+            if (!optPlayer.isPresent()) {
+                // still nobody online — retry in another second
+                if (pendingRelayStore.containsDelete(targetName)) {
+                    scheduleDeleteRelay(targetName);
+                }
+                return;
+            }
+
+            scheduler.getSyncExecutor().execute(() -> {
+                Player sender = optPlayer.get();
+                // remove-if-present: never double-send after another retry already relayed it
+                if (pendingRelayStore.clearDelete(targetName)) {
+                    bungeeManager.sendPluginMessage(sender,
+                            new DeletePremiumMessage(targetName, false));
+                    logger.info("Relayed pending delete for {}", targetName);
+                }
+            });
+        }, Duration.ofSeconds(1));
+    }
 }

@@ -28,7 +28,6 @@ package com.github.games647.fastlogin.bukkit.command;
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.ChannelMessage;
-import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -77,17 +76,12 @@ public abstract class ToggleCommand implements CommandExecutor {
             ChannelMessage message = new ChangePremiumMessage(target, activate, true);
             plugin.getBungeeManager().sendPluginMessage((PluginMessageRecipient) invoker, message);
         } else {
-            Optional<? extends Player> optPlayer = Bukkit.getServer().getOnlinePlayers().stream().findFirst();
+            Optional<? extends Player> optPlayer = plugin.getServer().getOnlinePlayers().stream().findFirst();
             if (!optPlayer.isPresent()) {
                 plugin.getLog().info("No player online to relay message — "
                     + "queuing pending toggle for {}", target);
-                // The configure listener will skip autoRegister for this name
-                // so Paper doesn't create a conflicting AuthMe record.
-                plugin.getPendingOfflineToggles().put(target, activate);
-                // Retry: deliver the proxy message once any player is online.
-                // The first to come online is usually the target player
-                // themselves (after they go through auth).
-                scheduleRetry(target, activate);
+                plugin.getPendingRelayStore().queueToggle(target, activate);
+                plugin.scheduleToggleRelay(target, activate);
                 return;
             }
 
@@ -95,36 +89,5 @@ public abstract class ToggleCommand implements CommandExecutor {
             ChannelMessage message = new ChangePremiumMessage(target, activate, false);
             plugin.getBungeeManager().sendPluginMessage(sender, message);
         }
-    }
-
-    /**
-     * Retries sending the proxy toggle message every 20 ticks (1 second)
-     * until a player is online to serve as the relay channel.
-     *
-     * @param target the player name to toggle
-     * @param activate true for premium, false for cracked
-     */
-    private void scheduleRetry(String target, boolean activate) {
-        final int[] taskIdHolder = new int[1];
-        taskIdHolder[0] = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, new Runnable() {
-            @Override
-            public void run() {
-                Optional<? extends Player> optPlayer =
-                    Bukkit.getServer().getOnlinePlayers().stream().findFirst();
-                if (!optPlayer.isPresent()) {
-                    return;
-                }
-                Player sender = optPlayer.get();
-                // remove-if-present: never double-send after the configure
-                // listener (or another retry) already relayed the toggle
-                if (plugin.getPendingOfflineToggles().remove(target) != null) {
-                    ChannelMessage message = new ChangePremiumMessage(target, activate, false);
-                    plugin.getBungeeManager().sendPluginMessage(sender, message);
-                    plugin.getLog().info("Relayed pending {} toggle for {}",
-                        activate ? "premium" : "cracked", target);
-                }
-                Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
-            }
-        }, 20L, 20L);
     }
 }

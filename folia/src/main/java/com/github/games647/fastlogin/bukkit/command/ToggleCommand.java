@@ -81,8 +81,8 @@ public abstract class ToggleCommand implements CommandExecutor {
             if (!optPlayer.isPresent()) {
                 plugin.getLog().info("No player online to relay message — "
                     + "queuing pending toggle for {}", target);
-                plugin.getPendingOfflineToggles().put(target, activate);
-                scheduleRetry(target, activate);
+                plugin.getPendingRelayStore().queueToggle(target, activate);
+                plugin.scheduleToggleRelay(target, activate);
                 return;
             }
 
@@ -90,39 +90,5 @@ public abstract class ToggleCommand implements CommandExecutor {
             ChannelMessage message = new ChangePremiumMessage(target, activate, false);
             plugin.getBungeeManager().sendPluginMessage(sender, message);
         }
-    }
-
-    /**
-     * Retries sending the pending toggle message every second until a player
-     * is online to serve as the relay channel. Folia has no global repeating
-     * scheduler, so each retry chains a one-shot delayed task.
-     *
-     * @param target the player name to toggle
-     * @param activate true for premium, false for cracked
-     */
-    private void scheduleRetry(String target, boolean activate) {
-        plugin.getScheduler().runAsyncDelayed(() -> {
-            Optional<? extends Player> optPlayer =
-                plugin.getServer().getOnlinePlayers().stream().findFirst();
-            if (!optPlayer.isPresent()) {
-                // still nobody online — retry in another second
-                if (plugin.getPendingOfflineToggles().containsKey(target)) {
-                    scheduleRetry(target, activate);
-                }
-                return;
-            }
-
-            plugin.getScheduler().getSyncExecutor().execute(() -> {
-                Player sender = optPlayer.get();
-                // remove-if-present: never double-send after the configure
-                // listener (or another retry) already relayed the toggle
-                if (plugin.getPendingOfflineToggles().remove(target) != null) {
-                    ChannelMessage message = new ChangePremiumMessage(target, activate, false);
-                    plugin.getBungeeManager().sendPluginMessage(sender, message);
-                    plugin.getLog().info("Relayed pending {} toggle for {}",
-                        activate ? "premium" : "cracked", target);
-                }
-            });
-        }, java.time.Duration.ofSeconds(1));
     }
 }
