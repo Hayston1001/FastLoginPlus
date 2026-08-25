@@ -89,6 +89,11 @@ public class CrackedCommand extends ToggleCommand {
         // Local path (no proxy): load profile from local DB
         // todo: load async if
         StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
+        if (profile == null) {
+            // null only on SQL exception (lock timeout, DB down) — the database failed
+            plugin.getCore().sendLocaleMessage("database-error", sender);
+            return;
+        }
         if (!profile.isOnlinemodePreferred()) {
             plugin.getCore().sendLocaleMessage("not-premium", sender);
             return;
@@ -146,7 +151,8 @@ public class CrackedCommand extends ToggleCommand {
         //todo: load async
         StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
         if (profile == null) {
-            sender.sendMessage("Error occurred");
+            // null only on SQL exception (lock timeout, DB down) — the database failed
+            plugin.getCore().sendLocaleMessage("database-error", sender);
             return;
         }
 

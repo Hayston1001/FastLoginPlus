@@ -86,6 +86,11 @@ public class PremiumCommand extends ToggleCommand {
         plugin.getCore().getPendingConfirms().remove(id);
         //todo: load async
         StoredProfile profile = plugin.getCore().getStorage().loadProfile(sender.getName());
+        if (profile == null) {
+            // null only on SQL exception (lock timeout, DB down) — the database failed
+            plugin.getCore().sendLocaleMessage("database-error", sender);
+            return;
+        }
         if (profile.isOnlinemodePreferred()) {
             plugin.getCore().sendLocaleMessage("already-exists", sender);
         } else {
@@ -120,7 +125,8 @@ public class PremiumCommand extends ToggleCommand {
         //todo: load async
         StoredProfile profile = plugin.getCore().getStorage().loadProfile(args[0]);
         if (profile == null) {
-            plugin.getCore().sendLocaleMessage("player-unknown", sender);
+            // null only on SQL exception (lock timeout, DB down) — the database failed
+            plugin.getCore().sendLocaleMessage("database-error", sender);
             return;
         }
 
