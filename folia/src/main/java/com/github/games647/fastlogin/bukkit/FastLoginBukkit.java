@@ -104,6 +104,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         return pendingOfflineToggles;
     }
 
+    // Deletes queued while no player was online to relay the proxy message.
+    // The retry task relays one pending delete per queued name as soon as
+    // any player comes online; the entry is removed once relayed.
+    private final java.util.Set<String> pendingOfflineDeletes =
+        java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public java.util.Set<String> getPendingOfflineDeletes() {
+        return pendingOfflineDeletes;
+    }
+
     public FastLoginBukkit() {
         this.logger = CommonUtil.initializeLoggerService(getLogger());
         this.scheduler = new FoliaScheduler(this, logger);

@@ -28,6 +28,7 @@ package com.github.games647.fastlogin.bukkit.command;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
@@ -69,7 +70,7 @@ public class DeleteCommand implements CommandExecutor {
 
         StoredProfile profile = plugin.getCore().getStorage().loadProfile(targetName);
         if (profile == null) {
-            sender.sendMessage("Error occurred");
+            plugin.getCore().sendLocaleMessage("database-error", sender);
             return true;
         }
 
@@ -103,19 +104,53 @@ public class DeleteCommand implements CommandExecutor {
     }
 
     private void sendBungeeDeleteMessage(CommandSender sender, String targetName) {
-        DeletePremiumMessage message = new DeletePremiumMessage(targetName);
         if (sender instanceof org.bukkit.plugin.messaging.PluginMessageRecipient) {
+            // player invoked — the invoker is the message carrier
             plugin.getBungeeManager().sendPluginMessage(
-                    (org.bukkit.plugin.messaging.PluginMessageRecipient) sender, message
-            );
+                    (org.bukkit.plugin.messaging.PluginMessageRecipient) sender,
+                    new DeletePremiumMessage(targetName, true));
         } else {
             java.util.Optional<? extends org.bukkit.entity.Player> optPlayer =
                     plugin.getServer().getOnlinePlayers().stream().findFirst();
             if (!optPlayer.isPresent()) {
-                plugin.getLog().info("No player online to send a plugin message to the proxy");
+                plugin.getLog().info("No player online to relay delete message — "
+                    + "queuing pending delete for {}", targetName);
+                plugin.getPendingOfflineDeletes().add(targetName);
+                scheduleDeleteRetry(targetName);
                 return;
             }
-            plugin.getBungeeManager().sendPluginMessage(optPlayer.get(), message);
+            plugin.getBungeeManager().sendPluginMessage(optPlayer.get(),
+                    new DeletePremiumMessage(targetName, false));
         }
+    }
+
+    /**
+     * Retries sending the pending delete message every second until a player
+     * is online to serve as the relay channel.  Folia has no global repeating
+     * scheduler, so each retry chains a one-shot delayed task.
+     *
+     * @param targetName the player name to delete
+     */
+    private void scheduleDeleteRetry(String targetName) {
+        plugin.getScheduler().runAsyncDelayed(() -> {
+            java.util.Optional<? extends Player> optPlayer =
+                    plugin.getServer().getOnlinePlayers().stream().findFirst();
+            if (!optPlayer.isPresent()) {
+                // still nobody online — retry in another second
+                if (plugin.getPendingOfflineDeletes().contains(targetName)) {
+                    scheduleDeleteRetry(targetName);
+                }
+                return;
+            }
+            plugin.getScheduler().getSyncExecutor().execute(() -> {
+                Player sender = optPlayer.get();
+                // remove-if-present: never double-send after another retry already relayed it
+                if (plugin.getPendingOfflineDeletes().remove(targetName)) {
+                    plugin.getBungeeManager().sendPluginMessage(sender,
+                            new DeletePremiumMessage(targetName, false));
+                    plugin.getLog().info("Relayed pending delete for {}", targetName);
+                }
+            });
+        }, java.time.Duration.ofSeconds(1));
     }
 }

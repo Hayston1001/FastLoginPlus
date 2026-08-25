@@ -32,9 +32,11 @@ import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
+import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
 import com.github.games647.fastlogin.velocity.VelocityLoginSession;
+import com.github.games647.fastlogin.velocity.event.VelocityFastLoginPremiumToggleEvent;
 import com.github.games647.fastlogin.velocity.task.AsyncToggleMessage;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteStreams;
@@ -121,27 +123,49 @@ public class PluginMessageListener {
             deleteMessage.readFrom(dataInput);
 
             String playerName = deleteMessage.getPlayerName();
+            boolean isSourceInvoker = deleteMessage.isSourceInvoker();
             plugin.getScheduler().runAsync(() -> {
                 StoredProfile profile = core.getStorage().loadProfile(playerName);
-                if (profile == null || !profile.isExistingPlayer()) {
-                    String message = core.getMessage("delete-not-found");
-                    sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+                if (profile == null) {
+                    // null only on SQL exception (connection down / lock timeout) — do not
+                    // report 'not found'; the database is the thing that failed
+                    sendDeleteFeedback(sender, isSourceInvoker, "database-error");
+                    return;
+                }
+                if (!profile.isExistingPlayer()) {
+                    sendDeleteFeedback(sender, isSourceInvoker, "delete-not-found");
                     return;
                 }
                 if (profile.isOnlinemodePreferred()) {
-                    String message = core.getMessage("delete-premium-denied");
-                    sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+                    sendDeleteFeedback(sender, isSourceInvoker, "delete-premium-denied");
                     return;
                 }
-                boolean deleted = core.getStorage().deleteProfile(playerName);
-                if (deleted) {
-                    String message = core.getMessage("delete-success");
-                    sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+                if (core.getStorage().deleteProfile(playerName)) {
+                    core.getPlugin().getProxy().getEventManager().fire(
+                            new VelocityFastLoginPremiumToggleEvent(profile,
+                                    PremiumToggleReason.COMMAND_OTHER));
+                    sendDeleteFeedback(sender, isSourceInvoker, "delete-success");
                 } else {
-                    String message = core.getMessage("delete-fail");
-                    sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+                    // affected rows == 0: distinguish real failure from concurrent removal
+                    StoredProfile after = core.getStorage().loadProfile(playerName);
+                    if (after == null || !after.isExistingPlayer()) {
+                        sendDeleteFeedback(sender, isSourceInvoker, "delete-not-found");
+                    } else {
+                        sendDeleteFeedback(sender, isSourceInvoker, "delete-fail");
+                    }
                 }
             });
+        }
+    }
+
+    private void sendDeleteFeedback(Player carrier, boolean isSourceInvoker, String localeId) {
+        FastLoginCore<Player, CommandSource, FastLoginVelocity> core = plugin.getCore();
+        String message = core.getMessage(localeId);
+        if (isSourceInvoker) {
+            carrier.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+        } else {
+            core.getPlugin().getProxy().getConsoleCommandSource()
+                .sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
         }
     }
 

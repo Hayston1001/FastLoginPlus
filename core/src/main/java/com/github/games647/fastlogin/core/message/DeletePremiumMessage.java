@@ -33,16 +33,23 @@ public class DeletePremiumMessage implements ChannelMessage {
     public static final String DELETE_CHANNEL = "del-st";
 
     private String playerName;
+    private boolean isSourceInvoker;
 
-    public DeletePremiumMessage(String playerName) {
+    public DeletePremiumMessage(String playerName, boolean isSourceInvoker) {
         this.playerName = playerName;
+        this.isSourceInvoker = isSourceInvoker;
     }
 
     public DeletePremiumMessage() {
+        //reading from
     }
 
     public String getPlayerName() {
         return playerName;
+    }
+
+    public boolean isSourceInvoker() {
+        return isSourceInvoker;
     }
 
     @Override
@@ -53,17 +60,29 @@ public class DeletePremiumMessage implements ChannelMessage {
     @Override
     public void readFrom(ByteArrayDataInput input) {
         playerName = input.readUTF();
+        try {
+            isSourceInvoker = input.readBoolean();
+        } catch (RuntimeException legacyFormat) {
+            // Legacy payloads carry only the player name — treat as relayed
+            // (console invoker).  ByteArrayDataInput redeclares every method
+            // without checked exceptions and wraps an underlying EOFException
+            // in IllegalStateException, so both EOFException and
+            // IllegalStateException surface here as RuntimeException.
+            isSourceInvoker = false;
+        }
     }
 
     @Override
     public void writeTo(ByteArrayDataOutput output) {
         output.writeUTF(playerName);
+        output.writeBoolean(isSourceInvoker);
     }
 
     @Override
     public String toString() {
         return this.getClass().getSimpleName() + '{'
             + "playerName='" + playerName + '\''
+            + ", isSourceInvoker=" + isSourceInvoker
             + '}';
     }
 }

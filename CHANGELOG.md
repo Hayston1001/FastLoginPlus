@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### /flp delete proxy fixes / flp delete 代理模式修复
+
+- The `del-st` message now carries an `isSourceInvoker` flag: result feedback goes to the player who ran `/flp delete`, and to the proxy console when the command was issued from the console or relayed by a carrier — relay players are no longer spammed with delete results
+- When no player is online to relay the delete message, the backend now queues the delete and retries every second until any player joins (aligned with the toggle-command behaviour) instead of silently dropping it; Folia uses a chained delayed task since it has no global repeating scheduler
+- Proxy-side `/flp delete` now reports `database-error` when the database query itself fails (instead of lying "record not found"), fires the premium-toggle event on success, and re-checks the row when `deleteProfile` returns false to distinguish a real failure from a concurrent removal
+- The standalone error path now uses the localized `database-error` message instead of hardcoded English text; reading legacy payloads (name only, no flag) degrades to "console invoker"
+- Add `DeletePremiumMessageTest` covering the round trip, the console-relay flag and the legacy-format fallback
+
+- `del-st` 消息现在携带 `isSourceInvoker` 标志: 玩家自己执行 `/flp delete` 时结果消息发给玩家本人, 控制台发起(或借中继玩家转发)时结果发给代理控制台 —— 中继玩家不再收到无关的删除结果
+- 后端无玩家在线时不再静默丢弃: 删除请求入队并每秒重试直到有玩家上线(与 toggle 命令行为对齐); Folia 因无全局循环调度器改用链式延迟任务
+- 代理端 `/flp delete` 在数据库查询本身失败时提示 `database-error`(不再谎报"记录不存在"), 删除成功时 fire 正版切换事件, 且 `deleteProfile` 返回 false 时复查记录以区分真失败与并发删除
+- standalone 报错路径改用本地化 `database-error` 消息, 移除硬编码英文; 读取旧格式消息(仅玩家名、无标志)时降级为"控制台发起"
+- 新增 `DeletePremiumMessageTest`: 覆盖往返序列化、控制台中继标志与旧格式容错
+
 ### Per-platform config templates / 分平台配置模板
 
 - BungeeCord/Velocity now generate `config.yml` from a dedicated `config-proxy.yml` template: backend-only keys (`verifyClientKeys`, `respectIpLimit`) are no longer present, and comments describe the proxy's role (decision maker: Mojang queries, database, force-login forwarding)

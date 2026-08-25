@@ -29,6 +29,7 @@ import java.util.Arrays;
 
 import com.github.games647.fastlogin.bungee.BungeeLoginSession;
 import com.github.games647.fastlogin.bungee.FastLoginBungee;
+import com.github.games647.fastlogin.bungee.event.BungeeFastLoginPremiumToggleEvent;
 import com.github.games647.fastlogin.bungee.task.AsyncToggleMessage;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
@@ -36,11 +37,13 @@ import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.NamespaceKey;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
+import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteStreams;
 
 import net.md_5.bungee.api.CommandSender;
+import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.connection.Server;
@@ -122,27 +125,48 @@ public class PluginMessageListener implements Listener {
             deleteMessage.readFrom(dataInput);
 
             String playerName = deleteMessage.getPlayerName();
+            boolean isSourceInvoker = deleteMessage.isSourceInvoker();
             plugin.getScheduler().runAsync(() -> {
                 StoredProfile profile = core.getStorage().loadProfile(playerName);
-                if (profile == null || !profile.isExistingPlayer()) {
-                    String message = core.getMessage("delete-not-found");
-                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                if (profile == null) {
+                    // null only on SQL exception (connection down / lock timeout) — do not
+                    // report 'not found'; the database is the thing that failed
+                    sendDeleteFeedback(forPlayer, isSourceInvoker, "database-error");
+                    return;
+                }
+                if (!profile.isExistingPlayer()) {
+                    sendDeleteFeedback(forPlayer, isSourceInvoker, "delete-not-found");
                     return;
                 }
                 if (profile.isOnlinemodePreferred()) {
-                    String message = core.getMessage("delete-premium-denied");
-                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                    sendDeleteFeedback(forPlayer, isSourceInvoker, "delete-premium-denied");
                     return;
                 }
-                boolean deleted = core.getStorage().deleteProfile(playerName);
-                if (deleted) {
-                    String message = core.getMessage("delete-success");
-                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                if (core.getStorage().deleteProfile(playerName)) {
+                    plugin.getProxy().getPluginManager().callEvent(
+                            new BungeeFastLoginPremiumToggleEvent(profile,
+                                    PremiumToggleReason.COMMAND_OTHER));
+                    sendDeleteFeedback(forPlayer, isSourceInvoker, "delete-success");
                 } else {
-                    String message = core.getMessage("delete-fail");
-                    forPlayer.sendMessage(TextComponent.fromLegacyText(message));
+                    // affected rows == 0: distinguish real failure from concurrent removal
+                    StoredProfile after = core.getStorage().loadProfile(playerName);
+                    if (after == null || !after.isExistingPlayer()) {
+                        sendDeleteFeedback(forPlayer, isSourceInvoker, "delete-not-found");
+                    } else {
+                        sendDeleteFeedback(forPlayer, isSourceInvoker, "delete-fail");
+                    }
                 }
             });
+        }
+    }
+
+    private void sendDeleteFeedback(ProxiedPlayer carrier, boolean isSourceInvoker, String localeId) {
+        FastLoginCore<ProxiedPlayer, CommandSender, FastLoginBungee> core = plugin.getCore();
+        String message = core.getMessage(localeId);
+        if (isSourceInvoker) {
+            carrier.sendMessage(TextComponent.fromLegacyText(message));
+        } else {
+            ProxyServer.getInstance().getConsole().sendMessage(TextComponent.fromLegacyText(message));
         }
     }
 
