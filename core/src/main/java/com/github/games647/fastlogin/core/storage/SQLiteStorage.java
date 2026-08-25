@@ -31,6 +31,11 @@ import org.sqlite.JDBC;
 import org.sqlite.SQLiteConfig;
 
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -40,11 +45,16 @@ public class SQLiteStorage extends SQLStorage {
     protected static final String CREATE_TABLE_STMT = "CREATE TABLE IF NOT EXISTS `" + PREMIUM_TABLE + "` ("
             + "`UserID` INTEGER PRIMARY KEY AUTO_INCREMENT, "
             + "`UUID` CHAR(36), "
-            + "`Name` VARCHAR(16) NOT NULL, "
+            // Minecraft usernames are case-insensitive: "Steve" and "steve" are the same account.
+            // MySQL is case-insensitive by default (utf8mb4 collations), while SQLite's default
+            // BINARY collation is case-sensitive. COLLATE NOCASE aligns SQLite with MySQL so the
+            // same player cannot get two rows (premium + cracked) that differ only by letter case.
+            + "`Name` VARCHAR(16) COLLATE NOCASE NOT NULL, "
             + "`Premium` BOOLEAN NOT NULL, "
             + "`LastIp` VARCHAR(255) NOT NULL, "
             + "`LastLogin` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
             //the premium shouldn't steal the cracked account by changing the name
+            + "`Floodgate` INTEGER(3), "
             + "UNIQUE (`Name`) "
             + ')';
 
@@ -128,6 +138,81 @@ public class SQLiteStorage extends SQLStorage {
             return super.deleteProfile(name);
         } finally {
             lock.unlock();
+        }
+    }
+
+    @Override
+    public void createTables() throws SQLException {
+        super.createTables();
+        migrateCaseInsensitiveName();
+    }
+
+    /**
+     * Older databases created before the COLLATE NOCASE column definition are case-sensitive on
+     * Name lookups, which lets the same player (e.g. "Steve" vs "steve") end up with two rows.
+     * SQLite cannot change a column collation in place, so the table is rebuilt: rename → recreate
+     * with the new schema → copy data → drop the old table, all in one transaction.
+     */
+    private void migrateCaseInsensitiveName() throws SQLException {
+        try (Connection con = dataSource.getConnection();
+             Statement stmt = con.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT `sql` FROM `sqlite_master` "
+                     + "WHERE `type`='table' AND `name`='" + PREMIUM_TABLE + "'")) {
+
+            if (!rs.next()) {
+                // no existing table: it was just created with the new schema
+                return;
+            }
+
+            String createSql = rs.getString(1);
+            if (createSql == null || !createSql.toUpperCase(Locale.ENGLISH).contains("COLLATE NOCASE")) {
+                log.info("Migrating premium table to case-insensitive Name collation (COLLATE NOCASE)");
+                stmt.execute("BEGIN");
+                try {
+                    // Best-effort cleanup in case a previous run died mid-migration outside the
+                    // transaction. The transaction below normally rolls the rename back.
+                    stmt.execute("DROP TABLE IF EXISTS `premium_old`");
+                    stmt.execute("ALTER TABLE `" + PREMIUM_TABLE + "` RENAME TO `premium_old`");
+                    stmt.execute(getCreateTableStmt());
+                    // A case-sensitive database can hold several rows that differ only by case
+                    // (exactly the premium + cracked split we now forbid). Copying them all would
+                    // violate the new UNIQUE(Name) NOCASE constraint, so keep one row per name
+                    // variant: premium rows win, otherwise the oldest (lowest UserID).
+                    stmt.execute("INSERT INTO `" + PREMIUM_TABLE + "` "
+                            + "(`UserID`, `UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`, `LastLogin`) "
+                            + "SELECT `UserID`, `UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`, `LastLogin` "
+                            + "FROM `premium_old` AS p "
+                            + "WHERE `UserID` = ("
+                            + "SELECT `UserID` FROM `premium_old` AS q "
+                            + "WHERE lower(q.`Name`) = lower(p.`Name`) "
+                            + "ORDER BY q.`Premium` DESC, q.`UserID` LIMIT 1)");
+                    int totalRows;
+                    try (ResultSet count = stmt.executeQuery("SELECT COUNT(*) FROM `premium_old`")) {
+                        count.next();
+                        totalRows = count.getInt(1);
+                    }
+                    int distinctNames;
+                    try (ResultSet count = stmt.executeQuery(
+                            "SELECT COUNT(*) FROM (SELECT 1 FROM `premium_old` GROUP BY lower(`Name`))")) {
+                        count.next();
+                        distinctNames = count.getInt(1);
+                    }
+                    int dropped = totalRows - distinctNames;
+                    if (dropped > 0) {
+                        log.warn("Dropped {} duplicate case-variant row(s) during migration; kept the "
+                                + "premium row (or the oldest) per player. Affected players with a "
+                                + "kept cracked row will log in as premium from now on.", dropped);
+                    }
+                    stmt.execute("DROP TABLE `premium_old`");
+                    stmt.execute("COMMIT");
+                    log.info("Migrated premium table to case-insensitive Name collation (COLLATE NOCASE)");
+                } catch (SQLException ex) {
+                    stmt.execute("ROLLBACK");
+                    log.warn("Failed to migrate premium table to case-insensitive Name collation; "
+                            + "rolled back, the original table is unchanged", ex);
+                    throw ex;
+                }
+            }
         }
     }
 

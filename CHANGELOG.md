@@ -26,6 +26,16 @@
 - 已知限制: 历史遗留的 `premium=false` 行(曾离线加入过)不会被自动升级 —— 用 `/flp delete <玩家>` 删一次, 下次正版验证成功会重建该行
 - 新增 `ForceLoginManagementTest`, 覆盖代理 null 分支落库、行升级语义、AuthMe 6.0 bypass 补发回执、成功路径回归与 cracked 路径回归
 
+### SQLite case-insensitive names / SQLite 名字大小写不敏感
+
+- SQLite `premium` table now creates `Name` with `COLLATE NOCASE`: Minecraft usernames are case-insensitive ("Steve" and "steve" are the same account), so a player can no longer end up with two rows (one premium, one cracked) that differ only by letter case — matching MySQL's default case-insensitive collation
+- On startup, an existing case-sensitive `premium` table is migrated in one transaction (rename → recreate → copy → drop); the migration is idempotent, preserves all rows, and keeps one row per name variant when a database already contains premium + cracked rows that differ only by case (premium wins, otherwise the oldest row)
+- Add `SQLiteStorageTest` covering case-insensitive lookup, case-variant duplicate rejection, legacy table migration and migration idempotency
+
+- SQLite `premium` 表的 `Name` 列现在使用 `COLLATE NOCASE` 创建: Minecraft 玩家名不区分大小写("Steve" 与 "steve" 是同一账号), 同一玩家不会再出现仅大小写不同的两行(一行正版、一行离线) —— 与 MySQL 默认不区分大小写的 collation 对齐
+- 启动时对既有的区分大小写 `premium` 表做一次性迁移(重命名 → 重建 → 复制 → 删除, 单事务), 迁移幂等且保留所有行
+- 新增 `SQLiteStorageTest`, 覆盖不敏感查找、大小写变体重复行拒绝、旧表迁移与迁移幂等性
+
 ## v0.4.0
 
 ### Paper Configure Phase autoRegister / Paper 配置阶段自动注册
