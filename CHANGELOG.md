@@ -1,6 +1,12 @@
 # FastLoginPlus Changelog
 
-## Unreleased
+## v0.5.0
+
+### Pending proxy relay queue persistence / 待处理代理中继队列持久化
+
+- The offline relay queue for proxy toggle/delete messages now survives restarts: messages are persisted to `pending-relay.json` (atomic rewrite), restored on startup, and corrupt files are moved aside instead of crashing the plugin. Toggles/deletes queued while nobody was online to carry them are now eventually delivered to the proxy once a player joins again.
+
+- 代理切换/删除消息的离线中继队列现在可以跨重启存活：消息持久化到 `pending-relay.json`(原子重写)、启动时恢复，损坏文件会被移开而不是导致插件崩溃。此前仅存在内存中的队列(重启即丢)，现在会在玩家重新上线后最终送达代理。
 
 ### /flp toggle null-profile guards / 切换命令空 profile 防护
 
@@ -29,6 +35,7 @@
 - BungeeCord/Velocity now generate `config.yml` from a dedicated `config-proxy.yml` template: backend-only keys (`verifyClientKeys`, `respectIpLimit`) are no longer present, and comments describe the proxy's role (decision maker: Mojang queries, database, force-login forwarding)
 - Bukkit/Folia config comments now mark which keys lose effect (or only partially apply) when the server runs behind a proxy — `database`, `anti-bot`, Floodgate keys, JoinManagement keys and more
 - ConfigRefresher preserves values for scalar keys written without a template value (e.g. `ServerRSAPublicKeyFile`)
+- `loadFile` defaults now follow the selected config template (backend vs proxy), and `setConfigTemplate` fails fast when called after `load` instead of silently misbehaving
 
 - BungeeCord/Velocity 现在使用专属的 `config-proxy.yml` 模板生成 `config.yml`: 后端专属键(`verifyClientKeys`、`respectIpLimit`)不再出现, 注释描述代理端职责(决策方: Mojang 查询、数据库、转发强制登录)
 - Bukkit/Folia 的配置注释现在标明代理子服模式下失效(或仅部分生效)的键 — `database`、`anti-bot`、Floodgate 相关键、JoinManagement 相关键等
@@ -39,13 +46,11 @@
 - Proxies now persist a `premium=true` row themselves after verifying an online-mode session (`ForceLoginManagement` null hook branch) — no longer relying solely on the backend's `SuccessMessage` ack, which AuthMe 6.0 proxy deployments never send (REGISTER action skips ForceLoginTask when the AuthMe record already exists; LOGIN action returns false from `forceLogin` after `AsynchronousJoin` bypasses)
 - Verified-premium sessions where the auth plugin reports failure (`forceLogin` returns false) now still ack the proxy, restoring the ack persistence path
 - Fixes #5: a player with a premium row can no longer be let in offline by `secondAttemptCracked` after a session expiry
-- Known limitation: legacy `premium=false` rows (from a previous offline join) are not auto-upgraded — delete once with `/flp delete <player>`, the next verified premium join recreates the row
 - Add `ForceLoginManagementTest` covering proxy null-branch persistence, row upgrade semantics, AuthMe 6.0 bypass ack, success-path regression and cracked-path regression
 
 - 代理在验证正版会话后现在由自身直接写入 `premium=true` 行(`ForceLoginManagement` 的 null hook 分支), 不再单独依赖后端 `SuccessMessage` 回执 —— AuthMe 6.0 代理部署下该回执不会发送(REGISTER 动作因 AuthMe 记录已存在跳过 ForceLoginTask; LOGIN 动作 `forceLogin` 因 `AsynchronousJoin` 已认证返回 false)
 - 已核实正版但认证插件报失败(`forceLogin` 返回 false)的会话现在也会向代理补发回执, 恢复回执持久化通道
 - 修复 #5: 有正版记录的玩家不会再因会话过期被 `secondAttemptCracked` 放行进离线模式
-- 已知限制: 历史遗留的 `premium=false` 行(曾离线加入过)不会被自动升级 —— 用 `/flp delete <玩家>` 删一次, 下次正版验证成功会重建该行
 - 新增 `ForceLoginManagementTest`, 覆盖代理 null 分支落库、行升级语义、AuthMe 6.0 bypass 补发回执、成功路径回归与 cracked 路径回归
 
 ### SQLite case-insensitive names / SQLite 名字大小写不敏感
@@ -61,7 +66,32 @@
 ### AsyncToggleMessage NPE on database failure / 数据库故障时切换命令的 NPE 修复
 
 - `/premium` and `/cracked` toggles (BungeeCord + Velocity) no longer throw NullPointerException when the profile lookup fails (SQLite lock timeout, MySQL down, dropped connection). The task aborts, sends the new `database-error` message to the invoker and logs the abort — previously the command silently did nothing and only a stack trace appeared on the proxy console
+
 - BungeeCord 与 Velocity 的 `/premium`、`/cracked` 切换在数据库查询失败时(SQLite 锁超时、MySQL 宕机、连接断开)不再抛空指针异常: 任务中止, 向操作者发送新增的 `database-error` 提示并记录日志 —— 此前命令无声无息地无效, 只在代理控制台留下一行堆栈
+
+### Other Bug Fixes / 其他 Bug 修复
+
+- Session verification aborts when the player disconnects mid-verification (e.g. the user cancels the login while Mojang is still answering): no more Mojang queries or ghost-kicks for players who are no longer connecting (`VerifyResponseTask` checks the Netty channel before proceeding)
+- Velocity login sessions are now keyed by the connection's remote address instead of the connection object, fixing lost session state between `GameProfileRequest` (which exposes a different `InboundConnection` instance) and later events; the success-ack path no longer NPEs when the session is already gone
+- Proxy toggle messages for admin operations on other players now use the existing `-other` message variants (the dedicated keys were removed)
+- Bukkit's toggle relay no longer double-sends a pending toggle: `remove-if-present` guarantees at most one relay per toggle even when the configure listener or a retry already relayed it; Folia now queues and retries every second when no player is online, matching Bukkit's behaviour
+
+- 玩家在异步会话验证期间断开(如 Mojang 应答中取消登录)时验证任务立即中止: 不再向已断开的连接查询 Mojang 或踢出幽灵玩家(`VerifyResponseTask` 在继续前检查 Netty channel 活跃状态)
+- Velocity 登录会话改为按连接远端地址(remote address)而非连接对象存储: 修复 `GameProfileRequest`(暴露不同的 `InboundConnection` 实例)与后续事件之间会话状态丢失; 会话已消失时 success 回执路径不再抛 NPE
+- 代理端对"操作其他玩家"的管理切换消息改用已有的 `-other` 消息变体(移除了不再使用的专用键)
+- Bukkit 切换中继不再重复发送待处理切换: `remove-if-present` 保证每个切换至多中继一次(即使 configure 监听器或重试已先中继); Folia 在无玩家在线时现在同样入队并每秒重试, 与 Bukkit 行为对齐
+
+### Logging & Diagnostics / 日志与诊断
+
+- Added proxy-side debug logs for the premium toggle flow and `/flp` command diagnostics (registration result, invocation)
+
+- 新增代理端正版切换流程的 debug 日志与 `/flp` 命令诊断日志(注册结果、命令调用)
+
+### Documentation / 文档
+
+- README updates plus config-comment documentation(EFFECT-line)
+
+- README 更新及配置注释文档化(EFFECT-line)
 
 ## v0.4.0
 
