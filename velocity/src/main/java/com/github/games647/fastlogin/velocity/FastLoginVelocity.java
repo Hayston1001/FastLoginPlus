@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.velocity;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,7 +63,6 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
-import com.velocitypowered.api.proxy.InboundConnection;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.messages.ChannelMessageSink;
@@ -78,7 +78,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     private final ProxyServer server;
     private final Path dataDirectory;
     private final Logger logger;
-    private final ConcurrentMap<InboundConnection, VelocityLoginSession> session = new MapMaker().weakKeys().makeMap();
+    private final ConcurrentMap<InetSocketAddress, VelocityLoginSession> session = new MapMaker().weakKeys().makeMap();
     private static final String PROXY_ID_FILE = "proxyId.txt";
 
     private FastLoginCore<Player, CommandSource, FastLoginVelocity> core;
@@ -203,7 +203,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         return core;
     }
 
-    public ConcurrentMap<InboundConnection, VelocityLoginSession> getSession() {
+    public ConcurrentMap<InetSocketAddress, VelocityLoginSession> getSession() {
         return session;
     }
 
