@@ -115,10 +115,14 @@ public abstract class ToggleCommand implements CommandExecutor {
                     return;
                 }
                 Player sender = optPlayer.get();
-                ChannelMessage message = new ChangePremiumMessage(target, activate, false);
-                plugin.getBungeeManager().sendPluginMessage(sender, message);
-                plugin.getLog().info("Relayed pending {} toggle for {}",
-                    activate ? "premium" : "cracked", target);
+                // remove-if-present: never double-send after the configure
+                // listener (or another retry) already relayed the toggle
+                if (plugin.getPendingOfflineToggles().remove(target) != null) {
+                    ChannelMessage message = new ChangePremiumMessage(target, activate, false);
+                    plugin.getBungeeManager().sendPluginMessage(sender, message);
+                    plugin.getLog().info("Relayed pending {} toggle for {}",
+                        activate ? "premium" : "cracked", target);
+                }
                 Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
             }
         }, 20L, 20L);
