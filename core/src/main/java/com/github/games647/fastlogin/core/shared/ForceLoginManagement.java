@@ -67,7 +67,26 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 AuthPlugin<P> authPlugin = core.getAuthPluginHook();
                 if (authPlugin == null) {
                     // maybe only bungeecord plugin
+                    // The proxy has already verified this session (online mode), so persist
+                    // the premium row locally instead of relying on the backend's
+                    // SuccessMessage ack. With AuthMe 6.0 the ack is never sent: on a
+                    // REGISTER action the backend skips ForceLoginTask when the AuthMe record
+                    // already exists (pre-created), and on a LOGIN action forceLogin() returns
+                    // false because AsynchronousJoin already authenticated the player. Without
+                    // a row every reconnect is treated as a new player (performNewPlayerLogin)
+                    // and secondAttemptCracked can let a verified premium player join offline
+                    // after a session expiry.
+                    // Note: Floodgate forced-online sessions reach this branch too; their
+                    // session UUID is never set (onGameProfileRequest only handles online-mode
+                    // connections), so the row is written without a UUID — matching the
+                    // existing Floodgate row convention.
                     onForceActionSuccess(session);
+
+                    if (playerProfile != null) {
+                        playerProfile.setId(session.getUuid());
+                        playerProfile.setOnlinemodePreferred(true);
+                        storage.save(playerProfile);
+                    }
                 } else {
                     boolean success = true;
                     String playerName = getName(player);
@@ -90,16 +109,28 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                         }
 
                         onForceActionSuccess(session);
-                    } else if (isOnlineMode() && playerProfile != null) {
-                        // forceLogin returned false but this is a verified premium session.
-                        // This happens with AuthMe 6.0: AuthMe's AsynchronousJoin runs
-                        // canBypassWithPremium() before FLP's ForceLoginTask, so the player
-                        // is already authenticated when forceLogin() is called (returns false).
+                    } else {
+                        // forceLogin/forceRegister returned false but this is a verified
+                        // premium session. This happens with AuthMe 6.0: AuthMe's
+                        // AsynchronousJoin runs canBypassWithPremium() before FLP's
+                        // ForceLoginTask, so the player is already authenticated when
+                        // forceLogin() is called (returns false).
                         // We still need to persist onlinemodePreferred=true so that future
-                        // reconnects route through requestPremiumLogin instead of startCrackedSession.
-                        playerProfile.setId(session.getUuid());
-                        playerProfile.setOnlinemodePreferred(true);
-                        storage.save(playerProfile);
+                        // reconnects route through requestPremiumLogin instead of
+                        // startCrackedSession (direct mode; proxy-mode backends keep
+                        // profile=null, so nothing is saved there).
+                        if (playerProfile != null) {
+                            playerProfile.setId(session.getUuid());
+                            playerProfile.setOnlinemodePreferred(true);
+                            storage.save(playerProfile);
+                        }
+
+                        // Ack the proxy even when the auth plugin reported failure: the
+                        // session is already verified and the player is in game. Without
+                        // this ack the proxy never persists the premium row and
+                        // secondAttemptCracked can let the player join offline after a
+                        // session expiry.
+                        onForceActionSuccess(session);
                     }
                 }
             } else if (playerProfile != null) {

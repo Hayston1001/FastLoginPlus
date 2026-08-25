@@ -12,6 +12,20 @@
 - Bukkit/Folia 的配置注释现在标明代理子服模式下失效(或仅部分生效)的键 — `database`、`anti-bot`、Floodgate 相关键、JoinManagement 相关键等
 - ConfigRefresher 现在会保留模板中无默认值的标量键(如 `ServerRSAPublicKeyFile`)的用户值
 
+### Proxy premium row persistence / 代理端正版记录持久化
+
+- Proxies now persist a `premium=true` row themselves after verifying an online-mode session (`ForceLoginManagement` null hook branch) — no longer relying solely on the backend's `SuccessMessage` ack, which AuthMe 6.0 proxy deployments never send (REGISTER action skips ForceLoginTask when the AuthMe record already exists; LOGIN action returns false from `forceLogin` after `AsynchronousJoin` bypasses)
+- Verified-premium sessions where the auth plugin reports failure (`forceLogin` returns false) now still ack the proxy, restoring the ack persistence path
+- Fixes #5: a player with a premium row can no longer be let in offline by `secondAttemptCracked` after a session expiry
+- Known limitation: legacy `premium=false` rows (from a previous offline join) are not auto-upgraded — delete once with `/flp delete <player>`, the next verified premium join recreates the row
+- Add `ForceLoginManagementTest` covering proxy null-branch persistence, row upgrade semantics, AuthMe 6.0 bypass ack, success-path regression and cracked-path regression
+
+- 代理在验证正版会话后现在由自身直接写入 `premium=true` 行(`ForceLoginManagement` 的 null hook 分支), 不再单独依赖后端 `SuccessMessage` 回执 —— AuthMe 6.0 代理部署下该回执不会发送(REGISTER 动作因 AuthMe 记录已存在跳过 ForceLoginTask; LOGIN 动作 `forceLogin` 因 `AsynchronousJoin` 已认证返回 false)
+- 已核实正版但认证插件报失败(`forceLogin` 返回 false)的会话现在也会向代理补发回执, 恢复回执持久化通道
+- 修复 #5: 有正版记录的玩家不会再因会话过期被 `secondAttemptCracked` 放行进离线模式
+- 已知限制: 历史遗留的 `premium=false` 行(曾离线加入过)不会被自动升级 —— 用 `/flp delete <玩家>` 删一次, 下次正版验证成功会重建该行
+- 新增 `ForceLoginManagementTest`, 覆盖代理 null 分支落库、行升级语义、AuthMe 6.0 bypass 补发回执、成功路径回归与 cracked 路径回归
+
 ## v0.4.0
 
 ### Paper Configure Phase autoRegister / Paper 配置阶段自动注册
