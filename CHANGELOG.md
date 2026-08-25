@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### /flp toggle null-profile guards / 切换命令空 profile 防护
+
+- `PremiumCommand`/`CrackedCommand` (bukkit+folia, self & other paths): a null `loadProfile` result (SQL exception only) now sends the localized `database-error` message instead of throwing an NPE (self paths) or reporting hardcoded English / `player-unknown` (other paths) — "not found" was misleading for a database failure
+- velocity/bungee `PluginMessageListener` change branch now reads `premium-warning` via the typed `config.getBoolean(...)` instead of an unguarded `(boolean) config.get(...)` cast, which threw a `ClassCastException` on string-typed values and was silently swallowed by the async scheduler
+
+- `PremiumCommand`/`CrackedCommand`(bukkit+folia, 自身与其他玩家路径): `loadProfile` 返回 null(仅 SQL 异常) 时改为发送本地化 `database-error` 消息, 不再抛 NPE(自身路径)或发送硬编码英文/`player-unknown`(其他玩家路径) —— 数据库故障时"记录不存在"是误导性提示
+- velocity/bungee `PluginMessageListener` change 分支改用类型化 `config.getBoolean(...)` 读取 `premium-warning`, 替代无保护的 `(boolean) config.get(...)` 强转 —— 字符串型配置值会抛 `ClassCastException` 且被异步调度器静默吞掉
+
 ### /flp delete proxy fixes / flp delete 代理模式修复
 
 - The `del-st` message now carries an `isSourceInvoker` flag: result feedback goes to the player who ran `/flp delete`, and to the proxy console when the command was issued from the console or relayed by a carrier — relay players are no longer spammed with delete results
