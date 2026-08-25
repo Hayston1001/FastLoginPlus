@@ -72,6 +72,10 @@ public abstract class ToggleCommand implements CommandExecutor {
     }
 
     protected void sendBungeeActivateMessage(CommandSender invoker, String target, boolean activate) {
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Forwarding toggle message to proxy: target={} activate={} invoker={}",
+                    target, activate, invoker.getName());
+        }
         if (invoker instanceof PluginMessageRecipient) {
             ChannelMessage message = new ChangePremiumMessage(target, activate, true);
             plugin.getBungeeManager().sendPluginMessage((PluginMessageRecipient) invoker, message);

@@ -86,6 +86,11 @@ public class PluginMessageListener {
         byte[] data = Arrays.copyOf(pluginMessageEvent.getData(), pluginMessageEvent.getData().length);
         Player forPlayer = (Player) pluginMessageEvent.getTarget();
 
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Received proxy plugin message from server on channel {} for {} size={}",
+                    channel, forPlayer.getUsername(), data.length);
+        }
+
         plugin.getScheduler().runAsync(() -> readMessage(forPlayer, channel, data));
     }
 
@@ -101,10 +106,18 @@ public class PluginMessageListener {
 
             String playerName = changeMessage.getPlayerName();
             boolean isSourceInvoker = changeMessage.isSourceInvoker();
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("ChangePremiumMessage: target={} enable={} sourceInvoker={} carrier={}",
+                        playerName, changeMessage.shouldEnable(), isSourceInvoker, sender.getUsername());
+            }
             if (changeMessage.shouldEnable()) {
                 boolean premiumWarning = plugin.getCore().getConfig().getBoolean("premium-warning");
                 if (isSourceInvoker && playerName.equals(sender.getUsername()) && premiumWarning
                     && !core.getPendingConfirms().contains(sender.getUniqueId())) {
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Premium-warning gate hit for {}: showing confirmation prompt, "
+                                + "toggle deferred until the command is issued again", playerName);
+                    }
                     String message = core.getMessage("premium-warning");
                     sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
                     core.getPendingConfirms().add(sender.getUniqueId());
@@ -112,9 +125,15 @@ public class PluginMessageListener {
                 }
 
                 core.getPendingConfirms().remove(sender.getUniqueId());
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("Dispatching premium toggle task for {} (enable=true)", playerName);
+                }
                 Runnable task = new AsyncToggleMessage(core, sender, playerName, true, isSourceInvoker);
                 plugin.getScheduler().runAsync(task);
             } else {
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("Dispatching premium toggle task for {} (enable=false)", playerName);
+                }
                 Runnable task = new AsyncToggleMessage(core, sender, playerName, false, isSourceInvoker);
                 plugin.getScheduler().runAsync(task);
             }

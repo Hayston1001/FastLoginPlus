@@ -59,6 +59,10 @@ public class AsyncToggleMessage implements Runnable {
 
     @Override
     public void run() {
+        if (core.isDebug()) {
+            core.getPlugin().getLog().info("Proxy toggle task: target={} toPremium={} isPlayerSender={} invoker={}",
+                    targetPlayer, toPremium, isPlayerSender, senderName);
+        }
         if (toPremium) {
             activatePremium();
         } else {
@@ -77,12 +81,19 @@ public class AsyncToggleMessage implements Runnable {
         }
         //existing player is already cracked
         if (playerProfile.isExistingPlayer() && !playerProfile.isOnlinemodePreferred()) {
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("{} is already cracked; skipping toggle", targetPlayer);
+            }
             boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
             sendMessage(isSelf ? "not-premium" : "not-premium-other");
             // Still kick if configured
             if (core.getConfig().getBoolean("kick-toggle")) {
                 ProxiedPlayer target = core.getPlugin().getProxy().getPlayer(targetPlayer);
                 if (target != null) {
+                    if (core.isDebug()) {
+                        core.getPlugin().getLog().info("Kicking {} to apply cracked profile (kick-toggle)",
+                                targetPlayer);
+                    }
                     target.disconnect(TextComponent.fromLegacyText(core.getMessage("remove-premium")));
                 }
             }
@@ -92,6 +103,9 @@ public class AsyncToggleMessage implements Runnable {
         playerProfile.setOnlinemodePreferred(false);
         playerProfile.setId(null);
         core.getStorage().save(playerProfile);
+        if (core.isDebug()) {
+            core.getPlugin().getLog().info("Marked {} as cracked in proxy database", targetPlayer);
+        }
         PremiumToggleReason reason = (!isPlayerSender || !senderName.equalsIgnoreCase(playerProfile.getName()))
             ? PremiumToggleReason.COMMAND_OTHER : PremiumToggleReason.COMMAND_SELF;
         core.getPlugin().getProxy().getPluginManager().callEvent(
@@ -104,6 +118,10 @@ public class AsyncToggleMessage implements Runnable {
         if (core.getConfig().getBoolean("kick-toggle")) {
             ProxiedPlayer target = core.getPlugin().getProxy().getPlayer(targetPlayer);
             if (target != null) {
+                if (core.isDebug()) {
+                    core.getPlugin().getLog().info("Kicking {} to apply cracked profile (kick-toggle)",
+                            targetPlayer);
+                }
                 target.disconnect(TextComponent.fromLegacyText(core.getMessage("remove-premium")));
             }
         }
@@ -119,6 +137,9 @@ public class AsyncToggleMessage implements Runnable {
             return;
         }
         if (playerProfile.isOnlinemodePreferred()) {
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("{} is already premium; skipping toggle", targetPlayer);
+            }
             boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
             sendMessage(isSelf ? "already-exists" : "already-exists-other");
             return;
@@ -134,12 +155,19 @@ public class AsyncToggleMessage implements Runnable {
             if (mojangProfile.isPresent()) {
                 playerProfile.setId(mojangProfile.get().getId());
             }
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("Mojang UUID resolution for {}: {}", targetPlayer,
+                        playerProfile.getId());
+            }
         } catch (Exception e) {
             core.getPlugin().getLog().warn(
                 "Failed to resolve Mojang UUID for {} during premium toggle", targetPlayer, e);
         }
 
         core.getStorage().save(playerProfile);
+        if (core.isDebug()) {
+            core.getPlugin().getLog().info("Marked {} as premium in proxy database", targetPlayer);
+        }
         PremiumToggleReason reason = (!isPlayerSender || !senderName.equalsIgnoreCase(playerProfile.getName()))
             ? PremiumToggleReason.COMMAND_OTHER : PremiumToggleReason.COMMAND_SELF;
         core.getPlugin().getProxy().getPluginManager().callEvent(
@@ -152,6 +180,10 @@ public class AsyncToggleMessage implements Runnable {
         if (core.getConfig().getBoolean("kick-toggle")) {
             ProxiedPlayer target = core.getPlugin().getProxy().getPlayer(targetPlayer);
             if (target != null) {
+                if (core.isDebug()) {
+                    core.getPlugin().getLog().info("Kicking {} to apply premium profile (kick-toggle)",
+                            targetPlayer);
+                }
                 target.disconnect(TextComponent.fromLegacyText(core.getMessage("add-premium")));
             }
         }
