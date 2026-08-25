@@ -68,6 +68,13 @@ public class AsyncToggleMessage implements Runnable {
 
     private void turnOffPremium() {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
+        if (playerProfile == null) {
+            // null only on SQL exception — abort instead of NPE, give the invoker feedback
+            core.getPlugin().getLog().warn("Cannot toggle premium state for {}: database query failed",
+                    targetPlayer);
+            sendMessage("database-error");
+            return;
+        }
         //existing player is already cracked
         if (playerProfile.isExistingPlayer() && !playerProfile.isOnlinemodePreferred()) {
             boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
@@ -104,6 +111,13 @@ public class AsyncToggleMessage implements Runnable {
 
     private void activatePremium() {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
+        if (playerProfile == null) {
+            // null only on SQL exception — abort instead of NPE, give the invoker feedback
+            core.getPlugin().getLog().warn("Cannot toggle premium state for {}: database query failed",
+                    targetPlayer);
+            sendMessage("database-error");
+            return;
+        }
         if (playerProfile.isOnlinemodePreferred()) {
             boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
             sendMessage(isSelf ? "already-exists" : "already-exists-other");

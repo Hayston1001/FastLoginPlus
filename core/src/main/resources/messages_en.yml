@@ -76,6 +76,7 @@ wait-on-proxy: '&6Sending request... (Do not forget to follow the BungeeCord set
 
 # Error messages
 error-kick: '&4Error occurred'
+database-error: '&4Database error. Please contact an admin.'
 invalid-verify-token: '&4Invalid nonce token. Please verify you are using the correct server address'
 invalid-session: '&4Invalid session'
 invalid-request: '&4Invalid request'

@@ -36,6 +36,11 @@
 - 启动时对既有的区分大小写 `premium` 表做一次性迁移(重命名 → 重建 → 复制 → 删除, 单事务), 迁移幂等且保留所有行
 - 新增 `SQLiteStorageTest`, 覆盖不敏感查找、大小写变体重复行拒绝、旧表迁移与迁移幂等性
 
+### AsyncToggleMessage NPE on database failure / 数据库故障时切换命令的 NPE 修复
+
+- `/premium` and `/cracked` toggles (BungeeCord + Velocity) no longer throw NullPointerException when the profile lookup fails (SQLite lock timeout, MySQL down, dropped connection). The task aborts, sends the new `database-error` message to the invoker and logs the abort — previously the command silently did nothing and only a stack trace appeared on the proxy console
+- BungeeCord 与 Velocity 的 `/premium`、`/cracked` 切换在数据库查询失败时(SQLite 锁超时、MySQL 宕机、连接断开)不再抛空指针异常: 任务中止, 向操作者发送新增的 `database-error` 提示并记录日志 —— 此前命令无声无息地无效, 只在代理控制台留下一行堆栈
+
 ## v0.4.0
 
 ### Paper Configure Phase autoRegister / Paper 配置阶段自动注册
