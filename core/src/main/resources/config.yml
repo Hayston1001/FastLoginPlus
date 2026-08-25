@@ -30,7 +30,6 @@
 # FastLoginPlus Configuration (Bukkit / Folia)
 # ========================================
 # This template ships with the Bukkit/Folia plugin and covers BOTH deployment
-#
 # modes:
 #   S = standalone      - no proxy, direct connections
 #   P = proxy backend   - spigot.yml bungee:true or Velocity forwarding
@@ -41,6 +40,28 @@
 #              currently "Paper" or "Paper 1.20.5+"
 #   none     - the key has no effect in this mode; its code paths do not run
 # Keys without an EFFECT line behave identically in both modes.
+#
+# Examples — how to read an EFFECT line:
+#
+#   --------------------------------
+#   # EFFECT  S=full   P=none
+#   anti-bot:
+#     enabled: true
+#   --------------------------------
+#   Standalone: This section fully works HERE.
+#   Behind a proxy: Editing this section HERE changes NOTHING. You should edit this in proxy's config.yml
+#
+#   --------------------------------
+#   # EFFECT  S=full   P=Paper 1.20.5+  configure-phase pre-registration
+#   autoRegister: true
+#   --------------------------------
+#   Standalone: This section fully works HERE.
+#   Behind a proxy: Only on Paper 1.20.5+; On Spigot editing this section HERE changes NOTHING--you should edit this in proxy's config.yml
+#
+#   --------------------------------
+#   autoLogin: true
+#   --------------------------------
+#   No EFFECT line: behaves identically in both modes.
 
 # ========================================
 # Language
