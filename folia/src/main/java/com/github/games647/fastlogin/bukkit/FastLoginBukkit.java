@@ -219,7 +219,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             FlpCommand flpCommand = new FlpCommand(this);
             c.setExecutor(flpCommand);
             c.setTabCompleter(flpCommand);
+            logger.info("Registered /flp command (FlpCommand executor)");
         });
+        if (getCommand("flp") == null) {
+            logger.warn("Command /flp is not registered — plugin.yml 'commands: flp' missing "
+                + "or the plugin was disabled before command registration");
+        }
     }
 
     private void scheduleUpdateCheck() {

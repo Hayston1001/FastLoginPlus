@@ -62,6 +62,11 @@ public class FlpCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
                              @NotNull String label, @NotNull String[] args) {
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("FlpCommand invoked by {} ({}) label={} args={}",
+                    sender.getName(), sender.getClass().getSimpleName(), label,
+                    Arrays.toString(args));
+        }
         if (args.length == 0) {
             sender.sendMessage("§eFastLoginPlus §7v" + plugin.getDescription().getVersion());
             sender.sendMessage("§7Usage: /flp premium|cracked|delete [player]");
