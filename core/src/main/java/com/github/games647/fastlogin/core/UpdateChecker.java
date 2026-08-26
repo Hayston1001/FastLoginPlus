@@ -79,8 +79,10 @@ public class UpdateChecker {
                 return true;
             }
         } catch (Exception e) {
+            String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            logger.warn("Update check failed, network unreachable: {}", reason);
             if (debug) {
-                logger.info("Update check failed", e);
+                logger.debug("Update check failed (full trace)", e);
             }
         }
         return false;
