@@ -68,6 +68,10 @@ public class FlpCommand implements CommandExecutor, TabCompleter {
                     Arrays.toString(args));
         }
         if (args.length == 0) {
+            if (!sender.isOp()) {
+                plugin.getCore().sendLocaleMessage("no-permission", sender);
+                return true;
+            }
             sender.sendMessage("§eFastLoginPlus §7v" + plugin.getDescription().getVersion());
             sender.sendMessage("§7Usage: /flp premium|cracked|delete [player]");
             return true;
