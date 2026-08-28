@@ -91,7 +91,7 @@ The file on disk is always named `config.yml`. Copying a config file between a p
 | Platform | Java | Notes |
 |----------|------|-------|
 | Spigot / Paper | 8+ | Requires [ProtocolLib 5.3+](https://www.spigotmc.org/resources/protocollib.1997/) or [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/) |
-| Folia | 17+ | Requires ProtocolLib 5.3+ |
+| Folia | 21+ | Requires ProtocolLib 5.3+ |
 | BungeeCord / Waterfall | 17+ | — |
 | Velocity | 17+ | — |
 

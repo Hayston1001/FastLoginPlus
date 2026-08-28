@@ -91,7 +91,7 @@ FLP 内置**两套配置模板**；每个平台根据自身角色生成 `config.
 | 平台 | Java | 备注 |
 |------|------|------|
 | Spigot/Paper | 8+ | 需要 [ProtocolLib 5.3+](https://www.spigotmc.org/resources/protocollib.1997/) 或 [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/) |
-| Folia | 17+ | 需要 ProtocolLib 5.3+ |
+| Folia | 21+ | 需要 ProtocolLib 5.3+ |
 | BungeeCord/Waterfall | 17+ | — |
 | Velocity | 17+ | — |
 
