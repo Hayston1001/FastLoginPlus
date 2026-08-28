@@ -532,14 +532,23 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         // Pending toggles queued while no relay player was online.
         // - Cracked: skip autoRegister — the player should see the register dialog.
+        //   The queued relay stays pending: the retry task delivers it once any
+        //   player reaches the PLAY phase, and the proxy then marks the profile
+        //   cracked (and applies kick-toggle).
         // - Premium: proceed with autoRegister despite UUID mismatch, then
         //   schedule a PLAY-phase self-relay + kick.  Don't remove from the
         //   pending map yet — only clear it once the proxy message is sent.
         Boolean pendingActivate = pendingRelayStore.getToggle(playerName);
         final boolean isPendingPremium = Boolean.TRUE.equals(pendingActivate);
         if (pendingActivate != null && !pendingActivate) {
-            pendingRelayStore.clearToggle(playerName);
-            logger.info("Skipping autoRegister for {}: pending cracked toggle", playerName);
+            // The queued cracked toggle must still reach the proxy (its DB is
+            // still premium) — do NOT consume the entry here.  Only skip the
+            // AuthMe autoRegister; the message is delivered later by the retry
+            // task (remove-if-present guards against double-send).
+            logger.info("Skipping autoRegister for {}: pending cracked toggle (relay stays queued)",
+                    playerName);
+            // defensive: make sure a relay task exists for the still-queued entry
+            scheduleToggleRelay(playerName);
             return;
         }
 
