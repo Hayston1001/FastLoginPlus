@@ -134,4 +134,42 @@ class PendingRelayStoreTest {
         PendingRelayStore restored = new PendingRelayStore(tempDir, logger());
         assertFalse(restored.load());
     }
+
+    @Test
+    void removeToggleReturnsCurrentValueAndClearsEntry() {
+        PendingRelayStore store = new PendingRelayStore(tempDir, logger());
+        store.queueToggle("Steve", true);
+        // a newer command overwrote the value while the retry task was pending
+        store.queueToggle("Steve", false);
+
+        assertEquals(Boolean.FALSE, store.removeToggle("Steve"));
+        assertFalse(store.hasPending());
+        assertNull(store.removeToggle("Steve"));
+
+        PendingRelayStore restored = new PendingRelayStore(tempDir, logger());
+        assertFalse(restored.load());
+    }
+
+    @Test
+    void queueToggleReturnsTrueOnlyForNewEntries() {
+        PendingRelayStore store = new PendingRelayStore(tempDir, logger());
+
+        assertTrue(store.queueToggle("Steve", true));
+        // same value again — a retry task already exists for the entry
+        assertFalse(store.queueToggle("Steve", true));
+        // value change — still covered by the existing retry task (it reads
+        // the current value at send time), so no new task is needed
+        assertFalse(store.queueToggle("Steve", false));
+
+        assertEquals(Boolean.FALSE, store.getToggle("Steve"));
+    }
+
+    @Test
+    void queueDeleteReturnsTrueOnlyForNewEntries() {
+        PendingRelayStore store = new PendingRelayStore(tempDir, logger());
+
+        assertTrue(store.queueDelete("Notch"));
+        assertFalse(store.queueDelete("Notch"));
+        assertTrue(store.containsDelete("Notch"));
+    }
 }
