@@ -568,15 +568,33 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
             scheduler.getSyncExecutor().execute(() -> {
                 Player sender = optPlayer.get();
+                if (!sender.isOnline()) {
+                    // The carrier quit between the async online check and this
+                    // global-region task.  The entry is still queued (nothing
+                    // was removed yet) — retry with a fresh task instead of
+                    // sending into a dead connection and losing the toggle.
+                    if (pendingRelayStore.containsToggle(target)) {
+                        scheduleToggleRelay(target);
+                    }
+                    return;
+                }
                 // remove-if-present AND take the CURRENT queued value: the entry
                 // may have been overwritten by a newer toggle command since this
                 // task was scheduled — never send a stale captured value
                 Boolean pendingValue = pendingRelayStore.removeToggle(target);
                 if (pendingValue != null) {
-                    bungeeManager.sendPluginMessage(sender,
-                            new ChangePremiumMessage(target, pendingValue, false));
-                    logger.info("Relayed pending {} toggle for {}",
-                        pendingValue ? "premium" : "cracked", target);
+                    try {
+                        bungeeManager.sendPluginMessage(sender,
+                                new ChangePremiumMessage(target, pendingValue, false));
+                        logger.info("Relayed pending {} toggle for {}",
+                            pendingValue ? "premium" : "cracked", target);
+                    } catch (Exception ex) {
+                        // send failed after removal — put the entry back and retry
+                        pendingRelayStore.queueToggle(target, pendingValue);
+                        scheduleToggleRelay(target);
+                        logger.warn("Failed to relay pending toggle for {} — requeued: {}",
+                            target, ex.getMessage());
+                    }
                 }
             });
         }, Duration.ofSeconds(1));
@@ -603,11 +621,26 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
             scheduler.getSyncExecutor().execute(() -> {
                 Player sender = optPlayer.get();
+                if (!sender.isOnline()) {
+                    // carrier quit between the async check and this task — retry
+                    if (pendingRelayStore.containsDelete(targetName)) {
+                        scheduleDeleteRelay(targetName);
+                    }
+                    return;
+                }
                 // remove-if-present: never double-send after another retry already relayed it
                 if (pendingRelayStore.clearDelete(targetName)) {
-                    bungeeManager.sendPluginMessage(sender,
-                            new DeletePremiumMessage(targetName, false));
-                    logger.info("Relayed pending delete for {}", targetName);
+                    try {
+                        bungeeManager.sendPluginMessage(sender,
+                                new DeletePremiumMessage(targetName, false));
+                        logger.info("Relayed pending delete for {}", targetName);
+                    } catch (Exception ex) {
+                        // send failed after removal — put the entry back and retry
+                        pendingRelayStore.queueDelete(targetName);
+                        scheduleDeleteRelay(targetName);
+                        logger.warn("Failed to relay pending delete for {} — requeued: {}",
+                            targetName, ex.getMessage());
+                    }
                 }
             });
         }, Duration.ofSeconds(1));
