@@ -85,7 +85,7 @@ public abstract class ToggleCommand implements CommandExecutor {
                 plugin.getLog().info("No player online to relay message — "
                     + "queuing pending toggle for {}", target);
                 plugin.getPendingRelayStore().queueToggle(target, activate);
-                plugin.scheduleToggleRelay(target, activate);
+                plugin.scheduleToggleRelay(target);
                 return;
             }
 

@@ -147,6 +147,26 @@ public class PendingRelayStore {
     }
 
     /**
+     * Atomically removes a queued toggle and returns the value it carried.
+     * <p>
+     * Callers must send the returned value instead of a value captured when the
+     * retry task was scheduled — the entry may have been overwritten by a newer
+     * toggle command in the meantime, and the latest queued value is the one the
+     * admin intended.
+     *
+     * @param name player name
+     * @return the removed toggle value (true = premium, false = cracked), or
+     * null if nothing was queued for the name
+     */
+    public synchronized Boolean removeToggle(String name) {
+        Boolean value = toggles.remove(name);
+        if (value != null) {
+            persist();
+        }
+        return value;
+    }
+
+    /**
      * Queues a delete for later relay and persists it.
      *
      * @param name player name

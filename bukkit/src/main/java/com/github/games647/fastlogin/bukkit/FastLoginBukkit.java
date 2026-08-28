@@ -154,7 +154,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             if (bungeeManager.isEnabled()) {
                 logger.info("Restored {} pending toggle(s) and {} pending delete(s) from disk; resuming relay",
                     pendingRelayStore.toggles().size(), pendingRelayStore.deletes().size());
-                pendingRelayStore.toggles().forEach((name, activate) -> scheduleToggleRelay(name, activate));
+                pendingRelayStore.toggles().keySet().forEach(this::scheduleToggleRelay);
                 pendingRelayStore.deletes().forEach(this::scheduleDeleteRelay);
             } else {
                 logger.warn("Discarding {} pending relay(s): proxy support is disabled",
@@ -606,19 +606,27 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     Bukkit.getScheduler().runTask(FastLoginBukkit.this, () -> {
                         Player player = Bukkit.getPlayerExact(playerName);
                         if (player != null && bungeeManager.isEnabled()) {
+                            // Read the CURRENT queued value at send time — the
+                            // entry may have been overwritten by a newer toggle
+                            // command, or already relayed by a retry task, since
+                            // the configure phase ran.
+                            Boolean pendingValue = pendingRelayStore.removeToggle(playerName);
+                            if (pendingValue == null) {
+                                return;
+                            }
                             ChangePremiumMessage msg = new ChangePremiumMessage(
-                                playerName, true, false);
+                                playerName, pendingValue, false);
                             bungeeManager.sendPluginMessage(player, msg);
-                            pendingRelayStore.clearToggle(playerName);
                             if (getConfig().getBoolean("kick-toggle")) {
                                 logger.info(
-                                    "Relayed pending premium toggle for {} and kicking",
-                                    playerName);
-                                player.kickPlayer(core.getMessage("add-premium"));
+                                    "Relayed pending {} toggle for {} and kicking",
+                                    pendingValue ? "premium" : "cracked", playerName);
+                                player.kickPlayer(core.getMessage(
+                                        pendingValue ? "add-premium" : "remove-premium"));
                             } else {
                                 logger.info(
-                                    "Relayed pending premium toggle for {} (kick disabled)",
-                                    playerName);
+                                    "Relayed pending {} toggle for {} (kick disabled)",
+                                    pendingValue ? "premium" : "cracked", playerName);
                             }
                         }
                     });
@@ -635,9 +643,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * (1 second) until a player is online to serve as the relay channel.
      *
      * @param target the player name to toggle
-     * @param activate true for premium, false for cracked
      */
-    public void scheduleToggleRelay(String target, boolean activate) {
+    public void scheduleToggleRelay(String target) {
         final int[] taskIdHolder = new int[1];
         taskIdHolder[0] = Bukkit.getScheduler().scheduleSyncRepeatingTask(this, new Runnable() {
             @Override
@@ -648,13 +655,15 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     return;
                 }
                 Player sender = optPlayer.get();
-                // remove-if-present: never double-send after the configure
-                // listener (or another retry) already relayed the toggle
-                if (pendingRelayStore.clearToggle(target)) {
-                    ChangePremiumMessage message = new ChangePremiumMessage(target, activate, false);
+                // remove-if-present AND take the CURRENT queued value: the entry
+                // may have been overwritten by a newer toggle command since this
+                // task was scheduled — never send a stale captured value
+                Boolean pendingValue = pendingRelayStore.removeToggle(target);
+                if (pendingValue != null) {
+                    ChangePremiumMessage message = new ChangePremiumMessage(target, pendingValue, false);
                     bungeeManager.sendPluginMessage(sender, message);
                     logger.info("Relayed pending {} toggle for {}",
-                        activate ? "premium" : "cracked", target);
+                        pendingValue ? "premium" : "cracked", target);
                 }
                 Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
             }
