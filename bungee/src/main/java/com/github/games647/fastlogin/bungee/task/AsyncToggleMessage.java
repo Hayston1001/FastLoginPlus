@@ -86,17 +86,10 @@ public class AsyncToggleMessage implements Runnable {
             }
             boolean isSelf = senderName.equalsIgnoreCase(targetPlayer);
             sendMessage(isSelf ? "not-premium" : "not-premium-other");
-            // Still kick if configured
-            if (core.getConfig().getBoolean("kick-toggle")) {
-                ProxiedPlayer target = core.getPlugin().getProxy().getPlayer(targetPlayer);
-                if (target != null) {
-                    if (core.isDebug()) {
-                        core.getPlugin().getLog().info("Kicking {} to apply cracked profile (kick-toggle)",
-                                targetPlayer);
-                    }
-                    target.disconnect(TextComponent.fromLegacyText(core.getMessage("remove-premium")));
-                }
-            }
+            // No state change → no kick.  The player's current session already
+            // matches the database; kicking here would ignore a kick-toggle:false
+            // setting and used the misleading "premium removed" text.  Aligned
+            // with activatePremium()'s already-premium skip (no kick there).
             return;
         }
 
