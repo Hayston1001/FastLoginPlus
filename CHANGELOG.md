@@ -1,5 +1,25 @@
 # FastLoginPlus Changelog
 
+## Unreleased
+
+### Pending relay audit fixes (P1–P6) / 待处理中继链路审计修复(P1–P6)
+
+- Fixed a race where two conflicting console toggles (`/flp premium X` then `/flp cracked X`) could relay the stale captured value: the relay task now atomically removes the queue entry and sends the CURRENT queued value (`PendingRelayStore.removeToggle`), so the last command always wins (bukkit, folia and the Paper configure-phase self-relay path).
+- A pending cracked toggle for a player who joins while nobody else is online is no longer silently dropped by the Paper configure listener (autoRegister skip): the entry stays queued and is relayed to the proxy once any player reaches the PLAY phase, so the proxy database is actually flipped to cracked.
+- Folia relay tasks no longer lose a toggle/delete when the carrier player quits between the async online-check and the global-region execution: the task re-checks `isOnline()` before removing the queue entry, re-chains the retry if the carrier left, and re-queues + retries when the plugin-message send itself fails.
+- The proxy no longer kicks a player who is ALREADY cracked when `/flp cracked` is relayed for them (bungee + velocity): a no-state-change toggle now behaves like the already-premium skip. This also respects `kick-toggle: false` and removes the misleading "premium removed" disconnect text on a no-op toggle.
+- Toggle/delete results for backend-relayed commands are now mirrored back to the backend console via a new proxy → backend plugin message (`ToggleFeedbackMessage`, channel `fb-st`, carries a locale key + the proxy UUID validated against `allowed-proxies.txt`) — the admin no longer has to check the proxy log to learn whether the queued toggle succeeded.
+- Retry-task accumulation bounded: `queueToggle`/`queueDelete` now report whether a NEW entry was created, and commands only schedule a retry task for new entries — an already-queued entry keeps its live task, which picks up overwritten values at send time.
+- Known limitations (documented, unchanged by design): the pending queue is per-backend (a toggle queued on backend A is delivered when A has a player online, not on other backends); entries have no TTL — admin intent is preserved until delivered or until proxy support is disabled (`clearAll`).
+
+- 修复异值双击竞态: 控制台先执行 `/flp premium X` 再执行 `/flp cracked X` 时, 中继任务可能发送任务创建时捕获的旧值 —— 现在中继任务通过新增的 `PendingRelayStore.removeToggle` 原子地取出队列当前值再发送, 保证最后一条命令生效(bukkit、folia 及 Paper configure 阶段的自中继路径)。
+- 修复 pending cracked 在目标玩家本人连入时被 Paper configure 监听器静默吞掉的问题(跳过 autoRegister 的同时不再清除队列条目): 条目保留并在任意玩家进入 PLAY 阶段后转发给代理, 代理数据库实际切换为 cracked。
+- 修复 Folia 载体玩家断连竞态: 异步在线检查与 global-region 执行之间玩家退出时, 任务会先复查 `isOnline()` 再取队列条目, 载体已离开则重新链式重试; 发送本身失败时回滚入队并重试(toggle 与 delete 一致)。
+- 代理端(bungee + velocity)不再对"本来就是盗版"的目标玩家执行 kick: 无状态变化的切换与 already-premium 跳过行为对齐, 同时遵守 `kick-toggle: false` 配置, 并移除无操作时误导性的"已移除高级登录"踢出文案。
+- 后端转发的 toggle/delete 执行结果现在通过新增的 代理 → 后端 插件消息(`ToggleFeedbackMessage`, 通道 `fb-st`, 携带语言键 + 用于 `allowed-proxies.txt` 校验的代理 UUID)回显到后端控制台 —— 管理员无需再去代理日志确认排队命令的成败。
+- 重试任务堆积受限: `queueToggle`/`queueDelete` 现在返回是否新建了条目, 命令只为新条目安排重试任务 —— 已在队列中的条目沿用存活的重试任务, 其在发送时读取被覆盖后的最新值。
+- 已知限制(设计如此, 保持不变): 排队队列是按后端隔离的(在 A 后端排队的 toggle 只在 A 有玩家上线时投递); 条目无 TTL —— 管理员意图会保留直到成功投递或代理支持被关闭(`clearAll`)。
+
 ## v0.5.0
 
 ### Pending proxy relay queue persistence / 待处理代理中继队列持久化
