@@ -114,8 +114,11 @@ public class DeleteCommand implements CommandExecutor {
             if (!optPlayer.isPresent()) {
                 plugin.getLog().info("No player online to relay delete message — "
                     + "queuing pending delete for {}", targetName);
-                plugin.getPendingRelayStore().queueDelete(targetName);
-                plugin.scheduleDeleteRelay(targetName);
+                if (plugin.getPendingRelayStore().queueDelete(targetName)) {
+                    // retry task only for a newly queued entry — one is already
+                    // running for an entry that is waiting
+                    plugin.scheduleDeleteRelay(targetName);
+                }
                 return;
             }
             plugin.getBungeeManager().sendPluginMessage(optPlayer.get(),

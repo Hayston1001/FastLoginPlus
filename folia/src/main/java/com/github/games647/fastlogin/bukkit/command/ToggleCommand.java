@@ -85,8 +85,12 @@ public abstract class ToggleCommand implements CommandExecutor {
             if (!optPlayer.isPresent()) {
                 plugin.getLog().info("No player online to relay message — "
                     + "queuing pending toggle for {}", target);
-                plugin.getPendingRelayStore().queueToggle(target, activate);
-                plugin.scheduleToggleRelay(target);
+                if (plugin.getPendingRelayStore().queueToggle(target, activate)) {
+                    // schedule a retry only for a newly queued entry — an entry
+                    // already waiting has a live retry task, which picks up the
+                    // latest queued value at send time
+                    plugin.scheduleToggleRelay(target);
+                }
                 return;
             }
 

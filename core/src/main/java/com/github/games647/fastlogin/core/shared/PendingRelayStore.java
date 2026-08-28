@@ -123,13 +123,22 @@ public class PendingRelayStore {
 
     /**
      * Queues a premium/cracked toggle for later relay and persists it.
+     * <p>
+     * The retry task reads the queued value at send time (see {@link #removeToggle}),
+     * so overwriting an existing entry with a new value does not require another
+     * retry task.
      *
      * @param name player name
      * @param activate true for premium, false for cracked
+     * @return true if this call created a new entry; false if an entry for the
+     * name already existed — in that case a retry task is already running for it
      */
-    public synchronized void queueToggle(String name, boolean activate) {
-        toggles.put(name, activate);
-        persist();
+    public synchronized boolean queueToggle(String name, boolean activate) {
+        Boolean previous = toggles.put(name, activate);
+        if (previous == null || previous.booleanValue() != activate) {
+            persist();
+        }
+        return previous == null;
     }
 
     /**
@@ -170,11 +179,15 @@ public class PendingRelayStore {
      * Queues a delete for later relay and persists it.
      *
      * @param name player name
+     * @return true if this call created a new entry; false if the name was
+     * already queued — in that case a retry task is already running for it
      */
-    public synchronized void queueDelete(String name) {
-        if (deletes.add(name)) {
+    public synchronized boolean queueDelete(String name) {
+        boolean added = deletes.add(name);
+        if (added) {
             persist();
         }
+        return added;
     }
 
     /**
