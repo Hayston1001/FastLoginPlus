@@ -26,11 +26,13 @@
 package com.github.games647.fastlogin.velocity.listener;
 
 import java.util.Arrays;
+import java.util.Optional;
 
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
+import com.github.games647.fastlogin.core.message.ToggleFeedbackMessage;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -185,6 +187,19 @@ public class PluginMessageListener {
         } else {
             core.getPlugin().getProxy().getConsoleCommandSource()
                 .sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+            // mirror the delete result to the backend console that issued the
+            // relayed command (over the carrier player's server connection)
+            Optional<ServerConnection> server = carrier.getCurrentServer();
+            if (server.isPresent()) {
+                try {
+                    core.getPlugin().sendPluginMessage(server.get(),
+                            new ToggleFeedbackMessage(carrier.getUsername(), localeId,
+                                    core.getPlugin().getProxyId()));
+                } catch (Exception ex) {
+                    plugin.getLog().warn("Failed to send delete feedback to backend: {}",
+                            ex.getMessage());
+                }
+            }
         }
     }
 

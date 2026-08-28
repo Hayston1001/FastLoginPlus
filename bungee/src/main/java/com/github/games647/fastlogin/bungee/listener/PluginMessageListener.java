@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.bungee.listener;
 
 import java.util.Arrays;
+import java.util.UUID;
 
 import com.github.games647.fastlogin.bungee.BungeeLoginSession;
 import com.github.games647.fastlogin.bungee.FastLoginBungee;
@@ -36,6 +37,7 @@ import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.NamespaceKey;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
+import com.github.games647.fastlogin.core.message.ToggleFeedbackMessage;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -186,6 +188,20 @@ public class PluginMessageListener implements Listener {
             carrier.sendMessage(TextComponent.fromLegacyText(message));
         } else {
             ProxyServer.getInstance().getConsole().sendMessage(TextComponent.fromLegacyText(message));
+            // mirror the delete result to the backend console that issued the
+            // relayed command (over the carrier player's server connection)
+            Server server = carrier.getServer();
+            if (server != null) {
+                try {
+                    UUID proxyId = UUID.fromString(
+                            ProxyServer.getInstance().getConfig().getUuid());
+                    plugin.sendPluginMessage(server,
+                            new ToggleFeedbackMessage(carrier.getName(), localeId, proxyId));
+                } catch (Exception ex) {
+                    plugin.getLog().warn("Failed to send delete feedback to backend: {}",
+                            ex.getMessage());
+                }
+            }
         }
     }
 

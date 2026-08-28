@@ -44,6 +44,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.messaging.PluginMessageRecipient;
 
 import com.github.games647.fastlogin.bukkit.listener.BungeeListener;
+import com.github.games647.fastlogin.bukkit.listener.ProxyFeedbackListener;
+import com.github.games647.fastlogin.core.message.ToggleFeedbackMessage;
 import static com.github.games647.fastlogin.core.message.ChangePremiumMessage.CHANGE_CHANNEL;
 import com.github.games647.fastlogin.core.message.ChannelMessage;
 import static com.github.games647.fastlogin.core.message.DeletePremiumMessage.DELETE_CHANNEL;
@@ -164,6 +166,10 @@ public class BungeeManager {
         String forceChannel = NamespaceKey.getCombined(groupId, LoginActionMessage.FORCE_CHANNEL);
         server.getMessenger().registerIncomingPluginChannel(plugin, forceChannel, new BungeeListener(plugin));
 
+        // incoming relay-result feedback (toggle/delete) sent back by the proxy
+        String feedbackChannel = NamespaceKey.getCombined(groupId, ToggleFeedbackMessage.FEEDBACK_CHANNEL);
+        server.getMessenger().registerIncomingPluginChannel(plugin, feedbackChannel,
+                new ProxyFeedbackListener(plugin));
         // outgoing
         String successChannel = new NamespaceKey(groupId, SUCCESS_CHANNEL).getCombinedName();
         String changeChannel = new NamespaceKey(groupId, CHANGE_CHANNEL).getCombinedName();

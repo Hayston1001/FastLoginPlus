@@ -31,12 +31,15 @@ import com.github.games647.fastlogin.bungee.event.BungeeFastLoginPremiumToggleEv
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.core.message.ToggleFeedbackMessage;
 import net.md_5.bungee.api.CommandSender;
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
+import net.md_5.bungee.api.connection.Server;
 
 import java.util.Optional;
+import java.util.UUID;
 
 public class AsyncToggleMessage implements Runnable {
 
@@ -189,6 +192,40 @@ public class AsyncToggleMessage implements Runnable {
         } else {
             CommandSender console = ProxyServer.getInstance().getConsole();
             console.sendMessage(TextComponent.fromLegacyText(message));
+            // route the result back to the backend console that issued the
+            // relayed command (over the carrier player's server connection)
+            sendFeedbackToBackend(localeId);
+        }
+    }
+
+    /**
+     * Sends the toggle result back to the backend over the carrier player's
+     * server connection so the backend console (where the relayed command was
+     * typed) sees the outcome without having to check the proxy log.  The
+     * payload carries a locale key — the backend renders it with its own
+     * language file — plus this proxy's UUID, which the backend validates
+     * against allowed-proxies.txt.
+     *
+     * @param localeId the locale key of the result message
+     */
+    private void sendFeedbackToBackend(String localeId) {
+        Server server = sender.getServer();
+        if (server == null) {
+            // carrier has no backend connection (yet/anymore) — result stays
+            // visible on this proxy's console only
+            return;
+        }
+        try {
+            UUID proxyId = UUID.fromString(ProxyServer.getInstance().getConfig().getUuid());
+            core.getPlugin().sendPluginMessage(server,
+                    new ToggleFeedbackMessage(targetPlayer, localeId, proxyId));
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("Sent relay feedback to backend for {}: {}",
+                        targetPlayer, localeId);
+            }
+        } catch (Exception e) {
+            core.getPlugin().getLog().warn("Failed to send relay feedback for {}: {}",
+                    targetPlayer, e.getMessage());
         }
     }
 }

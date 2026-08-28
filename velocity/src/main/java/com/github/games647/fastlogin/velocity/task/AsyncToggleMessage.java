@@ -29,11 +29,13 @@ import com.github.games647.craftapi.model.Profile;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.core.message.ToggleFeedbackMessage;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
 import com.github.games647.fastlogin.velocity.event.VelocityFastLoginPremiumToggleEvent;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.ConsoleCommandSource;
 import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.proxy.ServerConnection;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
@@ -194,6 +196,40 @@ public class AsyncToggleMessage implements Runnable {
         } else {
             ConsoleCommandSource console = core.getPlugin().getProxy().getConsoleCommandSource();
             console.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+            // route the result back to the backend console that issued the
+            // relayed command (over the carrier player's server connection)
+            sendFeedbackToBackend(localeId);
+        }
+    }
+
+    /**
+     * Sends the toggle result back to the backend over the carrier player's
+     * server connection so the backend console (where the relayed command was
+     * typed) sees the outcome without having to check the proxy log.  The
+     * payload carries a locale key — the backend renders it with its own
+     * language file — plus this proxy's UUID, which the backend validates
+     * against allowed-proxies.txt.
+     *
+     * @param localeId the locale key of the result message
+     */
+    private void sendFeedbackToBackend(String localeId) {
+        Optional<ServerConnection> server = sender.getCurrentServer();
+        if (!server.isPresent()) {
+            // carrier has no backend connection (yet/anymore) — result stays
+            // visible on this proxy's console only
+            return;
+        }
+        try {
+            core.getPlugin().sendPluginMessage(server.get(),
+                    new ToggleFeedbackMessage(targetPlayer, localeId,
+                            core.getPlugin().getProxyId()));
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("Sent relay feedback to backend for {}: {}",
+                        targetPlayer, localeId);
+            }
+        } catch (Exception e) {
+            core.getPlugin().getLog().warn("Failed to send relay feedback for {}: {}",
+                    targetPlayer, e.getMessage());
         }
     }
 }
