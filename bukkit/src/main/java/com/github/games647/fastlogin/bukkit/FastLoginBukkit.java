@@ -647,7 +647,17 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 if (isPendingPremium) {
                     Bukkit.getScheduler().runTask(FastLoginBukkit.this, () -> {
                         Player player = Bukkit.getPlayerExact(playerName);
-                        if (player != null && bungeeManager.isEnabled()) {
+                        if (player == null) {
+                            // 0.5.0/R1: defensive fallback mirroring the folia
+                            // branch — the carrier vanished between the configure
+                            // phase and this task.  The entry stays queued and is
+                            // delivered by the retry relay task once any player
+                            // reaches the PLAY phase.
+                            scheduleToggleRelay(playerName);
+                            return;
+                        }
+
+                        if (bungeeManager.isEnabled()) {
                             // Read the CURRENT queued value at send time — the
                             // entry may have been overwritten by a newer toggle
                             // command, or already relayed by a retry task, since
