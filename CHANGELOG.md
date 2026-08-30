@@ -2,6 +2,50 @@
 
 ## Unreleased
 
+### 0.5.0 audit fixes / 0.5.0 审计修复(批次 1–6)
+
+Full audit sweep of the 0.5.0 report (76 findings): **60 fixed, 14 deferred, 2 wontfix** —
+per-finding status in `audit/0.5.0/findings.json` (`fixStatus`/`fixNote`). Highlights:
+
+- **Security (P1)**: AuthMe premium-record cleanup during cracked sessions is now fail-closed —
+  a premium-flagged AuthMe record without a matching FLP profile row (DB reset / first login) is
+  kept and reported, so impostors no longer get a registration window on premium-verified names
+  (F059).
+- **Folia drift (P1)**: `VerifyResponseTask` synced with the bukkit event-loop scheduling fix
+  (upstream 327c14a3) — encryption + fake START injection no longer race the vanilla handler on
+  first login (F067); the configure-phase listeners no longer call `Bukkit.getScheduler()`, which
+  throws on Folia (F068).
+- **Anti-bot (P1)**: `AntiBotService` cleanup now shares the limiter's uptime clock — per-IP rate
+  state is no longer wiped every 100 connections (F076); lazy per-IP cleanup is throttled to once
+  per second (F038); expired-entry semantics fixed against the computeIfAbsent/tryRecord race
+  (F037); anti-bot config values are validated with fallback-to-default warnings (F039).
+- **Velocity (P2)**: the anti-bot event in `onPreLogin` is awaited with `EventTask.withContinuation`
+  instead of blocking the Netty event loop (F034); premium checks run on the plugin scheduler
+  instead of the shared async event executor (F056).
+- **Concurrency (P2)**: `pendingConfirms` is a concurrent set and the premium-warning gate uses an
+  atomic check-and-add (F025).
+- **Scheduler lifecycle**: a shutdown flag stops all platform schedulers before `core.close()` so
+  tasks no longer touch closed resources after disable (F046); Folia's self-chaining relay tasks
+  stop on disable (F073) and retry tasks give up after ~5 minutes (F014).
+- **Storage**: HikariCP `maxLifetime` clamped to ≥ 300s with a warning (template default now 1800s —
+  was 30s, causing constant connection churn, F019); MySQL first-time inserts are guarded upserts
+  that keep case-variant protection (F020); a failed database setup closes its connection pool (F021).
+- **Config**: `config.yml` rewrites are atomic (F026); template section headers are never overwritten
+  by user scalars (F029); YAML-ambiguous values stay quoted strings (F030); the `language` value is
+  validated (F049); invalid `proxies` entries are skipped instead of crashing startup (F047).
+- **Commands & hooks**: premium/cracked/delete commands no longer touch the database on the main
+  thread (F011); Passky support is actually registered now (F013); auth-plugin hook calls are
+  bounded at 5s (F017); a one-shot guard rejects replayed ENCRYPTION_BEGIN packets (F001) and the
+  listener survives unexpected reflection errors (F007).
+- **Hygiene**: offline-whitelist fails closed on errors (F002); bungee login/success handlers
+  null-guard missing sessions (F053/F055); duplicate toggle messages get the right locale key (F012);
+  update-check interval unit fixed on bukkit (F045); dead code/keys removed and misleading docs fixed
+  (F031/F032/F033/F041/F042/F050/F064/F065/F066/F071/F074/F075/F069/F040/F015/F021/F028/F044/F060/F061/F062).
+
+Deferred items (need product decisions, schema migrations or live integration testing) and wontfix
+items (documented trust-model semantics, one refuted finding) are listed with reasons in
+`findings.json`.
+
 ### Pending relay audit fixes (P1–P6) / 待处理中继链路审计修复(P1–P6)
 
 - Fixed a race where two conflicting console toggles (`/flp premium X` then `/flp cracked X`) could relay the stale captured value: the relay task now atomically removes the queue entry and sends the CURRENT queued value (`PendingRelayStore.removeToggle`), so the last command always wins (bukkit, folia and the Paper configure-phase self-relay path).
