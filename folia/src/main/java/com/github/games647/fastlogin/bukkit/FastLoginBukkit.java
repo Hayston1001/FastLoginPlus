@@ -466,7 +466,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+        scheduler.runAsync(() -> {
             try {
                 java.util.Optional<com.github.games647.craftapi.model.Profile> mojang =
                     core.getResolver().findProfile(playerName);
@@ -512,33 +512,42 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 putSession(address, session);
 
                 if (isPendingPremium) {
-                    Bukkit.getScheduler().runTask(FastLoginBukkit.this, () -> {
-                        Player player = Bukkit.getPlayerExact(playerName);
-                        if (player != null && bungeeManager.isEnabled()) {
-                            // Read the CURRENT queued value at send time — the
-                            // entry may have been overwritten by a newer toggle
-                            // command, or already relayed by a retry task, since
-                            // the configure phase ran.
-                            Boolean pendingValue = pendingRelayStore.removeToggle(playerName);
-                            if (pendingValue == null) {
-                                return;
+                    Player carrier = Bukkit.getPlayerExact(playerName);
+                    if (carrier == null) {
+                        // Player not in the player list yet — the entry stays
+                        // queued and is delivered by the retry relay task once
+                        // any player reaches the PLAY phase.
+                        scheduleToggleRelay(playerName);
+                    } else {
+                        // Folia: EntityScheduler — kickPlayer/sendPluginMessage
+                        // must run on the player's own region thread.
+                        carrier.getScheduler().run(FastLoginBukkit.this, task -> {
+                            if (carrier.isOnline() && bungeeManager.isEnabled()) {
+                                // Read the CURRENT queued value at send time — the
+                                // entry may have been overwritten by a newer toggle
+                                // command, or already relayed by a retry task, since
+                                // the configure phase ran.
+                                Boolean pendingValue = pendingRelayStore.removeToggle(playerName);
+                                if (pendingValue == null) {
+                                    return;
+                                }
+                                ChangePremiumMessage msg = new ChangePremiumMessage(
+                                        playerName, pendingValue, false);
+                                bungeeManager.sendPluginMessage(carrier, msg);
+                                if (getConfig().getBoolean("kick-toggle")) {
+                                    logger.info(
+                                            "Relayed pending {} toggle for {} and kicking",
+                                            pendingValue ? "premium" : "cracked", playerName);
+                                    carrier.kickPlayer(core.getMessage(
+                                            pendingValue ? "add-premium" : "remove-premium"));
+                                } else {
+                                    logger.info(
+                                            "Relayed pending {} toggle for {} (kick disabled)",
+                                            pendingValue ? "premium" : "cracked", playerName);
+                                }
                             }
-                            ChangePremiumMessage msg = new ChangePremiumMessage(
-                                playerName, pendingValue, false);
-                            bungeeManager.sendPluginMessage(player, msg);
-                            if (getConfig().getBoolean("kick-toggle")) {
-                                logger.info(
-                                    "Relayed pending {} toggle for {} and kicking",
-                                    pendingValue ? "premium" : "cracked", playerName);
-                                player.kickPlayer(core.getMessage(
-                                        pendingValue ? "add-premium" : "remove-premium"));
-                            } else {
-                                logger.info(
-                                    "Relayed pending {} toggle for {} (kick disabled)",
-                                    pendingValue ? "premium" : "cracked", playerName);
-                            }
-                        }
-                    });
+                        }, null);
+                    }
                 }
             } catch (Exception e) {
                 logger.warn("AutoRegister in configure phase failed for {}: {}",

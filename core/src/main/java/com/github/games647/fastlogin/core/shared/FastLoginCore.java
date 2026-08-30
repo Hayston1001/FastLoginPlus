@@ -273,7 +273,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         IpBanManager ipBanManager = new IpBanManager(ticker);
 
         return new AntiBotService(plugin.getLog(), enabled, globalLimiter, action,
-                trustedIpSet, ipBanManager, perIpLimiter, banDurationMs);
+                trustedIpSet, ipBanManager, perIpLimiter, banDurationMs, ticker);
     }
 
     private Configuration loadFile(String fileName) throws IOException {

@@ -60,7 +60,7 @@ class AntiBotServiceTest {
                 new TrustedIpSet(Collections.emptySet()),
                 new IpBanManager(ticker),
                 new PerIpRateLimiter(ticker, 1, 1000, 1, 1000),
-                60_000
+                60_000, ticker
         );
 
         // Even after many connections, disabled service always allows
@@ -77,7 +77,7 @@ class AntiBotServiceTest {
                 new TrustedIpSet(Collections.emptySet()),
                 new IpBanManager(ticker),
                 new PerIpRateLimiter(ticker, 2, 10_000, 100, 300_000),
-                60_000
+                60_000, ticker
         );
 
         // First 2 should pass (burst limit = 2)
@@ -100,7 +100,7 @@ class AntiBotServiceTest {
                 new TrustedIpSet(Collections.emptySet()),
                 new IpBanManager(ticker),
                 new PerIpRateLimiter(ticker, 10, 10_000, 100, 300_000),
-                60_000
+                60_000, ticker
         );
 
         // First request from IP A passes both
@@ -124,7 +124,7 @@ class AntiBotServiceTest {
                 new TrustedIpSet(Collections.singleton(trusted)),
                 new IpBanManager(ticker),
                 new PerIpRateLimiter(ticker, 0, 1000, 0, 1000),  // per-IP always rejects
-                60_000
+                60_000, ticker
         );
 
         // Trusted IP should pass even though all limiters would reject
@@ -143,7 +143,7 @@ class AntiBotServiceTest {
                 new TrustedIpSet(Collections.emptySet()),
                 new IpBanManager(ticker),
                 new PerIpRateLimiter(ticker, 1, 1000, 1, 1000),
-                60_000
+                60_000, ticker
         );
 
         // First call passes (burst=1 allows 1), 2nd call hits per-IP limit -> Block + logging
@@ -158,5 +158,34 @@ class AntiBotServiceTest {
         }
         assertEquals(Action.Block,
                 service.onIncomingConnection(addr("1.2.3.4"), longName.toString()));
+    }
+
+    // --- F076 regression: periodic cleanup must use the limiter's uptime clock ---
+    @Test
+    void perIpEntriesShouldSurvivePeriodicCleanup() {
+        FakeTicker ticker = new FakeTicker(0);
+        // burst window 1h — the burst state must survive the periodic cleanup
+        PerIpRateLimiter perIpLimiter = new PerIpRateLimiter(ticker, 2, 3_600_000, 1_000, 600_000);
+        AntiBotService service = new AntiBotService(
+                logger, true, () -> true, Action.Block,
+                new TrustedIpSet(Collections.emptySet()),
+                new IpBanManager(ticker),
+                perIpLimiter,
+                60_000, ticker
+        );
+
+        // connections 1-2 pass; 3 exceeds the burst limit and bans the IP;
+        // 4-100 hit the ban check — the 100th call fires the periodic cleanup
+        assertEquals(Action.Continue, service.onIncomingConnection(addr("1.2.3.4"), "u1"));
+        assertEquals(Action.Continue, service.onIncomingConnection(addr("1.2.3.4"), "u2"));
+        for (int i = 3; i <= 100; i++) {
+            assertEquals(Action.Block, service.onIncomingConnection(addr("1.2.3.4"), "u" + i));
+        }
+
+        // advance past the ban duration but well within the burst window:
+        // the per-IP entry must still be alive (pre-fix the epoch-millis cleanup
+        // wiped it, resetting the burst state and letting u101 through)
+        ticker.add(Duration.ofMillis(60_001));
+        assertEquals(Action.Block, service.onIncomingConnection(addr("1.2.3.4"), "u101"));
     }
 }

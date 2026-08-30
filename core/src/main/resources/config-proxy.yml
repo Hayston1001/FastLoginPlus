@@ -62,7 +62,9 @@ anti-bot:
   connections: 600
   # Minutes before entries expire
   expire: 10
-  # Action when limit is hit: 'ignore' (drop) or 'block' (kick)
+  # Action when limit is hit: 'ignore' (FastLogin stops handling the connection —
+  # login continues as a normal cracked login, no Mojang/DB requests) or 'block'
+  # (reject the connection with the kick-antibot message)
   action: 'ignore'
 
   # --- Per-IP rate limiting ---

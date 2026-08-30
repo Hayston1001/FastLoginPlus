@@ -25,6 +25,7 @@
  */
 package com.github.games647.fastlogin.core.antibot;
 
+import com.google.common.base.Ticker;
 import org.slf4j.Logger;
 
 import java.net.InetAddress;
@@ -35,6 +36,9 @@ public class AntiBotService {
     private static final int CLEANUP_INTERVAL = 100;
 
     private final Logger logger;
+
+    /** Uptime clock shared with the limiters — must not be mixed with epoch time. */
+    private final Ticker ticker;
 
     private final boolean enabled;
     private final RateLimiter globalLimiter;
@@ -50,7 +54,7 @@ public class AntiBotService {
     public AntiBotService(Logger logger, boolean enabled, RateLimiter globalLimiter,
                          Action limitReachedAction, TrustedIpSet trustedIpSet,
                          IpBanManager ipBanManager, PerIpRateLimiter perIpLimiter,
-                         long banDurationMs) {
+                         long banDurationMs, Ticker ticker) {
         this.logger = logger;
         this.enabled = enabled;
         this.globalLimiter = globalLimiter;
@@ -59,6 +63,7 @@ public class AntiBotService {
         this.ipBanManager = ipBanManager;
         this.perIpLimiter = perIpLimiter;
         this.banDurationMs = banDurationMs;
+        this.ticker = ticker;
     }
     // CHECKSTYLE.ON: ParameterNumber
 
@@ -85,7 +90,10 @@ public class AntiBotService {
         // Periodic cleanup every N connections
         if (++connectionCount >= CLEANUP_INTERVAL) {
             connectionCount = 0;
-            long nowMs = System.currentTimeMillis();
+            // same uptime clock as the limiters' internal Ticker — epoch
+            // millis would make every entry look expired and wipe the
+            // per-IP state on every cleanup (0.5.0/F076)
+            long nowMs = ticker.read() / 1_000_000;
             perIpLimiter.cleanup(nowMs);
             ipBanManager.cleanup();
         }
