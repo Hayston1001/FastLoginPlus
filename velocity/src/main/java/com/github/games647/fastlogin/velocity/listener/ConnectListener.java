@@ -67,6 +67,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 public class ConnectListener {
 
     private static final String FLOODGATE_PLUGIN_NAME = "org.geysermc.floodgate.VelocityPlugin";
@@ -109,23 +110,35 @@ public class ConnectListener {
             // Non-blocking (0.5.0/F034): pause the event, fire the anti-bot
             // event asynchronously and resume from the completion callback —
             // the Netty event loop must never block on a synchronous .get().
-            return EventTask.withContinuation(continuation ->
+            // 0.5.0/R2: per-event guard so the continuation is resumed exactly
+            // once even when the callback or the decision applying throws
+            AtomicBoolean resumed = new AtomicBoolean(false);
+            return EventTask.withContinuation(continuation -> {
+                try {
                     plugin.getProxy().getEventManager().fire(antiBotEvent).whenComplete((unused, ex) -> {
                         if (ex != null) {
                             plugin.getLog().error("Error firing anti-bot event", ex);
                         }
                         Action effective = antiBotEvent.isCancelled() ? Action.Continue : action;
-                        applyAntiBotDecision(preLoginEvent, connection, checkedUsername, effective,
-                                continuation);
-                    }));
+                        applyDecisionSafely(preLoginEvent, connection, checkedUsername, effective,
+                                continuation, resumed);
+                    });
+                } catch (Exception fireEx) {
+                    plugin.getLog().error("Error firing anti-bot event", fireEx);
+                    resumeOnce(continuation, resumed);
+                }
+            });
         }
 
         // no anti-bot action — continue with the premium check
         // 0.5.0/F056: run it on the plugin scheduler instead of the shared
         // async event executor, so blocking Mojang lookups (with retry sleeps)
         // cannot starve the event executor for all other handlers
+        // 0.5.0/R2: per-event guard so the continuation is resumed exactly once
+        AtomicBoolean resumed = new AtomicBoolean(false);
         return EventTask.withContinuation(continuation ->
-                applyAntiBotDecision(preLoginEvent, connection, checkedUsername, action, continuation));
+                applyDecisionSafely(preLoginEvent, connection, checkedUsername, action, continuation,
+                        resumed));
     }
 
     /**
@@ -138,20 +151,22 @@ public class ConnectListener {
      * @param action        the effective anti-bot action (third-party handlers
      *                      may have cancelled the original one)
      * @param continuation  the event continuation to resume
+     * @param resumed       per-event exactly-once resume guard (0.5.0/R2)
      */
     private void applyAntiBotDecision(PreLoginEvent preLoginEvent, InboundConnection connection,
-                                      String username, Action action, Continuation continuation) {
+                                      String username, Action action, Continuation continuation,
+                                      AtomicBoolean resumed) {
         switch (action) {
             case Ignore:
                 // FastLogin stops handling the connection — login continues as
                 // a normal cracked login without premium handling
-                continuation.resume();
+                resumeOnce(continuation, resumed);
                 break;
             case Block:
                 String message = plugin.getCore().getMessage("kick-antibot");
                 TextComponent messageParsed = LegacyComponentSerializer.legacyAmpersand().deserialize(message);
                 preLoginEvent.setResult(PreLoginComponentResult.denied(messageParsed));
-                continuation.resume();
+                resumeOnce(continuation, resumed);
                 break;
             case Continue:
             default:
@@ -163,10 +178,46 @@ public class ConnectListener {
                     } catch (Exception runEx) {
                         plugin.getLog().error("Error during premium check", runEx);
                     } finally {
-                        continuation.resume();
+                        // same guard as the outer paths: at most one resume (0.5.0/R2)
+                        resumeOnce(continuation, resumed);
                     }
                 });
                 break;
+        }
+    }
+
+    /**
+     * 0.5.0/R2: apply the decision and guarantee that the continuation is
+     * resumed even when applying it throws — otherwise the login hangs until
+     * the read timeout instead of degrading to a normal login.
+     *
+     * @param preLoginEvent the paused pre-login event
+     * @param connection    the inbound connection
+     * @param username      the username from the pre-login event
+     * @param action        the effective anti-bot action
+     * @param continuation  the event continuation to resume
+     * @param resumed       per-event exactly-once guard
+     */
+    void applyDecisionSafely(PreLoginEvent preLoginEvent, InboundConnection connection,
+                             String username, Action action, Continuation continuation,
+                             AtomicBoolean resumed) {
+        try {
+            applyAntiBotDecision(preLoginEvent, connection, username, action, continuation, resumed);
+        } catch (Exception decisionEx) {
+            plugin.getLog().error("Error applying anti-bot decision for {}", username, decisionEx);
+            resumeOnce(continuation, resumed);
+        }
+    }
+
+    /**
+     * 0.5.0/R2: resume the continuation at most once per event.
+     *
+     * @param continuation the event continuation
+     * @param resumed      CAS guard; flipped to true on the first call
+     */
+    static void resumeOnce(Continuation continuation, AtomicBoolean resumed) {
+        if (resumed.compareAndSet(false, true)) {
+            continuation.resume();
         }
     }
 
