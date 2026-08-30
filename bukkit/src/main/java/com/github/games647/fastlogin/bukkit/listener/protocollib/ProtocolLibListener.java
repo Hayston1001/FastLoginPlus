@@ -70,6 +70,12 @@ import java.util.function.Function;
 import static com.comphenix.protocol.PacketType.Login.Client.ENCRYPTION_BEGIN;
 import static com.comphenix.protocol.PacketType.Login.Client.START;
 
+/**
+ * Intercepts the login pipeline packets. The listener is deliberately
+ * registered as a ProtocolLib async handler — see
+ * PROTOCOLLIB-ASYNC-DESIGN.md at the repository root for the decision,
+ * the compensating controls and the residual risk (0.5.0/F003).
+ */
 public class ProtocolLibListener extends PacketAdapter {
 
     private final FastLoginBukkit plugin;
