@@ -254,10 +254,17 @@ port: 3306
 username: 'myUser'
 password: 'myPassword'
 
-# Connection pool settings (seconds)
+# --- Connection pool settings (seconds) ---
+# timeout: how long an operation waits to obtain a connection from the pool
+# before failing (HikariCP connectionTimeout)
 timeout: 30
-# Max pool connection lifetime (seconds). Keep this at minutes level (>= 300);
-# lower values make the pool constantly reconnect (default 1800).
+# lifetime: how long a pooled connection lives before the pool retires and
+# replaces it (HikariCP maxLifetime).
+# Recommended: 1800 (30 minutes — the HikariCP default): long enough to
+# amortize TCP/auth/TLS handshake costs, short enough to retire connections
+# before the server kills them — keep it BELOW your MySQL wait_timeout
+# (default 8h). Values below 300 are clamped to 300 with a startup warning
+# (shorter lifetimes make the pool constantly reconnect); 0 = never expire.
 lifetime: 1800
 
 # SSL for MySQL (only used when driver: 'mysql')
