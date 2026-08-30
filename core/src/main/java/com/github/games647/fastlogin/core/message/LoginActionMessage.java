@@ -63,7 +63,13 @@ public class LoginActionMessage implements ChannelMessage {
 
     @Override
     public void readFrom(ByteArrayDataInput input) {
-        this.type = Type.values()[input.readByte()];
+        // 0.5.0/F027: validate the type byte — a malformed client plugin message
+        // would otherwise throw an uncaught ArrayIndexOutOfBoundsException
+        byte typeByte = input.readByte();
+        if (typeByte < 0 || typeByte >= Type.values().length) {
+            throw new IllegalArgumentException("Invalid " + getChannelName() + " type byte: " + typeByte);
+        }
+        this.type = Type.values()[typeByte];
 
         this.playerName = input.readUTF();
 
