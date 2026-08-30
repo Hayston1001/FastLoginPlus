@@ -216,6 +216,25 @@ public class SQLiteStorage extends SQLStorage {
         }
     }
 
+    // 0.5.0/F020: mirror the MySQL upsert semantics - a concurrent first-time
+    // save for the same name must not fail on the UNIQUE(Name) constraint and
+    // lose the profile.  The hex() comparison is byte-exact, so a case-variant
+    // duplicate (e.g. "Steve" vs "steve") conflicts on the NOCASE unique key
+    // but does NOT overwrite the existing row - preserving the anti
+    // name-stealing semantics of the MySQLStorage upsert.
+    private static final String INSERT_PROFILE_UPSERT = "INSERT INTO `" + PREMIUM_TABLE
+            + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`) VALUES (?, ?, ?, ?, ?) "
+            + "ON CONFLICT(`Name`) DO UPDATE SET "
+            + "`UUID`=CASE WHEN hex(`Name`)=hex(excluded.`Name`) THEN excluded.`UUID` ELSE `UUID` END, "
+            + "`Premium`=CASE WHEN hex(`Name`)=hex(excluded.`Name`) THEN excluded.`Premium` ELSE `Premium` END, "
+            + "`Floodgate`=CASE WHEN hex(`Name`)=hex(excluded.`Name`) THEN excluded.`Floodgate` ELSE `Floodgate` END, "
+            + "`LastIp`=CASE WHEN hex(`Name`)=hex(excluded.`Name`) THEN excluded.`LastIp` ELSE `LastIp` END";
+
+    @Override
+    protected String getInsertProfileStmt() {
+        return INSERT_PROFILE_UPSERT;
+    }
+
     @Override
     protected String getCreateTableStmt() {
         // SQLite has a different syntax for auto increment

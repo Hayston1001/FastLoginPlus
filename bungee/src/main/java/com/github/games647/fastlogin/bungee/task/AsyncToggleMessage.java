@@ -74,6 +74,15 @@ public class AsyncToggleMessage implements Runnable {
     }
 
     private void turnOffPremium() {
+        // 0.5.0/F020: the whole load-modify-save window runs under the name-level
+        // striped lock so a concurrent login flow or admin command for the same
+        // player cannot interleave and drop this toggle.  Admin toggles are rare,
+        // so the Mojang-resolution latency inside activatePremium() is acceptable
+        // to hold the lock for.
+        core.getStorage().withNameLock(targetPlayer, this::turnOffPremiumLocked);
+    }
+
+    private void turnOffPremiumLocked() {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
         if (playerProfile == null) {
             // null only on SQL exception — abort instead of NPE, give the invoker feedback
@@ -124,6 +133,11 @@ public class AsyncToggleMessage implements Runnable {
     }
 
     private void activatePremium() {
+        // see turnOffPremium() for the locking rationale (0.5.0/F020)
+        core.getStorage().withNameLock(targetPlayer, this::activatePremiumLocked);
+    }
+
+    private void activatePremiumLocked() {
         StoredProfile playerProfile = core.getStorage().loadProfile(targetPlayer);
         if (playerProfile == null) {
             // null only on SQL exception — abort instead of NPE, give the invoker feedback

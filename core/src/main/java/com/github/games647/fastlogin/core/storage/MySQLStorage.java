@@ -42,7 +42,8 @@ public class MySQLStorage extends SQLStorage {
     // The HEX() comparison is byte-exact, so a case-variant duplicate (e.g.
     // "Steve" vs "steve") still conflicts on the case-insensitive unique key
     // but is NOT written — preserving the anti name-stealing semantics.
-    private static final String INSERT_PROFILE_UPSERT = "INSERT INTO `" + PREMIUM_TABLE
+    // package-private for the dialect assertion test (0.5.0/F020)
+    static final String INSERT_PROFILE_UPSERT = "INSERT INTO `" + PREMIUM_TABLE
             + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`) VALUES (?, ?, ?, ?, ?) "
             + "ON DUPLICATE KEY UPDATE "
             + "`UUID`=IF(HEX(`Name`)=HEX(VALUES(`Name`)), VALUES(`UUID`), `UUID`), "

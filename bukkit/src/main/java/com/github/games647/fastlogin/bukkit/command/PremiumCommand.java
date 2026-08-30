@@ -86,32 +86,36 @@ public class PremiumCommand extends ToggleCommand {
         plugin.getCore().getPendingConfirms().remove(id);
         // 0.5.0/F011: database calls must not run on the main thread
         plugin.getScheduler().runAsync(() -> {
-            StoredProfile profile = plugin.getCore().getStorage().loadProfile(sender.getName());
-            if (profile == null) {
-                // null only on SQL exception (lock timeout, DB down) — the database failed
-                plugin.getScheduler().getSyncExecutor().execute(() ->
-                        plugin.getCore().sendLocaleMessage("database-error", sender));
-                return;
-            }
-            if (profile.isOnlinemodePreferred()) {
-                plugin.getScheduler().getSyncExecutor().execute(() ->
-                        plugin.getCore().sendLocaleMessage("already-exists", sender));
-            } else {
-                //todo: resolve uuid
-                profile.setOnlinemodePreferred(true);
-                plugin.getCore().getStorage().save(profile);
-                plugin.getServer().getPluginManager().callEvent(
-                        new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_SELF)
-                );
+            // 0.5.0/F020+R3: serialize concurrent load-modify-save windows for the
+            // same player (two fast commands would otherwise double-save)
+            plugin.getCore().getStorage().withNameLock(sender.getName(), () -> {
+                StoredProfile profile = plugin.getCore().getStorage().loadProfile(sender.getName());
+                if (profile == null) {
+                    // null only on SQL exception (lock timeout, DB down) — the database failed
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("database-error", sender));
+                    return;
+                }
+                if (profile.isOnlinemodePreferred()) {
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("already-exists", sender));
+                } else {
+                    //todo: resolve uuid
+                    profile.setOnlinemodePreferred(true);
+                    plugin.getCore().getStorage().save(profile);
+                    plugin.getServer().getPluginManager().callEvent(
+                            new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_SELF)
+                    );
 
-                plugin.getScheduler().getSyncExecutor().execute(() -> {
-                    if (plugin.getCore().getConfig().getBoolean("kick-toggle")) {
-                        player.kickPlayer(plugin.getCore().getMessage("add-premium"));
-                    } else {
-                        plugin.getCore().sendLocaleMessage("add-premium", sender);
-                    }
-                });
-            }
+                    plugin.getScheduler().getSyncExecutor().execute(() -> {
+                        if (plugin.getCore().getConfig().getBoolean("kick-toggle")) {
+                            player.kickPlayer(plugin.getCore().getMessage("add-premium"));
+                        } else {
+                            plugin.getCore().sendLocaleMessage("add-premium", sender);
+                        }
+                    });
+                }
+            });
         });
     }
 
@@ -126,28 +130,31 @@ public class PremiumCommand extends ToggleCommand {
 
         // 0.5.0/F011: database calls must not run on the main thread
         plugin.getScheduler().runAsync(() -> {
-            StoredProfile profile = plugin.getCore().getStorage().loadProfile(args[0]);
-            if (profile == null) {
-                // null only on SQL exception (lock timeout, DB down) — the database failed
-                plugin.getScheduler().getSyncExecutor().execute(() ->
-                        plugin.getCore().sendLocaleMessage("database-error", sender));
-                return;
-            }
+            // 0.5.0/F020+R3: see the self path above
+            plugin.getCore().getStorage().withNameLock(args[0], () -> {
+                StoredProfile profile = plugin.getCore().getStorage().loadProfile(args[0]);
+                if (profile == null) {
+                    // null only on SQL exception (lock timeout, DB down) — the database failed
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("database-error", sender));
+                    return;
+                }
 
-            if (profile.isOnlinemodePreferred()) {
-                plugin.getScheduler().getSyncExecutor().execute(() ->
-                        plugin.getCore().sendLocaleMessage("already-exists-other", sender));
-            } else {
-                //todo: resolve uuid
-                profile.setOnlinemodePreferred(true);
-                plugin.getCore().getStorage().save(profile);
-                plugin.getServer().getPluginManager().callEvent(
-                        new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
-                );
+                if (profile.isOnlinemodePreferred()) {
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("already-exists-other", sender));
+                } else {
+                    //todo: resolve uuid
+                    profile.setOnlinemodePreferred(true);
+                    plugin.getCore().getStorage().save(profile);
+                    plugin.getServer().getPluginManager().callEvent(
+                            new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
+                    );
 
-                plugin.getScheduler().getSyncExecutor().execute(() ->
-                        plugin.getCore().sendLocaleMessage("add-premium-other", sender));
-            }
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("add-premium-other", sender));
+                }
+            });
         });
     }
 

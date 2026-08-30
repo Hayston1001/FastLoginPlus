@@ -83,9 +83,12 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     onForceActionSuccess(session);
 
                     if (playerProfile != null) {
-                        playerProfile.setId(session.getUuid());
-                        playerProfile.setOnlinemodePreferred(true);
-                        storage.save(playerProfile);
+                        // 0.5.0/F020: persist under the name-level striped lock
+                        storage.withNameLock(getName(player), () -> {
+                            playerProfile.setId(session.getUuid());
+                            playerProfile.setOnlinemodePreferred(true);
+                            storage.save(playerProfile);
+                        });
                     }
                 } else {
                     boolean success = true;
@@ -103,9 +106,12 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     if (success) {
                         //update only on success to prevent corrupt data
                         if (playerProfile != null) {
-                            playerProfile.setId(session.getUuid());
-                            playerProfile.setOnlinemodePreferred(true);
-                            storage.save(playerProfile);
+                            // 0.5.0/F020: persist under the name-level striped lock
+                            storage.withNameLock(getName(player), () -> {
+                                playerProfile.setId(session.getUuid());
+                                playerProfile.setOnlinemodePreferred(true);
+                                storage.save(playerProfile);
+                            });
                         }
 
                         onForceActionSuccess(session);
@@ -120,11 +126,14 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                         // startCrackedSession (direct mode; proxy-mode backends keep
                         // profile=null, so nothing is saved there).
                         if (playerProfile != null) {
-                            playerProfile.setId(session.getUuid());
-                            playerProfile.setOnlinemodePreferred(true);
-                            storage.save(playerProfile);
-                        }
+                            // 0.5.0/F020: persist under the name-level striped lock
+                            storage.withNameLock(getName(player), () -> {
+                                playerProfile.setId(session.getUuid());
+                                playerProfile.setOnlinemodePreferred(true);
+                                storage.save(playerProfile);
+                            });
 
+                        }
                         // Ack the proxy even when the auth plugin reported failure: the
                         // session is already verified and the player is in game. Without
                         // this ack the proxy never persists the premium row and
@@ -135,9 +144,12 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 }
             } else if (playerProfile != null) {
                 //cracked player
-                playerProfile.setId(null);
-                playerProfile.setOnlinemodePreferred(false);
-                storage.save(playerProfile);
+                // 0.5.0/F020: persist under the name-level striped lock
+                storage.withNameLock(getName(player), () -> {
+                    playerProfile.setId(null);
+                    playerProfile.setOnlinemodePreferred(false);
+                    storage.save(playerProfile);
+                });
             }
         } catch (Exception ex) {
             core.getPlugin().getLog().warn("ERROR ON FORCE LOGIN of {}", getName(player), ex);

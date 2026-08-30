@@ -41,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
@@ -74,6 +75,12 @@ class ForceLoginManagementTest {
         when(plugin.getLog()).thenReturn(logger);
         // mock FastLoginCore never initializes localeMessages → stub to no-op
         doNothing().when(core).sendLocaleMessage(anyString(), any());
+        // 0.5.0/F020: the production save windows run inside withNameLock - the
+        // mock must execute the passed runnable so the wrapped saves still happen
+        doAnswer(inv -> {
+            ((Runnable) inv.getArgument(1)).run();
+            return null;
+        }).when(storage).withNameLock(anyString(), any(Runnable.class));
     }
 
     // ---- proxy without auth hook: persist the premium row locally ----

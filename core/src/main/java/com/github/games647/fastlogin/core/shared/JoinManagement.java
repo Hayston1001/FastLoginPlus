@@ -57,44 +57,60 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             }
         }
 
-        StoredProfile profile = core.getStorage().loadProfile(username);
-        //can't be a premium Java player, if it's not saved in the database
-        if (profile == null) {
-            return;
-        }
-
-        if (profile.isFloodgateMigrated()) {
-            if (profile.getFloodgate() == FloodgateState.TRUE) {
-                // migrated and enabled floodgate player, however the above bedrocks fails, so the current connection
-                // isn't premium
-                return;
-            }
-        } else {
-            profile.setFloodgate(FloodgateState.FALSE);
-            if (core.isDebug()) {
-                core.getPlugin().getLog().info(
-                        "Player {} will be migrated to the v2 database schema as a JAVA user", username
-                );
-            }
-        }
-
-        callFastLoginPreLoginEvent(username, source, profile);
-
         String ip = source.getAddress().getAddress().getHostAddress();
-        profile.setLastIp(ip);
-        if (profile.isExistingPlayer()) {
-            if (profile.isOnlinemodePreferred()) {
-                if (core.isDebug()) {
-                    core.getPlugin().getLog().info("Requesting premium login for registered player: {}", username);
+
+        // 0.5.0/F020: load and mutate an existing profile under the name-level
+        // striped lock so a concurrent admin toggle or plugin-message save for the
+        // same player cannot interleave with this window.  The new-player branch
+        // performs Mojang API lookups (network I/O) and must not hold the lock —
+        // it runs for profiles without an existing row, so there is nothing to
+        // lose for it; its later persistence goes through wrapped save windows.
+        StoredProfile newPlayerProfile = core.getStorage().withNameLock(username, () -> {
+            StoredProfile profile = core.getStorage().loadProfile(username);
+            //can't be a premium Java player, if it's not saved in the database
+            if (profile == null) {
+                return null;
+            }
+
+            if (profile.isFloodgateMigrated()) {
+                if (profile.getFloodgate() == FloodgateState.TRUE) {
+                    // migrated and enabled floodgate player, however the above
+                    // bedrocks fails, so the current connection isn't premium
+                    return null;
                 }
-                requestPremiumLogin(source, profile, username, true);
             } else {
-                if (isValidUsername(source, profile)) {
-                    startCrackedSession(source, profile, username);
+                profile.setFloodgate(FloodgateState.FALSE);
+                if (core.isDebug()) {
+                    core.getPlugin().getLog().info(
+                            "Player {} will be migrated to the v2 database schema as a JAVA user", username
+                    );
                 }
             }
-        } else {
-            performNewPlayerLogin(username, source, ip, profile);
+
+            callFastLoginPreLoginEvent(username, source, profile);
+
+            profile.setLastIp(ip);
+            if (profile.isExistingPlayer()) {
+                if (profile.isOnlinemodePreferred()) {
+                    if (core.isDebug()) {
+                        core.getPlugin().getLog()
+                            .info("Requesting premium login for registered player: {}", username);
+                    }
+                    requestPremiumLogin(source, profile, username, true);
+                } else {
+                    if (isValidUsername(source, profile)) {
+                        startCrackedSession(source, profile, username);
+                    }
+                }
+                return null;
+            }
+
+            // brand-new player: decision needs Mojang lookups, run outside the lock
+            return profile;
+        });
+
+        if (newPlayerProfile != null) {
+            performNewPlayerLogin(username, source, ip, newPlayerProfile);
         }
     }
 

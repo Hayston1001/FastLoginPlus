@@ -243,11 +243,16 @@ public class PluginMessageListener implements Listener {
             StoredProfile playerProfile = loginSession.getProfile();
             loginSession.setRegistered(true);
 
-            if (!loginSession.isAlreadySaved()) {
-                playerProfile.setOnlinemodePreferred(true);
-                plugin.getCore().getStorage().save(playerProfile);
-                loginSession.setAlreadySaved(true);
-            }
+            // 0.5.0/F020: persist under the name-level striped lock so this cannot
+            // interleave with a concurrent toggle for the same player; the
+            // already-saved check runs inside for the same reason
+            plugin.getCore().getStorage().withNameLock(forPlayer.getName(), () -> {
+                if (!loginSession.isAlreadySaved()) {
+                    playerProfile.setOnlinemodePreferred(true);
+                    plugin.getCore().getStorage().save(playerProfile);
+                    loginSession.setAlreadySaved(true);
+                }
+            });
         }
     }
 
