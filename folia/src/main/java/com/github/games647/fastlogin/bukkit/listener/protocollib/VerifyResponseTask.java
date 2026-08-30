@@ -31,7 +31,6 @@ import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.injector.netty.channel.NettyChannelInjector;
 import io.netty.channel.Channel;
 import com.comphenix.protocol.injector.packet.PacketRegistry;
-import com.comphenix.protocol.injector.temporary.TemporaryPlayerFactory;
 import com.comphenix.protocol.reflect.EquivalentConverter;
 import com.comphenix.protocol.reflect.FuzzyReflection;
 import com.comphenix.protocol.reflect.accessors.Accessors;
@@ -152,7 +151,7 @@ public class VerifyResponseTask implements Runnable {
             // The player may have disconnected (e.g. the user cancelled the connection)
             // while this async task was queued or during a previous retry. Abort instead
             // of querying Mojang for a player that is no longer connecting.
-            if (!isConnectionActive()) {
+            if (!ProtocolLibCompat.isConnectionActive(plugin.getLog(), plugin.getCore().isDebug(), player)) {
                 plugin.getLog().info("Player {} disconnected during session verification, aborting",
                         requestedUsername);
                 return;
@@ -268,7 +267,7 @@ public class VerifyResponseTask implements Runnable {
         // thread while the vanilla handler is still processing the original ENCRYPTION_BEGIN packet.
         // All pipeline work (encryption, UUID spoof, fake START injection) runs serially on the
         // event loop, after ProtocolLib has cancelled the original packet and released the vanilla handler.
-        Channel channel = getChannel();
+        Channel channel = ProtocolLibCompat.getChannel(plugin.getLog(), plugin.getCore().isDebug(), player);
         if (channel == null || !channel.isActive()) {
             disconnect("error-kick", "Channel unavailable for {}", requestedUsername);
             return;
@@ -292,19 +291,6 @@ public class VerifyResponseTask implements Runnable {
         });
     }
 
-    private Channel getChannel() {
-        try {
-            NettyChannelInjector injectorContainer = (NettyChannelInjector) Accessors.getMethodAccessorOrNull(
-                    TemporaryPlayerFactory.class, "getInjectorFromPlayer", Player.class
-            ).invoke(null, player);
-
-            return FuzzyReflection.getFieldValue(injectorContainer, Channel.class, true);
-        } catch (Exception ex) {
-            plugin.getLog().error("Failed to get Netty channel for {}", player, ex);
-            return null;
-        }
-    }
-
     private void setPremiumUUID(UUID premiumUUID) {
         if (plugin.getConfig().getBoolean("premiumUuid") && premiumUUID != null) {
             try {
@@ -322,9 +308,8 @@ public class VerifyResponseTask implements Runnable {
 
     //try to get the networkManager from ProtocolLib
     private Object getNetworkManager() throws ClassNotFoundException {
-        NettyChannelInjector injectorContainer = (NettyChannelInjector) Accessors.getMethodAccessorOrNull(
-                TemporaryPlayerFactory.class, "getInjectorFromPlayer", Player.class
-        ).invoke(null, player);
+        NettyChannelInjector injectorContainer = ProtocolLibCompat.getInjector(
+                plugin.getLog(), plugin.getCore().isDebug(), player);
 
         FieldAccessor accessor = Accessors.getFieldAccessorOrNull(
                 NettyChannelInjector.class, "networkManager", Object.class
@@ -381,28 +366,10 @@ public class VerifyResponseTask implements Runnable {
         return true;
     }
 
-    private boolean isConnectionActive() {
-        try {
-            NettyChannelInjector injectorContainer = (NettyChannelInjector) Accessors.getMethodAccessorOrNull(
-                    TemporaryPlayerFactory.class, "getInjectorFromPlayer", Player.class
-            ).invoke(null, player);
-
-            if (injectorContainer == null) {
-                return false;
-            }
-
-            Channel channel = FuzzyReflection.getFieldValue(injectorContainer, Channel.class, true);
-            return channel != null && channel.isActive();
-        } catch (Exception ex) {
-            // Player is gone — the injector/network manager can no longer be resolved
-            return false;
-        }
-    }
-
     private void disconnect(String reasonKey, String logMessage, Object... arguments) {
         // The async verification can outlive the connection (e.g. the user cancelled the
         // login while Mojang was still answering). Don't log a scary error or kick a ghost.
-        if (!isConnectionActive()) {
+        if (!ProtocolLibCompat.isConnectionActive(plugin.getLog(), plugin.getCore().isDebug(), player)) {
             plugin.getLog().info("Skipping disconnect for {}: connection already closed",
                     session.getRequestUsername());
             return;

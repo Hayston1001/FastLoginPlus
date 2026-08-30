@@ -30,6 +30,7 @@ import com.comphenix.protocol.ProtocolManager;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.reflect.StructureModifier;
 import com.comphenix.protocol.wrappers.WrappedChatComponent;
+import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.packet.ClientPublicKey;
 import com.github.games647.fastlogin.core.shared.LoginSource;
 import org.bukkit.entity.Player;
@@ -44,6 +45,8 @@ import static com.comphenix.protocol.PacketType.Login.Server.ENCRYPTION_BEGIN;
 
 class ProtocolLibLoginSource implements LoginSource {
 
+    private final FastLoginBukkit plugin;
+
     private final Player player;
 
     private final Random random;
@@ -57,7 +60,9 @@ class ProtocolLibLoginSource implements LoginSource {
     // after onLogin() returns and cancel the START packet.
     private boolean kicked;
 
-    ProtocolLibLoginSource(Player player, Random random, PublicKey serverPublicKey, ClientPublicKey clientKey) {
+    ProtocolLibLoginSource(FastLoginBukkit plugin, Player player, Random random,
+                           PublicKey serverPublicKey, ClientPublicKey clientKey) {
+        this.plugin = plugin;
         this.player = player;
         this.random = random;
         this.publicKey = serverPublicKey;
@@ -97,6 +102,14 @@ class ProtocolLibLoginSource implements LoginSource {
     @Override
     public void kick(String message) {
         kicked = true;
+
+        if (!ProtocolLibCompat.isConnectionActive(plugin.getLog(), plugin.getCore().isDebug(), player)) {
+            // The player is already gone (vanilla 'Took too long to log in', client
+            // cancel, ...) — resolving the injector would NPE and the kick itself is
+            // moot. Skip silently; the disconnect is logged by the server.
+            return;
+        }
+
         ProtocolManager protocolManager = ProtocolLibrary.getProtocolManager();
 
         PacketContainer kickPacket = new PacketContainer(DISCONNECT);
@@ -106,6 +119,13 @@ class ProtocolLibLoginSource implements LoginSource {
             //send kick packet at login state
             //the normal event.getPlayer.kickPlayer(String) method does only work at play state
             protocolManager.sendServerPacket(player, kickPacket);
+        } catch (Exception ex) {
+            // Narrow race: the connection can drop between the isConnectionActive() check
+            // and the send above — ProtocolLib's injector lookup returns null (NPE) or the
+            // write fails. The kick is moot then; NameCheckTask still cancels the START
+            // packet via isKicked() and kickPlayer below closes the socket.
+            plugin.getLog().info("Cannot kick {}: connection already closed ({})",
+                    player.getName(), ex.getClass().getSimpleName());
         } finally {
             //tell the server that we want to close the connection
             player.kickPlayer("Disconnect");

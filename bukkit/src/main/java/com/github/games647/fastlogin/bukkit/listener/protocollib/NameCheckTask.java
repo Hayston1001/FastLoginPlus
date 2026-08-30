@@ -69,7 +69,7 @@ public class NameCheckTask extends JoinManagement<Player, CommandSender, Protoco
 
     @Override
     public void run() {
-        ProtocolLibLoginSource source = new ProtocolLibLoginSource(player, random, serverKey, clientKey);
+        ProtocolLibLoginSource source = new ProtocolLibLoginSource(plugin, player, random, serverKey, clientKey);
         try {
             super.onLogin(username, source);
         } finally {

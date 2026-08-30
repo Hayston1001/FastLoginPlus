@@ -30,11 +30,8 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.injector.netty.channel.NettyChannelInjector;
-import com.comphenix.protocol.injector.temporary.TemporaryPlayerFactory;
 import com.comphenix.protocol.reflect.FieldAccessException;
 import com.comphenix.protocol.reflect.FuzzyReflection;
-import com.comphenix.protocol.reflect.accessors.Accessors;
 import com.comphenix.protocol.utility.MinecraftVersion;
 import com.comphenix.protocol.wrappers.BukkitConverters;
 import com.comphenix.protocol.wrappers.Converters;
@@ -343,16 +340,14 @@ public class ProtocolLibListener extends PacketAdapter {
     }
 
     private FloodgatePlayer getFloodgatePlayer(Player player) {
-        Channel channel = getChannel(player);
+        Channel channel = ProtocolLibCompat.getChannel(plugin.getLog(), plugin.getCore().isDebug(), player);
+        if (channel == null) {
+            // connection already gone — no Floodgate data to read
+            return null;
+        }
+
         AttributeKey<FloodgatePlayer> floodgateAttribute = AttributeKey.valueOf("floodgate-player");
         return channel.attr(floodgateAttribute).get();
-    }
-
-    private static Channel getChannel(Player player) {
-        NettyChannelInjector injector = (NettyChannelInjector) Accessors.getMethodAccessorOrNull(
-                        TemporaryPlayerFactory.class, "getInjectorFromPlayer", Player.class
-                ).invoke(null, player);
-        return FuzzyReflection.getFieldValue(injector, Channel.class, true);
     }
 
     /**
@@ -371,7 +366,13 @@ public class ProtocolLibListener extends PacketAdapter {
         }
 
         // kick the player, if necessary
-        Channel channel = getChannel(packetEvent.getPlayer());
+        Channel channel = ProtocolLibCompat.getChannel(plugin.getLog(),
+                plugin.getCore().isDebug(), packetEvent.getPlayer());
+        if (channel == null) {
+            // connection already gone between the two lookups — nothing left to process
+            return true;
+        }
+
         AttributeKey<String> kickMessageAttribute = AttributeKey.valueOf("floodgate-kick-message");
         String kickMessage = channel.attr(kickMessageAttribute).get();
         if (kickMessage != null) {
