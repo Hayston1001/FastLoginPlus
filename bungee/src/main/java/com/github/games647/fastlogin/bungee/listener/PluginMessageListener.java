@@ -36,6 +36,7 @@ import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.NamespaceKey;
+import com.github.games647.fastlogin.core.message.ProxyAuthenticatedMessage;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
 import com.github.games647.fastlogin.core.message.ToggleFeedbackMessage;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
@@ -102,10 +103,19 @@ public class PluginMessageListener implements Listener {
 
         ByteArrayDataInput dataInput = ByteStreams.newDataInput(data);
         if (successChannel.equals(channel)) {
+            SuccessMessage successMessage = new SuccessMessage();
+            successMessage.readFrom(dataInput);
+            if (rejectUnauthenticated(channel, successMessage)) {
+                return;
+            }
+
             onSuccessMessage(forPlayer);
         } else if (changeChannel.equals(channel)) {
             ChangePremiumMessage changeMessage = new ChangePremiumMessage();
             changeMessage.readFrom(dataInput);
+            if (rejectUnauthenticated(channel, changeMessage)) {
+                return;
+            }
 
             String playerName = changeMessage.getPlayerName();
             boolean isSourceInvoker = changeMessage.isSourceInvoker();
@@ -146,6 +156,9 @@ public class PluginMessageListener implements Listener {
         } else if (deleteChannel.equals(channel)) {
             DeletePremiumMessage deleteMessage = new DeletePremiumMessage();
             deleteMessage.readFrom(dataInput);
+            if (rejectUnauthenticated(channel, deleteMessage)) {
+                return;
+            }
 
             String playerName = deleteMessage.getPlayerName();
             boolean isSourceInvoker = deleteMessage.isSourceInvoker();
@@ -235,6 +248,63 @@ public class PluginMessageListener implements Listener {
                 plugin.getCore().getStorage().save(playerProfile);
                 loginSession.setAlreadySaved(true);
             }
+        }
+    }
+
+    /**
+     * 0.5.0/F054: backend -&gt; proxy messages echo the sending backend's proxy allowlist;
+     * the message is only trusted when this proxy's own ID is part of that set.
+     *
+     * @param channel the plugin message channel (for the warning log)
+     * @param message the received message carrying the echoed allowlist
+     * @return true when the message must be dropped (strict mode and unauthenticated)
+     */
+    private boolean rejectUnauthenticated(String channel, ProxyAuthenticatedMessage message) {
+        if (!plugin.getCore().getConfig().getBoolean("verify-backend-messages")) {
+            // rolling-upgrade escape hatch; see config-proxy.yml
+            return false;
+        }
+
+        if (accepts(message.getSourceProxyId(), ownProxyId())) {
+            return false;
+        }
+
+        plugin.getLog().warn("Unauthenticated backend message on {} — echoed proxy id set '{}'"
+                + " does not contain this proxy's ID; dropping it", channel, message.getSourceProxyId());
+        return true;
+    }
+
+    /**
+     * Pure authentication decision for backend -&gt; proxy messages (0.5.0/F054).
+     *
+     * @param echoedProxyIds comma-joined proxy IDs echoed by the sending backend
+     * @param ownProxyId this proxy's own ID
+     * @return true only when {@code ownProxyId} is a member of the echoed set;
+     *         false for empty/legacy payloads, unparsable IDs or a null own ID (fail-closed)
+     */
+    static boolean accepts(String echoedProxyIds, UUID ownProxyId) {
+        if (ownProxyId == null || echoedProxyIds == null || echoedProxyIds.isEmpty()) {
+            return false;
+        }
+
+        for (String candidate : echoedProxyIds.split(",")) {
+            try {
+                if (ownProxyId.equals(UUID.fromString(candidate.trim()))) {
+                    return true;
+                }
+            } catch (IllegalArgumentException malformedEntry) {
+                // skip malformed entries but keep checking the rest of the set
+            }
+        }
+
+        return false;
+    }
+
+    private UUID ownProxyId() {
+        try {
+            return UUID.fromString(ProxyServer.getInstance().getConfig().getUuid());
+        } catch (RuntimeException notAUuid) {
+            return null;
         }
     }
 }

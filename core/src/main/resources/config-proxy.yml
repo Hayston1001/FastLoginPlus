@@ -135,6 +135,15 @@ offline-whitelist: false
 # Even when enabled, SkinsRestorer custom skins take priority (if SR is installed)
 # false strips the skin from the game profile before forwarding to the backend.
 forwardSkin: true
+# ========================================
+# Plugin Message Security
+# ========================================
+# Authenticate backend -> proxy plugin messages (premium toggle, delete, success
+# ack). Backends stamp these messages with their proxy allowlist and the proxy
+# only accepts them when its own ID is part of the echoed set. Set this to
+# false ONLY temporarily while performing a rolling upgrade of an older backend
+# that does not yet stamp its messages.
+verify-backend-messages: true
 
 # ========================================
 # Command Behavior

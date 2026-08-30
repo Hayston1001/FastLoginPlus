@@ -28,12 +28,16 @@ package com.github.games647.fastlogin.core.message;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteArrayDataOutput;
 
-public class DeletePremiumMessage implements ChannelMessage {
+public class DeletePremiumMessage implements ProxyAuthenticatedMessage {
 
     public static final String DELETE_CHANNEL = "del-st";
 
     private String playerName;
     private boolean isSourceInvoker;
+
+    // 0.5.0/F054: echoed proxy allowlist of the sending backend, appended as a
+    // trailing optional wire field (empty string when unset/untrusted)
+    private String sourceProxyId = "";
 
     public DeletePremiumMessage(String playerName, boolean isSourceInvoker) {
         this.playerName = playerName;
@@ -53,6 +57,16 @@ public class DeletePremiumMessage implements ChannelMessage {
     }
 
     @Override
+    public String getSourceProxyId() {
+        return sourceProxyId;
+    }
+
+    @Override
+    public void setSourceProxyId(String sourceProxyId) {
+        this.sourceProxyId = sourceProxyId;
+    }
+
+    @Override
     public String getChannelName() {
         return DELETE_CHANNEL;
     }
@@ -69,6 +83,15 @@ public class DeletePremiumMessage implements ChannelMessage {
             // in IllegalStateException, so both EOFException and
             // IllegalStateException surface here as RuntimeException.
             isSourceInvoker = false;
+            return;
+        }
+
+        // 0.5.0/F054: optional trailing authentication field; payloads of the
+        // intermediate format (no sourceProxyId yet) surface as RuntimeException
+        try {
+            sourceProxyId = input.readUTF();
+        } catch (RuntimeException legacyFormat) {
+            sourceProxyId = "";
         }
     }
 
@@ -76,6 +99,8 @@ public class DeletePremiumMessage implements ChannelMessage {
     public void writeTo(ByteArrayDataOutput output) {
         output.writeUTF(playerName);
         output.writeBoolean(isSourceInvoker);
+        // always appended so the wire format has no arity ambiguity
+        output.writeUTF(sourceProxyId);
     }
 
     @Override
@@ -83,6 +108,7 @@ public class DeletePremiumMessage implements ChannelMessage {
         return this.getClass().getSimpleName() + '{'
             + "playerName='" + playerName + '\''
             + ", isSourceInvoker=" + isSourceInvoker
+            + ", sourceProxyId='" + sourceProxyId + '\''
             + '}';
     }
 }

@@ -28,13 +28,17 @@ package com.github.games647.fastlogin.core.message;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteArrayDataOutput;
 
-public class ChangePremiumMessage implements ChannelMessage {
+public class ChangePremiumMessage implements ProxyAuthenticatedMessage {
 
     public static final String CHANGE_CHANNEL = "ch-st";
 
     private String playerName;
     private boolean willEnable;
     private boolean isSourceInvoker;
+
+    // 0.5.0/F054: echoed proxy allowlist of the sending backend, appended as a
+    // trailing optional wire field (empty string when unset/untrusted)
+    private String sourceProxyId = "";
 
     public ChangePremiumMessage(String playerName, boolean willEnable, boolean isSourceInvoker) {
         this.playerName = playerName;
@@ -59,6 +63,16 @@ public class ChangePremiumMessage implements ChannelMessage {
     }
 
     @Override
+    public String getSourceProxyId() {
+        return sourceProxyId;
+    }
+
+    @Override
+    public void setSourceProxyId(String sourceProxyId) {
+        this.sourceProxyId = sourceProxyId;
+    }
+
+    @Override
     public String getChannelName() {
         return CHANGE_CHANNEL;
     }
@@ -68,6 +82,14 @@ public class ChangePremiumMessage implements ChannelMessage {
         willEnable = input.readBoolean();
         playerName = input.readUTF();
         isSourceInvoker = input.readBoolean();
+
+        // 0.5.0/F054: optional trailing authentication field; legacy payloads
+        // (older backend) end here and surface as RuntimeException on EOF
+        try {
+            sourceProxyId = input.readUTF();
+        } catch (RuntimeException legacyFormat) {
+            sourceProxyId = "";
+        }
     }
 
     @Override
@@ -75,6 +97,8 @@ public class ChangePremiumMessage implements ChannelMessage {
         output.writeBoolean(willEnable);
         output.writeUTF(playerName);
         output.writeBoolean(isSourceInvoker);
+        // always appended so the wire format has no arity ambiguity
+        output.writeUTF(sourceProxyId);
     }
 
     @Override
@@ -83,6 +107,7 @@ public class ChangePremiumMessage implements ChannelMessage {
             + "playerName='" + playerName + '\''
             + ", shouldEnable=" + willEnable
             + ", isSourceInvoker=" + isSourceInvoker
+            + ", sourceProxyId='" + sourceProxyId + '\''
             + '}';
     }
 }
