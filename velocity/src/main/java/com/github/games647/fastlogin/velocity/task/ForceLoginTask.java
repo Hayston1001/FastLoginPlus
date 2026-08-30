@@ -41,7 +41,6 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 
 public class ForceLoginTask
         extends ForceLoginManagement<Player, CommandSource, VelocityLoginSession, FastLoginVelocity> {
@@ -91,16 +90,13 @@ public class ForceLoginTask
 
     @Override
     public FastLoginAutoLoginEvent callFastLoginAutoLoginEvent(LoginSession session, StoredProfile profile) {
+        // Unreachable on Velocity (0.5.0/F057): ForceLoginManagement only calls
+        // this when an auth plugin hook is set, which never happens on the proxy
+        // side. Fire without blocking rather than .get() in case that changes;
+        // handler cancellation is not awaited here.
         VelocityFastLoginAutoLoginEvent event = new VelocityFastLoginAutoLoginEvent(session, profile);
-        try {
-             return core.getPlugin().getProxy().getEventManager().fire(event).get();
-        } catch (InterruptedException interruptedEx) {
-            Thread.currentThread().interrupt(); // Set the interrupt flag again
-            return event;
-        } catch (ExecutionException executionEx) {
-            core.getPlugin().getLog().error("Error firing event", executionEx);
-            return event;
-        }
+        core.getPlugin().getProxy().getEventManager().fire(event);
+        return event;
     }
 
     @Override

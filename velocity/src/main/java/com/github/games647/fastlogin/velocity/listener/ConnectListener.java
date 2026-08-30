@@ -40,6 +40,7 @@ import com.github.games647.fastlogin.velocity.task.FloodgateAuthTask;
 import com.github.games647.fastlogin.velocity.task.ForceLoginTask;
 import com.google.common.cache.Cache;
 import com.google.common.collect.ListMultimap;
+import com.velocitypowered.api.event.Continuation;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.Subscribe;
@@ -65,7 +66,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 
 public class ConnectListener {
 
@@ -101,36 +101,64 @@ public class ConnectListener {
 
         Action action = antiBotService.onIncomingConnection(address, username);
         if (action != Action.Continue) {
-            VelocityFastLoginAntiBotEvent antiBotEvent = new VelocityFastLoginAntiBotEvent(address, username, action);
-            try {
-                plugin.getProxy().getEventManager().fire(antiBotEvent).get();
-            } catch (InterruptedException interruptedEx) {
-                Thread.currentThread().interrupt();
-            } catch (ExecutionException executionEx) {
-                plugin.getLog().error("Error firing anti-bot event", executionEx);
-            }
-
-            if (antiBotEvent.isCancelled()) {
-                action = Action.Continue;
-            }
+            VelocityFastLoginAntiBotEvent antiBotEvent =
+                    new VelocityFastLoginAntiBotEvent(address, username, action);
+            // Non-blocking (0.5.0/F034): pause the event, fire the anti-bot
+            // event asynchronously and resume from the completion callback —
+            // the Netty event loop must never block on a synchronous .get().
+            return EventTask.withContinuation(continuation ->
+                    plugin.getProxy().getEventManager().fire(antiBotEvent).whenComplete((unused, ex) -> {
+                        if (ex != null) {
+                            plugin.getLog().error("Error firing anti-bot event", ex);
+                        }
+                        Action effective = antiBotEvent.isCancelled() ? Action.Continue : action;
+                        applyAntiBotDecision(preLoginEvent, connection, username, effective, continuation);
+                    }));
         }
 
+        // no anti-bot action — continue with the async premium check
+        return EventTask.async(new AsyncPremiumCheck(plugin, connection, username, preLoginEvent));
+    }
+
+    /**
+     * Apply the effective anti-bot decision to the pre-login event and resume
+     * the paused event pipeline.
+     *
+     * @param preLoginEvent the paused pre-login event
+     * @param connection    the inbound connection
+     * @param username      the username from the pre-login event
+     * @param action        the effective anti-bot action (third-party handlers
+     *                      may have cancelled the original one)
+     * @param continuation  the event continuation to resume
+     */
+    private void applyAntiBotDecision(PreLoginEvent preLoginEvent, InboundConnection connection,
+                                      String username, Action action, Continuation continuation) {
         switch (action) {
             case Ignore:
-                // just ignore
-                return null;
+                // FastLogin stops handling the connection — login continues as
+                // a normal cracked login without premium handling
+                continuation.resume();
+                break;
             case Block:
                 String message = plugin.getCore().getMessage("kick-antibot");
                 TextComponent messageParsed = LegacyComponentSerializer.legacyAmpersand().deserialize(message);
-
-                PreLoginComponentResult reason = PreLoginComponentResult.denied(messageParsed);
-                preLoginEvent.setResult(reason);
-                return null;
+                preLoginEvent.setResult(PreLoginComponentResult.denied(messageParsed));
+                continuation.resume();
+                break;
             case Continue:
             default:
-                return EventTask.async(
-                        new AsyncPremiumCheck(plugin, connection, username, preLoginEvent)
-                );
+                // third-party handler cancelled the anti-bot action — run the
+                // premium check off the event loop and resume when it completes
+                plugin.getScheduler().runAsync(() -> {
+                    try {
+                        new AsyncPremiumCheck(plugin, connection, username, preLoginEvent).run();
+                    } catch (Exception runEx) {
+                        plugin.getLog().error("Error during premium check", runEx);
+                    } finally {
+                        continuation.resume();
+                    }
+                });
+                break;
         }
     }
 

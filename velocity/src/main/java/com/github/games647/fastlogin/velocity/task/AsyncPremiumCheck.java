@@ -38,6 +38,8 @@ import com.velocitypowered.api.proxy.InboundConnection;
 import com.velocitypowered.api.proxy.Player;
 
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, VelocityLoginSource>
         implements Runnable {
@@ -67,11 +69,14 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
                                                              StoredProfile profile) {
         VelocityFastLoginPreLoginEvent event = new VelocityFastLoginPreLoginEvent(username, source, profile);
         try {
-            return plugin.getProxy().getEventManager().fire(event).get();
+            // bounded wait (0.5.0/F034): this runs on a shared scheduler thread
+            // — an unbounded .get() can starve the pool; a continuation is not
+            // possible mid-flow inside JoinManagement.onLogin
+            return plugin.getProxy().getEventManager().fire(event).get(5, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // Restore the interrupt flag
             return event;
-        } catch (ExecutionException e) {
+        } catch (ExecutionException | TimeoutException e) {
             core.getPlugin().getLog().error("Error firing event", e);
             return event;
         }
