@@ -50,6 +50,8 @@ import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 
+import org.slf4j.Logger;
+
 import com.github.games647.craftapi.resolver.MojangResolver;
 import com.github.games647.craftapi.resolver.http.RotatingProxySelector;
 import com.github.games647.fastlogin.core.CommonUtil;
@@ -208,7 +210,16 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             }
         }
 
-        resolver.setMaxNameRequests(config.getInt("mojang-request-limit"));
+        // 0.5.0/F044: craftapi 0.8.1's setMaxNameRequests only stores the value
+        // — its profile limiter keeps the built-in 600/10min.  Warn so admins
+        // don't rely on the configured value.
+        int mojangRequestLimit = config.getInt("mojang-request-limit");
+        if (mojangRequestLimit != 600) {
+            plugin.getLog().warn("mojang-request-limit is currently not applied by the bundled"
+                    + " craftapi library (always {}) — configured value {} is ignored",
+                    600, mojangRequestLimit);
+        }
+        resolver.setMaxNameRequests(mojangRequestLimit);
         resolver.setProxySelector(new RotatingProxySelector(proxies));
         resolver.setOutgoingAddresses(addresses);
 
@@ -221,6 +232,46 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         }
     }
 
+    /**
+     * Validate an anti-bot limit value (0.5.0/F039): values below 1 either
+     * dead-lock the check (limit 0 rejects everything) or are undefined —
+     * fall back to the configured default instead.
+     *
+     * @param logger   the plugin logger
+     * @param key      the config key (for the warning)
+     * @param value    the configured value
+     * @param fallback the default from the bundled config template
+     * @return the validated value
+     */
+    static int validatedLimit(Logger logger, String key, int value, int fallback) {
+        if (value < 1) {
+            logger.warn("anti-bot.{} is {} — values below 1 break the check;"
+                    + " falling back to {}", key, value, fallback);
+            return fallback;
+        }
+        return value;
+    }
+
+    /**
+     * Validate an anti-bot duration value (0.5.0/F039): zero or negative
+     * durations make the associated window/ban ineffective — fall back to the
+     * configured default instead.
+     *
+     * @param logger     the plugin logger
+     * @param key        the config key (for the warning)
+     * @param valueMs    the configured value in milliseconds
+     * @param fallbackMs the default from the bundled config template
+     * @return the validated value
+     */
+    static long validatedDurationMs(Logger logger, String key, long valueMs, long fallbackMs) {
+        if (valueMs <= 0) {
+            logger.warn("anti-bot.{} is {}ms — non-positive durations break the"
+                    + " check; falling back to {}ms", key, valueMs, fallbackMs);
+            return fallbackMs;
+        }
+        return valueMs;
+    }
+
     private AntiBotService createAntiBotService(Configuration botSection) {
         Ticker ticker = Ticker.systemTicker();
         boolean enabled = botSection.getBoolean("enabled");
@@ -228,8 +279,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         // --- global rate limiter ---
         RateLimiter globalLimiter;
         if (enabled) {
-            int maxCon = botSection.getInt("connections");
-            long expireTime = botSection.getLong("expire") * 60 * 1_000L;
+            int maxCon = validatedLimit(plugin.getLog(), "connections",
+                    botSection.getInt("connections"), 600);
+            long expireTime = validatedDurationMs(plugin.getLog(), "expire",
+                    botSection.getLong("expire") * 60 * 1_000L, 600_000L);
             if (expireTime > MAX_EXPIRE_RATE) {
                 expireTime = MAX_EXPIRE_RATE;
             }
@@ -263,15 +316,20 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         TrustedIpSet trustedIpSet = new TrustedIpSet(trustedIps);
 
         // --- per-IP rate limiter ---
-        int burstLimit = botSection.getInt("burst-limit");
-        long burstWindowMs = botSection.getLong("burst-window") * 1_000L;
-        int perIpConnLimit = botSection.getInt("per-ip-connections");
-        long perIpExpireMs = botSection.getLong("per-ip-expire") * 60 * 1_000L;
+        int burstLimit = validatedLimit(plugin.getLog(), "burst-limit",
+                botSection.getInt("burst-limit"), 10);
+        long burstWindowMs = validatedDurationMs(plugin.getLog(), "burst-window",
+                botSection.getLong("burst-window") * 1_000L, 10_000L);
+        int perIpConnLimit = validatedLimit(plugin.getLog(), "per-ip-connections",
+                botSection.getInt("per-ip-connections"), 20);
+        long perIpExpireMs = validatedDurationMs(plugin.getLog(), "per-ip-expire",
+                botSection.getLong("per-ip-expire") * 60 * 1_000L, 300_000L);
         PerIpRateLimiter perIpLimiter = new PerIpRateLimiter(ticker, burstLimit, burstWindowMs,
                 perIpConnLimit, perIpExpireMs);
 
         // --- IP ban manager ---
-        long banDurationMs = botSection.getLong("ban-duration") * 60 * 1_000L;
+        long banDurationMs = validatedDurationMs(plugin.getLog(), "ban-duration",
+                botSection.getLong("ban-duration") * 60 * 1_000L, 300_000L);
         IpBanManager ipBanManager = new IpBanManager(ticker);
 
         return new AntiBotService(plugin.getLog(), enabled, globalLimiter, action,
@@ -328,6 +386,9 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         return localeMessages.get(key);
     }
 
+    // 0.5.0/F019 — floor for the HikariCP maxLifetime setting
+    private static final long MIN_LIFETIME_MS = 300_000L;
+
     public boolean setupDatabase() {
         String type = config.getString("driver");
 
@@ -335,7 +396,19 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         String database = config.getString("database");
 
         databaseConfig.setConnectionTimeout(config.getInt("timeout") * 1_000L);
-        databaseConfig.setMaxLifetime(config.getInt("lifetime") * 1_000L);
+
+        // 0.5.0/F019: HikariCP enforces a 30s minimum maxLifetime — values at
+        // or near it retire every pooled connection almost immediately
+        // (constant reconnect churn).  Clamp to a sane floor (0 = infinite,
+        // which HikariCP supports and is left untouched).
+        long lifetimeMs = config.getInt("lifetime") * 1_000L;
+        if (lifetimeMs > 0 && lifetimeMs < MIN_LIFETIME_MS) {
+            plugin.getLog().warn("Database lifetime is {}s — below the recommended minimum"
+                            + " of {}s, causing constant connection churn; using {}s instead.",
+                    lifetimeMs / 1_000, MIN_LIFETIME_MS / 1_000, MIN_LIFETIME_MS / 1_000);
+            lifetimeMs = MIN_LIFETIME_MS;
+        }
+        databaseConfig.setMaxLifetime(lifetimeMs);
 
         if (type.contains("sqlite")) {
             storage = new SQLiteStorage(plugin, database, databaseConfig);
@@ -364,6 +437,13 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             return true;
         } catch (Exception ex) {
             plugin.getLog().warn("Failed to setup database. Disabling plugin...", ex);
+            // 0.5.0/F021: the HikariDataSource was already constructed — close
+            // it here, because setEnabled(false) during onEnable suppresses
+            // onDisable (and with it core.close()) on bukkit/folia
+            if (storage != null) {
+                storage.close();
+                storage = null;
+            }
             return false;
         }
     }

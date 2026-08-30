@@ -124,6 +124,63 @@ class ConfigRefresherTest {
         assertTrue(refreshed.getBoolean("premiumUuid"));
     }
 
+    @Test
+    void sectionHeaderWithScalarUserValueKeepsTemplateStructure() throws IOException {
+        // 0.5.0/F029: a user value that turns a template section header into a
+        // scalar (e.g. a broken manual edit "anti-bot: false") must not
+        // produce invalid YAML — the template structure wins.
+        Path config = copyResource(FULL_TEMPLATE);
+        Configuration userConfig = load(config);
+        userConfig.set("anti-bot", false);
+        provider.save(userConfig, config.toFile());
+
+        ConfigRefresher.refresh(getClass().getClassLoader(), config, load(config), FULL_TEMPLATE);
+
+        String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
+        assertTrue(output.contains("anti-bot:"));
+        assertTrue(output.contains("  enabled:"));
+        Configuration refreshed = load(config);
+        assertTrue(refreshed.contains("anti-bot.enabled"));
+    }
+
+    @Test
+    void ambiguousScalarUserValuesStayQuotedStrings() throws IOException {
+        // 0.5.0/F030: strings that YAML 1.1 would resolve as boolean/number/null
+        // must be written quoted so they keep their string type across the
+        // refresh cycle.
+        Path config = copyResource(FULL_TEMPLATE);
+        Configuration userConfig = load(config);
+        userConfig.set("language", "no");
+        userConfig.set("ServerRSAPublicKeyFile", "1_000");
+        // no save/load round-trip here: the parsed config carries real Strings
+        ConfigRefresher.refresh(getClass().getClassLoader(), config, userConfig, FULL_TEMPLATE);
+
+        String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
+        assertTrue(output.contains("language: 'no'"));
+        assertTrue(output.contains("ServerRSAPublicKeyFile: '1_000'"));
+
+        Configuration refreshed = load(config);
+        assertEquals("no", refreshed.getString("language"));
+    }
+
+    @Test
+    void refreshRewritesConfigAtomicallyWithoutLeftoverTempFiles() throws IOException {
+        // 0.5.0/F026: the rewrite must go through a temp file + move so a crash
+        // mid-write can never truncate the user's config.
+        Path config = copyResource(FULL_TEMPLATE);
+        Configuration userConfig = load(config);
+        userConfig.set("language", "zh");
+
+        ConfigRefresher.refresh(getClass().getClassLoader(), config, userConfig, FULL_TEMPLATE);
+
+        Configuration refreshed = load(config);
+        assertEquals("zh", refreshed.getString("language"));
+        // no leftover temp files in the config directory
+        try (java.util.stream.Stream<Path> files = Files.list(tempDir)) {
+            assertEquals(1, files.count());
+        }
+    }
+
     private Path copyResource(String resource) throws IOException {
         Path target = tempDir.resolve("config.yml");
         try (InputStream is = getClass().getClassLoader().getResourceAsStream(resource)) {

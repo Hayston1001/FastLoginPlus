@@ -103,6 +103,24 @@ public class ProtocolLibListener extends PacketAdapter {
                 .getAsynchronousManager()
                 .registerAsyncHandler(new ProtocolLibListener(plugin, antiBotService, verifyClientKeys))
                 .start();
+
+        // 0.5.0/F003: ENCRYPTION_BEGIN interception is known to silently fail on
+        // some ProtocolLib/Minecraft combinations (e.g. Paper 1.21.11 + ProtocolLib
+        // 5.5.0, where ServerboundKeyPacket is not registered). The runtime
+        // getOverriddenType() fallback covers *some* of these — warn loudly when
+        // even the static mapping is gone so operators can correlate login issues.
+        try {
+            if (!PacketType.Login.Client.ENCRYPTION_BEGIN.isSupported()) {
+                plugin.getLog().warn("ProtocolLib does not statically resolve the encryption"
+                        + " response packet on this server version — premium detection may"
+                        + " not intercept logins. Verify ProtocolLib compatibility if premium"
+                        + " logins fail with 'invalid-request' or missing 'Verifying session'"
+                        + " log lines.");
+            }
+        } catch (Throwable th) {
+            // diagnostic only — never break registration over it
+            plugin.getLog().debug("Could not check ENCRYPTION_BEGIN packet type support", th);
+        }
     }
 
     @Override
@@ -196,6 +214,15 @@ public class ProtocolLibListener extends PacketAdapter {
         } else {
             byte[] expectedVerifyToken = session.getVerifyToken();
             if (verifyNonce(sender, packetEvent.getPacket(), session.getClientPublicKey(), expectedVerifyToken)) {
+                // 0.5.0/F001: only one verification per session — duplicates are
+                // a replay/DoS attempt and get kicked
+                if (!session.startVerification()) {
+                    plugin.getLog().warn("Duplicate encryption response from {} — ignoring",
+                            sender.getAddress());
+                    sender.kickPlayer(plugin.getCore().getMessage("invalid-request"));
+                    return;
+                }
+
                 packetEvent.getAsyncMarker().incrementProcessingDelay();
 
                 Runnable verifyTask = new VerifyResponseTask(

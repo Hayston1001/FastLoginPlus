@@ -190,7 +190,8 @@ public abstract class SQLStorage implements AuthStorage {
                         saveStmt.execute();
                     }
                 } else {
-                    try (PreparedStatement saveStmt = con.prepareStatement(INSERT_PROFILE, RETURN_GENERATED_KEYS)) {
+                    try (PreparedStatement saveStmt = con.prepareStatement(getInsertProfileStmt(),
+                            RETURN_GENERATED_KEYS)) {
                         saveStmt.setString(1, uuid);
 
                         saveStmt.setString(2, playerProfile.getName());
@@ -232,6 +233,19 @@ public abstract class SQLStorage implements AuthStorage {
      */
     protected String getCreateTableStmt() {
         return CREATE_TABLE_STMT;
+    }
+
+    /**
+     * Insert statement for a new profile.  Storage implementations override
+     * this with an upsert so that two concurrent first-time saves for the same
+     * name cannot race the UNIQUE(Name) constraint and silently lose the
+     * second profile (0.5.0/F020).
+     *
+     * @return an insert statement with five parameters
+     *         (UUID, Name, Premium, Floodgate, LastIp)
+     */
+    protected String getInsertProfileStmt() {
+        return INSERT_PROFILE;
     }
 
     @Override

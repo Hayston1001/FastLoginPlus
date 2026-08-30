@@ -36,10 +36,29 @@ public class MySQLStorage extends SQLStorage {
     private static final String MYSQL_DRIVER = "com.mysql.cj.jdbc.Driver";
     private static final String MARIADB_DRIVER = "fastlogin.mariadb.jdbc.Driver";
 
+    // 0.5.0/F020: concurrent first-time saves for the same name race the
+    // UNIQUE(Name) constraint — upsert instead of letting the second insert
+    // fail (the failure was swallowed by save(), silently losing the profile).
+    // The HEX() comparison is byte-exact, so a case-variant duplicate (e.g.
+    // "Steve" vs "steve") still conflicts on the case-insensitive unique key
+    // but is NOT written — preserving the anti name-stealing semantics.
+    private static final String INSERT_PROFILE_UPSERT = "INSERT INTO `" + PREMIUM_TABLE
+            + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`) VALUES (?, ?, ?, ?, ?) "
+            + "ON DUPLICATE KEY UPDATE "
+            + "`UUID`=IF(HEX(`Name`)=HEX(VALUES(`Name`)), VALUES(`UUID`), `UUID`), "
+            + "`Premium`=IF(HEX(`Name`)=HEX(VALUES(`Name`)), VALUES(`Premium`), `Premium`), "
+            + "`Floodgate`=IF(HEX(`Name`)=HEX(VALUES(`Name`)), VALUES(`Floodgate`), `Floodgate`), "
+            + "`LastIp`=IF(HEX(`Name`)=HEX(VALUES(`Name`)), VALUES(`LastIp`), `LastIp`)";
+
     public MySQLStorage(PlatformPlugin<?> plugin, String driver, String host, int port, String database,
                         HikariConfig config, boolean useSSL) {
         super(plugin.getLog(), plugin.getName(), plugin.getThreadFactory(),
                 setParams(config, driver, host, port, database, useSSL));
+    }
+
+    @Override
+    protected String getInsertProfileStmt() {
+        return INSERT_PROFILE_UPSERT;
     }
 
     private static HikariConfig setParams(HikariConfig config,

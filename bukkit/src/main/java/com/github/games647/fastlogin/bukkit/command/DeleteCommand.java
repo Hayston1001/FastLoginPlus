@@ -67,23 +67,29 @@ public class DeleteCommand implements CommandExecutor {
             return true;
         }
 
-        StoredProfile profile = plugin.getCore().getStorage().loadProfile(targetName);
-        if (profile == null) {
-            plugin.getCore().sendLocaleMessage("database-error", sender);
-            return true;
-        }
-
-        if (!profile.isExistingPlayer()) {
-            plugin.getCore().sendLocaleMessage("delete-not-found", sender);
-            return true;
-        }
-
-        if (profile.isOnlinemodePreferred()) {
-            plugin.getCore().sendLocaleMessage("delete-premium-denied", sender);
-            return true;
-        }
-
+        // 0.5.0/F011: database calls must not run on the main thread — the
+        // whole load/validate/delete flow runs async, replies hop back to the
+        // main thread
         plugin.getScheduler().runAsync(() -> {
+            StoredProfile profile = plugin.getCore().getStorage().loadProfile(targetName);
+            if (profile == null) {
+                plugin.getScheduler().getSyncExecutor().execute(() ->
+                        plugin.getCore().sendLocaleMessage("database-error", sender));
+                return;
+            }
+
+            if (!profile.isExistingPlayer()) {
+                plugin.getScheduler().getSyncExecutor().execute(() ->
+                        plugin.getCore().sendLocaleMessage("delete-not-found", sender));
+                return;
+            }
+
+            if (profile.isOnlinemodePreferred()) {
+                plugin.getScheduler().getSyncExecutor().execute(() ->
+                        plugin.getCore().sendLocaleMessage("delete-premium-denied", sender));
+                return;
+            }
+
             boolean deleted = plugin.getCore().getStorage().deleteProfile(targetName);
             if (deleted) {
                 plugin.getServer().getPluginManager().callEvent(

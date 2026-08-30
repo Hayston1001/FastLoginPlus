@@ -215,7 +215,9 @@ verifyClientKeys: false
 ip-addresses:
 
 # Max Mojang name->UUID requests per 10 minutes (per IP)
-# EFFECT  S=full   P=Paper 1.20.5+  configure-phase lookup only
+# EFFECT  S=none   P=none  — the bundled craftapi library currently ignores
+# this value (hardcoded 600/10min); kept for future compatibility
+# (formerly: S=full P=Paper 1.20.5+ configure-phase lookup only)
 mojang-request-limit: 600
 
 # ========================================
@@ -254,7 +256,9 @@ password: 'myPassword'
 
 # Connection pool settings (seconds)
 timeout: 30
-lifetime: 30
+# Max pool connection lifetime (seconds). Keep this at minutes level (>= 300);
+# lower values make the pool constantly reconnect (default 1800).
+lifetime: 1800
 
 # SSL for MySQL (only used when driver: 'mysql')
 useSSL: false

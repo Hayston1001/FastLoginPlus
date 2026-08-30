@@ -87,6 +87,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     private boolean serverStarted;
     private BungeeManager bungeeManager;
+    // 0.5.0/F014: stop relay retry tasks after ~5 minutes (1s interval)
+    private static final int MAX_RELAY_ATTEMPTS = 300;
+
     private final BukkitScheduler scheduler;
     private FastLoginCore<Player, CommandSender, FastLoginBukkit> core;
     private FloodgateService floodgateService;
@@ -127,7 +130,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // (persisted to AuthMe's config.yml) and unregister AuthMe's
                 // redundant PremiumVerificationPacketListener so FLP's ProtocolLib
                 // listener is the sole Mojang verification source.
-                authMePremiumIntegrator.enforceFlpPremiumControl();
+                // 0.5.0/F061: surface partial failures — AuthMe's packet listener may
+                // still be registered, causing a double-interception conflict
+                if (!authMePremiumIntegrator.enforceFlpPremiumControl()) {
+                    logger.warn("Failed to fully enforce FastLogin premium control in AuthMe 6.0"
+                            + " — premium logins may conflict with AuthMe's own listener");
+                }
             } else {
                 logger.info("AuthMe 5.x detected: v{} — using standard FLP flow",
                     authMeVersionDetector.getVersion());
@@ -143,6 +151,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         if (!initializeFloodgate()) {
             setEnabled(false);
+            // 0.5.0/F009: setEnabled(false) invokes onDisable synchronously —
+            // without this return the rest of onEnable would keep initializing
+            // listeners/commands on a plugin Bukkit considers disabled
+            return;
         }
 
         bungeeManager = new BungeeManager(this);
@@ -248,7 +260,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        long intervalTicks = core.getUpdateCheckInterval() * 60L * 60L;
+        // 0.5.0/F045: the config value is hours — the tick API runs at 20
+        // ticks/s, so hours*3600 ticks would fire 20x too often
+        long intervalTicks = core.getUpdateCheckInterval() * 60L * 60L * 20L;
         getServer().getScheduler().runTaskLaterAsynchronously(this, () -> {
             if (checker.checkForUpdates()) {
                 String msg = core.getMessage("update-available");
@@ -273,12 +287,28 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     private boolean initializeFloodgate() {
-        if (getServer().getPluginManager().getPlugin("Geyser-Spigot") != null) {
-            geyserService = new GeyserService(GeyserImpl.getInstance(), core);
+        // 0.5.0/F010: a plugin being present is not the same as being enabled —
+        // a disabled (or not yet initialized) Geyser/floodgate leaves
+        // getInstance() null and would NPE here, taking the whole plugin down.
+        // Check the enabled state and degrade gracefully instead.
+        if (getServer().getPluginManager().isPluginEnabled("Geyser-Spigot")) {
+            GeyserImpl geyser = GeyserImpl.getInstance();
+            if (geyser != null) {
+                geyserService = new GeyserService(geyser, core);
+            } else {
+                logger.warn("Geyser-Spigot is enabled but GeyserImpl is not initialized"
+                        + " — skipping Geyser service integration");
+            }
         }
 
-        if (getServer().getPluginManager().getPlugin("floodgate") != null) {
-            floodgateService = new FloodgateService(FloodgateApi.getInstance(), core);
+        if (getServer().getPluginManager().isPluginEnabled("floodgate")) {
+            FloodgateApi floodgateApi = FloodgateApi.getInstance();
+            if (floodgateApi == null) {
+                logger.warn("floodgate is enabled but FloodgateApi is not initialized"
+                        + " — skipping Floodgate service integration");
+                return true;
+            }
+            floodgateService = new FloodgateService(floodgateApi, core);
 
             // Check Floodgate config values and return
             return floodgateService.isValidFloodgateConfigString("autoLoginFloodgate")
@@ -293,6 +323,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         loginSession.clear();
         premiumPlayers.clear();
         playerFloodgateState.clear();
+
+        // 0.5.0/F046: stop scheduling before closing shared resources
+        scheduler.shutdown();
 
         if (core != null) {
             core.close();
@@ -655,9 +688,19 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      */
     public void scheduleToggleRelay(String target) {
         final int[] taskIdHolder = new int[1];
+        final int[] attempts = new int[1];
         taskIdHolder[0] = Bukkit.getScheduler().scheduleSyncRepeatingTask(this, new Runnable() {
             @Override
             public void run() {
+                // 0.5.0/F014: stop after ~5 minutes of an empty server — the
+                // entry stays queued and is retried after a restart
+                if (++attempts[0] >= MAX_RELAY_ATTEMPTS) {
+                    logger.warn("Gave up relaying pending toggle for {} after {} attempts"
+                            + " — the entry stays queued and is retried after a restart",
+                            target, attempts[0]);
+                    Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
+                    return;
+                }
                 Optional<? extends Player> optPlayer =
                     Bukkit.getServer().getOnlinePlayers().stream().findFirst();
                 if (!optPlayer.isPresent()) {
@@ -687,9 +730,19 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      */
     public void scheduleDeleteRelay(String targetName) {
         final int[] taskIdHolder = new int[1];
+        final int[] attempts = new int[1];
         taskIdHolder[0] = Bukkit.getScheduler().scheduleSyncRepeatingTask(this, new Runnable() {
             @Override
             public void run() {
+                // 0.5.0/F014: stop after ~5 minutes of an empty server — the
+                // entry stays queued and is retried after a restart
+                if (++attempts[0] >= MAX_RELAY_ATTEMPTS) {
+                    logger.warn("Gave up relaying pending delete for {} after {} attempts"
+                            + " — the entry stays queued and is retried after a restart",
+                            targetName, attempts[0]);
+                    Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
+                    return;
+                }
                 Optional<? extends Player> optPlayer =
                     Bukkit.getServer().getOnlinePlayers().stream().findFirst();
                 if (!optPlayer.isPresent()) {

@@ -32,6 +32,7 @@ import com.github.games647.fastlogin.core.storage.StoredProfile;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Represents a client connecting to the server.
@@ -49,6 +50,11 @@ public class BukkitLoginSession extends LoginSession {
     private boolean verified;
     private SkinProperty skinProperty;
 
+    // 0.5.0/F001: one-shot guard for the encryption verification — a malicious
+    // client can send duplicate ENCRYPTION_BEGIN packets; without this guard
+    // each duplicate schedules another VerifyResponseTask that double-enables
+    // encryption and double-injects the fake START
+    private final AtomicBoolean verificationStarted = new AtomicBoolean();
     public BukkitLoginSession(String username, byte[] verifyToken, ClientPublicKey publicKey, boolean registered,
                               StoredProfile profile) {
         super(username, registered, profile);
@@ -86,6 +92,16 @@ public class BukkitLoginSession extends LoginSession {
     @Nullable
     public ClientPublicKey getClientPublicKey() {
         return clientPublicKey;
+    }
+
+    /**
+     * Atomically claim the (single) encryption verification for this session.
+     *
+     * @return true if the caller may proceed with verification, false if a
+     *         verification was already started for this session
+     */
+    public boolean startVerification() {
+        return verificationStarted.compareAndSet(false, true);
     }
 
     /**

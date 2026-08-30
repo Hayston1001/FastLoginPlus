@@ -271,8 +271,11 @@ public final class AuthMePremiumIntegrator {
                 // runs BEFORE PlayerJoinEvent where forceRegister would normally
                 // create the record). Without this, AuthMe shows a blocking
                 // register dialog that the player must cancel before FLP can act.
-                preCreatePremiumAuth(dataSource, lowerName, playerName, mojangUuid);
-                return true;
+                // 0.5.0/F060: propagate the failure — marking the session
+                // registered on a record that was never created would make
+                // ForceLoginTask forceLogin a non-existent AuthMe record and
+                // leave the player unauthenticated
+                return preCreatePremiumAuth(dataSource, lowerName, playerName, mojangUuid);
             }
 
             // Set premium UUID on existing record
@@ -602,9 +605,11 @@ public final class AuthMePremiumIntegrator {
      * @param lowerName lowercase player name (DB key)
      * @param playerName original-case player name (for realName field)
      * @param mojangUuid the verified Mojang UUID
+     * @return true if the record was created (and its premium UUID persisted)
+     * @throws Exception on reflection or database failure
      */
-    private void preCreatePremiumAuth(Object dataSource, String lowerName,
-                                       String playerName, UUID mojangUuid) throws Exception {
+    private boolean preCreatePremiumAuth(Object dataSource, String lowerName,
+                                          String playerName, UUID mojangUuid) throws Exception {
         // Build: PlayerAuth.builder().name(lowerName).realName(playerName)
         //   .password(new HashedPassword(randomHash)).uuid(mojangUuid).premiumUuid(mojangUuid).build()
         Class<?> hashedPasswordClass = Class.forName(
@@ -654,6 +659,7 @@ public final class AuthMePremiumIntegrator {
             plugin.getLog().warn(
                 "Failed to pre-create premium AuthMe record for {}", playerName);
         }
+        return success;
     }
 
     // --- Reflection helpers ---
@@ -793,6 +799,10 @@ public final class AuthMePremiumIntegrator {
         try {
             Object injector = getAuthMeInjector();
             if (injector == null) {
+                // 0.5.0/F061: a silent failure here leaves the whole 6.0
+                // integration dead without any signal — warn loudly
+                plugin.getLog().warn("AuthMe injector not found — cannot enforce"
+                        + " FastLogin premium control (is the AuthMe version supported?)");
                 return false;
             }
 
@@ -928,6 +938,14 @@ public final class AuthMePremiumIntegrator {
         }
         boolean forced = forceEnablePremium();
         boolean unregistered = unregisterPremiumPacketListener();
+        if (forced && !unregistered) {
+            // 0.5.0/F061: half-applied state — enablePremium was persisted but
+            // AuthMe's packet listener may still be registered, which would
+            // double-intercept START/ENCRYPTION_RESPONSE
+            plugin.getLog().warn("enablePremium was set but AuthMe's premium packet"
+                    + " listener could not be unregistered — verify no double"
+                    + " interception of login packets occurs");
+        }
         return forced && unregistered;
     }
 

@@ -174,6 +174,17 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             }
         } catch (Exception ex) {
             core.getPlugin().getLog().error("Failed to check premium state of {}", username, ex);
+            // 0.5.0/F002 fail-closed: an error in the decision tree must not
+            // open a registration window — kick like the whitelist miss above
+            if ((boolean) core.getConfig().get("offline-whitelist")) {
+                try {
+                    source.kick(core.getMessage("offline-whitelist-kick-message"));
+                } catch (Exception kickEx) {
+                    core.getPlugin().getLog().error(
+                            "Failed to kick {} while failing closed on the offline-whitelist",
+                            username, kickEx);
+                }
+            }
         }
     }
 

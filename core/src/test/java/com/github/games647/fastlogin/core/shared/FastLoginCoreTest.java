@@ -80,4 +80,16 @@ class FastLoginCoreTest {
             pool.awaitTermination(5, TimeUnit.SECONDS);
         }
     }
+
+    @Test
+    void antibotConfigValidationFallsBackToDefaults() {
+        // 0.5.0/F039: zero/negative anti-bot limits and durations would
+        // dead-lock or silently disable the checks — fall back to defaults
+        org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(FastLoginCoreTest.class);
+        assertEquals(600, FastLoginCore.validatedLimit(logger, "connections", 0, 600));
+        assertEquals(10, FastLoginCore.validatedLimit(logger, "burst-limit", -5, 10));
+        assertEquals(10, FastLoginCore.validatedLimit(logger, "burst-limit", 10, 10));
+        assertEquals(300_000L, FastLoginCore.validatedDurationMs(logger, "expire", 0, 300_000L));
+        assertEquals(600_000L, FastLoginCore.validatedDurationMs(logger, "expire", 600_000L, 300_000L));
+    }
 }

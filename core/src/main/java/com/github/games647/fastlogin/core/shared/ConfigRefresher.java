@@ -30,8 +30,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -83,7 +85,8 @@ public final class ConfigRefresher {
         List<String> sectionPath = new ArrayList<>();
         List<Integer> indentStack = new ArrayList<>();
 
-        for (String line : templateLines) {
+        for (int lineIndex = 0; lineIndex < templateLines.size(); lineIndex++) {
+            String line = templateLines.get(lineIndex);
             String trimmed = line.trim();
 
             // Keep comments and blank lines as-is
@@ -131,9 +134,14 @@ public final class ConfigRefresher {
                         }
                     }
                     // Do NOT push to section stack — it's a list, not a map
-                } else if (userVal != null && !(userVal instanceof Configuration)) {
+                } else if (userVal != null && !(userVal instanceof Configuration)
+                        && !templateHasChildren(templateLines, lineIndex, indent)) {
                     // Scalar key written without a value in the template —
-                    // preserve the user's value on the key line
+                    // preserve the user's value on the key line.  If the template
+                    // treats this key as a section header (children follow), keep
+                    // the template structure instead: replacing the header with a
+                    // scalar would orphan the child keys and produce invalid YAML
+                    // (0.5.0/F029).
                     output.add(line.substring(0, line.indexOf(':') + 1)
                             + " " + toScalarYaml(userVal));
                 } else {
@@ -195,7 +203,25 @@ public final class ConfigRefresher {
                 sb.append('\n');
             }
         }
-        Files.write(configPath, sb.toString().getBytes(StandardCharsets.UTF_8));
+        byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
+        // Atomic rewrite (0.5.0/F026): a crash mid-write must never truncate
+        // the user's config — write to a temp file in the same directory and
+        // move it over the target (falls back to a non-atomic replace on
+        // filesystems without atomic move support).
+        Path parent = configPath.toAbsolutePath().getParent();
+        Path temp = Files.createTempFile(parent != null ? parent
+                : configPath.toAbsolutePath(), "flp-config", ".tmp");
+        try {
+            Files.write(temp, bytes);
+            try {
+                Files.move(temp, configPath,
+                        StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException ex) {
+                Files.move(temp, configPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temp);
+        }
     }
 
     // ---- internal helpers ------------------------------------------------
@@ -244,6 +270,27 @@ public final class ConfigRefresher {
         return count;
     }
 
+    /**
+     * Check whether the template line at the given index opens a section with
+     * child entries (a deeper-indented content line follows).
+     *
+     * @param templateLines the template lines
+     * @param lineIndex     index of the current line
+     * @param indent        indent level of the current line
+     * @return true if the next content line belongs to this key
+     */
+    private static boolean templateHasChildren(List<String> templateLines,
+                                               int lineIndex, int indent) {
+        for (int i = lineIndex + 1; i < templateLines.size(); i++) {
+            String next = templateLines.get(i);
+            String nextTrimmed = next.trim();
+            if (nextTrimmed.isEmpty() || nextTrimmed.startsWith("#")) {
+                continue;
+            }
+            return getIndentLevel(next) > indent;
+        }
+        return false;
+    }
     private static String spaces(int count) {
         StringBuilder sb = new StringBuilder(count);
         for (int i = 0; i < count; i++) {
@@ -283,6 +330,22 @@ public final class ConfigRefresher {
         if (s.isEmpty()) {
             return true;
         }
+        // leading/trailing whitespace changes the scalar
+        if (s.charAt(0) == ' ' || s.charAt(s.length() - 1) == ' ') {
+            return true;
+        }
+        // line breaks / tabs would break the single-line scalar (0.5.0/F030)
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\n' || c == '\r' || c == '\t') {
+                return true;
+            }
+        }
+        // YAML 1.1 resolver ambiguity: values that would parse as boolean,
+        // null or number must be quoted to keep their string type (0.5.0/F030)
+        if (isAmbiguousScalar(s)) {
+            return true;
+        }
         // YAML reserved starting characters
         char first = s.charAt(0);
         if (first == '?' || first == ':' || first == ',' || first == '-'
@@ -301,6 +364,43 @@ public final class ConfigRefresher {
             }
         }
         return false;
+    }
+
+    /**
+     * Return true if the string would be resolved as a boolean, null or number
+     * by a YAML 1.1 parser (SnakeYAML) even though it is a plain string value.
+     *
+     * @param s the string to check
+     * @return true if the value is a YAML 1.1 ambiguous scalar
+     */
+    private static boolean isAmbiguousScalar(String s) {
+        switch (s.toLowerCase(java.util.Locale.ROOT)) {
+            case "true":
+            case "false":
+            case "yes":
+            case "no":
+            case "on":
+            case "off":
+            case "y":
+            case "n":
+            case "null":
+            case "~":
+                return true;
+            default:
+                break;
+        }
+        // integer forms Double.parseDouble rejects: underscore groups, octal,
+        // hexadecimal
+        if (s.matches("[+-]?[0-9][0-9_]*") || s.matches("0[0-7_]+")
+                || s.matches("[+-]?0[xX][0-9a-fA-F_]+")) {
+            return true;
+        }
+        try {
+            Double.parseDouble(s);
+            return true;
+        } catch (NumberFormatException ex) {
+            return false;
+        }
     }
 
     /**

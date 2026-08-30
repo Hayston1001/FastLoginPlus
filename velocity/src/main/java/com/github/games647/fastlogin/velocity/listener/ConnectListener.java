@@ -99,10 +99,13 @@ public class ConnectListener {
             }
         }
 
-        Action action = antiBotService.onIncomingConnection(address, username);
+        // effectively-final snapshot for the lambda captures below (username
+        // may have been rewritten by the Floodgate lookup above)
+        final String checkedUsername = username;
+        Action action = antiBotService.onIncomingConnection(address, checkedUsername);
         if (action != Action.Continue) {
             VelocityFastLoginAntiBotEvent antiBotEvent =
-                    new VelocityFastLoginAntiBotEvent(address, username, action);
+                    new VelocityFastLoginAntiBotEvent(address, checkedUsername, action);
             // Non-blocking (0.5.0/F034): pause the event, fire the anti-bot
             // event asynchronously and resume from the completion callback —
             // the Netty event loop must never block on a synchronous .get().
@@ -112,12 +115,17 @@ public class ConnectListener {
                             plugin.getLog().error("Error firing anti-bot event", ex);
                         }
                         Action effective = antiBotEvent.isCancelled() ? Action.Continue : action;
-                        applyAntiBotDecision(preLoginEvent, connection, username, effective, continuation);
+                        applyAntiBotDecision(preLoginEvent, connection, checkedUsername, effective,
+                                continuation);
                     }));
         }
 
-        // no anti-bot action — continue with the async premium check
-        return EventTask.async(new AsyncPremiumCheck(plugin, connection, username, preLoginEvent));
+        // no anti-bot action — continue with the premium check
+        // 0.5.0/F056: run it on the plugin scheduler instead of the shared
+        // async event executor, so blocking Mojang lookups (with retry sleeps)
+        // cannot starve the event executor for all other handlers
+        return EventTask.withContinuation(continuation ->
+                applyAntiBotDecision(preLoginEvent, connection, checkedUsername, action, continuation));
     }
 
     /**

@@ -37,6 +37,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
@@ -89,6 +90,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private boolean serverStarted;
     private BungeeManager bungeeManager;
     private final FoliaScheduler scheduler;
+
+    // 0.5.0/F073: the pending-relay retry chains are self-re-chaining virtual
+    // threads the platform scheduler cannot cancel — they must stop themselves
+    // when the plugin disables (a reload would otherwise accumulate chains of
+    // dead plugin instances)
+    private final AtomicBoolean relayChainsRunning = new AtomicBoolean(true);
+
+    // 0.5.0/F014: give up relaying after ~5 minutes (1s interval) and keep the
+    // entry queued instead of retrying forever
+    private static final int MAX_RELAY_ATTEMPTS = 300;
     private FastLoginCore<Player, CommandSender, FastLoginBukkit> core;
     private FloodgateService floodgateService;
     private GeyserService geyserService;
@@ -127,7 +138,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // (persisted to AuthMe's config.yml) and unregister AuthMe's
                 // redundant PremiumVerificationPacketListener so FLP's ProtocolLib
                 // listener is the sole Mojang verification source.
-                authMePremiumIntegrator.enforceFlpPremiumControl();
+                // 0.5.0/F061: surface partial failures — AuthMe's packet listener may
+                // still be registered, causing a double-interception conflict
+                if (!authMePremiumIntegrator.enforceFlpPremiumControl()) {
+                    logger.warn("Failed to fully enforce FastLogin premium control in AuthMe 6.0"
+                            + " — premium logins may conflict with AuthMe's own listener");
+                }
             } else {
                 logger.info("AuthMe 5.x detected: v{} — using standard FLP flow",
                     authMeVersionDetector.getVersion());
@@ -142,6 +158,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         if (!initializeFloodgate()) {
             setEnabled(false);
+            // 0.5.0/F009: setEnabled(false) invokes onDisable synchronously —
+            // without this return the rest of onEnable would keep initializing
+            // listeners/commands on a plugin Bukkit considers disabled
+            return;
         }
 
         bungeeManager = new BungeeManager(this);
@@ -233,7 +253,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        long intervalTicks = core.getUpdateCheckInterval() * 60L * 60L;
+        // 0.5.0/F069: hours -> seconds (this API takes a TimeUnit, unlike the
+        // bukkit tick-based one)
+        long intervalSeconds = core.getUpdateCheckInterval() * 60L * 60L;
 
         // initial check after 3 seconds
         Bukkit.getAsyncScheduler().runDelayed(this, task -> {
@@ -254,20 +276,37 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                                 .replace("%current%", checker.getCurrentVersion()));
                     }
                 }
-            }, intervalTicks, intervalTicks, java.util.concurrent.TimeUnit.SECONDS);
+            }, intervalSeconds, intervalSeconds, java.util.concurrent.TimeUnit.SECONDS);
         }, 60L, java.util.concurrent.TimeUnit.SECONDS);
 
         getServer().getPluginManager().registerEvents(new UpdateNotifyListener(this), this);
     }
 
     private boolean initializeFloodgate() {
-        if (getServer().getPluginManager().getPlugin("Geyser-Spigot") != null) {
-            geyserService = new GeyserService(GeyserImpl.getInstance(), core);
+        // 0.5.0/F010: a plugin being present is not the same as being enabled —
+        // a disabled (or not yet initialized) Geyser/floodgate leaves
+        // getInstance() null and would NPE here, taking the whole plugin down.
+        // Check the enabled state and degrade gracefully instead.
+        if (getServer().getPluginManager().isPluginEnabled("Geyser-Spigot")) {
+            GeyserImpl geyser = GeyserImpl.getInstance();
+            if (geyser != null) {
+                geyserService = new GeyserService(geyser, core);
+            } else {
+                logger.warn("Geyser-Spigot is enabled but GeyserImpl is not initialized"
+                        + " — skipping Geyser service integration");
+            }
         }
 
-        if (getServer().getPluginManager().getPlugin("floodgate") != null) {
-            floodgateService = new FloodgateService(FloodgateApi.getInstance(), core);
+        if (getServer().getPluginManager().isPluginEnabled("floodgate")) {
+            FloodgateApi floodgateApi = FloodgateApi.getInstance();
+            if (floodgateApi == null) {
+                logger.warn("floodgate is enabled but FloodgateApi is not initialized"
+                        + " — skipping Floodgate service integration");
+                return true;
+            }
+            floodgateService = new FloodgateService(floodgateApi, core);
 
+            // Check Floodgate config values and return
             return floodgateService.isValidFloodgateConfigString("autoLoginFloodgate")
                     && floodgateService.isValidFloodgateConfigString("allowFloodgateNameConflict");
         }
@@ -280,6 +319,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         loginSession.clear();
         premiumPlayers.clear();
         playerFloodgateState.clear();
+
+        // 0.5.0/F046: stop scheduling before closing shared resources
+        scheduler.shutdown();
+        // 0.5.0/F073: stop the self-chaining relay retry tasks
+        relayChainsRunning.set(false);
 
         if (core != null) {
             core.close();
@@ -564,13 +608,30 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * @param target the player name to toggle
      */
     public void scheduleToggleRelay(String target) {
+        scheduleToggleRelayAttempt(target, 0);
+    }
+
+    private void scheduleToggleRelayAttempt(String target, int attempt) {
+        if (!relayChainsRunning.get()) {
+            return;
+        }
         scheduler.runAsyncDelayed(() -> {
+            if (!relayChainsRunning.get()) {
+                return;
+            }
             Optional<? extends Player> optPlayer =
                 getServer().getOnlinePlayers().stream().findFirst();
             if (!optPlayer.isPresent()) {
-                // still nobody online — retry in another second
+                // still nobody online — retry in another second, but stop after
+                // MAX_RELAY_ATTEMPTS (the entry stays queued for the next start)
+                if (attempt + 1 >= MAX_RELAY_ATTEMPTS) {
+                    logger.warn("Gave up relaying pending toggle for {} after {} attempts"
+                            + " — the entry stays queued and is retried after a restart",
+                            target, attempt + 1);
+                    return;
+                }
                 if (pendingRelayStore.containsToggle(target)) {
-                    scheduleToggleRelay(target);
+                    scheduleToggleRelayAttempt(target, attempt + 1);
                 }
                 return;
             }
@@ -582,8 +643,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     // global-region task.  The entry is still queued (nothing
                     // was removed yet) — retry with a fresh task instead of
                     // sending into a dead connection and losing the toggle.
+                    if (attempt + 1 >= MAX_RELAY_ATTEMPTS) {
+                        logger.warn("Gave up relaying pending toggle for {} after {} attempts"
+                                + " — the entry stays queued and is retried after a restart",
+                                target, attempt + 1);
+                        return;
+                    }
                     if (pendingRelayStore.containsToggle(target)) {
-                        scheduleToggleRelay(target);
+                        scheduleToggleRelayAttempt(target, attempt + 1);
                     }
                     return;
                 }
@@ -600,7 +667,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     } catch (Exception ex) {
                         // send failed after removal — put the entry back and retry
                         pendingRelayStore.queueToggle(target, pendingValue);
-                        scheduleToggleRelay(target);
+                        scheduleToggleRelayAttempt(target, attempt + 1);
                         logger.warn("Failed to relay pending toggle for {} — requeued: {}",
                             target, ex.getMessage());
                     }
@@ -617,13 +684,30 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * @param targetName the player name to delete
      */
     public void scheduleDeleteRelay(String targetName) {
+        scheduleDeleteRelayAttempt(targetName, 0);
+    }
+
+    private void scheduleDeleteRelayAttempt(String targetName, int attempt) {
+        if (!relayChainsRunning.get()) {
+            return;
+        }
         scheduler.runAsyncDelayed(() -> {
+            if (!relayChainsRunning.get()) {
+                return;
+            }
             Optional<? extends Player> optPlayer =
                 getServer().getOnlinePlayers().stream().findFirst();
             if (!optPlayer.isPresent()) {
-                // still nobody online — retry in another second
+                // still nobody online — retry in another second, but stop after
+                // MAX_RELAY_ATTEMPTS (the entry stays queued for the next start)
+                if (attempt + 1 >= MAX_RELAY_ATTEMPTS) {
+                    logger.warn("Gave up relaying pending delete for {} after {} attempts"
+                            + " — the entry stays queued and is retried after a restart",
+                            targetName, attempt + 1);
+                    return;
+                }
                 if (pendingRelayStore.containsDelete(targetName)) {
-                    scheduleDeleteRelay(targetName);
+                    scheduleDeleteRelayAttempt(targetName, attempt + 1);
                 }
                 return;
             }
@@ -632,8 +716,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 Player sender = optPlayer.get();
                 if (!sender.isOnline()) {
                     // carrier quit between the async check and this task — retry
+                    if (attempt + 1 >= MAX_RELAY_ATTEMPTS) {
+                        logger.warn("Gave up relaying pending delete for {} after {} attempts"
+                                + " — the entry stays queued and is retried after a restart",
+                                targetName, attempt + 1);
+                        return;
+                    }
                     if (pendingRelayStore.containsDelete(targetName)) {
-                        scheduleDeleteRelay(targetName);
+                        scheduleDeleteRelayAttempt(targetName, attempt + 1);
                     }
                     return;
                 }
@@ -646,7 +736,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     } catch (Exception ex) {
                         // send failed after removal — put the entry back and retry
                         pendingRelayStore.queueDelete(targetName);
-                        scheduleDeleteRelay(targetName);
+                        scheduleDeleteRelayAttempt(targetName, attempt + 1);
                         logger.warn("Failed to relay pending delete for {} — requeued: {}",
                             targetName, ex.getMessage());
                     }

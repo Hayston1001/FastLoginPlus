@@ -220,6 +220,13 @@ public class PluginMessageListener implements Listener {
             //bukkit module successfully received and force logged in the user
             //update only on success to prevent corrupt data
             BungeeLoginSession loginSession = plugin.getSession().get(forPlayer.getPendingConnection());
+            // 0.5.0/F055: the player may have disconnected between the message
+            // arriving and this async task running — nothing to persist then
+            if (loginSession == null) {
+                plugin.getLog().info("No active session for {} on success message"
+                        + " — the player probably disconnected", forPlayer.getName());
+                return;
+            }
             StoredProfile playerProfile = loginSession.getProfile();
             loginSession.setRegistered(true);
 

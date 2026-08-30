@@ -119,6 +119,9 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
 
     @Override
     public void onDisable() {
+        // 0.5.0/F046: stop scheduling before closing shared resources
+        scheduler.shutdown();
+
         if (core != null) {
             core.close();
         }

@@ -44,11 +44,18 @@ public class AsyncScheduler extends AbstractAsyncScheduler {
     public AsyncScheduler(Logger logger, Executor processingPool) {
         super(logger, Executors.newVirtualThreadPerTaskExecutor());
 
+        // 0.5.0/F046: this variant deliberately replaces the injected platform
+        // pool with virtual threads (green threads).  The platform executor is
+        // NOT used, so platform-side cancellation cannot reach these tasks —
+        // shutdown() is the only cancellation path (called on plugin disable).
         logger.info("Using optimized green threads with Java 21");
     }
 
     @Override
     public CompletableFuture<Void> runAsync(Runnable task) {
+        if (isShutdown()) {
+            return CompletableFuture.completedFuture(null);
+        }
         return CompletableFuture
                 .runAsync(() -> process(task), processingPool)
                 .exceptionally(error -> {
@@ -59,10 +66,18 @@ public class AsyncScheduler extends AbstractAsyncScheduler {
 
     @Override
     public CompletableFuture<Void> runAsyncDelayed(Runnable task, Duration delay) {
+        if (isShutdown()) {
+            return CompletableFuture.completedFuture(null);
+        }
         return CompletableFuture.runAsync(() -> {
             currentlyRunning.incrementAndGet();
             try {
                 Thread.sleep(delay);
+                // the plugin may have disabled during the delay — platform
+                // schedulers cannot cancel this virtual thread, so check here
+                if (isShutdown()) {
+                    return;
+                }
                 process(task);
             } catch (InterruptedException interruptedException) {
                 // restore interrupt flag

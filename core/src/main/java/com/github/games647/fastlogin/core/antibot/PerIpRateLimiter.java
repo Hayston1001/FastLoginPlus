@@ -31,6 +31,7 @@ import java.net.InetAddress;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Per-IP rate limiter with dual time windows: a short burst window and a long
@@ -49,6 +50,15 @@ public class PerIpRateLimiter {
     private final long connWindowMs;
 
     private final ConcurrentHashMap<InetAddress, WindowCounter> windows;
+
+    // Minimum interval between lazy cleanups triggered from tryAcquire — the
+    // full-map scan is O(n) and runs on connection threads, so scanning on
+    // every acquire under load is a self-inflicted DoS (0.5.0/F038)
+    private static final long LAZY_CLEANUP_MIN_INTERVAL_MS = 1_000;
+
+    private volatile long lastLazyCleanupMs;
+    // lazy cleanup invocation count — package-private, for tests
+    final AtomicLong lazyCleanupRuns = new AtomicLong();
 
     public PerIpRateLimiter(Ticker ticker, int burstLimit, long burstWindowMs,
                             int connLimit, long connWindowMs) {
@@ -69,9 +79,12 @@ public class PerIpRateLimiter {
     public boolean tryAcquire(InetAddress address) {
         long nowMs = ticker.read() / 1_000_000;
 
-        // lazy cleanup: remove expired entries every ~100 accesses
-        // (ConcurrentHashMap.size() is cheap enough for this)
-        if (windows.mappingCount() > 64) {
+        // lazy cleanup: remove expired entries, throttled to once per second
+        // (ConcurrentHashMap.mappingCount() is cheap, the scan itself is not)
+        if (windows.mappingCount() > 64
+                && nowMs - lastLazyCleanupMs >= LAZY_CLEANUP_MIN_INTERVAL_MS) {
+            lastLazyCleanupMs = nowMs;
+            lazyCleanupRuns.incrementAndGet();
             cleanup(nowMs);
         }
 
