@@ -461,12 +461,21 @@ public final class AuthMePremiumIntegrator {
      * Lightweight check called during cracked-session login to detect and clean
      * up stale AuthMe premium records left over from a failed
      * {@link #clearPlayerPremium(String)}. Only triggers full cleanup if the
-     * AuthMe record still has {@code isPremium()=true} — normal cracked players
-     * are not affected.
+     * AuthMe record still has {@code isPremium()=true} AND FLP's own profile
+     * row exists (a genuine stale /cracked retry) — normal cracked players are
+     * not affected.
      *
-     * @param playerName the player name
+     * <p>When the AuthMe record is premium-flagged but FLP has no profile row
+     * (DB reset, /flp delete or first login), the record is left in place
+     * (fail-closed): deleting it would open a registration window for impostors
+     * on the premium-verified name, while the surviving record keeps AuthMe's
+     * own lockout for the legitimate owner.</p>
+     *
+     * @param playerName            the player name
+     * @param existingCrackedPlayer whether FLP's own profile row exists for this
+     *                              player (cracked-session path)
      */
-    public void ensureNotPremium(String playerName) {
+    public void ensureNotPremium(String playerName, boolean existingCrackedPlayer) {
         if (!versionDetector.isAuthMe6()) {
             if (plugin.getCore().isDebug()) {
                 plugin.getLog().info("ensureNotPremium: {} skipped (not AuthMe 6.0)", playerName);
@@ -503,6 +512,19 @@ public final class AuthMePremiumIntegrator {
                 return;
             }
 
+            // premium-flagged record: only clean up when FLP's own profile row
+            // still exists (stale /cracked retry).  A premium-flagged record
+            // without an FLP row is a DB desync — deleting it would open a
+            // registration window for impostors, so fail closed and warn.
+            if (!shouldClearPremiumRecord(premium, existingCrackedPlayer)) {
+                plugin.getLog().warn(
+                    "ensureNotPremium: {} is premium-flagged in AuthMe but no FLP profile "
+                        + "exists — possible DB desync; leaving record (fail-closed); "
+                        + "admin should verify with /authme uuid other {}",
+                    playerName, playerName);
+                return;
+            }
+
             // Stale premium record from a failed /cracked cleanup
             if (plugin.getCore().isDebug()) {
                 plugin.getLog().info(
@@ -516,6 +538,18 @@ public final class AuthMePremiumIntegrator {
                 "ensureNotPremium check failed for {}: {}", playerName, e.getMessage());
             }
         }
+    }
+
+    /**
+     * Decide whether the destructive AuthMe cleanup may run on the
+     * cracked-session path (extracted as a pure function for testability).
+     *
+     * @param authMePremium         whether the AuthMe record is premium-flagged
+     * @param existingCrackedPlayer whether FLP's own profile row exists for the player
+     * @return true if the record is a stale premium entry that may be cleared
+     */
+    static boolean shouldClearPremiumRecord(boolean authMePremium, boolean existingCrackedPlayer) {
+        return authMePremium && existingCrackedPlayer;
     }
 
     /**

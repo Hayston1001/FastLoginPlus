@@ -130,7 +130,7 @@ public class NameCheckTask extends JoinManagement<Player, CommandSender, Protoco
         com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
             plugin.getAuthMePremiumIntegrator();
         if (integrator != null) {
-            integrator.ensureNotPremium(username);
+            integrator.ensureNotPremium(username, profile.isExistingPlayer());
         }
 
         BukkitLoginSession loginSession = new BukkitLoginSession(username, profile);

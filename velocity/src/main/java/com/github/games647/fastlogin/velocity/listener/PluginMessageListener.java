@@ -114,15 +114,17 @@ public class PluginMessageListener {
             }
             if (changeMessage.shouldEnable()) {
                 boolean premiumWarning = plugin.getCore().getConfig().getBoolean("premium-warning");
+                // atomic check-and-add (0.5.0/F025): add() returns false when the
+                // UUID is already pending, so two concurrent toggles for the same
+                // player cannot both pass this gate and double-prompt
                 if (isSourceInvoker && playerName.equals(sender.getUsername()) && premiumWarning
-                    && !core.getPendingConfirms().contains(sender.getUniqueId())) {
+                    && core.getPendingConfirms().add(sender.getUniqueId())) {
                     if (plugin.getCore().isDebug()) {
                         plugin.getLog().info("Premium-warning gate hit for {}: showing confirmation prompt, "
                                 + "toggle deferred until the command is issued again", playerName);
                     }
                     String message = core.getMessage("premium-warning");
                     sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
-                    core.getPendingConfirms().add(sender.getUniqueId());
                     return;
                 }
 

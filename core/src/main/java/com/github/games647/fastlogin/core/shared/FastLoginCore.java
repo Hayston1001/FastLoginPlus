@@ -89,7 +89,9 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             Duration.ofMinutes(5), -1
     );
 
-    private final Collection<UUID> pendingConfirms = new HashSet<>();
+    // concurrent set: proxy-side plugin-message listeners run on Netty
+    // event-loop threads of different players (0.5.0/F025)
+    private final Collection<UUID> pendingConfirms = ConcurrentHashMap.newKeySet();
     private final T plugin;
 
     private MojangResolver resolver;
