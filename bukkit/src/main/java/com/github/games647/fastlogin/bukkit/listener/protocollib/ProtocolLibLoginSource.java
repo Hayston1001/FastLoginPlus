@@ -122,8 +122,11 @@ class ProtocolLibLoginSource implements LoginSource {
         } catch (Exception ex) {
             // Narrow race: the connection can drop between the isConnectionActive() check
             // and the send above — ProtocolLib's injector lookup returns null (NPE) or the
-            // write fails. The kick is moot then; NameCheckTask still cancels the START
-            // packet via isKicked() and kickPlayer below closes the socket.
+            // write fails. Nothing needs closing here: the connection is already gone
+            // and the finally kickPlayer below is a harmless no-op for a player who
+            // already disconnected (unlike the early-return path above, the finally
+            // still runs on this path). NameCheckTask still cancels the START packet
+            // via isKicked().
             plugin.getLog().info("Cannot kick {}: connection already closed ({})",
                     player.getName(), ex.getClass().getSimpleName());
         } finally {
