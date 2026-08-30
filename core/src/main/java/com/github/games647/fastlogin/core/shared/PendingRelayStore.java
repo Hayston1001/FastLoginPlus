@@ -112,6 +112,10 @@ public class PendingRelayStore {
         if (data == null) {
             return false;
         }
+        // 0.5.0/F031: the contract says "replace" — clear first so a second
+        // load() cannot resurrect entries that were relayed and removed since
+        toggles.clear();
+        deletes.clear();
         if (data.toggles != null) {
             toggles.putAll(data.toggles);
         }

@@ -119,7 +119,9 @@ public class CrackedCommand extends ToggleCommand {
                 if (plugin.getCore().getConfig().getBoolean("kick-toggle")) {
                     player.kickPlayer(plugin.getCore().getMessage("remove-premium"));
                 } else {
-                    plugin.getCore().sendLocaleMessage("add-premium", sender);
+                    // 0.5.0/F012: this is the *cracked* self path — the message
+                    // was misleadingly the add-premium key
+                    plugin.getCore().sendLocaleMessage("remove-premium", sender);
                 }
             });
         });

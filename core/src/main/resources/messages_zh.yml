@@ -46,9 +46,6 @@ remove-premium-other: '&2已将该玩家从正版玩家列表中移除'
 not-premium: '&4你不在正版玩家列表中'
 not-premium-other: '&4该玩家不在正版玩家列表中'
 
-# 未知玩家
-player-unknown: '&4玩家不在数据库中'
-
 # 反机器人
 kick-antibot: '&4请稍等片刻！'
 

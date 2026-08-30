@@ -183,6 +183,11 @@ public class ProtocolLibListener extends PacketAdapter {
             }
         } catch (FieldAccessException fieldAccessEx) {
             plugin.getLog().error("Failed to parse packet {}", packetEvent.getPacketType(), fieldAccessEx);
+        } catch (Exception unexpectedEx) {
+            // 0.5.0/F007: an unexpected reflective failure must not abort the
+            // remaining packet handling for this connection
+            plugin.getLog().error("Unexpected error processing packet {}",
+                    packetEvent.getPacketType(), unexpectedEx);
         }
     }
 

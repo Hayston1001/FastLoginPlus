@@ -46,9 +46,6 @@ remove-premium-other: '&2Player has been removed from the premium list'
 not-premium: '&4You are not in the premium list'
 not-premium-other: '&4Player is not in the premium list'
 
-# Unknown player
-player-unknown: '&4Player not in the database'
-
 # Anti-bot
 kick-antibot: '&4Please wait a moment!'
 

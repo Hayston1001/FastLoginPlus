@@ -29,7 +29,6 @@ import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import fr.xephi.authme.api.v3.AuthMeApi;
@@ -44,7 +43,6 @@ import java.util.UUID;
  *
  * <p>Provides three injection points:
  * <ul>
- *   <li>{@link #forceRegisterInAuthMe} — auto-register a premium player in AuthMe's DB</li>
  *   <li>{@link #injectPendingPremium} — mark a player as pending premium verification</li>
  *   <li>{@link #injectVerifiedUuid} — store a verified Mojang UUID so AuthMe's
  *       {@code shouldSkipPreJoinDialogForPremium()} returns true</li>
@@ -99,74 +97,13 @@ public final class AuthMePremiumIntegrator {
             return config.getBoolean("settings.enablePremium", false);
         } catch (Exception e) {
             if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("Could not read AuthMe enablePremium: {}", e.getMessage());
+                plugin.getLog().info("Could not read AuthMe enablePremium: {}", e);
             }
             return false;
         }
     }
 
-    /**
-     * Returns true if AuthMe 6.0's preJoin dialog UI is enabled.
-     * Reads from AuthMe's config.yml; defaults to true (AuthMe's default).
-     *
-     * @return true if preJoin dialog is enabled
-     */
-    public boolean isPreJoinDialogEnabled() {
-        if (!versionDetector.isAuthMe6()) {
-            return false;
-        }
-        try {
-            Plugin authMePlugin = Bukkit.getPluginManager().getPlugin("AuthMe");
-            if (authMePlugin == null) {
-                return false;
-            }
-            File authMeConfig = new File(authMePlugin.getDataFolder(), "config.yml");
-            if (!authMeConfig.exists()) {
-                return false;
-            }
-            YamlConfiguration config = YamlConfiguration.loadConfiguration(authMeConfig);
-            return config.getBoolean("settings.registration.dialog.preJoin.enable", true);
-        } catch (Exception e) {
-            if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("Could not read AuthMe preJoin setting: {}", e.getMessage());
-            }
-            return false;
-        }
-    }
 
-    /**
-     * Auto-register a premium player in AuthMe's database.
-     * Calls AuthMeApi.forceRegister(player, generatedPassword) which also auto-logs in.
-     * No-op if AuthMe 6.0 is not present.
-     *
-     * @param player the player to register
-     * @return true if registration succeeded
-     */
-    public boolean forceRegisterInAuthMe(Player player) {
-        if (!versionDetector.isAuthMe6()) {
-            return false;
-        }
-        try {
-            AuthMeApi api = AuthMeApi.getInstance();
-            if (api == null) {
-                return false;
-            }
-            if (api.isRegistered(player.getName())) {
-                return false;
-            }
-
-            String generatedPassword = plugin.getCore()
-                .getPasswordGenerator().getRandomPassword(player);
-            api.forceRegister(player, generatedPassword);
-            plugin.getLog().info("Auto-registered {} in AuthMe (premium)", player.getName());
-            return true;
-        } catch (Exception e) {
-            if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("AuthMe forceRegister failed: {}", e.getMessage());
-            }
-            return false;
-        }
-    }
 
     /**
      * Inject a pending premium entry into AuthMe's PendingPremiumCache.
@@ -194,7 +131,7 @@ public final class AuthMePremiumIntegrator {
             }
         } catch (Exception e) {
             if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("PendingPremiumCache injection failed: {}", e.getMessage());
+                plugin.getLog().info("PendingPremiumCache injection failed: {}", e);
             }
         }
     }
@@ -226,7 +163,7 @@ public final class AuthMePremiumIntegrator {
             }
         } catch (Exception e) {
             if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("PremiumLoginVerifier injection failed: {}", e.getMessage());
+                plugin.getLog().info("PremiumLoginVerifier injection failed: {}", e);
             }
         }
     }
@@ -293,7 +230,7 @@ public final class AuthMePremiumIntegrator {
             return false;
         } catch (Exception e) {
             if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("markPlayerAsPremium failed: {}", e.getMessage());
+                plugin.getLog().info("markPlayerAsPremium failed: {}", e);
             }
             return false;
         }
@@ -338,7 +275,7 @@ public final class AuthMePremiumIntegrator {
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to clear AuthMe PendingPremiumCache for {}: {}",
-                    playerName, e.getMessage());
+                    playerName, e);
             }
 
             // 2. Clear PremiumLoginVerifier verified session (60-second TTL).
@@ -357,7 +294,7 @@ public final class AuthMePremiumIntegrator {
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to clear AuthMe PremiumLoginVerifier for {}: {}",
-                    playerName, e.getMessage());
+                    playerName, e);
             }
 
             // 3. Delete the player's AuthMe database record, with cascade fallback.
@@ -391,8 +328,18 @@ public final class AuthMePremiumIntegrator {
                         }
                     }
                 }
+            } catch (Exception e) {
+                plugin.getLog().warn("Failed to unregister {} from AuthMe 6.0: {}",
+                    playerName, e);
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("AuthMe unregister exception trace", e);
+                }
+            }
 
-                // b) Remove from AuthMe's in-memory player cache (synchronous)
+            // b) Remove from AuthMe's in-memory player cache (synchronous)
+            // 0.5.0/F064: independent try-block — a DB failure must not skip the
+            // cache cleanup (each step is independent, as the comment promises)
+            try {
                 Object pc = getPlayerCache();
                 if (pc == null) {
                     if (plugin.getCore().isDebug()) {
@@ -406,11 +353,8 @@ public final class AuthMePremiumIntegrator {
                     }
                 }
             } catch (Exception e) {
-                plugin.getLog().warn("Failed to unregister {} from AuthMe 6.0: {}",
-                    playerName, e.getMessage());
-                if (plugin.getCore().isDebug()) {
-                    plugin.getLog().info("AuthMe unregister exception trace", e);
-                }
+                plugin.getLog().warn("Failed to clear AuthMe PlayerCache for {}: {}",
+                    playerName, e);
             }
         } else {
             // AuthMe 5.x: no premium feature, no caches.
@@ -439,7 +383,7 @@ public final class AuthMePremiumIntegrator {
                 if (plugin.getCore().isDebug()) {
                     plugin.getLog().info(
                     "AuthMe 5.x synchronous cleanup failed for {}, falling back to async API: {}",
-                    playerName, e.getMessage());
+                    playerName, e);
                 }
             }
 
@@ -455,7 +399,7 @@ public final class AuthMePremiumIntegrator {
                 }
             } catch (Exception e) {
                 plugin.getLog().warn("Failed to unregister {} from AuthMe 5.x: {}",
-                    playerName, e.getMessage());
+                    playerName, e);
             }
         }
     }
@@ -538,7 +482,7 @@ public final class AuthMePremiumIntegrator {
         } catch (Exception e) {
             if (plugin.getCore().isDebug()) {
                 plugin.getLog().info(
-                "ensureNotPremium check failed for {}: {}", playerName, e.getMessage());
+                "ensureNotPremium check failed for {}: {}", playerName, e);
             }
         }
     }
@@ -597,7 +541,7 @@ public final class AuthMePremiumIntegrator {
      * skips the blocking register dialog for first-time premium players.
      *
      * <p>Uses reflection to call DataSource.saveAuth(PlayerAuth). The
-     * PlayerAuth is built with a random password (the player never needs
+     * PlayerAuth is built with a empty hash (the player never needs
      * it — premium bypass skips password auth entirely) and the Mojang
      * UUID as both the premium UUID and the player UUID.
      *
@@ -670,7 +614,7 @@ public final class AuthMePremiumIntegrator {
      *
      * @return the injector instance, or null if not found
      */
-    private Object getAuthMeInjector() throws Exception {
+    private synchronized Object getAuthMeInjector() throws Exception {
         if (authMeInjector != null) {
             return authMeInjector;
         }
@@ -700,7 +644,7 @@ public final class AuthMePremiumIntegrator {
      *
      * @return the PendingPremiumCache instance, or null if not found
      */
-    private Object getPendingPremiumCache() throws Exception {
+    private synchronized Object getPendingPremiumCache() throws Exception {
         if (pendingPremiumCache != null) {
             return pendingPremiumCache;
         }
@@ -720,7 +664,7 @@ public final class AuthMePremiumIntegrator {
      *
      * @return the PremiumLoginVerifier instance, or null if not found
      */
-    private Object getPremiumLoginVerifier() throws Exception {
+    private synchronized Object getPremiumLoginVerifier() throws Exception {
         if (premiumLoginVerifier != null) {
             return premiumLoginVerifier;
         }
@@ -739,7 +683,7 @@ public final class AuthMePremiumIntegrator {
      *
      * @return the DataSource instance, or null if not found
      */
-    private Object getDataSource() throws Exception {
+    private synchronized Object getDataSource() throws Exception {
         if (dataSource != null) {
             return dataSource;
         }
@@ -846,7 +790,7 @@ public final class AuthMePremiumIntegrator {
 
             return true;
         } catch (Exception e) {
-            plugin.getLog().error("Failed to force-enable AuthMe enablePremium: {}", e.getMessage());
+            plugin.getLog().error("Failed to force-enable AuthMe enablePremium: {}", e);
             return false;
         }
     }
@@ -918,7 +862,7 @@ public final class AuthMePremiumIntegrator {
             return true;
         } catch (Exception e) {
             if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("Failed to unregister premium packet listener: {}", e.getMessage());
+                plugin.getLog().info("Failed to unregister premium packet listener: {}", e);
             }
             return false;
         }
@@ -1006,7 +950,7 @@ public final class AuthMePremiumIntegrator {
             }
         } catch (Exception e) {
             if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("Failed to close AuthMe preJoin dialog: {}", e.getMessage());
+                plugin.getLog().info("Failed to close AuthMe preJoin dialog: {}", e);
             }
         }
     }
@@ -1050,7 +994,7 @@ public final class AuthMePremiumIntegrator {
             }
         } catch (Exception e) {
             if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("Failed to close AuthMe preJoin login dialog: {}", e.getMessage());
+                plugin.getLog().info("Failed to close AuthMe preJoin login dialog: {}", e);
             }
         }
     }

@@ -48,7 +48,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
-import static java.util.stream.Collectors.toSet;
 
 import org.slf4j.Logger;
 
@@ -151,6 +150,13 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
         // 2. Determine language file based on config
         String language = config.getString("language");
+        // 0.5.0/F049: the value is concatenated into a file path — reject
+        // traversal/separator characters instead of writing outside the
+        // plugin directory
+        if (language == null || !language.matches("[a-zA-Z0-9_-]+")) {
+            plugin.getLog().warn("Invalid language value '{}' — falling back to 'en'", language);
+            language = "en";
+        }
         String messagesFile = "messages_" + language + ".yml";
         String defaultMessagesFile = "messages_en.yml";
 
@@ -194,12 +200,24 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             ? new ProxyAgnosticMojangResolver() : new MojangResolver();
 
         antiBot = createAntiBotService(config.getSection("anti-bot"));
-        Set<Proxy> proxies = config.getStringList("proxies")
-                .stream()
-                .map(proxy -> proxy.split(":"))
-                .map(proxy -> new InetSocketAddress(proxy[0], Integer.parseInt(proxy[1])))
-                .map(sa -> new Proxy(Type.HTTP, sa))
-                .collect(toSet());
+        // 0.5.0/F047: validate entries — a missing colon or non-numeric port
+        // would otherwise crash the whole plugin startup
+        Set<Proxy> proxies = new HashSet<>();
+        for (String proxyEntry : config.getStringList("proxies")) {
+            String[] parts = proxyEntry.split(":");
+            if (parts.length != 2) {
+                plugin.getLog().warn("Invalid proxies entry '{}' — expected host:port, skipping",
+                        proxyEntry);
+                continue;
+            }
+            try {
+                proxies.add(new Proxy(Type.HTTP,
+                        new InetSocketAddress(parts[0], Integer.parseInt(parts[1]))));
+            } catch (NumberFormatException ex) {
+                plugin.getLog().warn("Invalid proxies entry '{}' — port is not a number, skipping",
+                        proxyEntry);
+            }
+        }
 
         Collection<InetAddress> addresses = new HashSet<>();
         for (String localAddress : config.getStringList("ip-addresses")) {
@@ -284,6 +302,9 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             long expireTime = validatedDurationMs(plugin.getLog(), "expire",
                     botSection.getLong("expire") * 60 * 1_000L, 600_000L);
             if (expireTime > MAX_EXPIRE_RATE) {
+                plugin.getLog().warn("anti-bot.expire is capped at {} minutes (was {} minutes)"
+                                + " — the internal rate limiter cannot track longer windows",
+                        MAX_EXPIRE_RATE / 60_000, expireTime / 60_000);
                 expireTime = MAX_EXPIRE_RATE;
             }
             globalLimiter = new TickingRateLimiter(ticker, maxCon, expireTime);

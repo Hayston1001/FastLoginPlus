@@ -81,7 +81,8 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
 
         plugin.getPremiumPlayers().put(player.getUniqueId(), status);
 
-        StoredProfile profile = session.getProfile();
+        // 0.5.0/F008: super.run() supports a null session — the tail must too
+        StoredProfile profile = session == null ? null : session.getProfile();
         if (profile != null) {
             FloodgateState floodgate = profile.getFloodgate();
             if (floodgate != null) {

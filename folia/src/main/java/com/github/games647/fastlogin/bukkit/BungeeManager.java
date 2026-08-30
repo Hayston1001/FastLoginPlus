@@ -97,7 +97,12 @@ public class BungeeManager {
         if (enabled) {
             proxyIds = loadBungeeCordIds();
             if (proxyIds.isEmpty()) {
-                plugin.getLog().info("No valid IDs found. Minecraft proxy support cannot work in the current state");
+                // 0.5.0/F015: an empty or unparsable allowed-proxies.txt makes
+                // every incoming proxy ID untrusted — surface this at ERROR
+                // level because proxy support is effectively dead
+                plugin.getLog().error("allowed-proxies.txt contains no valid proxy IDs"
+                        + " — proxy (BungeeCord/Velocity) support cannot work."
+                        + " Add the proxy ID printed by the proxy plugin to the file.");
             }
 
             registerPluginChannels();

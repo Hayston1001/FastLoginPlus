@@ -122,6 +122,12 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
         // 0.5.0/F046: stop scheduling before closing shared resources
         scheduler.shutdown();
 
+        // 0.5.0/F074: release the global channel registrations so a reload
+        // does not leak them
+        getProxy().unregisterChannel(NamespaceKey.getCombined(getName(), ChangePremiumMessage.CHANGE_CHANNEL));
+        getProxy().unregisterChannel(NamespaceKey.getCombined(getName(), SuccessMessage.SUCCESS_CHANNEL));
+        getProxy().unregisterChannel(NamespaceKey.getCombined(getName(), DeletePremiumMessage.DELETE_CHANNEL));
+
         if (core != null) {
             core.close();
         }
