@@ -1,15 +1,11 @@
 # FastLoginPlus Changelog
 
-## Unreleased
+## v0.6.0
 
 ### Bug Fixes
 
-#### 0.5.0 Audit Fixes
-
 <details>
-<summary>
-Details(click to expand)
-</summary>
+<summary><strong>0.5.0 Audit Fixes</strong></summary>
 
 - **AuthMe integration**: premium-record cleanup during cracked sessions is now fail-closed —
   a premium-flagged AuthMe record without a matching FastLogin profile row (database reset or
@@ -44,10 +40,16 @@ Details(click to expand)
   survives unexpected reflection errors.
 - **Other**: offline-whitelist fails closed on errors; bungee login/success handlers null-guard
   missing sessions; the cracked self-command sends the correct message; the bukkit update-check
-  interval now matches the documented hours semantics; dead code and locale keys removed;
-  misleading documentation fixed; many smaller null-guards and race fixes.
-
-基于 0.5.0 代码审计的全面修复,要点:
+  interval now matches the documented hours semantics; kicks aimed at players that already
+  disconnected (e.g. vanilla 'Took too long to log in') are skipped instead of erroring; dead
+  code and locale keys removed; misleading documentation fixed; many smaller null-guards and
+  race fixes.
+- **Plugin message authentication (backend → proxy)**: the `ch-st`, `del-st` and `succ` channels now carry the sending backend's proxy allowlist as a trailing wire field, and the proxy drops messages whose echoed set does not contain its own proxy ID (fail-closed with a WARN) — closing the last unauthenticated plugin-message channel, which previously let any backend inside the network forge premium toggles, deletes or success-acks against the proxy database
+- New `verify-backend-messages` config key (proxy template): set it to `false` only temporarily while rolling out the upgrade — upgrade backends first, the proxy last (old backends send no echo and are rejected). On single-proxy networks this is equivalent to a config-shared secret; on multi-proxy networks a compromised backend can still echo its own allowlist (documented trust-model boundary, see the code comments)
+- **Storage concurrency**: a 64-stripe per-name lock now wraps every load-modify-save window (login flow, force-login persistence, proxy toggles, success-ack saves, premium/cracked commands), so concurrent flows for the same player can no longer silently overwrite each other; two fast `/flp premium|cracked` invocations also no longer double-save/double-fire
+- **SQLite upsert**: first-time saves are now `INSERT ... ON CONFLICT(Name) DO UPDATE` with a byte-exact case guard mirroring MySQL's HEX protection, so two concurrent first saves of the same name collapse into one row instead of losing the profile; the row id is backfilled via a name lookup when `getGeneratedKeys()` yields nothing on the update branch; `save` failures are reported through `saveQuietly` instead of being silently swallowed. Regression tests run against a real SQLite database, including a discriminating test that fails without the lock
+- **Velocity**: the `EventTask.withContinuation` continuation is now resumed exactly once on every path — a per-event CAS guard funnels all resumes through `resumeOnce`, and exceptions while applying the anti-bot decision (or firing the anti-bot event) are caught and still resume the login instead of hanging the connection until the read timeout
+- **Bukkit**: the configure-phase premium path now schedules the defensive toggle relay when the carrier player is missing (mirroring the Folia branch) — a pending premium toggle no longer waits for a restart to be delivered after an empty-server window
 
 - **AuthMe 集成**: 盗版会话路径上的 AuthMe premium 记录清理改为 fail-closed —— 当 AuthMe 记录
   带 premium 标记但 FastLogin 侧没有对应记录时(数据库重置/首次登录),记录会被保留并告警,
@@ -71,17 +73,19 @@ Details(click to expand)
   认证插件钩子调用加上 5 秒超时; 重放的 ENCRYPTION_BEGIN 包被拒绝而不是双重验证; 包监听器
   可在意外反射异常后存活. 
 - **其他**: 离线白名单在出错时 fail-closed; bungee 登录/成功处理器对缺失会话判空; cracked 自助
-  命令发送正确的消息; bukkit 更新检查间隔与文档的小时语义一致; 清理死代码与失效语言键;
-  修正失实文档; 多处判空与竞态小修. 
+  命令发送正确的消息; bukkit 更新检查间隔与文档的小时语义一致; 对已断开玩家的补踢改为静默跳过
+  (例如原版"登录耗时过长"已将其踢出时); 清理死代码与失效语言键; 修正失实文档; 多处判空与竞态小修.
+- **插件消息认证(后端 → 代理)**: `ch-st`、`del-st`、`succ` 三个通道现在携带发送方后端的代理白名单作为尾随字段, 代理端在校验回传集合不包含自身 ID 时丢弃消息并输出 WARN(fail-closed)—— 封堵最后一条无认证的插件消息通道, 此前网络内任意后端都可以伪造正版切换、删除或成功回执来篡改代理端数据库
+- 新增 `verify-backend-messages` 配置键(代理端模板): 仅在滚动升级期间临时设为 `false` —— 先升级全部后端, 最后升级代理(旧后端不带回传字段会被拒绝). 单代理网络下等价于共享密钥; 多代理网络中被入侵的后端仍可回显自身白名单(信任模型边界已在代码注释与设计文档中说明)
+- **存储并发**: 新增 64 条纹的名字级锁覆盖全部 load-modify-save 窗口(登录流程、强制登录持久化、代理端切换、成功回执落库、premium/cracked 命令), 同一玩家的并发流程不再互相静默覆盖; 快速连续的 `/flp premium|cracked` 也不再重复落库/重复触发事件
+- **SQLite upsert**: 首次保存改为 `INSERT ... ON CONFLICT(Name) DO UPDATE`, 并带字节级大小写守卫(与 MySQL 的 HEX 保护对齐), 两个并发的首次保存会收敛为一行而不是丢失记录; upsert 走更新分支且 `getGeneratedKeys()` 无行时回退按名查询回填 rowId; 保存失败通过 `saveQuietly` 上报而不是静默吞掉. 回归测试使用真实 SQLite 数据库, 含去掉锁必失败的判别用例
+- **Velocity**: `EventTask.withContinuation` 的续体现在在所有路径上恰好 resume 一次 —— 每事件一个 CAS 守卫, 所有 resume 收敛到 `resumeOnce`; 应用反机器人决策(或触发反机器人事件)抛出异常时会被捕获并仍然恢复登录, 不再把连接挂死到读超时
+- **Bukkit**: configure 阶段 premium 分支在载体玩家缺失时补上防御性中继调度(与 Folia 分支对齐)—— 空服期间排队的正版切换不再要等重启才能投递
 
 </details>
 
-#### Pending relay audit fixes
-
 <details>
-<summary>
-Details(click to expand)
-</summary>
+<summary><strong>Pending relay audit fixes</strong></summary>
 
 - Fixed a race where two conflicting console toggles (`/flp premium X` then `/flp cracked X`) could relay the stale captured value: the relay task now atomically removes the queue entry and sends the CURRENT queued value (`PendingRelayStore.removeToggle`), so the last command always wins (bukkit, folia and the Paper configure-phase self-relay path).
 - A pending cracked toggle for a player who joins while nobody else is online is no longer silently dropped by the Paper configure listener (autoRegister skip): the entry stays queued and is relayed to the proxy once any player reaches the PLAY phase, so the proxy database is actually flipped to cracked.
@@ -101,14 +105,43 @@ Details(click to expand)
 
 </details>
 
+### Changes
+
+<details>
+<summary><strong>/flp help restricted to operators</strong></summary>
+
+- The bare `/flp` command now requires server operator permission: other senders receive the localized `no-permission` message
+
+- 裸 `/flp` 命令现在仅限服务器管理员(OP)使用: 其他发送者会收到本地化的 `no-permission` 提示
+
+</details>
+
+<details>
+<summary><strong>Quieter update-check failures</strong></summary>
+
+- Update-check network failures are now logged as a single WARN line with the failure reason instead of an INFO entry with a full stack trace (the trace moved to debug level)
+
+- 更新检查的网络失败现在以一条简短的 WARN 日志记录失败原因, 不再以 INFO 级别输出完整堆栈(堆栈移至 debug 级别)
+
+</details>
+
+<details>
+<summary><strong>ProtocolLib async design record</strong></summary>
+
+- The decision to keep the ProtocolLib login listener registered as an async handler is now documented in `PROTOCOLLIB-ASYNC-DESIGN.md` at the repository root: rationale, compensating controls, residual risk with operator guidance for the startup self-check warning, and re-evaluation triggers
+- A misleading comment in the ProtocolLib kick source was corrected (bukkit + folia)
+
+- 保持 ProtocolLib 登录监听器以 async 方式注册的决策已记录到仓库根目录的 `PROTOCOLLIB-ASYNC-DESIGN.md`: 决策理由、补偿措施、残余风险与启动自检告警的处置指引、重新评估触发条件
+- 修正 ProtocolLib 踢出源码中的一处误导性注释(bukkit + folia)
+
+</details>
+
 ### Reminder
 
-For users of MySQL:
-
+For users of MySQL:  
 The recommended value for `lifetime` is **1800** seconds. Values below 300 are now clamped to 300 with a startup warning.
 
-使用 MySQL 数据库的用户:
-
+使用 MySQL 数据库的用户:  
 `lifetime` 推荐值为 **1800** 秒. 模板默认值已由 30 提升为 1800,低于 300 的值 会被钳制到 300 并在启动时输出警告. 
 
 ## v0.5.0
