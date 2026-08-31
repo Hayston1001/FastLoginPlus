@@ -247,3 +247,27 @@ ServerRSAPublicKeyFile:
 # proxies:
 #   - 'xyz.com:1337'
 proxies:
+
+# ========================================
+# Web Management Panel
+# ========================================
+# Embedded web UI for managing players and viewing anti-bot stats.
+# On a proxy setup (BungeeCord/Velocity) enable it here on the proxy only,
+# NOT on the backend Bukkit/Folia servers.
+web:
+  enabled: false
+  # Host to bind to
+  #   '' (empty)  - all interfaces, IPv4 + IPv6
+  #   '0.0.0.0'   - all interfaces, IPv4 only
+  #   '::'        - all interfaces, IPv4 + IPv6
+  #   '127.0.0.1' - local access only
+  host: ''
+  # Port to listen on
+  port: 8080
+  # Authentication token (min 16 characters, auto-generated on first start if empty)
+  # Access the panel at http://host:port and enter this token
+  token: ''
+  # Language for the web panel. Built-in: "en" (English), "zh" (中文)
+  # You can also use a custom value, e.g. "ja" -> loads webui_ja.json from plugin folder
+  # Users can also switch language in the panel (stored in browser localStorage)
+  lang: 'en'

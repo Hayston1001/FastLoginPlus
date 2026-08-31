@@ -49,6 +49,14 @@ import net.md_5.bungee.config.Configuration;
  */
 public final class ConfigRefresher {
 
+    /**
+     * Bundled config templates. The union of their top-level keys defines
+     * which keys the plugin "knows" — a user key outside that union is
+     * treated as user-added and re-appended after the refresh (0.6.0/F005).
+     */
+    private static final List<String> BUNDLED_TEMPLATES = java.util.Arrays.asList(
+            "config.yml", "config-proxy.yml");
+
     private ConfigRefresher() {
         // utility class
     }
@@ -183,8 +191,102 @@ public final class ConfigRefresher {
             }
         }
 
-        // 4. Write back
+        // 4. Re-append genuinely user-added keys (0.6.0/F005): keys that
+        // neither bundled template knows would otherwise be silently dropped
+        // by the template walk. Keys that the full backend template knows but
+        // the selected template does not keep their 0.5.0 migration-trim
+        // semantics (see ConfigRefresherTest) — the union check below
+        // excludes them from the append.
+        appendUserAddedKeys(classLoader, userValues, output);
+
+        // 5. Write back
         writeOutput(output, configPath);
+    }
+
+    /**
+     * Append user-added top-level keys back to the end of the output.
+     *
+     * <p>A top-level key counts as "user-added" when neither bundled
+     * template knows it. Such keys would otherwise be silently dropped by
+     * the template walk (0.6.0/F005). Grouped values are emitted as a
+     * section; lists are expanded to their items.</p>
+     *
+     * @param classLoader to load the bundled templates from
+     * @param userValues  the flattened user configuration
+     * @param output      the output lines to append to
+     * @throws IOException if reading a bundled template fails
+     */
+    private static void appendUserAddedKeys(ClassLoader classLoader, Map<String, Object> userValues,
+                                            List<String> output) throws IOException {
+        java.util.Set<String> knownKeys = new java.util.LinkedHashSet<>();
+        for (String template : BUNDLED_TEMPLATES) {
+            List<String> lines = readResourceLines(classLoader, template);
+            if (lines == null) {
+                continue;
+            }
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
+                    continue;
+                }
+                if (getIndentLevel(line) == 0) {
+                    int colonIdx = trimmed.indexOf(':');
+                    if (colonIdx > 0) {
+                        knownKeys.add(trimmed.substring(0, colonIdx).trim());
+                    }
+                }
+            }
+        }
+
+        // Collect the user's top-level keys that are unknown to every bundled
+        // template, in the order they appear in the user's config
+        java.util.List<String> missingTopKeys = new ArrayList<>();
+        for (String fullKey : userValues.keySet()) {
+            String topLevel = fullKey.contains(".")
+                    ? fullKey.substring(0, fullKey.indexOf('.'))
+                    : fullKey;
+            if (!knownKeys.contains(topLevel) && !missingTopKeys.contains(topLevel)) {
+                missingTopKeys.add(topLevel);
+            }
+        }
+        if (missingTopKeys.isEmpty()) {
+            return;
+        }
+
+        output.add("");
+        output.add("# (user-added, preserved)");
+        for (String topKey : missingTopKeys) {
+            Object topValue = userValues.get(topKey);
+            if (topValue != null && !(topValue instanceof List)) {
+                // top-level scalar lives directly on the key line
+                output.add(topKey + ": " + toScalarYaml(topValue));
+            } else {
+                output.add(topKey + ":");
+            }
+            String prefix = topKey + ".";
+            for (Map.Entry<String, Object> entry : userValues.entrySet()) {
+                String key = entry.getKey();
+                Object value = entry.getValue();
+
+                String rest;
+                if (key.equals(topKey)) {
+                    // the top-level key itself — written above
+                    continue;
+                } else if (key.startsWith(prefix)) {
+                    rest = key.substring(prefix.length());
+                } else {
+                    continue;
+                }
+                if (value instanceof List) {
+                    output.add("  " + rest + ":");
+                    for (Object item : (List<?>) value) {
+                        output.add("    - " + toScalarYaml(item));
+                    }
+                } else {
+                    output.add("  " + rest + ": " + toScalarYaml(value));
+                }
+            }
+        }
     }
 
     /**

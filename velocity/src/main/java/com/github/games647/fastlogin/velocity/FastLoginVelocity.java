@@ -85,6 +85,12 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
 
     private FastLoginCore<Player, CommandSource, FastLoginVelocity> core;
     private AsyncScheduler scheduler;
+
+    // 0.6.0/F003: kept as an instance field so onProxyShutdown() can stop the
+    // web panel (releasing the port and threads). Declared without an
+    // initializer on purpose — the WebServer class must only load behind the
+    // Java 17+ version gate inside startWebPanel() (0.6.0/F057).
+    private WebServer webServer;
     private FloodgateService floodgateService;
     private GeyserService geyserService;
     private UUID proxyId;
@@ -131,6 +137,12 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     }
 
     private void startWebPanel() {
+        // 0.6.0/F003: guard against a double enable — restart the panel
+        // instead of leaking the previous instance
+        if (webServer != null) {
+            stopWebPanel();
+        }
+
         try {
             // Read web config from core config
             net.md_5.bungee.config.Configuration config = core.getConfig();
@@ -157,7 +169,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
                 version = "unknown";
             }
 
-            WebServer webServer = new WebServer(logger,
+            webServer = new WebServer(logger,
                     core.getStorage(), core.getAntiBotService(),
                     version, getPluginFolder());
             webServer.setOnlinePlayersSupplier(() ->
@@ -177,11 +189,33 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
             webServer.start(host, port, token);
         } catch (Exception e) {
             logger.error("Failed to start web management panel", e);
+            webServer = null;
+        }
+    }
+
+    /**
+     * Stop the web management panel, if one is running (0.6.0/F003).
+     *
+     * <p>Releases the HTTP port and the Jetty threads so a following
+     * re-enable can bind the same port again.</p>
+     */
+    private void stopWebPanel() {
+        if (webServer != null) {
+            try {
+                webServer.stop();
+            } catch (Exception e) {
+                logger.error("Failed to stop web management panel", e);
+            } finally {
+                webServer = null;
+            }
         }
     }
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
+        // 0.6.0/F003: stop the web panel first so it cannot serve requests
+        // against the closing storage/scheduler and releases its port
+        stopWebPanel();
         // 0.5.0/F046: stop scheduling before closing shared resources
         scheduler.shutdown();
 

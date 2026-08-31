@@ -144,6 +144,36 @@ class ConfigRefresherTest {
     }
 
     @Test
+    void userAddedWebKeysAndCustomKeysSurviveProxyRefresh() throws IOException {
+        // 0.6.0/F005: keys a user manually added to a proxy config must not
+        // be silently dropped by the template refresh — the web panel section
+        // (now part of the proxy template) and genuinely custom keys alike.
+        Path config = copyResource(PROXY_TEMPLATE);
+        Configuration userConfig = load(config);
+        userConfig.set("web.enabled", true);
+        userConfig.set("web.token", "x");
+        userConfig.set("my-custom-section.flag", true);
+        provider.save(userConfig, config.toFile());
+
+        ConfigRefresher.refresh(getClass().getClassLoader(), config, load(config), PROXY_TEMPLATE);
+
+        Configuration refreshed = load(config);
+        assertTrue(refreshed.getBoolean("web.enabled"),
+                "user-set web.enabled dropped by proxy template refresh");
+        assertEquals("x", refreshed.getString("web.token"),
+                "user-set web.token dropped by proxy template refresh");
+
+        // keys unknown to every bundled template are re-appended and marked
+        String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
+        assertTrue(output.contains("# (user-added, preserved)"),
+                "user-added marker comment missing: " + output);
+        assertTrue(output.contains("my-custom-section:"),
+                "custom section dropped: " + output);
+        assertTrue(refreshed.getBoolean("my-custom-section.flag"),
+                "custom section value dropped by refresh");
+    }
+
+    @Test
     void ambiguousScalarUserValuesStayQuotedStrings() throws IOException {
         // 0.5.0/F030: strings that YAML 1.1 would resolve as boolean/number/null
         // must be written quoted so they keep their string type across the
