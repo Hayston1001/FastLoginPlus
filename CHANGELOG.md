@@ -2,6 +2,8 @@
 
 ## v0.6.0
 
+> This is a release focused on stability fixes.
+
 ### Bug Fixes
 
 <details>
