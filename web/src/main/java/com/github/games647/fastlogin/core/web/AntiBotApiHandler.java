@@ -86,7 +86,8 @@ public class AntiBotApiHandler {
         IpBanManager banManager = antiBot.getIpBanManager();
 
         Map<String, Object> stats = new HashMap<>();
-        stats.put("enabled", true);
+        // 0.6.0/F024: report the real configuration-driven state
+        stats.put("enabled", antiBot.isEnabled());
         stats.put("banCount", banManager.banCount());
         stats.put("action", antiBot.getLimitReachedAction().name());
 
@@ -115,10 +116,17 @@ public class AntiBotApiHandler {
     public void handleBan(Context ctx) {
         Map<String, Object> body = ctx.bodyAsClass(Map.class);
 
+        // 0.6.0/F025: type-safe field extraction - a non-string "ip" in the
+        // JSON body used to throw ClassCastException (-> 500) instead of 400
+        if (!(body.get("ip") instanceof String)) {
+            ctx.status(400).json(of("error", "Missing or invalid 'ip' field (string expected)"));
+            return;
+        }
+
         String ip = (String) body.get("ip");
         Object durationObj = body.get("duration");
 
-        if (ip == null || ip.isEmpty()) {
+        if (ip.isEmpty()) {
             ctx.status(400).json(of("error", "Missing 'ip' field"));
             return;
         }

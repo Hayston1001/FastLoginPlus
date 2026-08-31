@@ -8,15 +8,12 @@
   "login.error.invalid": "Token 无效",
   "login.error.connectionFailed": "无法连接到服务器",
   "login.hint": "输入 <code>demo</code> 可预览界面",
-
   "header.logout": "登出",
   "header.status.online": "在线",
   "header.disconnected": "未连接",
-
   "tab.online": "在线玩家",
   "tab.players": "玩家数据库",
   "tab.antibot": "Anti-bot",
-
   "online.refresh": "刷新",
   "online.count": "在线玩家: {count}",
   "online.empty": "暂无在线玩家",
@@ -32,7 +29,6 @@
   "online.action.switchCracked": "切换为离线",
   "online.action.switchPremium": "切换为正版",
   "online.action.delete": "删除",
-
   "players.search.placeholder": "输入玩家名或 UUID 的任意部分...",
   "players.search.label": "搜索玩家",
   "players.search.btn": "搜索",
@@ -51,7 +47,6 @@
   "players.action.switchCracked": "切换为离线",
   "players.action.switchPremium": "切换为正版",
   "players.action.delete": "删除",
-
   "antibot.stat.bans": "封禁 IP",
   "antibot.stat.action": "限制动作",
   "antibot.ban.title": "手动封禁",
@@ -65,10 +60,8 @@
   "antibot.bans.col.remaining": "剩余时间",
   "antibot.bans.col.actions": "操作",
   "antibot.bans.action.unban": "解封",
-
   "modal.confirm": "确认",
   "modal.cancel": "取消",
-
   "msg.deleteConfirm": "确定要删除玩家 {name} 的记录吗？",
   "msg.deleteSuccess": "已删除玩家 {name}",
   "msg.updateSuccess": "已更新玩家 {name}",
@@ -85,28 +78,30 @@
   "msg.connectionRestored": "连接已恢复",
   "msg.reconnectFailed": "重连失败，请稍后再试",
   "msg.loadFailed": "加载数据失败，请检查服务器状态",
-
   "type.premium": "Java 正版",
   "type.cracked": "Java 离线",
   "type.bedrock": "基岩版",
-
   "floodgate.java": "Java",
   "floodgate.bedrock": "Bedrock",
   "floodgate.linked": "Linked",
   "floodgate.unknown": "Unknown",
-
   "badge.premium": "正版",
   "badge.cracked": "离线",
   "badge.bedrock": "基岩版",
-
   "duration.hours": "{h}小时{m}分钟",
   "duration.minutes": "{m}分钟",
   "duration.seconds": "{s}秒",
-
   "lang.selector": "语言",
-
   "disconnect.title": "服务器已断开连接",
   "disconnect.message": "无法连接到服务器，请检查服务器是否正在运行以及您的网络连接。",
   "disconnect.reconnect": "重新连接",
-  "disconnect.reconnecting": "正在重连..."
+  "disconnect.reconnecting": "正在重连...",
+  "login.error.rateLimited": "尝试过于频繁 - 请稍后再试",
+  "aria.openMenu": "打开菜单",
+  "aria.closeMenu": "关闭菜单",
+  "aria.languageSelector": "语言选择器",
+  "aria.toggleTheme": "切换主题",
+  "aria.searchPlayers": "搜索玩家",
+  "aria.ipAddress": "IP 地址",
+  "aria.banDuration": "封禁时长"
 }

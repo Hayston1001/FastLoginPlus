@@ -92,6 +92,11 @@
                             <pattern>org.eclipse.jetty</pattern>
                             <shadedPattern>fastlogin.jetty</shadedPattern>
                         </relocation>
+                        <!-- 0.6.0/F059: jackson relocation aligned across platforms -->
+                        <relocation>
+                            <pattern>com.fasterxml.jackson</pattern>
+                            <shadedPattern>fastlogin.jackson</shadedPattern>
+                        </relocation>
                     </relocations>
                     <transformers>
                         <transformer

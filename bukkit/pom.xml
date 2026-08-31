@@ -95,6 +95,11 @@
                             <pattern>org.eclipse.jetty</pattern>
                             <shadedPattern>fastlogin.jetty</shadedPattern>
                         </relocation>
+                        <!-- 0.6.0/F059: jackson relocation aligned across platforms -->
+                        <relocation>
+                            <pattern>com.fasterxml.jackson</pattern>
+                            <shadedPattern>fastlogin.jackson</shadedPattern>
+                        </relocation>
                     </relocations>
                     <!-- Rename the service file too to let SLF4J api find our own relocated jdk logger -->
                     <!-- Located in META-INF/services -->

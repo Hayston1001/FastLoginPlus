@@ -168,10 +168,17 @@ public class AntiBotService {
     }
 
     /**
-     * Get the IP ban manager.
+     * Whether the anti-bot protection is enabled by configuration (0.6.0/F024).
      *
-     * @return the IP ban manager
+     * <p>Previously only {@code enabled=true} was reported (hardcoded),
+     * desynchronizing the WebUI from the actual protection state.</p>
+     *
+     * @return true when the anti-bot layers are active
      */
+    public boolean isEnabled() {
+        return enabled;
+    }
+
     public IpBanManager getIpBanManager() {
         return ipBanManager;
     }

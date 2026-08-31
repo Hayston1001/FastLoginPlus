@@ -59,10 +59,18 @@ public class StatusApiHandler {
      * @param ctx the Javalin context
      */
     public void handle(Context ctx) {
+        // 0.6.0/F030: same null-storage protection as PlayerApiHandler
+        if (storage == null) {
+            ctx.status(503).json(java.util.Collections.singletonMap("error",
+                    "No storage backend configured"));
+            return;
+        }
+
         Map<String, Object> status = new HashMap<>();
         status.put("version", pluginVersion);
         status.put("databaseType", storage.getDatabaseType());
-        status.put("antiBotEnabled", true);
+        // 0.6.0/F024: real configuration-driven anti-bot state
+        status.put("antiBotEnabled", antiBot != null && antiBot.isEnabled());
 
         int onlineCount = 0;
         if (onlinePlayersSupplier != null) {

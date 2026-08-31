@@ -54,6 +54,13 @@ public class OnlineApiHandler {
      * @param ctx the Javalin context
      */
     public void handle(Context ctx) {
+        // 0.6.0/F030: same null-storage protection as PlayerApiHandler
+        if (storage == null) {
+            ctx.status(503).json(java.util.Collections.singletonMap("error",
+                    "No storage backend configured"));
+            return;
+        }
+
         if (onlinePlayersSupplier == null) {
             ctx.json(Collections.emptyList());
             return;

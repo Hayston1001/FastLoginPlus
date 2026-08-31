@@ -141,7 +141,9 @@ public class PlayerApiHandler {
             return;
         }
 
-        ctx.json(profile);
+        // 0.6.0/F028: serialize through the PlayerEntry DTO so internal
+        // StoredProfile state (saveLock/rowId/optId) never leaks into JSON
+        ctx.json(new PlayerEntry(profile));
     }
 
     /**
@@ -164,6 +166,7 @@ public class PlayerApiHandler {
         // null there); the existence check is skipped and the platform
         // listener — which relays to the proxy — is the authority.
         StoredProfile profile = null;
+        boolean accepted = false;
         if (storage != null) {
             // 0.6.0/F046: strict lookup so unknown players get a 404 and the
             // fallback path below can never INSERT a fresh row for them
@@ -177,6 +180,9 @@ public class PlayerApiHandler {
         if (toggleListener != null) {
             // Platform performs the full toggle exactly like the commands
             toggleListener.onPremiumToggle(name, premium);
+            // 0.6.0/F029: the toggle runs asynchronously on the platform side
+            // and its persistence result never reaches the WebUI
+            accepted = true;
         } else if (profile != null) {
             // Fallback for embedders without a platform listener: direct DB write.
             // 0.5.0/F020: run the whole load-modify-save window under the
@@ -218,8 +224,12 @@ public class PlayerApiHandler {
         response.put("success", true);
         response.put("name", name);
         response.put("premium", premium);
+        if (accepted) {
+            response.put("async", true);
+        }
 
-        ctx.json(response);
+        // 0.6.0/F029: listener path is fire-and-forget -> 202 Accepted
+        ctx.status(accepted ? 202 : 200).json(response);
     }
 
     /**

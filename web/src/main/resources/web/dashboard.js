@@ -3,7 +3,9 @@
 
 // ── State ──────────────────────────────────────────
 const token = localStorage.getItem('flp-token') || '';
-const isDemo = localStorage.getItem('flp-demo') === '1';
+// 0.6.0/F042: demo mode is session-scoped so a stale demo flag can no
+// longer masquerade as the real panel in later sessions
+const isDemo = sessionStorage.getItem('flp-demo') === '1';
 
 if (!token) {
     location.href = 'index.html';
@@ -14,6 +16,11 @@ let onlinePlayers = [];
 let playersData = { players: [], total: 0, page: 1, size: 20, totalPages: 1 };
 let bansData = [];
 let statusRefreshInterval = null;
+// 0.6.0/F036: adaptive status polling (backoff after 429/5xx)
+const STATUS_POLL_BASE_MS = 30000;
+const STATUS_POLL_MAX_MS = 300000;
+let statusPollMs = STATUS_POLL_BASE_MS;
+let statusPollFailures = 0;
 let lastOnlineSnapshot = '';
 let searchDebounceTimer = null;
 let isConnected = true;
@@ -288,23 +295,41 @@ const confirmNo = document.getElementById('confirm-no');
         reconnectBtn.addEventListener('click', attemptReconnect);
     }
 
-    loadStatus();
+    loadStatus().catch(() => {/* failure handled by the poller */});
     // Restore saved tab, default to 'online'
     const savedTab = localStorage.getItem('flp-tab') || 'online';
     switchTab(savedTab);
     startCountdown();
 
-    // Refresh status every 30s
-    statusRefreshInterval = setInterval(loadStatus, 30000);
+    // 0.6.0/F036: adaptive polling - a fixed 30s interval kept hammering a
+    // rate-limited (429) or degraded server, flashing the disconnect overlay
+    statusRefreshInterval = setInterval(pollStatusWithBackoff, statusPollMs);
 })();
+
+async function pollStatusWithBackoff() {
+    try {
+        await loadStatus();
+        statusPollFailures = 0;
+        statusPollMs = STATUS_POLL_BASE_MS;
+    } catch (error) {
+        statusPollFailures++;
+        // 429 backs off faster and further than other errors
+        const factor = error && String(error.message).includes('Too many requests') ? 2 : 1.5;
+        statusPollMs = Math.min(STATUS_POLL_MAX_MS, Math.round(statusPollMs * factor));
+    } finally {
+        clearInterval(statusRefreshInterval);
+        statusRefreshInterval = setInterval(pollStatusWithBackoff, statusPollMs);
+    }
+}
 
 // ── Logout ─────────────────────────────────────────
 function logout() {
     stopCountdown();
     if (statusRefreshInterval) clearInterval(statusRefreshInterval);
     localStorage.removeItem('flp-token');
-    localStorage.removeItem('flp-demo');
     localStorage.removeItem('flp-tab');
+    // 0.6.0/F042: demo mode now lives in sessionStorage (per browser session)
+    sessionStorage.removeItem('flp-demo');
     location.href = 'index.html';
 }
 
@@ -404,13 +429,12 @@ function renderOnlinePlayers() {
 
     onlineEmpty.style.display = 'none';
     onlineTbody.innerHTML = onlinePlayers.map(player => {
-        const isPremium = player.type === 'premium';
         const isBedrock = player.type === 'bedrock';
         return `
         <tr>
             <td data-label="${I18n.t('online.col.name')}">${escapeHtml(player.name)}</td>
             <td data-label="${I18n.t('online.col.uuid')}"><code class="mono">${escapeHtml(player.uuid || '—')}</code></td>
-            <td data-label="${I18n.t('online.col.mode')}">${isPremium ? `<span class="badge badge-premium">${I18n.t('badge.premium')}</span>` : `<span class="badge badge-cracked">${I18n.t('badge.cracked')}</span>`}</td>
+            <td data-label="${I18n.t('online.col.mode')}">${getLoginTypeBadge(player.type)}</td>
             <td data-label="${I18n.t('online.col.client')}">${isBedrock ? `<span class="badge badge-bedrock">${I18n.t('floodgate.bedrock')}</span>` : `<span class="badge badge-java">${I18n.t('floodgate.java')}</span>`}</td>
             <td data-label="${I18n.t('online.col.ip')}" class="mono">${escapeHtml(player.lastIp || '-')}</td>
             <td data-label="${I18n.t('online.col.actions')}">${getOnlineActions(player)}</td>
@@ -482,7 +506,12 @@ searchInput.addEventListener('keydown', (e) => {
 prevPageBtn.addEventListener('click', () => { if (playersData.page > 1) { playersData.page--; loadPlayers(); } });
 nextPageBtn.addEventListener('click', () => { if (playersData.page < playersData.totalPages) { playersData.page++; loadPlayers(); } });
 
+// 0.6.0/F038: stale-response guard - concurrent player searches previously
+// raced and the slowest (not the newest) response won
+let playersRequestId = 0;
+
 async function loadPlayers() {
+    const requestId = ++playersRequestId;
     try {
         showTableSkeleton(playersTbody, 7);
 
@@ -491,9 +520,16 @@ async function loadPlayers() {
         if (query) endpoint += `&q=${encodeURIComponent(query)}`;
         playersData = await api(endpoint);
 
+        if (requestId !== playersRequestId) {
+            return; // a newer request superseded this one
+        }
+
         hideTableSkeleton(playersTbody);
         renderPlayers();
     } catch (error) {
+        if (requestId !== playersRequestId) {
+            return;
+        }
         hideTableSkeleton(playersTbody);
         showToast('error', I18n.t('msg.loadFailed'));
         console.error('Failed to load players:', error);
@@ -750,6 +786,8 @@ function formatDate(instant) {
 }
 
 function formatDuration(ms) {
+    // 0.6.0/F039: missing/NaN inputs would render "NaNd 5h" style garbage
+    if (ms === undefined || ms === null || Number.isNaN(Number(ms))) return '—';
     if (ms <= 0) return I18n.t('msg.expired');
     const seconds = Math.floor(ms / 1000);
     const minutes = Math.floor(seconds / 60);

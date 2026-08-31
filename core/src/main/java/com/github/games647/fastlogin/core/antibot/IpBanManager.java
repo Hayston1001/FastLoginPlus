@@ -128,11 +128,13 @@ public class IpBanManager {
     }
 
     /**
-     * Get a list of currently banned IP addresses with their unban times.
+     * Get a list of currently banned IP addresses and how long each ban
+     * is still going to last (0.6.0/F021: aligned with the implementation
+     * and the WebUI, which consumes {@code remainingMs}).
      *
      * <p>Expired entries are cleaned up lazily during this call.</p>
      *
-     * @return a list of maps containing "ip" and "unbanTime" keys
+     * @return a list of maps containing "ip" and "remainingMs" keys
      */
     public java.util.List<java.util.Map<String, Object>> getBannedIps() {
         cleanup(); // Clean up expired entries first

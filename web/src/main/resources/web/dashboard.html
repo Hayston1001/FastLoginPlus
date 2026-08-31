@@ -2,6 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FastLoginPlus</title>
     <link rel="stylesheet" href="style.css?v=10">
@@ -10,7 +11,7 @@
     <div id="toast-container" class="toast-container"></div>
 
     <header>
-        <button class="hamburger" id="menu-toggle" aria-label="Open menu">
+        <button class="hamburger" id="menu-toggle" data-i18n-aria="aria.openMenu">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
                 <path d="M3 5h14M3 10h14M3 15h14"/>
             </svg>
@@ -28,12 +29,12 @@
         </nav>
         <div class="header-right">
             <div class="lang-selector">
-                <select id="lang-select" aria-label="Language selector">
+                <select id="lang-select" data-i18n-aria="aria.languageSelector">
                     <option value="en">English</option>
                     <option value="zh">中文</option>
                 </select>
             </div>
-            <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">
+            <button class="theme-toggle" id="theme-toggle" data-i18n-aria="aria.toggleTheme">
                 <svg class="icon-sun" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
                     <circle cx="10" cy="10" r="4"/>
                     <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.93 4.93l1.41 1.41M13.66 13.66l1.41 1.41M4.93 15.07l1.41-1.41M13.66 6.34l1.41-1.41"/>
@@ -57,7 +58,7 @@
                 </svg>
                 <a class="brand-name" href="https://github.com/Hayston1001/FastLoginPlus" target="_blank" rel="noopener noreferrer">FastLoginPlus</a>
             </div>
-            <button class="sidebar-close" id="sidebar-close" aria-label="Close menu">
+            <button class="sidebar-close" id="sidebar-close" data-i18n-aria="aria.closeMenu">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
                     <path d="M5 5l10 10M15 5l-10 10"/>
                 </svg>
@@ -115,7 +116,7 @@
         <div id="tab-players" class="tab-content" role="tabpanel">
             <div class="toolbar">
                 <div class="search-bar">
-                    <input type="text" id="search-input" data-i18n-placeholder="players.search.placeholder" aria-label="Search players">
+                    <input type="text" id="search-input" data-i18n-placeholder="players.search.placeholder" data-i18n-aria="aria.searchPlayers">
                     <button id="search-btn" class="btn-primary" data-i18n="players.search.btn"></button>
                     <button id="reset-search-btn" class="btn-ghost" data-i18n="players.search.reset"></button>
                 </div>
@@ -162,8 +163,8 @@
                     <h3 data-i18n="antibot.ban.title"></h3>
                 </div>
                 <div class="ban-form">
-                    <input type="text" id="ban-ip-input" data-i18n-placeholder="antibot.ban.ipPlaceholder" aria-label="IP Address">
-                    <input type="number" id="ban-duration-input" data-i18n-placeholder="antibot.ban.durationPlaceholder" aria-label="Ban Duration">
+                    <input type="text" id="ban-ip-input" data-i18n-placeholder="antibot.ban.ipPlaceholder" data-i18n-aria="aria.ipAddress">
+                    <input type="number" id="ban-duration-input" data-i18n-placeholder="antibot.ban.durationPlaceholder" data-i18n-aria="aria.banDuration">
                     <button id="ban-btn" class="btn-danger" data-i18n="antibot.ban.btn"></button>
                 </div>
             </div>
@@ -220,8 +221,8 @@
         </div>
     </div>
 
-    <script src="i18n.js?v=10"></script>
+    <script src="i18n.js?v=11"></script>
     <script src="theme.js?v=10"></script>
-    <script src="dashboard.js?v=11"></script>
+    <script src="dashboard.js?v=12"></script>
 </body>
 </html>

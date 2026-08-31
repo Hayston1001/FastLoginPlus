@@ -328,4 +328,48 @@ class WebServerHardeningTest {
 
         return http.send(request, HttpResponse.BodyHandlers.ofString());
     }
+
+    // ---- W4: F025 type-safe ban body, F014 lang endpoint rate limited ----
+
+    @Test
+    void banRejectsNonStringIpField() throws Exception {
+        Ticker ticker = mock(Ticker.class);
+        when(ticker.read()).thenReturn(0L);
+        IpBanManager banManager = new IpBanManager(ticker);
+        AntiBotService antiBot = mock(AntiBotService.class);
+        when(antiBot.getIpBanManager()).thenReturn(banManager);
+
+        WebServer banServer = new WebServer(LoggerFactory.getLogger("WebServerHardeningTest"),
+                storage, antiBot, "test", null);
+        banServer.start("127.0.0.1", 0, TOKEN);
+        try {
+            HttpClient http = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder(
+                            URI.create("http://127.0.0.1:" + banServer.port() + "/api/antibot/ban"))
+                    .header("Authorization", "Bearer " + TOKEN)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{\"ip\": 12345}"))
+                    .build();
+
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            assertEquals(400, response.statusCode(),
+                    "a non-string ip field must be rejected with 400 (F025), not 500");
+        } finally {
+            banServer.stop();
+        }
+    }
+
+    @Test
+    void languageEndpointIsRateLimitedToo() throws Exception {
+        HttpResponse<String> overLimit = null;
+        for (int i = 0; i < 11; i++) {
+            HttpResponse<String> response = get("/api/lang/en", null, null);
+            if (i == 10) {
+                overLimit = response;
+            }
+        }
+
+        assertEquals(429, overLimit.statusCode(),
+                "the public language endpoint must be rate limited as well (F014)");
+    }
 }

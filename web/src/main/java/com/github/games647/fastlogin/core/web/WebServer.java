@@ -150,22 +150,36 @@ public class WebServer {
                 }));
             }
 
+            // 0.6.0/F041: defense-in-depth response headers
+            config.routes.before(ctx -> {
+                ctx.header("X-Content-Type-Options", "nosniff");
+                ctx.header("X-Frame-Options", "DENY");
+                ctx.header("Content-Security-Policy",
+                        "default-src 'self'; img-src 'self' data:; "
+                                + "style-src 'self' 'unsafe-inline'; script-src 'self'");
+            });
+
             // Authentication middleware
             config.routes.before(ctx -> {
-                // Skip static file requests and language API (public, no auth needed)
                 String path = ctx.path();
-                if (!path.startsWith("/api/") || path.startsWith("/api/lang/")) {
+                if (!path.startsWith("/api/")) {
                     return;
                 }
 
-                // Rate limit BEFORE the token check so invalid-token brute forcing
-                // is throttled too, not only correctly authenticated traffic.
+                // Rate limit BEFORE the token check (0.6.0/F014: the language
+                // API counts too) so brute forcing and public endpoint
+                // hammering are throttled alike.
                 // (0.6.0/F001) Throwing is what actually interrupts the Javalin
                 // pipeline — only writing a status and returning does not stop
                 // the endpoint handler from running and overwriting the body.
                 String clientIp = normalizeIp(ctx.ip());
                 if (!checkRateLimit(clientIp)) {
                     throw new TooManyRequestsResponse("Too many requests");
+                }
+
+                // Skip the token check for the language API (public)
+                if (path.startsWith("/api/lang/")) {
+                    return;
                 }
 
                 // Constant-time comparison — a plain String.equals() on the

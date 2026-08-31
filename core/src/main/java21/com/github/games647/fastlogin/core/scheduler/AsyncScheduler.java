@@ -41,14 +41,28 @@ import java.util.concurrent.Executors;
  */
 public class AsyncScheduler extends AbstractAsyncScheduler {
 
+    // 0.6.0/F065: keep a reference to the virtual-thread executor so
+    // shutdown() can close it instead of leaking the thread pool forever
+    private final java.util.concurrent.ExecutorService virtualThreads;
+
     public AsyncScheduler(Logger logger, Executor processingPool) {
         super(logger, Executors.newVirtualThreadPerTaskExecutor());
-
-        // 0.5.0/F046: this variant deliberately replaces the injected platform
-        // pool with virtual threads (green threads).  The platform executor is
-        // NOT used, so platform-side cancellation cannot reach these tasks —
-        // shutdown() is the only cancellation path (called on plugin disable).
+        // 0.6.0/F065: remember the internally created virtual-thread executor
+        // so shutdown() can close it (the injected platform pool stays
+        // deliberately unused - 0.5.0/F046)
+        this.virtualThreads = (java.util.concurrent.ExecutorService) this.processingPool;
         logger.info("Using optimized green threads with Java 21");
+    }
+
+    @Override
+    public void shutdown() {
+        try {
+            super.shutdown();
+        } finally {
+            // 0.6.0/F065: ExecutorService.close() blocks until the submitted
+            // tasks finished - shutdown()'s drain already ran in super
+            virtualThreads.close();
+        }
     }
 
     @Override

@@ -33,6 +33,8 @@ import com.github.games647.fastlogin.core.shared.PendingRelayStore;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -385,10 +387,15 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             webServer = new WebServer(logger,
                     core.getStorage(), core.getAntiBotService(),
                     version, getPluginFolder());
-            webServer.setOnlinePlayersSupplier(() ->
-                Bukkit.getOnlinePlayers().stream()
+            // 0.6.0/F067: copy the live player view into a snapshot first —
+            // streaming the view directly on a Jetty thread races with joins
+            ///quits (index shifts cause random 500s)
+            webServer.setOnlinePlayersSupplier(() -> {
+                List<Player> snapshot = new ArrayList<>(Bukkit.getOnlinePlayers());
+                return snapshot.stream()
                     .map(Player::getName)
-                    .collect(java.util.stream.Collectors.toList()));
+                    .collect(java.util.stream.Collectors.toList());
+            });
 
             // Premium toggle listener: perform the full toggle exactly like
             // the /premium and /cracked commands — relay to the proxy (with

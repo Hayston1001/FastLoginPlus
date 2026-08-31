@@ -59,7 +59,10 @@ const I18n = {
         let text = this._lang[key] || this._fallback[key] || key;
         if (params) {
             Object.keys(params).forEach(k => {
-                text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), params[k]);
+                    // 0.6.0/F040: function replacer - the previous
+                    // string replacement interpreted $& / $' in values
+                    text = text.replace(new RegExp(`\\{${k}\\}`, 'g'),
+                        () => String(params[k]));
             });
         }
         return text;
@@ -81,6 +84,11 @@ const I18n = {
         document.querySelectorAll('[data-i18n-html]').forEach(el => {
             const key = el.getAttribute('data-i18n-html');
             el.innerHTML = this.t(key);
+        });
+        // 0.6.0/F035: translated aria-labels
+        document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+            const key = el.getAttribute('data-i18n-aria');
+            el.setAttribute('aria-label', this.t(key));
         });
     },
 

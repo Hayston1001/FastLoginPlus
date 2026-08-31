@@ -190,7 +190,17 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
                 getScheduler().runAsync(task);
             });
 
-            webServer.start(host, port, token, config.getStringList("web.corsAllowedOrigins"));
+            // 0.6.0/F020: set the TCCL to the plugin classloader so
+            // Javalin's ServiceLoader can discover SLF4J's SPI provider
+            // inside the shaded JAR (same as the bukkit platform)
+            ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
+            try {
+                webServer.start(host, port, token,
+                        config.getStringList("web.corsAllowedOrigins"));
+            } finally {
+                Thread.currentThread().setContextClassLoader(originalTccl);
+            }
         } catch (LinkageError | Exception e) {
             // 0.6.0/F057: LinkageError covers UnsupportedClassVersionError and
             // NoClassDefFoundError so a broken web stack cannot disable the

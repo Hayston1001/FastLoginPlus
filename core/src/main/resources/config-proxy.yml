@@ -268,8 +268,9 @@ web:
   #   '' (empty)  - all interfaces, IPv4 + IPv6
   #   '0.0.0.0'   - all interfaces, IPv4 only
   #   '::'        - all interfaces, IPv4 + IPv6
-  #   '127.0.0.1' - local access only
-  host: ''
+  #   '127.0.0.1' - local access only (default - the panel is a single-admin
+  #                 tool; only widen the binding deliberately)
+  host: '127.0.0.1'
   # Port to listen on
   port: 8080
   # Authentication token (min 16 characters, auto-generated on first start if empty)

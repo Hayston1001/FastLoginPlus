@@ -25,8 +25,8 @@ function showLoginError(message) {
         langSelect.addEventListener('change', () => I18n.switchLang(langSelect.value));
     }
 
-    // Already have token → go to dashboard
-    if (localStorage.getItem('flp-token')) {
+    // Already have token → go to dashboard (0.6.0/F042: demo session counts)
+    if (localStorage.getItem('flp-token') || sessionStorage.getItem('flp-demo')) {
         location.href = 'dashboard.html';
         return;
     }
@@ -41,10 +41,10 @@ function showLoginError(message) {
 function handleLogin() {
     const input = tokenInput.value.trim();
 
-    // Demo mode
+    // Demo mode (0.6.0/F042: session-scoped - no cross-session residue)
     if (input === DEMO_TOKEN) {
-        localStorage.setItem('flp-token', DEMO_TOKEN);
-        localStorage.setItem('flp-demo', '1');
+        sessionStorage.setItem('flp-token', DEMO_TOKEN);
+        sessionStorage.setItem('flp-demo', '1');
         location.href = 'dashboard.html';
         return;
     }
@@ -62,10 +62,16 @@ function handleLogin() {
     }).then(resp => {
         if (resp.ok) {
             localStorage.setItem('flp-token', input);
-            localStorage.removeItem('flp-demo');
+            sessionStorage.removeItem('flp-demo');
             location.href = 'dashboard.html';
-        } else {
+        } else if (resp.status === 429) {
+            // 0.6.0/F043: distinguish failure classes instead of a blanket
+            // 'Invalid token'
+            showLoginError(I18n.t('login.error.rateLimited'));
+        } else if (resp.status === 401 || resp.status === 403) {
             showLoginError(I18n.t('login.error.invalid'));
+        } else {
+            showLoginError(I18n.t('login.error.connectionFailed'));
         }
     }).catch(() => {
         showLoginError(I18n.t('login.error.connectionFailed'));

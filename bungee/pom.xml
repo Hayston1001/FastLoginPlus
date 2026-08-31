@@ -75,6 +75,12 @@
                             <pattern>org.eclipse.jetty</pattern>
                             <shadedPattern>fastlogin.jetty</shadedPattern>
                         </relocation>
+                        <!-- 0.6.0/F059: jackson was shaded unrelocated, clashing
+                        with the server's own (older) jackson on the classpath -->
+                        <relocation>
+                            <pattern>com.fasterxml.jackson</pattern>
+                            <shadedPattern>fastlogin.jackson</shadedPattern>
+                        </relocation>
                     </relocations>
                     <!-- Rename the service file too to let SLF4J api find our own relocated jdk logger -->
                     <!-- Located in META-INF/services -->
@@ -164,6 +170,9 @@
         <dependency>
             <groupId>net.md-5</groupId>
             <artifactId>bungeecord-proxy</artifactId>
+            <!-- 0.6.0/F060: kept as SNAPSHOT deliberately - bungeecord-proxy is
+            only ever published to sonatype snapshots (no release exists on
+            Maven Central), so a release pin is impossible for this artifact -->
             <version>1.20-R0.2-SNAPSHOT</version>
             <scope>provided</scope>
             <!-- Use our own newer api version -->

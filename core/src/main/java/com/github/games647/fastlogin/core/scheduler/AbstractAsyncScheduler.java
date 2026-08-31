@@ -38,6 +38,8 @@ public abstract class AbstractAsyncScheduler {
 
     protected final Logger logger;
     protected final Executor processingPool;
+    // 0.6.0/F066: task bookkeeping; readable for tests/monitoring via
+    // {@link #currentlyRunningTasks()} (previously a write-only counter)
     protected final AtomicInteger currentlyRunning = new AtomicInteger();
 
     // 0.6.0/F062: tasks accepted (but possibly not yet started) — shutdown()
@@ -89,6 +91,18 @@ public abstract class AbstractAsyncScheduler {
 
     protected boolean isShutdown() {
         return shutdown;
+    }
+
+    /**
+     * Get the number of tasks currently executing.
+     *
+     * <p>0.6.0/F066: gives the previously write-only {@code currentlyRunning}
+     * counter a reader for tests and monitoring.</p>
+     *
+     * @return the number of tasks whose {@code process} body is running
+     */
+    public int currentlyRunningTasks() {
+        return currentlyRunning.get();
     }
 
     /**
