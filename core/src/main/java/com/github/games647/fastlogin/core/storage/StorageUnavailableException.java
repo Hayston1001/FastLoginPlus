@@ -25,30 +25,25 @@
  */
 package com.github.games647.fastlogin.core.storage;
 
-import java.util.UUID;
+/**
+ * Signals that the storage backend could not be reached (SQL error) while
+ * reading aggregate data (0.6.0/F010).
+ *
+ * <p>Callers must not treat this as "no data" — silently rendering an empty
+ * list hides outages from the admin. WebUI handlers map this to a 503
+ * response with an error body instead.</p>
+ */
+public class StorageUnavailableException extends RuntimeException {
 
-public interface AuthStorage {
+    private static final long serialVersionUID = 1L;
 
     /**
-     * Loads a profile with strict "not found" semantics (0.6.0/F046).
+     * Creates the exception with a message and cause.
      *
-     * <p>Unlike {@link #loadProfile(String)}, which keeps returning a
-     * placeholder profile for unknown names (a legacy login-flow contract),
-     * this method returns {@code null} for unknown names — WebUI 404
-     * branches must never be fed a fake profile.</p>
-     *
-     * @param name the player name to look up
-     * @return the stored profile, or {@code null} when unknown or on a SQL error
+     * @param message the detail message
+     * @param cause   the underlying SQL (or other) failure
      */
-    StoredProfile findProfileByName(String name);
-
-    StoredProfile loadProfile(String name);
-
-    StoredProfile loadProfile(UUID uuid);
-
-    void save(StoredProfile playerProfile);
-
-    boolean deleteProfile(String name);
-
-    void close();
+    public StorageUnavailableException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

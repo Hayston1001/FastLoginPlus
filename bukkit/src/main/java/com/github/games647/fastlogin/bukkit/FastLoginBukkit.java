@@ -70,6 +70,7 @@ import com.github.games647.fastlogin.core.hooks.bedrock.BedrockService;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.hooks.bedrock.GeyserService;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
+import com.github.games647.fastlogin.core.shared.JavaVersions;
 import com.github.games647.fastlogin.core.shared.FloodgateState;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
@@ -161,36 +162,43 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * @param premium    {@code true} to set premium, {@code false} for cracked
      */
     public void performLocalPremiumToggle(String playerName, boolean premium) {
-        StoredProfile profile = core.getStorage().loadProfile(playerName);
-        if (profile == null) {
-            return;
-        }
+        // 0.6.0/F008: run the whole load-modify-save window under the
+        // name-level striped lock, exactly like the /premium and /cracked
+        // command paths, so a concurrent login flow cannot interleave
+        core.getStorage().withNameLock(playerName, () -> {
+            // 0.6.0/F046: strict lookup - unknown players stay unknown, the
+            // WebUI never inserts a fresh row for a typo'd name
+            StoredProfile profile = core.getStorage().findProfileByName(playerName);
+            if (profile == null) {
+                return;
+            }
 
-        if (profile.isExistingPlayer() && profile.isOnlinemodePreferred() == premium) {
-            // Already in the requested state
-            return;
-        }
+            if (profile.isExistingPlayer() && profile.isOnlinemodePreferred() == premium) {
+                // Already in the requested state
+                return;
+            }
 
-        profile.setOnlinemodePreferred(premium);
-        if (!premium) {
-            // Clear the premium UUID so the player uses the offline-mode
-            // UUID on their next login
-            profile.setId(null);
-        }
+            profile.setOnlinemodePreferred(premium);
+            if (!premium) {
+                // Clear the premium UUID so the player uses the offline-mode
+                // UUID on their next login
+                profile.setId(null);
+            }
 
-        getScheduler().runAsync(() -> {
-            core.getStorage().save(profile);
-            getServer().getPluginManager().callEvent(new BukkitFastLoginPremiumToggleEvent(
-                    Bukkit.getConsoleSender(), profile, PremiumToggleReason.COMMAND_OTHER));
+            getScheduler().runAsync(() -> {
+                core.getStorage().save(profile);
+                getServer().getPluginManager().callEvent(new BukkitFastLoginPremiumToggleEvent(
+                        Bukkit.getConsoleSender(), profile, PremiumToggleReason.COMMAND_OTHER));
 
-            getScheduler().getSyncExecutor().execute(() -> {
-                if (core.getConfig().getBoolean("kick-toggle")) {
-                    Player target = Bukkit.getPlayerExact(playerName);
-                    if (target != null) {
-                        target.kickPlayer(
-                            core.getMessage(premium ? "add-premium" : "remove-premium"));
+                getScheduler().getSyncExecutor().execute(() -> {
+                    if (core.getConfig().getBoolean("kick-toggle")) {
+                        Player target = Bukkit.getPlayerExact(playerName);
+                        if (target != null) {
+                            target.kickPlayer(
+                                core.getMessage(premium ? "add-premium" : "remove-premium"));
+                        }
                     }
-                }
+                });
             });
         });
     }
@@ -349,6 +357,17 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 return;
             }
 
+            // 0.6.0/F057: the web stack (Javalin 7 / Jetty 12) is Java 17
+            // bytecode. On an older JVM loading it would throw
+            // UnsupportedClassVersionError (an Error the catch below cannot
+            // cover) and disable the whole plugin - skip the panel instead.
+            if (!JavaVersions.isAtLeast(JavaVersions.MINIMUM_WEB_JAVA)) {
+                logger.warn("Web management panel requires Java {}+ (found {}). "
+                        + "Panel skipped; other features unaffected.",
+                        JavaVersions.MINIMUM_WEB_JAVA, System.getProperty("java.version"));
+                return;
+            }
+
             String host = config.get("web.host", "127.0.0.1");
             int port = config.get("web.port", 8080);
             String token = config.get("web.token", "");
@@ -389,11 +408,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
             Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
             try {
-                webServer.start(host, port, token);
+                webServer.start(host, port, token, config.getStringList("web.corsAllowedOrigins"));
             } finally {
                 Thread.currentThread().setContextClassLoader(originalTccl);
             }
-        } catch (Exception e) {
+        } catch (LinkageError | Exception e) {
+            // 0.6.0/F057: LinkageError covers UnsupportedClassVersionError and
+            // NoClassDefFoundError so a broken web stack cannot disable the
+            // whole plugin
             logger.error("Failed to start web management panel", e);
             webServer = null;
         }

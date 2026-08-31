@@ -52,9 +52,20 @@ public class PerIpRateLimiter {
     private final ConcurrentHashMap<InetAddress, WindowCounter> windows;
 
     // Minimum interval between lazy cleanups triggered from tryAcquire — the
-    // full-map scan is O(n) and runs on connection threads, so scanning on
+    // scan is O(n) and runs on connection threads, so scanning on
     // every acquire under load is a self-inflicted DoS (0.5.0/F038)
     private static final long LAZY_CLEANUP_MIN_INTERVAL_MS = 1_000;
+
+    // 0.6.0/F009: hard ceiling on tracked IPs — a multi-IP flood must not
+    // grow the table without bound. Above the cap, new (unknown) IPs are
+    // denied instead of added.
+    public static final int MAX_TRACKED_IPS = 65_536;
+
+    // 0.6.0/F009: incremental cleanup — at most this many entries are visited
+    // per sweep, so the cost on a connection thread is bounded regardless of
+    // table size. Expired entries beyond the budget are picked up by later
+    // sweeps (which stay throttled to once per second).
+    static final int CLEANUP_SCAN_BUDGET = 2_048;
 
     private volatile long lastLazyCleanupMs;
     // lazy cleanup invocation count — package-private, for tests
@@ -88,18 +99,42 @@ public class PerIpRateLimiter {
             cleanup(nowMs);
         }
 
+        // 0.6.0/F009: capacity guard — deny new IPs once the ceiling is
+        // reached instead of letting an attack allocate unbounded memory.
+        // Already-tracked IPs keep being evaluated normally.
+        if (windows.mappingCount() >= MAX_TRACKED_IPS
+                && !windows.containsKey(address)) {
+            return false;
+        }
+
         WindowCounter counter = windows.computeIfAbsent(address, k -> new WindowCounter());
         return counter.tryRecord(nowMs, burstLimit, burstWindowMs, connLimit, connWindowMs);
     }
 
     /**
-     * Remove all entries whose both windows have expired.
+     * Get the number of currently tracked IP windows.
+     *
+     * <p>Intended for testing and monitoring.</p>
+     *
+     * @return the number of tracked IP entries
+     */
+    public int trackedIpCount() {
+        return windows.size();
+    }
+
+    /**
+     * Remove expired entries, visiting at most {@link #CLEANUP_SCAN_BUDGET}
+     * entries per call (0.6.0/F009) so the cost on a connection thread stays
+     * bounded — a full-table sweep under a multi-IP flood would take the
+     * login path down by itself.
      *
      * @param nowMs current time in milliseconds
      */
     public void cleanup(long nowMs) {
+        int scanned = 0;
         Iterator<Map.Entry<InetAddress, WindowCounter>> it = windows.entrySet().iterator();
-        while (it.hasNext()) {
+        while (it.hasNext() && scanned < CLEANUP_SCAN_BUDGET) {
+            scanned++;
             Map.Entry<InetAddress, WindowCounter> entry = it.next();
             if (entry.getValue().isExpired(nowMs, burstWindowMs, connWindowMs)) {
                 it.remove();

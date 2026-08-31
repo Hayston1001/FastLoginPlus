@@ -42,6 +42,10 @@ public class IpBanManager {
     private final Ticker ticker;
     private final ConcurrentHashMap<InetAddress, Long> bans;
 
+    // 0.6.0/F009: hard ceiling on active bans — AntiBotService auto-bans
+    // on top of the admin endpoint, so a table flood must be bounded
+    public static final int MAX_BANS = 10_000;
+
     public IpBanManager(Ticker ticker) {
         this.ticker = ticker;
         this.bans = new ConcurrentHashMap<>();
@@ -55,6 +59,15 @@ public class IpBanManager {
      */
     public void ban(InetAddress address, long durationMs) {
         long nowMs = ticker.read() / 1_000_000;
+        if (bans.size() >= MAX_BANS && !bans.containsKey(address)) {
+            // 0.6.0/F009: try to free expired entries first; if the table is
+            // still full, drop the new ban — bounded memory wins over
+            // remembering every attacker IP forever
+            cleanup();
+            if (bans.size() >= MAX_BANS) {
+                return;
+            }
+        }
         bans.put(address, nowMs + durationMs);
     }
 

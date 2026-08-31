@@ -243,6 +243,13 @@ public class AsyncToggleMessage implements Runnable {
      * @param localeId the locale key of the result message
      */
     private void sendFeedbackToBackend(String localeId) {
+        // 0.6.0/F004: WebUI toggles run with a null sender (result goes to the
+        // proxy console only) - dereferencing it here killed the whole toggle
+        // task with an NPE and made the kick step unreachable
+        if (sender == null) {
+            return;
+        }
+
         Server server = sender.getServer();
         if (server == null) {
             // carrier has no backend connection (yet/anymore) — result stays

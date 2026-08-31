@@ -33,6 +33,7 @@ import java.util.Map;
 
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.core.storage.StorageUnavailableException;
 
 import io.javalin.http.Context;
 
@@ -66,6 +67,16 @@ public class PlayerApiHandler {
      * @param ctx the Javalin context
      */
     public void handleList(Context ctx) {
+        try {
+            handleListInner(ctx);
+        } catch (StorageUnavailableException e) {
+            // 0.6.0/F010: a storage outage must surface as an error status,
+            // not as a 200 with an empty (misleading) list
+            ctx.status(503).json(of("error", "storage unavailable"));
+        }
+    }
+
+    private void handleListInner(Context ctx) {
         String query = ctx.queryParam("q");
         int page = parseIntParam(ctx, "page", 1);
         int size = parseIntParam(ctx, "size", 20);
@@ -121,7 +132,9 @@ public class PlayerApiHandler {
             ctx.status(503).json(of("error", "No storage backend configured"));
             return;
         }
-        StoredProfile profile = storage.loadProfile(name);
+        // 0.6.0/F046: strict lookup - unknown names reach the 404 branch
+        // (loadProfile() would hand back a fake profile)
+        StoredProfile profile = storage.findProfileByName(name);
 
         if (profile == null) {
             ctx.status(404).json(of("error", "Player not found"));
@@ -152,7 +165,9 @@ public class PlayerApiHandler {
         // listener — which relays to the proxy — is the authority.
         StoredProfile profile = null;
         if (storage != null) {
-            profile = storage.loadProfile(name);
+            // 0.6.0/F046: strict lookup so unknown players get a 404 and the
+            // fallback path below can never INSERT a fresh row for them
+            profile = storage.findProfileByName(name);
             if (profile == null) {
                 ctx.status(404).json(of("error", "Player not found"));
                 return;
@@ -166,10 +181,11 @@ public class PlayerApiHandler {
             // Fallback for embedders without a platform listener: direct DB write.
             // 0.5.0/F020: run the whole load-modify-save window under the
             // name-level striped lock, same as every other toggle path.
-            storage.withNameLock(name, () -> {
-                StoredProfile lockedProfile = storage.loadProfile(name);
+            Boolean saved = storage.withNameLock(name, () -> {
+                StoredProfile lockedProfile = storage.findProfileByName(name);
                 if (lockedProfile == null) {
-                    return;
+                    // deleted while waiting for the lock
+                    return null;
                 }
                 lockedProfile.setOnlinemodePreferred(premium);
 
@@ -179,8 +195,20 @@ public class PlayerApiHandler {
                     lockedProfile.setId(null);
                 }
 
-                storage.save(lockedProfile);
+                // 0.6.0/F012: saveQuietly reports SQL failures through the
+                // return value instead of swallowing them
+                return storage.saveQuietly(lockedProfile);
             });
+
+            if (saved == null) {
+                ctx.status(404).json(of("error", "Player not found"));
+                return;
+            }
+            if (!saved) {
+                // 0.6.0/F012: never answer success:true for a failed save
+                ctx.status(500).json(of("error", "Failed to update player"));
+                return;
+            }
         } else {
             ctx.status(500).json(of("error", "No storage backend configured"));
             return;
@@ -213,7 +241,8 @@ public class PlayerApiHandler {
         // the row between the check and the delete (TOCTOU).
         final String[] error = new String[1];
         boolean deleted = storage.withNameLock(name, () -> {
-            StoredProfile profile = storage.loadProfile(name);
+            // 0.6.0/F046: strict lookup - unknown names reach the 404 branch
+            StoredProfile profile = storage.findProfileByName(name);
 
             if (profile == null) {
                 error[0] = "Player not found";

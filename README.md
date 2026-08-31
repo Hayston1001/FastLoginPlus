@@ -135,6 +135,58 @@ Add `.other` suffix for targeting other players (default: op).
 | `%fastloginplus_is_premium%` | `true`, `false` | Whether the player passed premium verification |
 | `%fastloginplus_floodgate%` | `Java`, `Bedrock`, `Linked`, `Unknown` | Connection platform (Java vs Bedrock via Geyser/Floodgate) |
 
+## Web Management Panel
+
+FastLoginPlus ships an optional embedded web panel for player management and
+anti-bot statistics. It is disabled by default.
+
+### Enabling it
+
+```yaml
+web:
+  enabled: true
+  host: '127.0.0.1'   # bind address
+  port: 8080
+  token: ''           # auto-generated (min 16 chars) on first start
+```
+
+Open `http://<host>:<port>`, enter the token from `config.yml` and you are
+logged in. On a proxy setup (BungeeCord/Velocity) enable the panel **on the
+proxy only**, not on the backend servers.
+
+### Security model
+
+- The token **is** the full admin access to the panel. All `/api/*` endpoints
+  require it; without a valid token the API only answers 401/429 with no data.
+- The browser stores the token in `localStorage`, so it survives browser
+  restarts. That also means any script able to run on the panel page could
+  read it — the panel is therefore designed for a **single admin**, served
+  from a trusted origin. There is intentionally no multi-user/login-expiry
+  concept ("logout" only clears the local copy — use the rotation flow below
+  to actually invalidate access).
+- Bind `host` to `127.0.0.1` (or a LAN interface) instead of `''` when the
+  panel does not need to be reachable from the internet.
+- Behind a reverse proxy, keep the panel origin dedicated: do **not** serve it
+  from an origin that shares cookies/JS with untrusted applications.
+- Cross-origin browser access is disabled by default; set
+  `web.corsAllowedOrigins` to a whitelist if you deliberately embed the panel
+  somewhere else.
+
+### Rotating the token
+
+1. Stop the server.
+2. Clear the `web.token` value in `config.yml`.
+3. Start the server — a fresh random token is generated and written to
+   `config.yml` (read it there; it is not logged in plaintext).
+4. Old browser sessions get a 401 on their next poll and are returned to the
+   login page automatically.
+
+### API
+
+All endpoints live under `/api/*`, accept/return JSON and expect an
+`Authorization: Bearer <token>` header. The language endpoint
+(`/api/lang/{code}`) is the only public exception.
+
 ## License
 
 [MIT](LICENSE) · Originally by [games647](https://github.com/TuxCoding/FastLogin) · Maintained by [Hayston](https://github.com/Hayston1001)

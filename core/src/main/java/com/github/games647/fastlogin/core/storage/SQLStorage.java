@@ -179,6 +179,36 @@ public abstract class SQLStorage implements AuthStorage {
         }
     }
 
+    /**
+     * Look up a profile by name with strict "not found" semantics (0.6.0/F046).
+     *
+     * <p>{@link #loadProfile(String)} must keep returning a placeholder for
+     * unknown names — the login flow relies on it. The WebUI (and any code
+     * that must distinguish "unknown" from "known") uses this method
+     * instead, so its 404 branches stay live and no rows are inserted for
+     * unknown toggles.</p>
+     *
+     * @param name the player name to look up
+     * @return the stored profile, or {@code null} when the name is unknown
+     *         or the query failed
+     */
+    @Override
+    public StoredProfile findProfileByName(String name) {
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement loadStmt = con.prepareStatement(LOAD_BY_NAME)
+        ) {
+            loadStmt.setString(1, name);
+
+            try (ResultSet resultSet = loadStmt.executeQuery()) {
+                return parseResult(resultSet).orElse(null);
+            }
+        } catch (SQLException sqlEx) {
+            log.error("Failed to query profile: {}", name, sqlEx);
+        }
+
+        return null;
+    }
+
     @Override
     public StoredProfile loadProfile(String name) {
         try (Connection con = dataSource.getConnection();
@@ -373,6 +403,9 @@ public abstract class SQLStorage implements AuthStorage {
             }
         } catch (Exception ex) {
             log.error("Failed to load profiles", ex);
+            // 0.6.0/F010: an empty list reads as "no players" downstream —
+            // surface the outage instead of swallowing it
+            throw new StorageUnavailableException("Failed to load profiles", ex);
         }
         return profiles;
     }
@@ -402,6 +435,8 @@ public abstract class SQLStorage implements AuthStorage {
             }
         } catch (Exception ex) {
             log.error("Failed to search profiles", ex);
+            // 0.6.0/F010: surface the outage instead of swallowing it
+            throw new StorageUnavailableException("Failed to search profiles", ex);
         }
         return profiles;
     }
@@ -436,6 +471,8 @@ public abstract class SQLStorage implements AuthStorage {
             }
         } catch (SQLException ex) {
             log.error("Failed to count profiles", ex);
+            // 0.6.0/F010: surface the outage instead of reporting 0 players
+            throw new StorageUnavailableException("Failed to count profiles", ex);
         }
         return 0;
     }

@@ -134,20 +134,29 @@ async function api(endpoint, options = {}) {
 
     try {
         const response = await fetch(`/api${endpoint}`, { ...options, headers });
-        const data = await response.json();
 
         if (!response.ok) {
+            // 0.6.0/F052: judge the logout by the HTTP status code, not by a
+            // body.error string - the endpoint JSON may overwrite the body
+            // and the error format is an implementation detail
+            if (response.status === 401) {
+                logout();
+                throw new Error(I18n.t('msg.authFailed'));
+            }
+
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (jsonError) {
+                // body was not JSON (e.g. plain-text error) - fall through
+            }
             throw new Error(data.error || `HTTP ${response.status}`);
         }
 
         // Connection successful
         updateConnectionStatus(true);
-        return data;
+        return await response.json();
     } catch (error) {
-        if (error.message === 'Unauthorized') {
-            logout();
-            throw new Error(I18n.t('msg.authFailed'));
-        }
 
         // Network error (not auth error) — track connection failures
         if (error.name === 'TypeError' || error.message.includes('Failed to fetch')) {

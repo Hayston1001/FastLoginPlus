@@ -106,6 +106,15 @@
                             <include>com.github.games647:craftapi</include>
                             <include>org.mariadb.jdbc:mariadb-java-client</include>
                             <include>org.xerial:sqlite-jdbc</include>
+                            <!-- 0.6.0/F055: the web panel stack was missing from
+                            the release jar, so web.enabled=true crashed the whole
+                            proxy with NoClassDefFoundError -->
+                            <include>io.javalin:*</include>
+                            <include>org.eclipse.jetty*:*</include>
+                            <include>com.fasterxml.jackson.core:*</include>
+                            <include>com.fasterxml.jackson.datatype:*</include>
+                            <include>org.jetbrains.kotlin:kotlin-stdlib</include>
+                            <include>jakarta.servlet:jakarta.servlet-api</include>
                         </includes>
                     </artifactSet>
                     <filters>

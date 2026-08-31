@@ -135,6 +135,42 @@ FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入
 | `%fastloginplus_is_premium%` | `true`、`false` | 是否通过正版验证 |
 | `%fastloginplus_floodgate%` | `Java`、`Bedrock`、`Linked`、`Unknown` | 连接平台(Java 版或通过 Geyser/Floodgate 的基岩版) |
 
+## Web 管理面板
+
+FastLoginPlus 内置可选的 Web 管理面板（玩家管理、反虐物统计），默认关闭。
+
+### 启用
+
+```yaml
+web:
+  enabled: true
+  host: '127.0.0.1'   # 监听地址
+  port: 8080
+  token: ''           # 首次启动自动生成（最少 16 位）
+```
+
+打开 `http://<host>:<port>`，输入 `config.yml` 中的 token 即可登录。
+代理端（BungeeCord/Velocity）请只在代理上启用，不要在后端服务器启用。
+
+### 安全模型
+
+- token 即面板的全部管理权限。所有 `/api/*` 端点均需要 token；无有效 token 时 API 只会返回 401/429，不含任何数据。
+- 浏览器会把 token 存在 `localStorage`（跨浏览器重启仍有效）。因此能在面板页面执行脚本的代码就能取走 token（即面板原始 origin 上的 XSS 等价于面板被接管）。面板按 **单管理员** 模型设计，不存在多用户/会话过期概念（“退出登录”只清除本地副本 — 真正失效需要下面的轮换流程）。
+- 面板无需对外网可见时，请把 `host` 绑定到 `127.0.0.1`（或内网网卡）而非 `''`。
+- 反向代理场景下，面板 origin 请独立部署，不要与不受信任的应用共享 cookie/JS origin。
+- 跨域访问默认关闭；确需时用 `web.corsAllowedOrigins` 白名单显式放行。
+
+### 轮换 token
+
+1. 停服。
+2. 清空 `config.yml` 中的 `web.token`。
+3. 启动 — 会自动生成新 token 并写回 `config.yml`（在配置文件中查看，不会打进日志）。
+4. 旧浏览器会话在下一次轮询收到 401 并自动弹回登录页。
+
+### API
+
+所有端点位于 `/api/*` 下，JSON 格式，需要 `Authorization: Bearer <token>` 头。语言端点 (`/api/lang/{code}`) 是唯一免鉴权的例外。
+
 ## 许可证
 
 [MIT](LICENSE) · 原作者: [games647](https://github.com/TuxCoding/FastLogin) · 维护者: [Hayston](https://github.com/Hayston1001)

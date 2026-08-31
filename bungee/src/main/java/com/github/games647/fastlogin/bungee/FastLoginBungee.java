@@ -52,6 +52,7 @@ import com.github.games647.fastlogin.core.message.SuccessMessage;
 import com.github.games647.fastlogin.core.UpdateChecker;
 import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
+import com.github.games647.fastlogin.core.shared.JavaVersions;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 import com.github.games647.fastlogin.core.web.WebServer;
 import com.google.common.collect.MapMaker;
@@ -147,6 +148,17 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
                 return;
             }
 
+            // 0.6.0/F057: the web stack (Javalin 7 / Jetty 12) is Java 17
+            // bytecode. On an older JVM loading it would throw
+            // UnsupportedClassVersionError (an Error the catch below cannot
+            // cover) and disable the whole plugin - skip the panel instead.
+            if (!JavaVersions.isAtLeast(JavaVersions.MINIMUM_WEB_JAVA)) {
+                logger.warn("Web management panel requires Java {}+ (found {}). "
+                        + "Panel skipped; other features unaffected.",
+                        JavaVersions.MINIMUM_WEB_JAVA, System.getProperty("java.version"));
+                return;
+            }
+
             String host = config.get("web.host", "127.0.0.1");
             int port = config.get("web.port", 8080);
             String token = config.get("web.token", "");
@@ -178,8 +190,11 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
                 getScheduler().runAsync(task);
             });
 
-            webServer.start(host, port, token);
-        } catch (Exception e) {
+            webServer.start(host, port, token, config.getStringList("web.corsAllowedOrigins"));
+        } catch (LinkageError | Exception e) {
+            // 0.6.0/F057: LinkageError covers UnsupportedClassVersionError and
+            // NoClassDefFoundError so a broken web stack cannot disable the
+            // whole plugin
             logger.error("Failed to start web management panel", e);
             webServer = null;
         }

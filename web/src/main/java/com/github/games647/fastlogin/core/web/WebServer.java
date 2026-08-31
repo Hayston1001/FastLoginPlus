@@ -29,7 +29,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import org.slf4j.Logger;
@@ -106,13 +105,28 @@ public class WebServer {
     }
 
     /**
-     * Start the HTTP server.
+     * Start the HTTP server with no extra CORS origins (same-origin only).
      *
      * @param host  the host to bind to (empty string or {@code null} for all interfaces)
      * @param port  the port to listen on
      * @param token the Bearer token for authentication
      */
     public void start(String host, int port, String token) {
+        start(host, port, token, java.util.Collections.emptyList());
+    }
+
+    /**
+     * Start the HTTP server.
+     *
+     * @param host                the host to bind to (empty string or {@code null} for all interfaces)
+     * @param port                the port to listen on
+     * @param token               the Bearer token for authentication
+     * @param corsAllowedOrigins  extra browser origins allowed by CORS; the
+     *                            panel is same-origin, so an empty list (the
+     *                            default) registers no CORS at all (0.6.0/F013)
+     */
+    public void start(String host, int port, String token,
+                      List<String> corsAllowedOrigins) {
         app = Javalin.create(config -> {
             // Serve static files from classpath
             config.staticFiles.add("/web", Location.CLASSPATH);
@@ -124,8 +138,17 @@ public class WebServer {
                 mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
             }));
 
-            // CORS configuration (disabled by default)
-            config.bundledPlugins.enableCors(cors -> cors.addRule(it -> it.anyHost()));
+            if (corsAllowedOrigins != null && !corsAllowedOrigins.isEmpty()) {
+                // 0.6.0/F013: opt-in CORS whitelist. anyHost() (the previous
+                // default) let any web page read the whole admin API cross-
+                // origin. Origins without a scheme get http:// prefixed by
+                // Javalin's default rule scheme.
+                config.bundledPlugins.enableCors(cors -> cors.addRule(rule -> {
+                    for (String origin : corsAllowedOrigins) {
+                        rule.allowHost(origin);
+                    }
+                }));
+            }
 
             // Authentication middleware
             config.routes.before(ctx -> {
@@ -287,28 +310,100 @@ public class WebServer {
         return ip;
     }
 
-    private boolean checkRateLimit(String ip) {
+    // 0.6.0/F015: periodic sweep cadence and idle threshold for the per-IP
+    // rate-limit table (computeIfAbsent alone would grow without bound)
+    static final long SWEEP_INTERVAL_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(1);
+    static final long IDLE_SWEEP_NANOS = java.util.concurrent.TimeUnit.MINUTES.toNanos(5);
+    // 0.6.0/F015: protection mode - above this many tracked IPs, entries
+    // are evicted after only one minute of inactivity
+    static final int MAX_TRACKED_IPS = 10_000;
+
+    private volatile long nextSweepNanos = System.nanoTime() + SWEEP_INTERVAL_NANOS;
+
+    /**
+     * Get the number of per-IP rate-limit entries currently tracked.
+     *
+     * <p>Package-private - used by tests to verify the sweep logic.</p>
+     *
+     * @return the number of tracked IPs
+     */
+    int trackedIpCount() {
+        return rateLimiters.size();
+    }
+
+    boolean checkRateLimit(String ip) {  // package-private for tests
+        sweepRateLimiters(System.nanoTime());
+
         RateCounter counter = rateLimiters.computeIfAbsent(ip, k -> new RateCounter());
         return counter.tryAcquire();
     }
 
     /**
-     * Simple rate counter that allows up to {@link #RATE_LIMIT_PER_SECOND} requests per second.
+     * Evict idle per-IP rate-limit entries (0.6.0/F015).
+     *
+     * <p>Sweeps run at most once per sweep interval; when the table grows
+     * beyond {@link #MAX_TRACKED_IPS} (a multi-IP flood), the idle threshold
+     * tightens to one minute so the table shrinks instead of leaking.</p>
+     *
+     * @param nowNanos the current monotonic time (injected for tests)
+     */
+    void sweepRateLimiters(long nowNanos) {
+        if (nowNanos - nextSweepNanos < 0) {
+            return;
+        }
+
+        nextSweepNanos = nowNanos + SWEEP_INTERVAL_NANOS;
+
+        long idleThreshold = rateLimiters.size() > MAX_TRACKED_IPS
+                ? java.util.concurrent.TimeUnit.MINUTES.toNanos(1)
+                : IDLE_SWEEP_NANOS;
+        rateLimiters.values().removeIf(counter -> counter.isIdle(nowNanos, idleThreshold));
+    }
+
+    /**
+     * Per-IP counter that allows up to {@link #RATE_LIMIT_PER_SECOND}
+     * requests per second.
      */
     private static final class RateCounter {
-        private final AtomicInteger count = new AtomicInteger(0);
-        private volatile long windowStart = System.currentTimeMillis();
+        // 0.6.0/F016: monotonic clock (nanoTime) - a wall-clock rollback
+        // (NTP) can no longer make active IPs receive endless 429s
+        private long windowStartNanos = System.nanoTime();
+        private volatile long lastAccessNanos = System.nanoTime();
+        private int count;
 
-        boolean tryAcquire() {
-            long now = System.currentTimeMillis();
-            if (now - windowStart >= 1000) {
+        /**
+         * Try to record a request in the current one-second window.
+         *
+         * <p>Synchronized (0.6.0/F016): the previous unsynchronized
+         * check-then-act on count/windowStart let concurrent requests slip
+         * past the window reset and under-count.</p>
+         *
+         * @return true if the request is within the rate limit
+         */
+        synchronized boolean tryAcquire() {
+            long now = System.nanoTime();
+            lastAccessNanos = now;
+
+            if (now - windowStartNanos >= 1_000_000_000L) {
                 // New window
-                count.set(1);
-                windowStart = now;
+                count = 1;
+                windowStartNanos = now;
                 return true;
             }
 
-            return count.incrementAndGet() <= RATE_LIMIT_PER_SECOND;
+            count++;
+            return count <= RATE_LIMIT_PER_SECOND;
+        }
+
+        /**
+         * Check whether this counter was not used recently.
+         *
+         * @param nowNanos  the current monotonic time
+         * @param idleNanos the idle threshold
+         * @return true if the entry is idle long enough to be evicted
+         */
+        boolean isIdle(long nowNanos, long idleNanos) {
+            return nowNanos - lastAccessNanos >= idleNanos;
         }
     }
 }

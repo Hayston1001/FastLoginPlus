@@ -53,41 +53,55 @@ public class AsyncScheduler extends AbstractAsyncScheduler {
 
     @Override
     public CompletableFuture<Void> runAsync(Runnable task) {
-        if (isShutdown()) {
+        // 0.6.0/F062: atomic accept (vs shutdown) + tracked completion
+        if (!tryAcceptTask()) {
             return CompletableFuture.completedFuture(null);
         }
-        return CompletableFuture
-                .runAsync(() -> process(task), processingPool)
-                .exceptionally(error -> {
-                    logger.warn("Error occurred on thread pool", error);
-                    return null;
-                });
+        try {
+            return CompletableFuture
+                    .runAsync(() -> process(task), processingPool)
+                    .whenComplete((unused, error) -> releaseTask())
+                    .exceptionally(error -> {
+                        logger.warn("Error occurred on thread pool", error);
+                        return null;
+                    });
+        } catch (RuntimeException rejectEx) {
+            releaseTask();
+            throw rejectEx;
+        }
     }
 
     @Override
     public CompletableFuture<Void> runAsyncDelayed(Runnable task, Duration delay) {
-        if (isShutdown()) {
+        // 0.6.0/F062: atomic accept (vs shutdown) + tracked completion
+        if (!tryAcceptTask()) {
             return CompletableFuture.completedFuture(null);
         }
-        return CompletableFuture.runAsync(() -> {
-            currentlyRunning.incrementAndGet();
-            try {
-                Thread.sleep(delay);
-                // the plugin may have disabled during the delay — platform
-                // schedulers cannot cancel this virtual thread, so check here
-                if (isShutdown()) {
-                    return;
+        try {
+            return CompletableFuture.runAsync(() -> {
+                currentlyRunning.incrementAndGet();
+                try {
+                    Thread.sleep(delay);
+                    // the plugin may have disabled during the delay — platform
+                    // schedulers cannot cancel this virtual thread, so check here
+                    if (isShutdown()) {
+                        return;
+                    }
+                    process(task);
+                } catch (InterruptedException interruptedException) {
+                    // restore interrupt flag
+                    Thread.currentThread().interrupt();
+                } finally {
+                    currentlyRunning.getAndDecrement();
                 }
-                process(task);
-            } catch (InterruptedException interruptedException) {
-                // restore interrupt flag
-                Thread.currentThread().interrupt();
-            } finally {
-                currentlyRunning.getAndDecrement();
-            }
-        }, processingPool).exceptionally(error -> {
-            logger.warn("Error occurred on thread pool", error);
-            return null;
-        });
+            }, processingPool).whenComplete((unused, error) -> releaseTask())
+              .exceptionally(error -> {
+                logger.warn("Error occurred on thread pool", error);
+                return null;
+            });
+        } catch (RuntimeException rejectEx) {
+            releaseTask();
+            throw rejectEx;
+        }
     }
 }
