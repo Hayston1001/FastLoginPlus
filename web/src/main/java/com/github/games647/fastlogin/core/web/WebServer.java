@@ -39,6 +39,7 @@ import com.github.games647.fastlogin.core.storage.SQLStorage;
 
 import io.javalin.Javalin;
 import io.javalin.http.staticfiles.Location;
+import io.javalin.config.RoutesConfig;
 import io.javalin.json.JavalinJackson;
 
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -121,37 +122,38 @@ public class WebServer {
             }));
 
             // CORS configuration (disabled by default)
-            config.plugins.enableCors(cors -> cors.add(it -> it.anyHost()));
+            config.bundledPlugins.enableCors(cors -> cors.addRule(it -> it.anyHost()));
+
+            // Authentication middleware
+            config.routes.before(ctx -> {
+                // Skip static file requests and language API (public, no auth needed)
+                String path = ctx.path();
+                if (!path.startsWith("/api/") || path.startsWith("/api/lang/")) {
+                    return;
+                }
+
+                // Rate limit BEFORE the token check so invalid-token brute forcing
+                // is throttled too, not only correctly authenticated traffic.
+                String clientIp = normalizeIp(ctx.ip());
+                if (!checkRateLimit(clientIp)) {
+                    ctx.status(429).json(java.util.Collections.singletonMap("error", "Too many requests"));
+                    return;
+                }
+
+                // Constant-time comparison — a plain String.equals() on the
+                // Authorization header leaks the token prefix through timing.
+                String auth = ctx.header("Authorization");
+                byte[] expected = ("Bearer " + token).getBytes(StandardCharsets.UTF_8);
+                byte[] provided = (auth == null) ? new byte[0] : auth.getBytes(StandardCharsets.UTF_8);
+                if (auth == null || !MessageDigest.isEqual(expected, provided)) {
+                    ctx.status(401).json(java.util.Collections.singletonMap("error", "Unauthorized"));
+                }
+            });
+
+            // Register API routes — Javalin 7 requires upfront registration in the
+            // config block; routes cannot be added after create()
+            registerRoutes(config.routes);
         });
-
-        // Authentication middleware
-        app.before(ctx -> {
-            // Skip static file requests and language API (public, no auth needed)
-            String path = ctx.path();
-            if (!path.startsWith("/api/") || path.startsWith("/api/lang/")) {
-                return;
-            }
-
-            // Rate limit BEFORE the token check so invalid-token brute forcing
-            // is throttled too, not only correctly authenticated traffic.
-            String clientIp = normalizeIp(ctx.ip());
-            if (!checkRateLimit(clientIp)) {
-                ctx.status(429).json(java.util.Collections.singletonMap("error", "Too many requests"));
-                return;
-            }
-
-            // Constant-time comparison — a plain String.equals() on the
-            // Authorization header leaks the token prefix through timing.
-            String auth = ctx.header("Authorization");
-            byte[] expected = ("Bearer " + token).getBytes(StandardCharsets.UTF_8);
-            byte[] provided = (auth == null) ? new byte[0] : auth.getBytes(StandardCharsets.UTF_8);
-            if (auth == null || !MessageDigest.isEqual(expected, provided)) {
-                ctx.status(401).json(java.util.Collections.singletonMap("error", "Unauthorized"));
-            }
-        });
-
-        // Register API routes
-        registerRoutes();
 
         // Start server
         app.start(host, port);
@@ -168,68 +170,77 @@ public class WebServer {
         }
     }
 
-    private void registerRoutes() {
+    /**
+     * Register all API routes on the given router.
+     *
+     * <p>Javalin 7 requires routes to be registered upfront inside the
+     * {@code Javalin.create()} config block, so the router is passed in
+     * instead of being accessed through the app field.</p>
+     *
+     * @param routes the Javalin router configuration from the config block
+     */
+    private void registerRoutes(RoutesConfig routes) {
         // Language API
-        app.get("/api/lang/{code}", ctx -> {
+        routes.get("/api/lang/{code}", ctx -> {
             LangApiHandler handler = new LangApiHandler(log, pluginFolder);
             handler.handle(ctx);
         });
 
         // Online players API
-        app.get("/api/online", ctx -> {
+        routes.get("/api/online", ctx -> {
             OnlineApiHandler handler = new OnlineApiHandler(storage, onlinePlayersSupplier);
             handler.handle(ctx);
         });
 
         // Player database API
-        app.get("/api/players", ctx -> {
+        routes.get("/api/players", ctx -> {
             PlayerApiHandler handler = new PlayerApiHandler(storage);
             handler.handleList(ctx);
         });
 
-        app.get("/api/players/{name}", ctx -> {
+        routes.get("/api/players/{name}", ctx -> {
             PlayerApiHandler handler = new PlayerApiHandler(storage);
             handler.handleGet(ctx);
         });
 
-        app.put("/api/players/{name}/premium", ctx -> {
+        routes.put("/api/players/{name}/premium", ctx -> {
             PlayerApiHandler handler = new PlayerApiHandler(storage, premiumToggleListener);
             handler.handleSetPremium(ctx, true);
         });
 
-        app.put("/api/players/{name}/cracked", ctx -> {
+        routes.put("/api/players/{name}/cracked", ctx -> {
             PlayerApiHandler handler = new PlayerApiHandler(storage, premiumToggleListener);
             handler.handleSetPremium(ctx, false);
         });
 
-        app.delete("/api/players/{name}", ctx -> {
+        routes.delete("/api/players/{name}", ctx -> {
             PlayerApiHandler handler = new PlayerApiHandler(storage);
             handler.handleDelete(ctx);
         });
 
         // Anti-bot API
-        app.get("/api/antibot/stats", ctx -> {
+        routes.get("/api/antibot/stats", ctx -> {
             AntiBotApiHandler handler = new AntiBotApiHandler(antiBot);
             handler.handleStats(ctx);
         });
 
-        app.get("/api/antibot/bans", ctx -> {
+        routes.get("/api/antibot/bans", ctx -> {
             AntiBotApiHandler handler = new AntiBotApiHandler(antiBot);
             handler.handleListBans(ctx);
         });
 
-        app.post("/api/antibot/ban", ctx -> {
+        routes.post("/api/antibot/ban", ctx -> {
             AntiBotApiHandler handler = new AntiBotApiHandler(antiBot);
             handler.handleBan(ctx);
         });
 
-        app.delete("/api/antibot/ban/{ip}", ctx -> {
+        routes.delete("/api/antibot/ban/{ip}", ctx -> {
             AntiBotApiHandler handler = new AntiBotApiHandler(antiBot);
             handler.handleUnban(ctx);
         });
 
         // Server status API
-        app.get("/api/status", ctx -> {
+        routes.get("/api/status", ctx -> {
             StatusApiHandler handler = new StatusApiHandler(pluginVersion, storage, antiBot, onlinePlayersSupplier);
             handler.handle(ctx);
         });

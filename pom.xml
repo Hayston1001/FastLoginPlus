@@ -139,6 +139,8 @@
                                 <exclude>src/main/resources/**</exclude>
                                 <exclude>.java-version</exclude>
                 <exclude>dev_web_server.py</exclude>
+                                <!-- local-only audit workspace (gitignored), no license headers -->
+                                <exclude>audit/**</exclude>
                             </excludes>
                         </licenseSet>
                     </licenseSets>
