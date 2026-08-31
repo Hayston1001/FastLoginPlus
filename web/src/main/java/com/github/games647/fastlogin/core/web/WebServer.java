@@ -40,6 +40,9 @@ import com.github.games647.fastlogin.core.storage.SQLStorage;
 import io.javalin.Javalin;
 import io.javalin.http.staticfiles.Location;
 import io.javalin.config.RoutesConfig;
+import io.javalin.http.HttpResponseException;
+import io.javalin.http.TooManyRequestsResponse;
+import io.javalin.http.UnauthorizedResponse;
 import io.javalin.json.JavalinJackson;
 
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -134,10 +137,12 @@ public class WebServer {
 
                 // Rate limit BEFORE the token check so invalid-token brute forcing
                 // is throttled too, not only correctly authenticated traffic.
+                // (0.6.0/F001) Throwing is what actually interrupts the Javalin
+                // pipeline — only writing a status and returning does not stop
+                // the endpoint handler from running and overwriting the body.
                 String clientIp = normalizeIp(ctx.ip());
                 if (!checkRateLimit(clientIp)) {
-                    ctx.status(429).json(java.util.Collections.singletonMap("error", "Too many requests"));
-                    return;
+                    throw new TooManyRequestsResponse("Too many requests");
                 }
 
                 // Constant-time comparison — a plain String.equals() on the
@@ -146,9 +151,18 @@ public class WebServer {
                 byte[] expected = ("Bearer " + token).getBytes(StandardCharsets.UTF_8);
                 byte[] provided = (auth == null) ? new byte[0] : auth.getBytes(StandardCharsets.UTF_8);
                 if (auth == null || !MessageDigest.isEqual(expected, provided)) {
-                    ctx.status(401).json(java.util.Collections.singletonMap("error", "Unauthorized"));
+                    throw new UnauthorizedResponse("Unauthorized");
                 }
             });
+
+            // (0.6.0/F001 companion) Render thrown HttpResponseExceptions as a
+            // stable {"error": "<message>"} JSON body. Javalin's default error
+            // format is {"title": ...}, which would break the dashboard's
+            // logout contract (F052: error === 'Unauthorized') and the
+            // frontend's data.error display for 429s.
+            config.routes.exception(HttpResponseException.class, (ex, ctx) -> ctx
+                    .status(ex.getStatus())
+                    .json(java.util.Collections.singletonMap("error", ex.getMessage())));
 
             // Register API routes — Javalin 7 requires upfront registration in the
             // config block; routes cannot be added after create()

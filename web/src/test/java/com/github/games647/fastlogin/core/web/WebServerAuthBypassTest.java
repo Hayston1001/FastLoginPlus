@@ -59,14 +59,13 @@ import com.github.games647.fastlogin.core.storage.StoredProfile;
  * contract: an unauthenticated (or over-limit) request must be rejected with a
  * proper error status and must NOT carry any business data in its body.</p>
  *
- * <p>These tests are the RED baseline of the audit fix plan: on the unpatched
- * middleware (which writes the error status but does not interrupt the Javalin
- * pipeline) the first three tests fail because the endpoint handlers still run
- * and overwrite the response with business data. They are enabled together
- * with the F001 fix.</p>
+ * <p>These tests were the RED baseline of the audit fix plan: on the unpatched
+ * middleware (which wrote the error status but did not interrupt the Javalin
+ * pipeline) the first three tests failed because the endpoint handlers still
+ * ran and overwrote the response with business data — see the RED evidence in
+ * audit/0.6.0/reports/09-fix-recheck.md (W0). They are green since the F001
+ * fix (0.6.0/F001).</p>
  */
-@Disabled("RED baseline for audit F001 — assertions fail on the unpatched "
-        + "middleware; enabled together with the F001 fix (FIX-PLAN-1.md W1)")
 class WebServerAuthBypassTest {
 
     private static final String TOKEN = "unit-test-token-0123456789abcdef";
@@ -114,6 +113,8 @@ class WebServerAuthBypassTest {
         HttpResponse<String> response = get("/api/players", null);
 
         assertEquals(401, response.statusCode());
+        assertTrue(response.body().contains("\"error\""),
+                "401 body must be the {\"error\": ...} contract (F052): " + response.body());
         assertFalse(response.body().contains("\"players\""),
                 "player list leaked to unauthenticated request: " + response.body());
         assertFalse(response.body().contains("Alice"),
