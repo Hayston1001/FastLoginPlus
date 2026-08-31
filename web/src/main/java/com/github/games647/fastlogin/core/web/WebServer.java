@@ -171,6 +171,19 @@ public class WebServer {
     }
 
     /**
+     * Get the actual port the running HTTP server is bound to.
+     *
+     * <p>Mainly used with an ephemeral port ({@code 0}) to discover the
+     * randomly assigned port, e.g. from tests.</p>
+     *
+     * @return the bound port, or {@code -1} if the server was never created
+     */
+    public int port() {
+        return app == null ? -1 : app.port();
+    }
+
+
+    /**
      * Register all API routes on the given router.
      *
      * <p>Javalin 7 requires routes to be registered upfront inside the

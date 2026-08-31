@@ -12,6 +12,21 @@ jobs:
     permissions:
       contents: read
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Reference JDK matching .java-version
+          - jdk: '21'
+            extra_args: ''
+          # Second leg on a pre-21 JDK so the default (non-virtual-thread)
+          # scheduler-variant tests — @DisabledForJreRange(min = JAVA_21) —
+          # actually run instead of being permanently skipped on CI (audit
+          # F063). The folia module compiles with --release 21 and is built
+          # only on the JDK 21 leg.
+          - jdk: '17'
+            extra_args: '-pl !folia'
+
     steps:
       - uses: actions/checkout@v4
 
@@ -19,8 +34,10 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version-file: '.java-version'
+          java-version: ${{ matrix.jdk }}
           cache: 'maven'
 
       - name: Build and test
-        run: mvn package --batch-mode --threads 2.0C --no-snapshot-updates --strict-checksums
+        run: >
+          mvn package --batch-mode --threads 2.0C --no-snapshot-updates --strict-checksums
+          ${{ matrix.extra_args }}
