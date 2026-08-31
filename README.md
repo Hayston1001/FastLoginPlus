@@ -1,10 +1,12 @@
 # FastLoginPlus
 
-[中文→](https://github.com/Hayston1001/FastLoginPlus/blob/main/README_zh.md)
+[中文→](README_zh.md)
 
 > **Auto-detect and login premium Minecraft players on offline-mode servers** — no password needed, no client mods required. Actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin).
 
 Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow cracked clients, but this forces all players — including those with paid accounts — to type a password every time they join. FastLoginPlus checks each player against Mojang's API on login: if they own the game, they skip the auth plugin entirely and get their real UUID and skin automatically.
+
+> Works with [ProtocolLib](https://github.com/dmulloy2/ProtocolLib). [ForDetails→](PROTOCOLLIB-ASYNC-DESIGN.md)
 
 ## Features
 
@@ -32,9 +34,9 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 ## Quick Start
 
-**Spigot/Paper:** install ProtocolLib → drop `FastLoginPlusBukkit.jar` in `plugins/` → set `online-mode=false`
+**Spigot/Paper**: drop `FastLoginPlusBukkit.jar` `an Auth pl` and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
 
-**Folia:** drop `FastLoginPlusFolia.jar` in `plugins/` → set `online-mode=false`
+**Folia**: drop `FastLoginPlusFolia.jar` `an Auth pl` and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
 
 ### Proxy Configuration
 
@@ -90,12 +92,12 @@ The file on disk is always named `config.yml`. Copying a config file between a p
 
 | Platform | Java | Notes |
 |----------|------|-------|
-| Spigot / Paper | 8+ | Requires [ProtocolLib 5.3+](https://www.spigotmc.org/resources/protocollib.1997/) or [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/) |
-| Folia | 21+ | Requires ProtocolLib 5.3+ |
+| Spigot / Paper | 8+ | Requires [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
+| Folia | 21+ | Requires [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
 | BungeeCord / Waterfall | 17+ | — |
 | Velocity | 17+ | — |
 
-An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin) [SeeFullList→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
+An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin). [SeeFullList→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
 
 ## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) Support
 
