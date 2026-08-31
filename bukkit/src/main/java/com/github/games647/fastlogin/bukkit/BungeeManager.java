@@ -35,6 +35,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import static java.util.stream.Collectors.toSet;
 import java.util.stream.Stream;
 
@@ -44,10 +45,13 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.messaging.PluginMessageRecipient;
 
 import com.github.games647.fastlogin.bukkit.listener.BungeeListener;
+import com.github.games647.fastlogin.bukkit.listener.ProxyFeedbackListener;
 import static com.github.games647.fastlogin.core.message.ChangePremiumMessage.CHANGE_CHANNEL;
 import com.github.games647.fastlogin.core.message.ChannelMessage;
 import static com.github.games647.fastlogin.core.message.DeletePremiumMessage.DELETE_CHANNEL;
 import com.github.games647.fastlogin.core.message.LoginActionMessage;
+import com.github.games647.fastlogin.core.message.ProxyAuthenticatedMessage;
+import com.github.games647.fastlogin.core.message.ToggleFeedbackMessage;
 import com.github.games647.fastlogin.core.message.NamespaceKey;
 import static com.github.games647.fastlogin.core.message.SuccessMessage.SUCCESS_CHANNEL;
 import com.google.common.io.ByteArrayDataOutput;
@@ -78,11 +82,38 @@ public class BungeeManager {
     public void sendPluginMessage(PluginMessageRecipient player, ChannelMessage message) {
         if (player != null) {
             ByteArrayDataOutput dataOutput = ByteStreams.newDataOutput();
+
+            // 0.5.0/F054: stamp backend -> proxy messages with the echoed proxy
+            // allowlist so the proxy can authenticate the source
+            if (message instanceof ProxyAuthenticatedMessage) {
+                ((ProxyAuthenticatedMessage) message).setSourceProxyId(stampFor(proxyIds));
+            }
+
             message.writeTo(dataOutput);
 
             NamespaceKey channel = new NamespaceKey(plugin.getName(), message.getChannelName());
             player.sendPluginMessage(plugin, channel.getCombinedName(), dataOutput.toByteArray());
         }
+    }
+
+    /**
+     * Build the echoed proxy allowlist stamped onto backend -&gt; proxy plugin messages.
+     *
+     * <p>Exactly one trusted proxy -&gt; its ID; multiple -&gt; comma-joined; empty set (or
+     * unknown state) -&gt; empty string, matching the 0.5.0/F015 semantics that an empty
+     * allowlist makes proxy support effectively dead.</p>
+     *
+     * @param proxyIds the trusted proxy IDs configured on this backend
+     * @return the echoed allowlist for the {@link ProxyAuthenticatedMessage} trailing field
+     */
+    static String stampFor(Set<UUID> proxyIds) {
+        if (proxyIds == null || proxyIds.isEmpty()) {
+            return "";
+        }
+
+        return proxyIds.stream()
+                .map(UUID::toString)
+                .collect(Collectors.joining(","));
     }
 
     public boolean isEnabled() {
@@ -95,7 +126,12 @@ public class BungeeManager {
         if (enabled) {
             proxyIds = loadBungeeCordIds();
             if (proxyIds.isEmpty()) {
-                plugin.getLog().info("No valid IDs found. Minecraft proxy support cannot work in the current state");
+                // 0.5.0/F015: an empty or unparsable allowed-proxies.txt makes
+                // every incoming proxy ID untrusted — surface this at ERROR
+                // level because proxy support is effectively dead
+                plugin.getLog().error("allowed-proxies.txt contains no valid proxy IDs"
+                        + " — proxy (BungeeCord/Velocity) support cannot work."
+                        + " Add the proxy ID printed by the proxy plugin to the file.");
             }
 
             registerPluginChannels();
@@ -164,6 +200,10 @@ public class BungeeManager {
         String forceChannel = NamespaceKey.getCombined(groupId, LoginActionMessage.FORCE_CHANNEL);
         server.getMessenger().registerIncomingPluginChannel(plugin, forceChannel, new BungeeListener(plugin));
 
+        // incoming relay-result feedback (toggle/delete) sent back by the proxy
+        String feedbackChannel = NamespaceKey.getCombined(groupId, ToggleFeedbackMessage.FEEDBACK_CHANNEL);
+        server.getMessenger().registerIncomingPluginChannel(plugin, feedbackChannel,
+                new ProxyFeedbackListener(plugin));
         // outgoing
         String successChannel = new NamespaceKey(groupId, SUCCESS_CHANNEL).getCombinedName();
         String changeChannel = new NamespaceKey(groupId, CHANGE_CHANNEL).getCombinedName();

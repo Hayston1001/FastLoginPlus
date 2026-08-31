@@ -33,6 +33,8 @@ import ultraauth.api.UltraAuthAPI;
 import ultraauth.managers.PlayerManager;
 
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.Future;
 
 /**
@@ -66,8 +68,10 @@ public class UltraAuthHook implements AuthPlugin<Player> {
         });
 
         try {
-            return future.get();
-        } catch (InterruptedException | ExecutionException ex) {
+            // 0.5.0/F017: bound the wait — a stuck main thread must not pile up
+            // unbounded async login threads
+            return future.get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException | ExecutionException | TimeoutException ex) {
             plugin.getLog().error("Failed to forceLogin player: {}", player, ex);
             return false;
         }

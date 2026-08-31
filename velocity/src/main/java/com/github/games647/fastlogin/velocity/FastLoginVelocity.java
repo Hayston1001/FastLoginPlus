@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.velocity;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -64,7 +65,6 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
-import com.velocitypowered.api.proxy.InboundConnection;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.messages.ChannelMessageSink;
@@ -80,7 +80,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     private final ProxyServer server;
     private final Path dataDirectory;
     private final Logger logger;
-    private final ConcurrentMap<InboundConnection, VelocityLoginSession> session = new MapMaker().weakKeys().makeMap();
+    private final ConcurrentMap<InetSocketAddress, VelocityLoginSession> session = new MapMaker().weakKeys().makeMap();
     private static final String PROXY_ID_FILE = "proxyId.txt";
 
     private FastLoginCore<Player, CommandSource, FastLoginVelocity> core;
@@ -100,6 +100,8 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     public void onProxyInitialization(ProxyInitializeEvent event) {
         scheduler = new AsyncScheduler(logger, task -> server.getScheduler().buildTask(this, task).schedule());
         core = new FastLoginCore<>(this);
+        // Proxies ship a trimmed config template without backend-only keys
+        core.setConfigTemplate("config-proxy.yml");
         core.load();
         loadOrGenerateProxyId();
         if (!core.setupDatabase() || proxyId == null) {
@@ -180,6 +182,9 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
+        // 0.5.0/F046: stop scheduling before closing shared resources
+        scheduler.shutdown();
+
         if (core != null) {
             core.close();
         }
@@ -256,7 +261,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         return core;
     }
 
-    public ConcurrentMap<InboundConnection, VelocityLoginSession> getSession() {
+    public ConcurrentMap<InetSocketAddress, VelocityLoginSession> getSession() {
         return session;
     }
 

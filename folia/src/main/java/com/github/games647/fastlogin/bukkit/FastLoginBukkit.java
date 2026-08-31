@@ -26,6 +26,8 @@
 package com.github.games647.fastlogin.bukkit;
 
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
+import com.github.games647.fastlogin.core.shared.PendingRelayStore;
 
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
@@ -35,6 +37,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
@@ -87,6 +90,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private boolean serverStarted;
     private BungeeManager bungeeManager;
     private final FoliaScheduler scheduler;
+
+    // 0.5.0/F073: the pending-relay retry chains are self-re-chaining virtual
+    // threads the platform scheduler cannot cancel — they must stop themselves
+    // when the plugin disables (a reload would otherwise accumulate chains of
+    // dead plugin instances)
+    private final AtomicBoolean relayChainsRunning = new AtomicBoolean(true);
+
+    // 0.5.0/F014: give up relaying after ~5 minutes (1s interval) and keep the
+    // entry queued instead of retrying forever
+    private static final int MAX_RELAY_ATTEMPTS = 300;
     private FastLoginCore<Player, CommandSender, FastLoginBukkit> core;
     private FloodgateService floodgateService;
     private GeyserService geyserService;
@@ -97,11 +110,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private AuthMeVersionDetector authMeVersionDetector;
     private AuthMePremiumIntegrator authMePremiumIntegrator;
 
-    private final java.util.Map<String, Boolean> pendingOfflineToggles =
-        new java.util.concurrent.ConcurrentHashMap<>();
+    // Durable queue for proxy relay messages that could not be sent because
+    // no player was online to serve as the plugin-message carrier.
+    private PendingRelayStore pendingRelayStore;
 
-    public java.util.Map<String, Boolean> getPendingOfflineToggles() {
-        return pendingOfflineToggles;
+    public PendingRelayStore getPendingRelayStore() {
+        return pendingRelayStore;
     }
 
     public FastLoginBukkit() {
@@ -124,7 +138,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // (persisted to AuthMe's config.yml) and unregister AuthMe's
                 // redundant PremiumVerificationPacketListener so FLP's ProtocolLib
                 // listener is the sole Mojang verification source.
-                authMePremiumIntegrator.enforceFlpPremiumControl();
+                // 0.5.0/F061: surface partial failures — AuthMe's packet listener may
+                // still be registered, causing a double-interception conflict
+                if (!authMePremiumIntegrator.enforceFlpPremiumControl()) {
+                    logger.warn("Failed to fully enforce FastLogin premium control in AuthMe 6.0"
+                            + " — premium logins may conflict with AuthMe's own listener");
+                }
             } else {
                 logger.info("AuthMe 5.x detected: v{} — using standard FLP flow",
                     authMeVersionDetector.getVersion());
@@ -139,10 +158,29 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         if (!initializeFloodgate()) {
             setEnabled(false);
+            // 0.5.0/F009: setEnabled(false) invokes onDisable synchronously —
+            // without this return the rest of onEnable would keep initializing
+            // listeners/commands on a plugin Bukkit considers disabled
+            return;
         }
 
         bungeeManager = new BungeeManager(this);
         bungeeManager.initialize();
+
+        // Restore the durable relay queue after a restart and resume delivery.
+        pendingRelayStore = new PendingRelayStore(getPluginFolder(), logger);
+        if (pendingRelayStore.load()) {
+            if (bungeeManager.isEnabled()) {
+                logger.info("Restored {} pending toggle(s) and {} pending delete(s) from disk; resuming relay",
+                    pendingRelayStore.toggles().size(), pendingRelayStore.deletes().size());
+                pendingRelayStore.toggles().keySet().forEach(this::scheduleToggleRelay);
+                pendingRelayStore.deletes().forEach(this::scheduleDeleteRelay);
+            } else {
+                logger.warn("Discarding {} pending relay(s): proxy support is disabled",
+                    pendingRelayStore.toggles().size() + pendingRelayStore.deletes().size());
+                pendingRelayStore.clearAll();
+            }
+        }
 
         PluginManager pluginManager = getServer().getPluginManager();
         if (bungeeManager.isEnabled()) {
@@ -201,7 +239,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             FlpCommand flpCommand = new FlpCommand(this);
             c.setExecutor(flpCommand);
             c.setTabCompleter(flpCommand);
+            logger.info("Registered /flp command (FlpCommand executor)");
         });
+        if (getCommand("flp") == null) {
+            logger.warn("Command /flp is not registered — plugin.yml 'commands: flp' missing "
+                + "or the plugin was disabled before command registration");
+        }
     }
 
     private void scheduleUpdateCheck() {
@@ -210,7 +253,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        long intervalTicks = core.getUpdateCheckInterval() * 60L * 60L;
+        // 0.5.0/F069: hours -> seconds (this API takes a TimeUnit, unlike the
+        // bukkit tick-based one)
+        long intervalSeconds = core.getUpdateCheckInterval() * 60L * 60L;
 
         // initial check after 3 seconds
         Bukkit.getAsyncScheduler().runDelayed(this, task -> {
@@ -231,20 +276,37 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                                 .replace("%current%", checker.getCurrentVersion()));
                     }
                 }
-            }, intervalTicks, intervalTicks, java.util.concurrent.TimeUnit.SECONDS);
+            }, intervalSeconds, intervalSeconds, java.util.concurrent.TimeUnit.SECONDS);
         }, 60L, java.util.concurrent.TimeUnit.SECONDS);
 
         getServer().getPluginManager().registerEvents(new UpdateNotifyListener(this), this);
     }
 
     private boolean initializeFloodgate() {
-        if (getServer().getPluginManager().getPlugin("Geyser-Spigot") != null) {
-            geyserService = new GeyserService(GeyserImpl.getInstance(), core);
+        // 0.5.0/F010: a plugin being present is not the same as being enabled —
+        // a disabled (or not yet initialized) Geyser/floodgate leaves
+        // getInstance() null and would NPE here, taking the whole plugin down.
+        // Check the enabled state and degrade gracefully instead.
+        if (getServer().getPluginManager().isPluginEnabled("Geyser-Spigot")) {
+            GeyserImpl geyser = GeyserImpl.getInstance();
+            if (geyser != null) {
+                geyserService = new GeyserService(geyser, core);
+            } else {
+                logger.warn("Geyser-Spigot is enabled but GeyserImpl is not initialized"
+                        + " — skipping Geyser service integration");
+            }
         }
 
-        if (getServer().getPluginManager().getPlugin("floodgate") != null) {
-            floodgateService = new FloodgateService(FloodgateApi.getInstance(), core);
+        if (getServer().getPluginManager().isPluginEnabled("floodgate")) {
+            FloodgateApi floodgateApi = FloodgateApi.getInstance();
+            if (floodgateApi == null) {
+                logger.warn("floodgate is enabled but FloodgateApi is not initialized"
+                        + " — skipping Floodgate service integration");
+                return true;
+            }
+            floodgateService = new FloodgateService(floodgateApi, core);
 
+            // Check Floodgate config values and return
             return floodgateService.isValidFloodgateConfigString("autoLoginFloodgate")
                     && floodgateService.isValidFloodgateConfigString("allowFloodgateNameConflict");
         }
@@ -257,6 +319,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         loginSession.clear();
         premiumPlayers.clear();
         playerFloodgateState.clear();
+
+        // 0.5.0/F046: stop scheduling before closing shared resources
+        scheduler.shutdown();
+        // 0.5.0/F073: stop the self-chaining relay retry tasks
+        relayChainsRunning.set(false);
 
         if (core != null) {
             core.close();
@@ -426,16 +493,24 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        // Pending toggles — cracked skips, premium allows despite UUID mismatch
-        Boolean pendingActivate = pendingOfflineToggles.get(playerName);
+        // Pending toggles — cracked skips, premium allows despite UUID mismatch.
+        // Cracked: the queued relay STAYS pending and is delivered by the retry
+        // task once any player reaches the PLAY phase.
+        Boolean pendingActivate = pendingRelayStore.getToggle(playerName);
         final boolean isPendingPremium = Boolean.TRUE.equals(pendingActivate);
         if (pendingActivate != null && !pendingActivate) {
-            pendingOfflineToggles.remove(playerName);
-            logger.info("Skipping autoRegister for {}: pending cracked toggle", playerName);
+            // The queued cracked toggle must still reach the proxy (its DB is
+            // still premium) — do NOT consume the entry here.  Only skip the
+            // AuthMe autoRegister; the message is delivered later by the retry
+            // task (remove-if-present guards against double-send).
+            logger.info("Skipping autoRegister for {}: pending cracked toggle (relay stays queued)",
+                    playerName);
+            // defensive: make sure a relay task exists for the still-queued entry
+            scheduleToggleRelay(playerName);
             return;
         }
 
-        Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
+        scheduler.runAsync(() -> {
             try {
                 java.util.Optional<com.github.games647.craftapi.model.Profile> mojang =
                     core.getResolver().findProfile(playerName);
@@ -481,25 +556,42 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 putSession(address, session);
 
                 if (isPendingPremium) {
-                    Bukkit.getScheduler().runTask(FastLoginBukkit.this, () -> {
-                        Player player = Bukkit.getPlayerExact(playerName);
-                        if (player != null && bungeeManager.isEnabled()) {
-                            ChangePremiumMessage msg = new ChangePremiumMessage(
-                                playerName, true, false);
-                            bungeeManager.sendPluginMessage(player, msg);
-                            pendingOfflineToggles.remove(playerName);
-                            if (getConfig().getBoolean("kick-toggle")) {
-                                logger.info(
-                                    "Relayed pending premium toggle for {} and kicking",
-                                    playerName);
-                                player.kickPlayer(core.getMessage("add-premium"));
-                            } else {
-                                logger.info(
-                                    "Relayed pending premium toggle for {} (kick disabled)",
-                                    playerName);
+                    Player carrier = Bukkit.getPlayerExact(playerName);
+                    if (carrier == null) {
+                        // Player not in the player list yet — the entry stays
+                        // queued and is delivered by the retry relay task once
+                        // any player reaches the PLAY phase.
+                        scheduleToggleRelay(playerName);
+                    } else {
+                        // Folia: EntityScheduler — kickPlayer/sendPluginMessage
+                        // must run on the player's own region thread.
+                        carrier.getScheduler().run(FastLoginBukkit.this, task -> {
+                            if (carrier.isOnline() && bungeeManager.isEnabled()) {
+                                // Read the CURRENT queued value at send time — the
+                                // entry may have been overwritten by a newer toggle
+                                // command, or already relayed by a retry task, since
+                                // the configure phase ran.
+                                Boolean pendingValue = pendingRelayStore.removeToggle(playerName);
+                                if (pendingValue == null) {
+                                    return;
+                                }
+                                ChangePremiumMessage msg = new ChangePremiumMessage(
+                                        playerName, pendingValue, false);
+                                bungeeManager.sendPluginMessage(carrier, msg);
+                                if (getConfig().getBoolean("kick-toggle")) {
+                                    logger.info(
+                                            "Relayed pending {} toggle for {} and kicking",
+                                            pendingValue ? "premium" : "cracked", playerName);
+                                    carrier.kickPlayer(core.getMessage(
+                                            pendingValue ? "add-premium" : "remove-premium"));
+                                } else {
+                                    logger.info(
+                                            "Relayed pending {} toggle for {} (kick disabled)",
+                                            pendingValue ? "premium" : "cracked", playerName);
+                                }
                             }
-                        }
-                    });
+                        }, null);
+                    }
                 }
             } catch (Exception e) {
                 logger.warn("AutoRegister in configure phase failed for {}: {}",
@@ -508,4 +600,148 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         });
     }
 
+    /**
+     * Retries relaying a queued premium/cracked toggle message every second
+     * until a player is online to serve as the relay channel. Folia has no
+     * global repeating scheduler, so each retry chains a one-shot delayed task.
+     *
+     * @param target the player name to toggle
+     */
+    public void scheduleToggleRelay(String target) {
+        scheduleToggleRelayAttempt(target, 0);
+    }
+
+    private void scheduleToggleRelayAttempt(String target, int attempt) {
+        if (!relayChainsRunning.get()) {
+            return;
+        }
+        scheduler.runAsyncDelayed(() -> {
+            if (!relayChainsRunning.get()) {
+                return;
+            }
+            Optional<? extends Player> optPlayer =
+                getServer().getOnlinePlayers().stream().findFirst();
+            if (!optPlayer.isPresent()) {
+                // still nobody online — retry in another second, but stop after
+                // MAX_RELAY_ATTEMPTS (the entry stays queued for the next start)
+                if (attempt + 1 >= MAX_RELAY_ATTEMPTS) {
+                    logger.warn("Gave up relaying pending toggle for {} after {} attempts"
+                            + " — the entry stays queued and is retried after a restart",
+                            target, attempt + 1);
+                    return;
+                }
+                if (pendingRelayStore.containsToggle(target)) {
+                    scheduleToggleRelayAttempt(target, attempt + 1);
+                }
+                return;
+            }
+
+            scheduler.getSyncExecutor().execute(() -> {
+                Player sender = optPlayer.get();
+                if (!sender.isOnline()) {
+                    // The carrier quit between the async online check and this
+                    // global-region task.  The entry is still queued (nothing
+                    // was removed yet) — retry with a fresh task instead of
+                    // sending into a dead connection and losing the toggle.
+                    if (attempt + 1 >= MAX_RELAY_ATTEMPTS) {
+                        logger.warn("Gave up relaying pending toggle for {} after {} attempts"
+                                + " — the entry stays queued and is retried after a restart",
+                                target, attempt + 1);
+                        return;
+                    }
+                    if (pendingRelayStore.containsToggle(target)) {
+                        scheduleToggleRelayAttempt(target, attempt + 1);
+                    }
+                    return;
+                }
+                // remove-if-present AND take the CURRENT queued value: the entry
+                // may have been overwritten by a newer toggle command since this
+                // task was scheduled — never send a stale captured value
+                Boolean pendingValue = pendingRelayStore.removeToggle(target);
+                if (pendingValue != null) {
+                    try {
+                        bungeeManager.sendPluginMessage(sender,
+                                new ChangePremiumMessage(target, pendingValue, false));
+                        logger.info("Relayed pending {} toggle for {}",
+                            pendingValue ? "premium" : "cracked", target);
+                    } catch (Exception ex) {
+                        // send failed after removal — put the entry back and retry
+                        pendingRelayStore.queueToggle(target, pendingValue);
+                        scheduleToggleRelayAttempt(target, attempt + 1);
+                        logger.warn("Failed to relay pending toggle for {} — requeued: {}",
+                            target, ex.getMessage());
+                    }
+                }
+            });
+        }, Duration.ofSeconds(1));
+    }
+
+    /**
+     * Retries relaying a queued delete message every second until a player is
+     * online to serve as the relay channel. Folia has no global repeating
+     * scheduler, so each retry chains a one-shot delayed task.
+     *
+     * @param targetName the player name to delete
+     */
+    public void scheduleDeleteRelay(String targetName) {
+        scheduleDeleteRelayAttempt(targetName, 0);
+    }
+
+    private void scheduleDeleteRelayAttempt(String targetName, int attempt) {
+        if (!relayChainsRunning.get()) {
+            return;
+        }
+        scheduler.runAsyncDelayed(() -> {
+            if (!relayChainsRunning.get()) {
+                return;
+            }
+            Optional<? extends Player> optPlayer =
+                getServer().getOnlinePlayers().stream().findFirst();
+            if (!optPlayer.isPresent()) {
+                // still nobody online — retry in another second, but stop after
+                // MAX_RELAY_ATTEMPTS (the entry stays queued for the next start)
+                if (attempt + 1 >= MAX_RELAY_ATTEMPTS) {
+                    logger.warn("Gave up relaying pending delete for {} after {} attempts"
+                            + " — the entry stays queued and is retried after a restart",
+                            targetName, attempt + 1);
+                    return;
+                }
+                if (pendingRelayStore.containsDelete(targetName)) {
+                    scheduleDeleteRelayAttempt(targetName, attempt + 1);
+                }
+                return;
+            }
+
+            scheduler.getSyncExecutor().execute(() -> {
+                Player sender = optPlayer.get();
+                if (!sender.isOnline()) {
+                    // carrier quit between the async check and this task — retry
+                    if (attempt + 1 >= MAX_RELAY_ATTEMPTS) {
+                        logger.warn("Gave up relaying pending delete for {} after {} attempts"
+                                + " — the entry stays queued and is retried after a restart",
+                                targetName, attempt + 1);
+                        return;
+                    }
+                    if (pendingRelayStore.containsDelete(targetName)) {
+                        scheduleDeleteRelayAttempt(targetName, attempt + 1);
+                    }
+                    return;
+                }
+                // remove-if-present: never double-send after another retry already relayed it
+                if (pendingRelayStore.clearDelete(targetName)) {
+                    try {
+                        bungeeManager.sendPluginMessage(sender,
+                                new DeletePremiumMessage(targetName, false));
+                        logger.info("Relayed pending delete for {}", targetName);
+                    } catch (Exception ex) {
+                        // send failed after removal — put the entry back and retry
+                        pendingRelayStore.queueDelete(targetName);
+                        scheduleDeleteRelayAttempt(targetName, attempt + 1);
+                        logger.warn("Failed to relay pending delete for {} — requeued: {}",
+                            targetName, ex.getMessage());
+                    }
+                }
+            });
+        }, Duration.ofSeconds(1));
+    }
 }

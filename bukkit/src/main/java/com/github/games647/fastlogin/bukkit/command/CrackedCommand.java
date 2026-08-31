@@ -87,34 +87,45 @@ public class CrackedCommand extends ToggleCommand {
         }
 
         // Local path (no proxy): load profile from local DB
-        // todo: load async if
-        StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
-        if (!profile.isOnlinemodePreferred()) {
-            plugin.getCore().sendLocaleMessage("not-premium", sender);
-            return;
-        }
-
-        plugin.getCore().sendLocaleMessage("remove-premium", sender);
-
-        profile.setOnlinemodePreferred(false);
-        profile.setId(null);
-
+        // 0.5.0/F011: database calls must not run on the main thread
         plugin.getScheduler().runAsync(() -> {
-            plugin.getCore().getStorage().save(profile);
-        });
-
-        // Local path (no proxy): event + kick
-        plugin.getScheduler().runAsync(() -> {
-            plugin.getServer().getPluginManager().callEvent(
-                    new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
-            );
-
-            plugin.getScheduler().getSyncExecutor().execute(() -> {
-                if (plugin.getCore().getConfig().getBoolean("kick-toggle")) {
-                    player.kickPlayer(plugin.getCore().getMessage("remove-premium"));
-                } else {
-                    plugin.getCore().sendLocaleMessage("add-premium", sender);
+            // 0.5.0/F020+R3: serialize concurrent load-modify-save windows for the
+            // same player (two fast commands would otherwise double-save)
+            plugin.getCore().getStorage().withNameLock(playerName, () -> {
+                StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
+                if (profile == null) {
+                    // null only on SQL exception (lock timeout, DB down) — the database failed
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("database-error", sender));
+                    return;
                 }
+                if (!profile.isOnlinemodePreferred()) {
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("not-premium", sender));
+                    return;
+                }
+
+                profile.setOnlinemodePreferred(false);
+                profile.setId(null);
+
+                plugin.getCore().getStorage().save(profile);
+
+                // Local path (no proxy): event + kick
+                plugin.getServer().getPluginManager().callEvent(
+                        new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
+                );
+
+                plugin.getScheduler().getSyncExecutor().execute(() -> {
+                    if (plugin.getCore().getConfig().getBoolean("kick-toggle")) {
+                        player.kickPlayer(plugin.getCore().getMessage("remove-premium"));
+                    } else {
+                        // 0.5.0/F012: this is the *cracked* self path — the message
+                        // was misleadingly the add-premium key
+                        // 0.5.0/R4: single feedback message — the pre-save duplicate
+                        // was removed
+                        plugin.getCore().sendLocaleMessage("remove-premium", sender);
+                    }
+                });
             });
         });
     }
@@ -143,32 +154,37 @@ public class CrackedCommand extends ToggleCommand {
         }
 
         // Local path (no proxy): load profile from local DB
-        //todo: load async
-        StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
-        if (profile == null) {
-            sender.sendMessage("Error occurred");
-            return;
-        }
-
-        //existing player is already cracked
-        if (profile.isExistingPlayer() && !profile.isOnlinemodePreferred()) {
-            plugin.getCore().sendLocaleMessage("not-premium-other", sender);
-            return;
-        }
-
-        plugin.getCore().sendLocaleMessage("remove-premium-other", sender);
-
-        profile.setOnlinemodePreferred(false);
-        profile.setId(null);
-
+        // 0.5.0/F011: database calls must not run on the main thread
         plugin.getScheduler().runAsync(() -> {
-            plugin.getCore().getStorage().save(profile);
-        });
+            // 0.5.0/F020+R3: see the self path above
+            plugin.getCore().getStorage().withNameLock(playerName, () -> {
+                StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
+                if (profile == null) {
+                    // null only on SQL exception (lock timeout, DB down) — the database failed
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("database-error", sender));
+                    return;
+                }
 
-        // Local path (no proxy): event
-        plugin.getScheduler().runAsync(() -> {
-            plugin.getServer().getPluginManager().callEvent(
-                    new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER));
+                //existing player is already cracked
+                if (profile.isExistingPlayer() && !profile.isOnlinemodePreferred()) {
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("not-premium-other", sender));
+                    return;
+                }
+
+                plugin.getScheduler().getSyncExecutor().execute(() ->
+                        plugin.getCore().sendLocaleMessage("remove-premium-other", sender));
+
+                profile.setOnlinemodePreferred(false);
+                profile.setId(null);
+
+                plugin.getCore().getStorage().save(profile);
+
+                // Local path (no proxy): event
+                plugin.getServer().getPluginManager().callEvent(
+                        new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER));
+            });
         });
     }
 

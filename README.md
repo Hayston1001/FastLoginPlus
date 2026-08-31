@@ -1,10 +1,12 @@
 # FastLoginPlus
 
-[中文→](https://github.com/Hayston1001/FastLoginPlus/blob/main/README_zh.md)
+[中文→](README_zh.md)
 
 > **Auto-detect and login premium Minecraft players on offline-mode servers** — no password needed, no client mods required. Actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin).
 
 Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow cracked clients, but this forces all players — including those with paid accounts — to type a password every time they join. FastLoginPlus checks each player against Mojang's API on login: if they own the game, they skip the auth plugin entirely and get their real UUID and skin automatically.
+
+> Works with [ProtocolLib](https://github.com/dmulloy2/ProtocolLib). [ForDetails→](PROTOCOLLIB-ASYNC-DESIGN.md)
 
 ## Features
 
@@ -23,7 +25,8 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 * **Multi-layer anti-bot** — per-IP rate limiting, burst detection, temporary IP ban, trusted IP whitelist, and `FastLoginAntiBotEvent` for plugin integration
 * **[Folia](https://papermc.io/downloads/folia) support** — dedicated module with Folia-compatible scheduler
 * **Auto update check** — checks GitHub Releases on startup and periodically; notifies OPs in-game when a new version is available
-* **Multi-language** — built-in English and Chinese, custom language files supported, bilingual config comments
+* **Multi-language** — built-in English and Chinese, custom language files supported
+* **Per-platform config templates** — Bukkit/Folia and BungeeCord/Velocity each generate their own config file: proxies get a trimmed template without backend-only keys, and backend comments mark the keys that lose effect behind a proxy
 * **SQLite on proxy platforms** — BungeeCord and Velocity now bundle SQLite JDBC driver; upstream only supports MySQL/MariaDB on proxies
 * **Session retry** — Mojang verification retries on network errors instead of failing immediately
 * **[SkinsRestorer](https://modrinth.com/plugin/skinsrestorer) compatibility** — no longer overrides skins set via SkinsRestorer
@@ -31,9 +34,9 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 ## Quick Start
 
-**Spigot/Paper:** install ProtocolLib → drop `FastLoginPlusBukkit.jar` in `plugins/` → set `online-mode=false`
+**Spigot/Paper**: drop `FastLoginPlusBukkit.jar` `an Auth pl` and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
 
-**Folia:** drop `FastLoginPlusFolia.jar` in `plugins/` → set `online-mode=false`
+**Folia**: drop `FastLoginPlusFolia.jar` `an Auth pl` and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
 
 ### Proxy Configuration
 
@@ -58,8 +61,7 @@ Paste the UUID into `plugins/fastloginplus/allowed-proxies.txt` on every backend
 | `velocity.toml` → `player-info-forwarding-mode` | `modern` | **Required**. Without this, Velocity does not forward UUIDs, skins, or IPs — FLP's plugin messages will never reach the backend. |
 | `velocity.toml` → `online-mode` | `false` | FLP handles authentication per-connection via `forceOnlineMode()`; the proxy should not authenticate by default. |
 | Backend `server.properties` → `online-mode` | `false` | The proxy handles authentication; the backend must not repeat it. |
-
-`ping-passthrough` has no effect on FLP — it only controls the server list MOTD/player count display. Set it to whatever you prefer.
+| Backend `paper-global.yml` → `proxies.velocity.online-mode` | `false` | Must match `velocity.toml`'s `online-mode`. |
 
 #### BungeeCord
 
@@ -75,16 +77,27 @@ In **standalone mode** (no proxy), the database (`FastLogin.db` by default) is s
 
 In **proxy mode** (BungeeCord/Velocity), the database is stored **only on the proxy**. Backend servers do not create a database — they simply execute the login/register commands sent by the proxy via plugin messages. `/flp premium` and `/flp cracked` commands on the backend forward to the proxy, and the proxy handles all profile reads and writes.
 
+### Configuration Templates
+
+FLP ships **two config templates**; each platform generates its `config.yml` from the one that matches its role:
+
+| Template | Used by | Contents |
+|----------|---------|----------|
+| `config.yml` (backend) | Bukkit, Folia | All keys. Comments mark which keys have no effect (or only partial effect) when the server runs **behind a proxy** — e.g. `database`, `anti-bot`, Floodgate keys are ignored on a proxy backend because the proxy owns those functions. |
+| `config-proxy.yml` (proxy) | BungeeCord, Velocity | Proxy-relevant keys only. Backend-only keys (`verifyClientKeys`, `respectIpLimit`) are omitted, and comments describe the proxy's role (decision maker: Mojang API queries, database, force-login forwarding). |
+
+The file on disk is always named `config.yml`. Copying a config file between a proxy and a backend is safe: each platform regenerates the file structure from its own template on startup while preserving your values, and keys missing from the new template are simply dropped (they had no effect there anyway).
+
 ## Environment
 
 | Platform | Java | Notes |
 |----------|------|-------|
-| Spigot / Paper | 8+ | Requires [ProtocolLib 5.3+](https://www.spigotmc.org/resources/protocollib.1997/) or [ProtocolSupport](https://www.spigotmc.org/resources/protocolsupport.7201/) |
-| Folia | 17+ | Requires ProtocolLib 5.3+ |
+| Spigot / Paper | 8+ | Requires [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
+| Folia | 21+ | Requires [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
 | BungeeCord / Waterfall | 17+ | — |
 | Velocity | 17+ | — |
 
-An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin) [SeeFullList→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
+An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin). [SeeFullList→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
 
 ## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) Support
 

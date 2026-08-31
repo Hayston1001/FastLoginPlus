@@ -87,16 +87,9 @@ public class TickingRateLimiter implements RateLimiter {
             }
 
             int res = latest.compareTo(nowMilli);
-            if (res < 0) {
-                // now is before the record — clock jumped back (NTP, VM drift)
-                // Treat as same-window: safest to allow rather than crash
-                latest.hit();
-                totalRequests++;
-                return true;
-            }
-
-            if (res == 0) {
-                // same minute record
+            if (res <= 0) {
+                // same window or earlier record — treat as same-window either
+                // way (a clock jump back must not crash the limiter)
                 latest.hit();
                 totalRequests++;
                 return true;

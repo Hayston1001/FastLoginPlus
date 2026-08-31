@@ -24,10 +24,44 @@
 # SOFTWARE.
 #
 
-# ========================================
-# FastLoginPlus Configuration
-# ========================================
 # Project: https://github.com/Hayston1001/FastLoginPlus
+
+# ========================================
+# FastLoginPlus Configuration (Bukkit / Folia)
+# ========================================
+# This template ships with the Bukkit/Folia plugin and covers BOTH deployment
+# modes:
+#   S = standalone      - no proxy, direct connections
+#   P = proxy backend   - spigot.yml bungee:true or Velocity forwarding
+# Keys whose behavior differs between modes carry an EFFECT line:
+#   # EFFECT  S=<full|none>   P=<scenario|none>   reason
+#   full     - the key works as described in this mode
+#   scenario - the sub-scenario where the key still works in this mode;
+#              currently "Paper" or "Paper 1.20.5+"
+#   none     - the key has no effect in this mode; its code paths do not run
+# Keys without an EFFECT line behave identically in both modes.
+#
+# Examples — how to read an EFFECT line:
+#
+#   --------------------------------
+#   # EFFECT  S=full   P=none
+#   anti-bot:
+#     enabled: true
+#   --------------------------------
+#   Standalone: This section fully works HERE.
+#   Behind a proxy: Editing this section HERE changes NOTHING. You should edit this in proxy's config.yml
+#
+#   --------------------------------
+#   # EFFECT  S=full   P=Paper 1.20.5+  configure-phase pre-registration
+#   autoRegister: true
+#   --------------------------------
+#   Standalone: This section fully works HERE.
+#   Behind a proxy: Only on Paper 1.20.5+; On Spigot editing this section HERE changes NOTHING--you should edit this in proxy's config.yml
+#
+#   --------------------------------
+#   autoLogin: true
+#   --------------------------------
+#   No EFFECT line: behaves identically in both modes.
 
 # ========================================
 # Language
@@ -49,13 +83,16 @@ update-check-interval: 24
 # Anti-bot
 # ========================================
 # Simple anti-bot protection. For serious protection, use a dedicated firewall
+# EFFECT  S=full   P=none           the proxy enforces anti-bot checks
 anti-bot:
   enabled: true
   # Total connections allowed in the time window
   connections: 600
   # Minutes before entries expire
   expire: 10
-  # Action when limit is hit: 'ignore' (drop) or 'block' (kick)
+  # Action when limit is hit: 'ignore' (FastLogin stops handling the connection —
+  # login continues as a normal cracked login, no Mojang/DB requests) or 'block'
+  # (reject the connection with the kick-antibot message)
   action: 'ignore'
 
   # --- Per-IP rate limiting ---
@@ -84,23 +121,27 @@ anti-bot:
 # Premium Detection
 # ========================================
 # Auto-register new premium players on first join
+# EFFECT  S=full   P=Paper 1.20.5+  configure-phase pre-registration; Spigot: none
 autoRegister: true
 
 # Enable auto-login for premium players
 autoLogin: true
 
 # Use premium UUID for premium players
-# Bukkit-side implementation uses ProtocolLib reflection to set the UUID
-# BungeeCord/Velocity-side uses native proxy API, no special requirements
+# In standalone mode, true = inject the premium UUID into the offline-mode
+# server (ProtocolLib reflection)
+# EFFECT  S=full   P=none           the proxy decides the UUID
 premiumUuid: true
 
 # Query Mojang API for new players and detect name changes by UUID
 # If a player's name is not in the database but their UUID is (under an old name),
 # the old record is updated with the new name and they log in as premium
+# EFFECT  S=full   P=none           the proxy detects name changes
 nameChangeCheck: true
 
 # If an offline player uses a premium username but fails authentication, 
 # remember them so they can join in offline mode next time (not recommended)
+# EFFECT  S=full   P=none           the cracked fallback runs on the proxy
 secondAttemptCracked: false
 
 # ========================================
@@ -111,6 +152,7 @@ secondAttemptCracked: false
 # No restrictions apply to online players
 # Use /flp cracked <player> to add offline players to the database
 # Use /flp delete <player> to remove offline players from the database
+# EFFECT  S=full   P=none           the proxy enforces the whitelist
 offline-whitelist: false
 
 # ========================================
@@ -118,15 +160,18 @@ offline-whitelist: false
 # ========================================
 # Forward premium skin to the player
 # Even when enabled, SkinsRestorer custom skins take priority (if SR is installed)
+# EFFECT  S=full   P=none           the proxy forwards or strips the skin itself
 forwardSkin: true
 
 # ========================================
 # Command Behavior
 # ========================================
 # Show warning before /flp premium command takes effect
+# EFFECT  S=full   P=none           the proxy reads its own copy
 premium-warning: true
 
 # Kick the player from the server after they confirm /flp premium, forcing them to reconnect
+# EFFECT  S=full   P=Paper 1.20.5+  pending-toggle relay kick only
 kick-toggle: true
 
 # ========================================
@@ -139,47 +184,62 @@ debug: false
 auto-register-unknown: true
 
 # Respect auth plugin per-IP registration limit
+# Bukkit/Folia only - currently honored by the AuthMe hook; other auth-plugin
+# hooks do not implement this check yet. Works in both modes (the auth plugin
+# runs on this server).
 respectIpLimit: false
 
-# ======[[ Spigot+ProtocolLib users only ]]======
-# Alternative session resolver that doesn't send server IP to Mojang
-# Useful behind DNAT / transparent reverse proxy
+# Alternative session resolver that doesn't send the server IP to Mojang
+# Useful behind DNAT / transparent reverse proxies
+# In standalone mode it omits the ip parameter in hasJoined, so verification
+# matches even when the backend observes a different IP than the client used
+# EFFECT  S=full   P=none           hasJoined never runs behind a proxy
 useProxyAgnosticResolver: true
 
-# ======[[ Mojang API retry ]]======
-# Retry count for Mojang API calls (both Name→UUID lookup and session verification)
+# Mojang API retry
+# Retry count for Mojang API calls (Name→UUID lookup + session verification)
 # Total attempts per request
+# EFFECT  S=full   P=none           no retried Mojang call runs behind a proxy
 mojang-retry-count: 3
 # Base delay between retries in milliseconds (exponential backoff: delay * 2^(attempt-1), capped at 10s)
 mojang-retry-delay: 500
 
-# ======[[ 1.19+ only ]]======
-# Verify client public key signature
+# Verify client public key signature (1.19+, standalone ProtocolLib)
+# EFFECT  S=full   P=none           ProtocolLib is not registered behind a proxy
 verifyClientKeys: false
 
 # IP addresses for rotating Mojang API requests (to avoid rate limits)
+# EFFECT  S=full   P=Paper 1.20.5+  configure-phase lookup only
 # ip-addresses:
 #   - 192-168-0-2
 ip-addresses:
 
 # Max Mojang name->UUID requests per 10 minutes (per IP)
+# EFFECT  S=none   P=none  — the bundled craftapi library currently ignores
+# this value (hardcoded 600/10min); kept for future compatibility
+# (formerly: S=full P=Paper 1.20.5+ configure-phase lookup only)
 mojang-request-limit: 600
 
 # ========================================
 # Floodgate / Bedrock
 # ========================================
 # Auto-login for Floodgate (Bedrock) players. Values: false / true / linked / no-conflict
+# EFFECT  S=full   P=none           the proxy handles Bedrock players
 autoLoginFloodgate: false
 
 # Allow Bedrock players to join even if their name conflicts with a Java premium account
+# EFFECT  S=full   P=none           the proxy enforces the conflict policy
 allowFloodgateNameConflict: false
 
 # Auto-register Floodgate players. Requires autoLoginFloodgate
+# EFFECT  S=full   P=none           the proxy handles Bedrock players
 autoRegisterFloodgate: false
 
 # ========================================
 # Database
 # ========================================
+# EFFECT  S=full   P=none           setupDatabase() is skipped; the proxy DB is
+#                                  the single source of truth
 # Database driver: 'sqlite' (default) or 'mysql'
 driver: 'sqlite'
 
@@ -194,9 +254,18 @@ port: 3306
 username: 'myUser'
 password: 'myPassword'
 
-# Connection pool settings (seconds)
+# --- Connection pool settings (seconds) ---
+# timeout: how long an operation waits to obtain a connection from the pool
+# before failing (HikariCP connectionTimeout)
 timeout: 30
-lifetime: 30
+# lifetime: how long a pooled connection lives before the pool retires and
+# replaces it (HikariCP maxLifetime).
+# Recommended: 1800 (30 minutes — the HikariCP default): long enough to
+# amortize TCP/auth/TLS handshake costs, short enough to retire connections
+# before the server kills them — keep it BELOW your MySQL wait_timeout
+# (default 8h). Values below 300 are clamped to 300 with a startup warning
+# (shorter lifetimes make the pool constantly reconnect); 0 = never expire.
+lifetime: 1800
 
 # SSL for MySQL (only used when driver: 'mysql')
 useSSL: false
@@ -210,6 +279,7 @@ ServerRSAPublicKeyFile:
 # Proxies
 # ========================================
 # HTTP proxies for Mojang API requests (workaround for rate limits)
+# EFFECT  S=full   P=Paper 1.20.5+  configure-phase lookup only
 # proxies:
 #   - 'xyz.com:1337'
 proxies:

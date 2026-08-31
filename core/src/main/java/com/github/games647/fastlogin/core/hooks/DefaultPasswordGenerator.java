@@ -41,7 +41,9 @@ public class DefaultPasswordGenerator<P> implements PasswordGenerator<P> {
     public String getRandomPassword(P player) {
         StringBuilder generatedPassword = new StringBuilder(8);
         IntStream.rangeClosed(1, PASSWORD_LENGTH)
-                .map(i -> random.nextInt(PASSWORD_CHARACTERS.length - 1))
+                // 0.5.0/F050: length, not length-1 — the last charset char
+                // ('9') was never generated before
+                .map(i -> random.nextInt(PASSWORD_CHARACTERS.length))
                 .mapToObj(pos -> PASSWORD_CHARACTERS[pos])
                 .forEach(generatedPassword::append);
 

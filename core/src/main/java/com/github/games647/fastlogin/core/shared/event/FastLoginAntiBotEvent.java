@@ -34,6 +34,9 @@ import java.net.InetSocketAddress;
  * <p>
  * Other plugins can listen to this event to react to anti-bot decisions (e.g. logging) or
  * cancel the event to bypass the anti-bot block (e.g. whitelisted players).
+ * <p>
+ * This event may fire from an async thread (a ProtocolLib worker on Bukkit/Folia, a Netty
+ * event loop on BungeeCord) — handlers must not call main-thread-only APIs (0.5.0/F040).
  *
  * {@snippet :
  * @EventHandler()

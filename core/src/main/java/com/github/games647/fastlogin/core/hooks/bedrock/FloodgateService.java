@@ -81,6 +81,13 @@ public class FloodgateService extends BedrockService<FloodgatePlayer> {
     public boolean performChecks(String username, LoginSource source) {
         // check if the Bedrock player is linked to a Java account
         FloodgatePlayer floodgatePlayer = getBedrockPlayer(username);
+        if (floodgatePlayer == null) {
+            // 0.5.0/F052: the player disconnected between the two Bedrock
+            // session lookups — treat as no Bedrock context and skip
+            core.getPlugin().getLog().info(
+                    "No Bedrock session for {} anymore — skipping Floodgate checks", username);
+            return true;
+        }
         boolean isLinked = floodgatePlayer.getLinkedPlayer() != null;
 
         if ("false".equals(allowConflict)

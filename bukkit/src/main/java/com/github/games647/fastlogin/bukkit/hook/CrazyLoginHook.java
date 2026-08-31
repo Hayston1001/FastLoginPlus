@@ -39,6 +39,8 @@ import org.bukkit.entity.Player;
 
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.Future;
 
 /**
@@ -97,13 +99,16 @@ public class CrazyLoginHook implements AuthPlugin<Player> {
         });
 
         try {
-            Optional<LoginPlayerData> result = future.get().filter(LoginPlayerData::isLoggedIn);
+            // 0.5.0/F017: bound the wait — a stuck main thread must not pile up
+            // unbounded async login threads
+            Optional<LoginPlayerData> result = future.get(5, TimeUnit.SECONDS)
+                    .filter(LoginPlayerData::isLoggedIn);
             if (result.isPresent()) {
                 //SQL-Queries should run async
                 crazyLoginPlugin.getCrazyDatabase().saveWithoutPassword(result.get());
                 return true;
             }
-        } catch (InterruptedException | ExecutionException ex) {
+        } catch (InterruptedException | ExecutionException | TimeoutException ex) {
             plugin.getLog().error("Failed to forceLogin player: {}", player, ex);
             return false;
         }

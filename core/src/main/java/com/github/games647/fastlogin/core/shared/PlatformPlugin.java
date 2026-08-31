@@ -48,7 +48,9 @@ public interface PlatformPlugin<C> {
     boolean isPluginInstalled(String name);
 
     default void sendMultiLineMessage(C receiver, String message) {
-        for (String line : message.split("%nl%")) {
+        // 0.5.0/F033: accept both newline conventions — locale files use %nl%,
+        // some messages contain literal backslash-n
+        for (String line : message.replace("\\n", "%nl%").split("%nl%")) {
             sendMessage(receiver, line);
         }
     }

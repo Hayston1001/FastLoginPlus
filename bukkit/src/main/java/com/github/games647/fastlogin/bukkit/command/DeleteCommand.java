@@ -67,23 +67,29 @@ public class DeleteCommand implements CommandExecutor {
             return true;
         }
 
-        StoredProfile profile = plugin.getCore().getStorage().loadProfile(targetName);
-        if (profile == null) {
-            sender.sendMessage("Error occurred");
-            return true;
-        }
-
-        if (!profile.isExistingPlayer()) {
-            plugin.getCore().sendLocaleMessage("delete-not-found", sender);
-            return true;
-        }
-
-        if (profile.isOnlinemodePreferred()) {
-            plugin.getCore().sendLocaleMessage("delete-premium-denied", sender);
-            return true;
-        }
-
+        // 0.5.0/F011: database calls must not run on the main thread — the
+        // whole load/validate/delete flow runs async, replies hop back to the
+        // main thread
         plugin.getScheduler().runAsync(() -> {
+            StoredProfile profile = plugin.getCore().getStorage().loadProfile(targetName);
+            if (profile == null) {
+                plugin.getScheduler().getSyncExecutor().execute(() ->
+                        plugin.getCore().sendLocaleMessage("database-error", sender));
+                return;
+            }
+
+            if (!profile.isExistingPlayer()) {
+                plugin.getScheduler().getSyncExecutor().execute(() ->
+                        plugin.getCore().sendLocaleMessage("delete-not-found", sender));
+                return;
+            }
+
+            if (profile.isOnlinemodePreferred()) {
+                plugin.getScheduler().getSyncExecutor().execute(() ->
+                        plugin.getCore().sendLocaleMessage("delete-premium-denied", sender));
+                return;
+            }
+
             boolean deleted = plugin.getCore().getStorage().deleteProfile(targetName);
             if (deleted) {
                 plugin.getServer().getPluginManager().callEvent(
@@ -103,19 +109,26 @@ public class DeleteCommand implements CommandExecutor {
     }
 
     private void sendBungeeDeleteMessage(CommandSender sender, String targetName) {
-        DeletePremiumMessage message = new DeletePremiumMessage(targetName);
         if (sender instanceof org.bukkit.plugin.messaging.PluginMessageRecipient) {
+            // player invoked — the invoker is the message carrier
             plugin.getBungeeManager().sendPluginMessage(
-                    (org.bukkit.plugin.messaging.PluginMessageRecipient) sender, message
-            );
+                    (org.bukkit.plugin.messaging.PluginMessageRecipient) sender,
+                    new DeletePremiumMessage(targetName, true));
         } else {
             java.util.Optional<? extends org.bukkit.entity.Player> optPlayer =
                     plugin.getServer().getOnlinePlayers().stream().findFirst();
             if (!optPlayer.isPresent()) {
-                plugin.getLog().info("No player online to send a plugin message to the proxy");
+                plugin.getLog().info("No player online to relay delete message — "
+                    + "queuing pending delete for {}", targetName);
+                if (plugin.getPendingRelayStore().queueDelete(targetName)) {
+                    // retry task only for a newly queued entry — one is already
+                    // running for an entry that is waiting
+                    plugin.scheduleDeleteRelay(targetName);
+                }
                 return;
             }
-            plugin.getBungeeManager().sendPluginMessage(optPlayer.get(), message);
+            plugin.getBungeeManager().sendPluginMessage(optPlayer.get(),
+                    new DeletePremiumMessage(targetName, false));
         }
     }
 }

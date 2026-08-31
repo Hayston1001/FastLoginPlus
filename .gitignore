@@ -1,6 +1,7 @@
 # dev
 .worktrees/
 .playwright-mcp/
+audit/
 dev_web_server.py
 
 # Eclipse
@@ -64,3 +65,4 @@ desktop.ini
 # AI agent
 AGENTS.md
 .hermes/
+.pi/

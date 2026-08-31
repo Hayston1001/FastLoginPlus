@@ -33,6 +33,8 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.Future;
 
 /**
@@ -75,8 +77,10 @@ public class XAuthHook implements AuthPlugin<Player> {
         });
 
         try {
-            return future.get();
-        } catch (InterruptedException | ExecutionException ex) {
+            // 0.5.0/F017: bound the wait — a stuck main thread must not pile up
+            // unbounded async login threads
+            return future.get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException | ExecutionException | TimeoutException ex) {
             plugin.getLog().error("Failed to forceLogin player: {}", player, ex);
             return false;
         }
@@ -103,8 +107,9 @@ public class XAuthHook implements AuthPlugin<Player> {
 
         try {
             //login in the player after registration
-            return future.get() && forceLogin(player);
-        } catch (InterruptedException | ExecutionException ex) {
+            // 0.5.0/F017: bound the wait (see forceLogin)
+            return future.get(5, TimeUnit.SECONDS) && forceLogin(player);
+        } catch (InterruptedException | ExecutionException | TimeoutException ex) {
             plugin.getLog().error("Failed to forceRegister player: {}", player, ex);
             return false;
         }

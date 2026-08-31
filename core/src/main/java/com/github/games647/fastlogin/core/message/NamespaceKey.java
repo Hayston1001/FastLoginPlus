@@ -35,8 +35,10 @@ public class NamespaceKey {
     private final String combined;
 
     public NamespaceKey(String namespace, String key) {
-        this.namespace = namespace.toLowerCase();
-        this.key = key.toLowerCase();
+        // Locale.ROOT: the default locale must not rewrite channel names
+        // (e.g. Turkish 'I' -> 'ı' would break plugin messaging) (0.5.0/F032)
+        this.namespace = namespace.toLowerCase(java.util.Locale.ROOT);
+        this.key = key.toLowerCase(java.util.Locale.ROOT);
 
         this.combined = this.namespace + SEPARATOR_CHAR + this.key;
     }

@@ -25,16 +25,21 @@
  */
 package com.github.games647.fastlogin.core.antibot;
 
+import com.google.common.base.Ticker;
 import org.slf4j.Logger;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class AntiBotService {
 
     private static final int CLEANUP_INTERVAL = 100;
 
     private final Logger logger;
+
+    /** Uptime clock shared with the limiters — must not be mixed with epoch time. */
+    private final Ticker ticker;
 
     private final boolean enabled;
     private final RateLimiter globalLimiter;
@@ -44,13 +49,15 @@ public class AntiBotService {
     private final IpBanManager ipBanManager;
     private final PerIpRateLimiter perIpLimiter;
     private final long banDurationMs;
-    private int connectionCount;
+    // atomic: onIncomingConnection runs on connection/Netty threads — a plain
+    // int would lose increments and skew the cleanup cadence (0.5.0/F041,F075)
+    private final AtomicInteger connectionCount = new AtomicInteger();
 
     // CHECKSTYLE.OFF: ParameterNumber — 8 params is intentional; enabled flag + all layers
     public AntiBotService(Logger logger, boolean enabled, RateLimiter globalLimiter,
                          Action limitReachedAction, TrustedIpSet trustedIpSet,
                          IpBanManager ipBanManager, PerIpRateLimiter perIpLimiter,
-                         long banDurationMs) {
+                         long banDurationMs, Ticker ticker) {
         this.logger = logger;
         this.enabled = enabled;
         this.globalLimiter = globalLimiter;
@@ -59,6 +66,7 @@ public class AntiBotService {
         this.ipBanManager = ipBanManager;
         this.perIpLimiter = perIpLimiter;
         this.banDurationMs = banDurationMs;
+        this.ticker = ticker;
     }
     // CHECKSTYLE.ON: ParameterNumber
 
@@ -82,10 +90,15 @@ public class AntiBotService {
             return Action.Continue;
         }
 
-        // Periodic cleanup every N connections
-        if (++connectionCount >= CLEANUP_INTERVAL) {
-            connectionCount = 0;
-            long nowMs = System.currentTimeMillis();
+        // Periodic cleanup every N connections. Two threads may both observe
+        // the threshold — the cleanup itself is idempotent (and the per-IP lazy
+        // path is throttled), so a rare double-run is acceptable.
+        if (connectionCount.incrementAndGet() >= CLEANUP_INTERVAL) {
+            connectionCount.set(0);
+            // same uptime clock as the limiters' internal Ticker — epoch
+            // millis would make every entry look expired and wipe the
+            // per-IP state on every cleanup (0.5.0/F076)
+            long nowMs = ticker.read() / 1_000_000;
             perIpLimiter.cleanup(nowMs);
             ipBanManager.cleanup();
         }

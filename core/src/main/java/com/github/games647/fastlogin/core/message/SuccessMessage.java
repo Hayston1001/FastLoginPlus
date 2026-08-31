@@ -28,9 +28,23 @@ package com.github.games647.fastlogin.core.message;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteArrayDataOutput;
 
-public class SuccessMessage implements ChannelMessage {
+public class SuccessMessage implements ProxyAuthenticatedMessage {
 
     public static final String SUCCESS_CHANNEL = "succ";
+
+    // 0.5.0/F054: echoed proxy allowlist of the sending backend, appended as a
+    // trailing optional wire field (empty string when unset/untrusted)
+    private String sourceProxyId = "";
+
+    @Override
+    public String getSourceProxyId() {
+        return sourceProxyId;
+    }
+
+    @Override
+    public void setSourceProxyId(String sourceProxyId) {
+        this.sourceProxyId = sourceProxyId;
+    }
 
     @Override
     public String getChannelName() {
@@ -39,16 +53,25 @@ public class SuccessMessage implements ChannelMessage {
 
     @Override
     public void readFrom(ByteArrayDataInput input) {
-        //empty
+        // 0.5.0/F054: optional trailing authentication field; legacy payloads
+        // (older backend) are empty and surface as RuntimeException on EOF
+        try {
+            sourceProxyId = input.readUTF();
+        } catch (RuntimeException legacyFormat) {
+            sourceProxyId = "";
+        }
     }
 
     @Override
     public void writeTo(ByteArrayDataOutput output) {
-        //empty
+        // always appended so the wire format has no arity ambiguity
+        output.writeUTF(sourceProxyId);
     }
 
     @Override
     public String toString() {
-        return this.getClass().getSimpleName() + "{}";
+        return this.getClass().getSimpleName() + '{'
+            + "sourceProxyId='" + sourceProxyId + '\''
+            + '}';
     }
 }

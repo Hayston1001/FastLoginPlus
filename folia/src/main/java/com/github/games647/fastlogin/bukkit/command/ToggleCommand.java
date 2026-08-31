@@ -28,7 +28,6 @@ package com.github.games647.fastlogin.bukkit.command;
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.ChannelMessage;
-import org.bukkit.Bukkit;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -74,13 +73,24 @@ public abstract class ToggleCommand implements CommandExecutor {
     }
 
     protected void sendBungeeActivateMessage(CommandSender invoker, String target, boolean activate) {
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Forwarding toggle message to proxy: target={} activate={} invoker={}",
+                    target, activate, invoker.getName());
+        }
         if (invoker instanceof PluginMessageRecipient) {
             ChannelMessage message = new ChangePremiumMessage(target, activate, true);
             plugin.getBungeeManager().sendPluginMessage((PluginMessageRecipient) invoker, message);
         } else {
-            Optional<? extends Player> optPlayer = Bukkit.getServer().getOnlinePlayers().stream().findFirst();
+            Optional<? extends Player> optPlayer = plugin.getServer().getOnlinePlayers().stream().findFirst();
             if (!optPlayer.isPresent()) {
-                plugin.getLog().info("No player online to send a plugin message to the proxy");
+                plugin.getLog().info("No player online to relay message — "
+                    + "queuing pending toggle for {}", target);
+                if (plugin.getPendingRelayStore().queueToggle(target, activate)) {
+                    // schedule a retry only for a newly queued entry — an entry
+                    // already waiting has a live retry task, which picks up the
+                    // latest queued value at send time
+                    plugin.scheduleToggleRelay(target);
+                }
                 return;
             }
 

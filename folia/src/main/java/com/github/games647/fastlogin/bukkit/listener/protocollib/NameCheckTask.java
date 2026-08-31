@@ -69,7 +69,7 @@ public class NameCheckTask extends JoinManagement<Player, CommandSender, Protoco
 
     @Override
     public void run() {
-        ProtocolLibLoginSource source = new ProtocolLibLoginSource(player, random, serverKey, clientKey);
+        ProtocolLibLoginSource source = new ProtocolLibLoginSource(plugin, player, random, serverKey, clientKey);
         try {
             super.onLogin(username, source);
         } finally {
@@ -130,7 +130,7 @@ public class NameCheckTask extends JoinManagement<Player, CommandSender, Protoco
         com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
             plugin.getAuthMePremiumIntegrator();
         if (integrator != null) {
-            integrator.ensureNotPremium(username);
+            integrator.ensureNotPremium(username, profile.isExistingPlayer());
         }
 
         BukkitLoginSession loginSession = new BukkitLoginSession(username, profile);

@@ -48,7 +48,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
-import static java.util.stream.Collectors.toSet;
+
+import org.slf4j.Logger;
 
 import com.github.games647.craftapi.resolver.MojangResolver;
 import com.github.games647.craftapi.resolver.http.RotatingProxySelector;
@@ -89,12 +90,21 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             Duration.ofMinutes(5), -1
     );
 
-    private final Collection<UUID> pendingConfirms = new HashSet<>();
+    // concurrent set: proxy-side plugin-message listeners run on Netty
+    // event-loop threads of different players (0.5.0/F025)
+    private final Collection<UUID> pendingConfirms = ConcurrentHashMap.newKeySet();
     private final T plugin;
 
     private MojangResolver resolver;
 
     private Configuration config;
+
+    /**
+     * Bundled config template resource name. Backends (bukkit/folia) use the
+     * full "config.yml"; proxies (bungee/velocity) select the trimmed
+     * "config-proxy.yml" before {@link #load()}.
+     */
+    private String configTemplate = "config.yml";
     private SQLStorage storage;
     private AntiBotService antiBot;
     private PasswordGenerator<P> passwordGenerator = new DefaultPasswordGenerator<>();
@@ -107,7 +117,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     public void load() {
         // 1. Load config first to determine language setting
-        saveDefaultFile("config.yml");
+        saveDefaultFile("config.yml", configTemplate);
 
         try {
             config = loadFile("config.yml");
@@ -133,7 +143,8 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             ConfigRefresher.refresh(
                     getClass().getClassLoader(),
                     plugin.getPluginFolder().resolve("config.yml"),
-                    config);
+                    config,
+                    configTemplate);
         } catch (IOException ioEx) {
             plugin.getLog().warn("Could not refresh config.yml from template", ioEx);
             // non-fatal: continue with the config as-is
@@ -150,6 +161,13 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
         // 2. Determine language file based on config
         String language = config.getString("language");
+        // 0.5.0/F049: the value is concatenated into a file path — reject
+        // traversal/separator characters instead of writing outside the
+        // plugin directory
+        if (language == null || !language.matches("[a-zA-Z0-9_-]+")) {
+            plugin.getLog().warn("Invalid language value '{}' — falling back to 'en'", language);
+            language = "en";
+        }
         String messagesFile = "messages_" + language + ".yml";
         String defaultMessagesFile = "messages_en.yml";
 
@@ -197,12 +215,24 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             ? new ProxyAgnosticMojangResolver() : new MojangResolver();
 
         antiBot = createAntiBotService(config.getSection("anti-bot"));
-        Set<Proxy> proxies = config.getStringList("proxies")
-                .stream()
-                .map(proxy -> proxy.split(":"))
-                .map(proxy -> new InetSocketAddress(proxy[0], Integer.parseInt(proxy[1])))
-                .map(sa -> new Proxy(Type.HTTP, sa))
-                .collect(toSet());
+        // 0.5.0/F047: validate entries — a missing colon or non-numeric port
+        // would otherwise crash the whole plugin startup
+        Set<Proxy> proxies = new HashSet<>();
+        for (String proxyEntry : config.getStringList("proxies")) {
+            String[] parts = proxyEntry.split(":");
+            if (parts.length != 2) {
+                plugin.getLog().warn("Invalid proxies entry '{}' — expected host:port, skipping",
+                        proxyEntry);
+                continue;
+            }
+            try {
+                proxies.add(new Proxy(Type.HTTP,
+                        new InetSocketAddress(parts[0], Integer.parseInt(parts[1]))));
+            } catch (NumberFormatException ex) {
+                plugin.getLog().warn("Invalid proxies entry '{}' — port is not a number, skipping",
+                        proxyEntry);
+            }
+        }
 
         Collection<InetAddress> addresses = new HashSet<>();
         for (String localAddress : config.getStringList("ip-addresses")) {
@@ -213,7 +243,16 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             }
         }
 
-        resolver.setMaxNameRequests(config.getInt("mojang-request-limit"));
+        // 0.5.0/F044: craftapi 0.8.1's setMaxNameRequests only stores the value
+        // — its profile limiter keeps the built-in 600/10min.  Warn so admins
+        // don't rely on the configured value.
+        int mojangRequestLimit = config.getInt("mojang-request-limit");
+        if (mojangRequestLimit != 600) {
+            plugin.getLog().warn("mojang-request-limit is currently not applied by the bundled"
+                    + " craftapi library (always {}) — configured value {} is ignored",
+                    600, mojangRequestLimit);
+        }
+        resolver.setMaxNameRequests(mojangRequestLimit);
         resolver.setProxySelector(new RotatingProxySelector(proxies));
         resolver.setOutgoingAddresses(addresses);
 
@@ -226,6 +265,46 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         }
     }
 
+    /**
+     * Validate an anti-bot limit value (0.5.0/F039): values below 1 either
+     * dead-lock the check (limit 0 rejects everything) or are undefined —
+     * fall back to the configured default instead.
+     *
+     * @param logger   the plugin logger
+     * @param key      the config key (for the warning)
+     * @param value    the configured value
+     * @param fallback the default from the bundled config template
+     * @return the validated value
+     */
+    static int validatedLimit(Logger logger, String key, int value, int fallback) {
+        if (value < 1) {
+            logger.warn("anti-bot.{} is {} — values below 1 break the check;"
+                    + " falling back to {}", key, value, fallback);
+            return fallback;
+        }
+        return value;
+    }
+
+    /**
+     * Validate an anti-bot duration value (0.5.0/F039): zero or negative
+     * durations make the associated window/ban ineffective — fall back to the
+     * configured default instead.
+     *
+     * @param logger     the plugin logger
+     * @param key        the config key (for the warning)
+     * @param valueMs    the configured value in milliseconds
+     * @param fallbackMs the default from the bundled config template
+     * @return the validated value
+     */
+    static long validatedDurationMs(Logger logger, String key, long valueMs, long fallbackMs) {
+        if (valueMs <= 0) {
+            logger.warn("anti-bot.{} is {}ms — non-positive durations break the"
+                    + " check; falling back to {}ms", key, valueMs, fallbackMs);
+            return fallbackMs;
+        }
+        return valueMs;
+    }
+
     private AntiBotService createAntiBotService(Configuration botSection) {
         Ticker ticker = Ticker.systemTicker();
         boolean enabled = botSection.getBoolean("enabled");
@@ -233,9 +312,14 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         // --- global rate limiter ---
         RateLimiter globalLimiter;
         if (enabled) {
-            int maxCon = botSection.getInt("connections");
-            long expireTime = botSection.getLong("expire") * 60 * 1_000L;
+            int maxCon = validatedLimit(plugin.getLog(), "connections",
+                    botSection.getInt("connections"), 600);
+            long expireTime = validatedDurationMs(plugin.getLog(), "expire",
+                    botSection.getLong("expire") * 60 * 1_000L, 600_000L);
             if (expireTime > MAX_EXPIRE_RATE) {
+                plugin.getLog().warn("anti-bot.expire is capped at {} minutes (was {} minutes)"
+                                + " — the internal rate limiter cannot track longer windows",
+                        MAX_EXPIRE_RATE / 60_000, expireTime / 60_000);
                 expireTime = MAX_EXPIRE_RATE;
             }
             globalLimiter = new TickingRateLimiter(ticker, maxCon, expireTime);
@@ -268,26 +352,35 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         TrustedIpSet trustedIpSet = new TrustedIpSet(trustedIps);
 
         // --- per-IP rate limiter ---
-        int burstLimit = botSection.getInt("burst-limit");
-        long burstWindowMs = botSection.getLong("burst-window") * 1_000L;
-        int perIpConnLimit = botSection.getInt("per-ip-connections");
-        long perIpExpireMs = botSection.getLong("per-ip-expire") * 60 * 1_000L;
+        int burstLimit = validatedLimit(plugin.getLog(), "burst-limit",
+                botSection.getInt("burst-limit"), 10);
+        long burstWindowMs = validatedDurationMs(plugin.getLog(), "burst-window",
+                botSection.getLong("burst-window") * 1_000L, 10_000L);
+        int perIpConnLimit = validatedLimit(plugin.getLog(), "per-ip-connections",
+                botSection.getInt("per-ip-connections"), 20);
+        long perIpExpireMs = validatedDurationMs(plugin.getLog(), "per-ip-expire",
+                botSection.getLong("per-ip-expire") * 60 * 1_000L, 300_000L);
         PerIpRateLimiter perIpLimiter = new PerIpRateLimiter(ticker, burstLimit, burstWindowMs,
                 perIpConnLimit, perIpExpireMs);
 
         // --- IP ban manager ---
-        long banDurationMs = botSection.getLong("ban-duration") * 60 * 1_000L;
+        long banDurationMs = validatedDurationMs(plugin.getLog(), "ban-duration",
+                botSection.getLong("ban-duration") * 60 * 1_000L, 300_000L);
         IpBanManager ipBanManager = new IpBanManager(ticker);
 
         return new AntiBotService(plugin.getLog(), enabled, globalLimiter, action,
-                trustedIpSet, ipBanManager, perIpLimiter, banDurationMs);
+                trustedIpSet, ipBanManager, perIpLimiter, banDurationMs, ticker);
     }
 
     private Configuration loadFile(String fileName) throws IOException {
         ConfigurationProvider configProvider = ConfigurationProvider.getProvider(YamlConfiguration.class);
 
+        // Defaults come from the SELECTED template (config.yml on backends,
+        // config-proxy.yml on proxies) so the in-memory config matches the
+        // trimmed on-disk file — dropped backend-only keys must not sneak
+        // back in via the full template's defaults.
         Configuration defaults;
-        try (InputStream defaultStream = getClass().getClassLoader().getResourceAsStream(fileName)) {
+        try (InputStream defaultStream = getClass().getClassLoader().getResourceAsStream(configTemplate)) {
             defaults = configProvider.load(defaultStream);
         }
 
@@ -329,6 +422,9 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         return localeMessages.get(key);
     }
 
+    // 0.5.0/F019 — floor for the HikariCP maxLifetime setting
+    private static final long MIN_LIFETIME_MS = 300_000L;
+
     public boolean setupDatabase() {
         String type = config.getString("driver");
 
@@ -336,7 +432,19 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         String database = config.getString("database");
 
         databaseConfig.setConnectionTimeout(config.getInt("timeout") * 1_000L);
-        databaseConfig.setMaxLifetime(config.getInt("lifetime") * 1_000L);
+
+        // 0.5.0/F019: HikariCP enforces a 30s minimum maxLifetime — values at
+        // or near it retire every pooled connection almost immediately
+        // (constant reconnect churn).  Clamp to a sane floor (0 = infinite,
+        // which HikariCP supports and is left untouched).
+        long lifetimeMs = config.getInt("lifetime") * 1_000L;
+        if (lifetimeMs > 0 && lifetimeMs < MIN_LIFETIME_MS) {
+            plugin.getLog().warn("Database lifetime is {}s — below the recommended minimum"
+                            + " of {}s, causing constant connection churn; using {}s instead.",
+                    lifetimeMs / 1_000, MIN_LIFETIME_MS / 1_000, MIN_LIFETIME_MS / 1_000);
+            lifetimeMs = MIN_LIFETIME_MS;
+        }
+        databaseConfig.setMaxLifetime(lifetimeMs);
 
         if (type.contains("sqlite")) {
             storage = new SQLiteStorage(plugin, database, databaseConfig);
@@ -365,6 +473,13 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             return true;
         } catch (Exception ex) {
             plugin.getLog().warn("Failed to setup database. Disabling plugin...", ex);
+            // 0.5.0/F021: the HikariDataSource was already constructed — close
+            // it here, because setEnabled(false) during onEnable suppresses
+            // onDisable (and with it core.close()) on bukkit/folia
+            if (storage != null) {
+                storage.close();
+                storage = null;
+            }
             return false;
         }
     }
@@ -422,6 +537,21 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         this.authPlugin = authPlugin;
     }
 
+    /**
+     * Select which bundled template feeds config.yml generation and refresh.
+     * Must be called before {@link #load()}.
+     *
+     * @param configTemplate resource name of the bundled template
+     *                       (e.g. "config.yml", "config-proxy.yml")
+     */
+    public void setConfigTemplate(String configTemplate) {
+        if (this.config != null) {
+            throw new IllegalStateException(
+                    "setConfigTemplate must be called before load()");
+        }
+        this.configTemplate = configTemplate;
+    }
+
     public void saveDefaultFile(String fileName) {
         saveDefaultFile(fileName, fileName);
     }
@@ -442,10 +572,15 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
                 try (InputStream defaultStream = getClass().getClassLoader().getResourceAsStream(resourceFile)) {
                     if (defaultStream != null) {
                         Files.copy(Objects.requireNonNull(defaultStream), configFile);
-                        plugin.getLog().info("Created language file: {}", targetName);
+                        plugin.getLog().info("Created default file: {}", targetName);
                     } else {
-                        plugin.getLog().warn("Bundled resource not found: {}, falling back to English", resourceFile);
-                        saveDefaultFile(targetName, "messages_en.yml");
+                        plugin.getLog().warn("Bundled resource not found: {}", resourceFile);
+                        // Only language files have an English fallback. A missing
+                        // config template must not be replaced by a language file —
+                        // let the subsequent load fail loudly instead.
+                        if (targetName.startsWith("messages_")) {
+                            saveDefaultFile(targetName, "messages_en.yml");
+                        }
                     }
                 }
             }

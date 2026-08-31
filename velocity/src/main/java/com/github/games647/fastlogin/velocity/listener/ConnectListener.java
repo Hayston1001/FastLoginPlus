@@ -40,6 +40,7 @@ import com.github.games647.fastlogin.velocity.task.FloodgateAuthTask;
 import com.github.games647.fastlogin.velocity.task.ForceLoginTask;
 import com.google.common.cache.Cache;
 import com.google.common.collect.ListMultimap;
+import com.velocitypowered.api.event.Continuation;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.Subscribe;
@@ -65,8 +66,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 public class ConnectListener {
 
     private static final String FLOODGATE_PLUGIN_NAME = "org.geysermc.floodgate.VelocityPlugin";
@@ -99,45 +100,131 @@ public class ConnectListener {
             }
         }
 
-        Action action = antiBotService.onIncomingConnection(address, username);
+        // effectively-final snapshot for the lambda captures below (username
+        // may have been rewritten by the Floodgate lookup above)
+        final String checkedUsername = username;
+        Action action = antiBotService.onIncomingConnection(address, checkedUsername);
         if (action != Action.Continue) {
-            VelocityFastLoginAntiBotEvent antiBotEvent = new VelocityFastLoginAntiBotEvent(address, username, action);
-            try {
-                plugin.getProxy().getEventManager().fire(antiBotEvent).get();
-            } catch (InterruptedException interruptedEx) {
-                Thread.currentThread().interrupt();
-            } catch (ExecutionException executionEx) {
-                plugin.getLog().error("Error firing anti-bot event", executionEx);
-            }
-
-            if (antiBotEvent.isCancelled()) {
-                action = Action.Continue;
-            }
+            VelocityFastLoginAntiBotEvent antiBotEvent =
+                    new VelocityFastLoginAntiBotEvent(address, checkedUsername, action);
+            // Non-blocking (0.5.0/F034): pause the event, fire the anti-bot
+            // event asynchronously and resume from the completion callback —
+            // the Netty event loop must never block on a synchronous .get().
+            // 0.5.0/R2: per-event guard so the continuation is resumed exactly
+            // once even when the callback or the decision applying throws
+            AtomicBoolean resumed = new AtomicBoolean(false);
+            return EventTask.withContinuation(continuation -> {
+                try {
+                    plugin.getProxy().getEventManager().fire(antiBotEvent).whenComplete((unused, ex) -> {
+                        if (ex != null) {
+                            plugin.getLog().error("Error firing anti-bot event", ex);
+                        }
+                        Action effective = antiBotEvent.isCancelled() ? Action.Continue : action;
+                        applyDecisionSafely(preLoginEvent, connection, checkedUsername, effective,
+                                continuation, resumed);
+                    });
+                } catch (Exception fireEx) {
+                    plugin.getLog().error("Error firing anti-bot event", fireEx);
+                    resumeOnce(continuation, resumed);
+                }
+            });
         }
 
+        // no anti-bot action — continue with the premium check
+        // 0.5.0/F056: run it on the plugin scheduler instead of the shared
+        // async event executor, so blocking Mojang lookups (with retry sleeps)
+        // cannot starve the event executor for all other handlers
+        // 0.5.0/R2: per-event guard so the continuation is resumed exactly once
+        AtomicBoolean resumed = new AtomicBoolean(false);
+        return EventTask.withContinuation(continuation ->
+                applyDecisionSafely(preLoginEvent, connection, checkedUsername, action, continuation,
+                        resumed));
+    }
+
+    /**
+     * Apply the effective anti-bot decision to the pre-login event and resume
+     * the paused event pipeline.
+     *
+     * @param preLoginEvent the paused pre-login event
+     * @param connection    the inbound connection
+     * @param username      the username from the pre-login event
+     * @param action        the effective anti-bot action (third-party handlers
+     *                      may have cancelled the original one)
+     * @param continuation  the event continuation to resume
+     * @param resumed       per-event exactly-once resume guard (0.5.0/R2)
+     */
+    private void applyAntiBotDecision(PreLoginEvent preLoginEvent, InboundConnection connection,
+                                      String username, Action action, Continuation continuation,
+                                      AtomicBoolean resumed) {
         switch (action) {
             case Ignore:
-                // just ignore
-                return null;
+                // FastLogin stops handling the connection — login continues as
+                // a normal cracked login without premium handling
+                resumeOnce(continuation, resumed);
+                break;
             case Block:
                 String message = plugin.getCore().getMessage("kick-antibot");
                 TextComponent messageParsed = LegacyComponentSerializer.legacyAmpersand().deserialize(message);
-
-                PreLoginComponentResult reason = PreLoginComponentResult.denied(messageParsed);
-                preLoginEvent.setResult(reason);
-                return null;
+                preLoginEvent.setResult(PreLoginComponentResult.denied(messageParsed));
+                resumeOnce(continuation, resumed);
+                break;
             case Continue:
             default:
-                return EventTask.async(
-                        new AsyncPremiumCheck(plugin, connection, username, preLoginEvent)
-                );
+                // third-party handler cancelled the anti-bot action — run the
+                // premium check off the event loop and resume when it completes
+                plugin.getScheduler().runAsync(() -> {
+                    try {
+                        new AsyncPremiumCheck(plugin, connection, username, preLoginEvent).run();
+                    } catch (Exception runEx) {
+                        plugin.getLog().error("Error during premium check", runEx);
+                    } finally {
+                        // same guard as the outer paths: at most one resume (0.5.0/R2)
+                        resumeOnce(continuation, resumed);
+                    }
+                });
+                break;
+        }
+    }
+
+    /**
+     * 0.5.0/R2: apply the decision and guarantee that the continuation is
+     * resumed even when applying it throws — otherwise the login hangs until
+     * the read timeout instead of degrading to a normal login.
+     *
+     * @param preLoginEvent the paused pre-login event
+     * @param connection    the inbound connection
+     * @param username      the username from the pre-login event
+     * @param action        the effective anti-bot action
+     * @param continuation  the event continuation to resume
+     * @param resumed       per-event exactly-once guard
+     */
+    void applyDecisionSafely(PreLoginEvent preLoginEvent, InboundConnection connection,
+                             String username, Action action, Continuation continuation,
+                             AtomicBoolean resumed) {
+        try {
+            applyAntiBotDecision(preLoginEvent, connection, username, action, continuation, resumed);
+        } catch (Exception decisionEx) {
+            plugin.getLog().error("Error applying anti-bot decision for {}", username, decisionEx);
+            resumeOnce(continuation, resumed);
+        }
+    }
+
+    /**
+     * 0.5.0/R2: resume the continuation at most once per event.
+     *
+     * @param continuation the event continuation
+     * @param resumed      CAS guard; flipped to true on the first call
+     */
+    static void resumeOnce(Continuation continuation, AtomicBoolean resumed) {
+        if (resumed.compareAndSet(false, true)) {
+            continuation.resume();
         }
     }
 
     @Subscribe
     public void onGameProfileRequest(GameProfileRequestEvent event) {
         if (event.isOnlineMode()) {
-            LoginSession session = plugin.getSession().get(event.getConnection());
+            LoginSession session = plugin.getSession().get(event.getConnection().getRemoteAddress());
             if (session == null) {
                 plugin.getLog().error("No active login session found for onlinemode player {}", event.getUsername());
                 return;
@@ -191,7 +278,7 @@ public class ConnectListener {
             }
         }
 
-        VelocityLoginSession session = plugin.getSession().get(player);
+        VelocityLoginSession session = plugin.getSession().get(player.getRemoteAddress());
         if (session == null) {
             plugin.getLog().info("No active login session found on server connect for {}", player);
             return;
@@ -211,7 +298,7 @@ public class ConnectListener {
         Player player = disconnectEvent.getPlayer();
         plugin.getCore().getPendingConfirms().remove(player.getUniqueId());
 
-        plugin.getSession().remove(player);
+        plugin.getSession().remove(player.getRemoteAddress());
     }
 
     /**

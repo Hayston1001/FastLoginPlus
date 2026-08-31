@@ -46,9 +46,6 @@ remove-premium-other: '&2已将该玩家从正版玩家列表中移除'
 not-premium: '&4你不在正版玩家列表中'
 not-premium-other: '&4该玩家不在正版玩家列表中'
 
-# 未知玩家
-player-unknown: '&4玩家不在数据库中'
-
 # 反机器人
 kick-antibot: '&4请稍等片刻！'
 
@@ -76,6 +73,7 @@ wait-on-proxy: '&6正在发送请求...（别忘了按照插件页面上的 Bung
 
 # 错误消息
 error-kick: '&4发生错误'
+database-error: '&4数据库错误，请联系管理员'
 invalid-verify-token: '&4无效的验证令牌，请确认你使用的服务器地址正确'
 invalid-session: '&4无效的会话'
 invalid-request: '&4无效的请求'

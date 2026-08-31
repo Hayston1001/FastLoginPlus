@@ -31,7 +31,6 @@ import com.comphenix.protocol.events.PacketEvent;
 import com.comphenix.protocol.injector.netty.channel.NettyChannelInjector;
 import io.netty.channel.Channel;
 import com.comphenix.protocol.injector.packet.PacketRegistry;
-import com.comphenix.protocol.injector.temporary.TemporaryPlayerFactory;
 import com.comphenix.protocol.reflect.EquivalentConverter;
 import com.comphenix.protocol.reflect.FuzzyReflection;
 import com.comphenix.protocol.reflect.accessors.Accessors;
@@ -112,12 +111,15 @@ public class VerifyResponseTask implements Runnable {
         try {
             verifyResponse(session);
         } finally {
-            //this is a fake packet; it shouldn't be sent to the server
+            // Cancel the original ENCRYPTION_BEGIN packet so the vanilla handler never sees it.
+            // Without this, the vanilla handler would try to enable encryption again (already done
+            // by us), causing Netty pipeline state corruption and chunk rendering issues on first login.
             synchronized (packetEvent.getAsyncMarker().getProcessingLock()) {
                 packetEvent.setCancelled(true);
             }
 
-            ProtocolLibrary.getProtocolManager().getAsynchronousManager().signalPacketTransmission(packetEvent);
+            ProtocolLibrary.getProtocolManager().getAsynchronousManager()
+                .signalPacketTransmission(packetEvent);
         }
     }
 
@@ -129,15 +131,6 @@ public class VerifyResponseTask implements Runnable {
             loginKey = EncryptionUtil.decryptSharedKey(privateKey, sharedSecret);
         } catch (GeneralSecurityException securityEx) {
             disconnect("error-kick", "Cannot decrypt received contents", securityEx);
-            return;
-        }
-
-        try {
-            if (!enableEncryption(loginKey)) {
-                return;
-            }
-        } catch (Exception ex) {
-            disconnect("error-kick", "Cannot decrypt received contents", ex);
             return;
         }
 
@@ -158,7 +151,7 @@ public class VerifyResponseTask implements Runnable {
             // The player may have disconnected (e.g. the user cancelled the connection)
             // while this async task was queued or during a previous retry. Abort instead
             // of querying Mojang for a player that is no longer connecting.
-            if (!isConnectionActive()) {
+            if (!ProtocolLibCompat.isConnectionActive(plugin.getLog(), plugin.getCore().isDebug(), player)) {
                 plugin.getLog().info("Player {} disconnected during session verification, aborting",
                         requestedUsername);
                 return;
@@ -167,7 +160,7 @@ public class VerifyResponseTask implements Runnable {
             try {
                 Optional<Verification> response = resolver.hasJoined(requestedUsername, serverId, address);
                 if (response.isPresent()) {
-                    encryptConnection(session, requestedUsername, response.get());
+                    encryptConnection(session, requestedUsername, response.get(), loginKey);
                     return;
                 }
 
@@ -220,7 +213,8 @@ public class VerifyResponseTask implements Runnable {
         }
     }
 
-    private void encryptConnection(BukkitLoginSession session, String requestedUsername, Verification verification) {
+    private void encryptConnection(BukkitLoginSession session, String requestedUsername,
+                                   Verification verification, SecretKey loginKey) {
         if (plugin.getCore().isDebug()) {
             plugin.getLog().info("Profile {} has a verified premium account", requestedUsername);
         }
@@ -268,8 +262,33 @@ public class VerifyResponseTask implements Runnable {
             }
         }
 
-        setPremiumUUID(session.getUuid());
-        receiveFakeStartPacket(realUsername, session.getClientPublicKey(), session.getUuid());
+        // Schedule Netty pipeline modifications on the channel's event loop thread.
+        // This avoids a race condition where enableEncryption() modifies the pipeline from an async
+        // thread while the vanilla handler is still processing the original ENCRYPTION_BEGIN packet.
+        // All pipeline work (encryption, UUID spoof, fake START injection) runs serially on the
+        // event loop, after ProtocolLib has cancelled the original packet and released the vanilla handler.
+        Channel channel = ProtocolLibCompat.getChannel(plugin.getLog(), plugin.getCore().isDebug(), player);
+        if (channel == null || !channel.isActive()) {
+            disconnect("error-kick", "Channel unavailable for {}", requestedUsername);
+            return;
+        }
+
+        String username = realUsername;
+        UUID uuid = verification.getId();
+        ClientPublicKey clientKey = session.getClientPublicKey();
+        channel.eventLoop().execute(() -> {
+            try {
+                if (!enableEncryption(loginKey)) {
+                    return;
+                }
+            } catch (Exception ex) {
+                disconnect("error-kick", "Cannot enable encryption for {}", username, ex);
+                return;
+            }
+
+            setPremiumUUID(uuid);
+            receiveFakeStartPacket(username, clientKey, uuid);
+        });
     }
 
     private void setPremiumUUID(UUID premiumUUID) {
@@ -289,9 +308,8 @@ public class VerifyResponseTask implements Runnable {
 
     //try to get the networkManager from ProtocolLib
     private Object getNetworkManager() throws ClassNotFoundException {
-        NettyChannelInjector injectorContainer = (NettyChannelInjector) Accessors.getMethodAccessorOrNull(
-                TemporaryPlayerFactory.class, "getInjectorFromPlayer", Player.class
-        ).invoke(null, player);
+        NettyChannelInjector injectorContainer = ProtocolLibCompat.getInjector(
+                plugin.getLog(), plugin.getCore().isDebug(), player);
 
         FieldAccessor accessor = Accessors.getFieldAccessorOrNull(
                 NettyChannelInjector.class, "networkManager", Object.class
@@ -348,28 +366,10 @@ public class VerifyResponseTask implements Runnable {
         return true;
     }
 
-    private boolean isConnectionActive() {
-        try {
-            NettyChannelInjector injectorContainer = (NettyChannelInjector) Accessors.getMethodAccessorOrNull(
-                    TemporaryPlayerFactory.class, "getInjectorFromPlayer", Player.class
-            ).invoke(null, player);
-
-            if (injectorContainer == null) {
-                return false;
-            }
-
-            Channel channel = FuzzyReflection.getFieldValue(injectorContainer, Channel.class, true);
-            return channel != null && channel.isActive();
-        } catch (Exception ex) {
-            // Player is gone — the injector/network manager can no longer be resolved
-            return false;
-        }
-    }
-
     private void disconnect(String reasonKey, String logMessage, Object... arguments) {
         // The async verification can outlive the connection (e.g. the user cancelled the
         // login while Mojang was still answering). Don't log a scary error or kick a ghost.
-        if (!isConnectionActive()) {
+        if (!ProtocolLibCompat.isConnectionActive(plugin.getLog(), plugin.getCore().isDebug(), player)) {
             plugin.getLog().info("Skipping disconnect for {}: connection already closed",
                     session.getRequestUsername());
             return;

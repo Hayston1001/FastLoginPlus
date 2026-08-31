@@ -39,6 +39,9 @@ public class AsyncScheduler extends AbstractAsyncScheduler {
 
     @Override
     public CompletableFuture<Void> runAsync(Runnable task) {
+        if (isShutdown()) {
+            return CompletableFuture.completedFuture(null);
+        }
         return CompletableFuture.runAsync(() -> process(task), processingPool).exceptionally(error -> {
             logger.warn("Error occurred on thread pool", error);
             return null;
@@ -47,10 +50,17 @@ public class AsyncScheduler extends AbstractAsyncScheduler {
 
     @Override
     public CompletableFuture<Void> runAsyncDelayed(Runnable task, Duration delay) {
+        if (isShutdown()) {
+            return CompletableFuture.completedFuture(null);
+        }
         return CompletableFuture.runAsync(() -> {
             currentlyRunning.incrementAndGet();
             try {
                 Thread.sleep(delay.toMillis());
+                // the plugin may have disabled during the delay
+                if (isShutdown()) {
+                    return;
+                }
                 process(task);
             } catch (InterruptedException interruptedException) {
                 Thread.currentThread().interrupt();

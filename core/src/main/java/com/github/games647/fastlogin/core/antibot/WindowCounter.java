@@ -39,6 +39,11 @@ class WindowCounter {
     private int connCount;
     private long connStart;
 
+    // timestamp of the last record attempt (or -1 before the first attempt) —
+    // drives expiry so a brand-new counter is never instantly "expired" and
+    // removed between computeIfAbsent and tryRecord (0.5.0/F037)
+    private long lastRecordMs = -1;
+
     /**
      * Try to record a connection in both windows.
      *
@@ -51,6 +56,8 @@ class WindowCounter {
      */
     synchronized boolean tryRecord(long now, int burstLimit, long burstWindowMs,
                                    int connLimit, long connWindowMs) {
+        lastRecordMs = now;
+
         // --- burst window ---
         if (burstCount == 0 || now - burstStart >= burstWindowMs) {
             // window expired or first use — reset
@@ -87,8 +94,12 @@ class WindowCounter {
      * @return true if this counter can be safely removed
      */
     synchronized boolean isExpired(long now, long burstWindowMs, long connWindowMs) {
-        boolean burstExpired = burstCount == 0 || now - burstStart >= burstWindowMs;
-        boolean connExpired = connCount == 0 || now - connStart >= connWindowMs;
-        return burstExpired && connExpired;
+        // a counter that never recorded must stay (removing it would race the
+        // tryRecord that created it); otherwise expire on idle time since the
+        // last record attempt, using the longer of the two windows
+        if (lastRecordMs < 0) {
+            return false;
+        }
+        return now - lastRecordMs >= Math.max(burstWindowMs, connWindowMs);
     }
 }

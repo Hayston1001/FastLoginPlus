@@ -171,6 +171,14 @@ public class ConnectListener implements Listener {
         PendingConnection connection = loginEvent.getConnection();
         if (connection.isOnlineMode()) {
             LoginSession session = plugin.getSession().get(connection);
+            // 0.5.0/F053: no FLP session exists for unknown players when the
+            // proxy itself runs in online mode (or a third-party plugin enabled
+            // it) — skip instead of NPE-ing on the event thread
+            if (session == null) {
+                plugin.getLog().warn("No active login session for online-mode player {}"
+                        + " — skipping FastLogin session update", connection.getName());
+                return;
+            }
 
             UUID verifiedUUID = connection.getUniqueId();
             String verifiedUsername = connection.getName();

@@ -30,11 +30,8 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.events.PacketEvent;
-import com.comphenix.protocol.injector.netty.channel.NettyChannelInjector;
-import com.comphenix.protocol.injector.temporary.TemporaryPlayerFactory;
 import com.comphenix.protocol.reflect.FieldAccessException;
 import com.comphenix.protocol.reflect.FuzzyReflection;
-import com.comphenix.protocol.reflect.accessors.Accessors;
 import com.comphenix.protocol.utility.MinecraftVersion;
 import com.comphenix.protocol.wrappers.BukkitConverters;
 import com.comphenix.protocol.wrappers.Converters;
@@ -73,6 +70,12 @@ import java.util.function.Function;
 import static com.comphenix.protocol.PacketType.Login.Client.ENCRYPTION_BEGIN;
 import static com.comphenix.protocol.PacketType.Login.Client.START;
 
+/**
+ * Intercepts the login pipeline packets. The listener is deliberately
+ * registered as a ProtocolLib async handler — see
+ * PROTOCOLLIB-ASYNC-DESIGN.md at the repository root for the decision,
+ * the compensating controls and the residual risk (0.5.0/F003).
+ */
 public class ProtocolLibListener extends PacketAdapter {
 
     private final FastLoginBukkit plugin;
@@ -103,6 +106,24 @@ public class ProtocolLibListener extends PacketAdapter {
                 .getAsynchronousManager()
                 .registerAsyncHandler(new ProtocolLibListener(plugin, antiBotService, verifyClientKeys))
                 .start();
+
+        // 0.5.0/F003: ENCRYPTION_BEGIN interception is known to silently fail on
+        // some ProtocolLib/Minecraft combinations (e.g. Paper 1.21.11 + ProtocolLib
+        // 5.5.0, where ServerboundKeyPacket is not registered). The runtime
+        // getOverriddenType() fallback covers *some* of these — warn loudly when
+        // even the static mapping is gone so operators can correlate login issues.
+        try {
+            if (!PacketType.Login.Client.ENCRYPTION_BEGIN.isSupported()) {
+                plugin.getLog().warn("ProtocolLib does not statically resolve the encryption"
+                        + " response packet on this server version — premium detection may"
+                        + " not intercept logins. Verify ProtocolLib compatibility if premium"
+                        + " logins fail with 'invalid-request' or missing 'Verifying session'"
+                        + " log lines.");
+            }
+        } catch (Throwable th) {
+            // diagnostic only — never break registration over it
+            plugin.getLog().debug("Could not check ENCRYPTION_BEGIN packet type support", th);
+        }
     }
 
     @Override
@@ -165,6 +186,11 @@ public class ProtocolLibListener extends PacketAdapter {
             }
         } catch (FieldAccessException fieldAccessEx) {
             plugin.getLog().error("Failed to parse packet {}", packetEvent.getPacketType(), fieldAccessEx);
+        } catch (Exception unexpectedEx) {
+            // 0.5.0/F007: an unexpected reflective failure must not abort the
+            // remaining packet handling for this connection
+            plugin.getLog().error("Unexpected error processing packet {}",
+                    packetEvent.getPacketType(), unexpectedEx);
         }
     }
 
@@ -196,6 +222,15 @@ public class ProtocolLibListener extends PacketAdapter {
         } else {
             byte[] expectedVerifyToken = session.getVerifyToken();
             if (verifyNonce(sender, packetEvent.getPacket(), session.getClientPublicKey(), expectedVerifyToken)) {
+                // 0.5.0/F001: only one verification per session — duplicates are
+                // a replay/DoS attempt and get kicked
+                if (!session.startVerification()) {
+                    plugin.getLog().warn("Duplicate encryption response from {} — ignoring",
+                            sender.getAddress());
+                    sender.kickPlayer(plugin.getCore().getMessage("invalid-request"));
+                    return;
+                }
+
                 packetEvent.getAsyncMarker().incrementProcessingDelay();
 
                 Runnable verifyTask = new VerifyResponseTask(
@@ -311,16 +346,14 @@ public class ProtocolLibListener extends PacketAdapter {
     }
 
     private FloodgatePlayer getFloodgatePlayer(Player player) {
-        Channel channel = getChannel(player);
+        Channel channel = ProtocolLibCompat.getChannel(plugin.getLog(), plugin.getCore().isDebug(), player);
+        if (channel == null) {
+            // connection already gone — no Floodgate data to read
+            return null;
+        }
+
         AttributeKey<FloodgatePlayer> floodgateAttribute = AttributeKey.valueOf("floodgate-player");
         return channel.attr(floodgateAttribute).get();
-    }
-
-    private static Channel getChannel(Player player) {
-        NettyChannelInjector injector = (NettyChannelInjector) Accessors.getMethodAccessorOrNull(
-                        TemporaryPlayerFactory.class, "getInjectorFromPlayer", Player.class
-                ).invoke(null, player);
-        return FuzzyReflection.getFieldValue(injector, Channel.class, true);
     }
 
     /**
@@ -339,7 +372,13 @@ public class ProtocolLibListener extends PacketAdapter {
         }
 
         // kick the player, if necessary
-        Channel channel = getChannel(packetEvent.getPlayer());
+        Channel channel = ProtocolLibCompat.getChannel(plugin.getLog(),
+                plugin.getCore().isDebug(), packetEvent.getPlayer());
+        if (channel == null) {
+            // connection already gone between the two lookups — nothing left to process
+            return true;
+        }
+
         AttributeKey<String> kickMessageAttribute = AttributeKey.valueOf("floodgate-kick-message");
         String kickMessage = channel.attr(kickMessageAttribute).get();
         if (kickMessage != null) {

@@ -57,6 +57,7 @@ softdepend:
     - LogIt
     - UltraAuth
     - xAuth
+    - Passky
     # Skin plugins
     - SkinsRestorer
 
