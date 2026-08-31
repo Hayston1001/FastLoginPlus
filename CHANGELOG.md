@@ -50,6 +50,7 @@
 - **SQLite upsert**: first-time saves are now `INSERT ... ON CONFLICT(Name) DO UPDATE` with a byte-exact case guard mirroring MySQL's HEX protection, so two concurrent first saves of the same name collapse into one row instead of losing the profile; the row id is backfilled via a name lookup when `getGeneratedKeys()` yields nothing on the update branch; `save` failures are reported through `saveQuietly` instead of being silently swallowed. Regression tests run against a real SQLite database, including a discriminating test that fails without the lock
 - **Velocity**: the `EventTask.withContinuation` continuation is now resumed exactly once on every path — a per-event CAS guard funnels all resumes through `resumeOnce`, and exceptions while applying the anti-bot decision (or firing the anti-bot event) are caught and still resume the login instead of hanging the connection until the read timeout
 - **Bukkit**: the configure-phase premium path now schedules the defensive toggle relay when the carrier player is missing (mirroring the Folia branch) — a pending premium toggle no longer waits for a restart to be delivered after an empty-server window
+- **Plugin message hardening**: the login-action message type byte is validated on read — a malformed client plugin message now fails fast with an exception the message listeners catch instead of an uncaught `ArrayIndexOutOfBoundsException`
 
 - **AuthMe 集成**: 盗版会话路径上的 AuthMe premium 记录清理改为 fail-closed —— 当 AuthMe 记录
   带 premium 标记但 FastLogin 侧没有对应记录时(数据库重置/首次登录),记录会被保留并告警,
@@ -81,6 +82,7 @@
 - **SQLite upsert**: 首次保存改为 `INSERT ... ON CONFLICT(Name) DO UPDATE`, 并带字节级大小写守卫(与 MySQL 的 HEX 保护对齐), 两个并发的首次保存会收敛为一行而不是丢失记录; upsert 走更新分支且 `getGeneratedKeys()` 无行时回退按名查询回填 rowId; 保存失败通过 `saveQuietly` 上报而不是静默吞掉. 回归测试使用真实 SQLite 数据库, 含去掉锁必失败的判别用例
 - **Velocity**: `EventTask.withContinuation` 的续体现在在所有路径上恰好 resume 一次 —— 每事件一个 CAS 守卫, 所有 resume 收敛到 `resumeOnce`; 应用反机器人决策(或触发反机器人事件)抛出异常时会被捕获并仍然恢复登录, 不再把连接挂死到读超时
 - **Bukkit**: configure 阶段 premium 分支在载体玩家缺失时补上防御性中继调度(与 Folia 分支对齐)—— 空服期间排队的正版切换不再要等重启才能投递
+- **插件消息加固**: 登录动作消息的类型字节在读取时校验 —— 格式错误的客户端插件消息现在快速失败为监听器可捕获的异常, 不再抛出未捕获的 `ArrayIndexOutOfBoundsException`
 
 </details>
 
