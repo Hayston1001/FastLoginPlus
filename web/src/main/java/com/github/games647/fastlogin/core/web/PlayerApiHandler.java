@@ -117,6 +117,10 @@ public class PlayerApiHandler {
      */
     public void handleGet(Context ctx) {
         String name = ctx.pathParam("name");
+        if (storage == null) {
+            ctx.status(503).json(of("error", "No storage backend configured"));
+            return;
+        }
         StoredProfile profile = storage.loadProfile(name);
 
         if (profile == null) {
@@ -159,16 +163,24 @@ public class PlayerApiHandler {
             // Platform performs the full toggle exactly like the commands
             toggleListener.onPremiumToggle(name, premium);
         } else if (profile != null) {
-            // Fallback for embedders without a platform listener: direct DB write
-            profile.setOnlinemodePreferred(premium);
+            // Fallback for embedders without a platform listener: direct DB write.
+            // 0.5.0/F020: run the whole load-modify-save window under the
+            // name-level striped lock, same as every other toggle path.
+            storage.withNameLock(name, () -> {
+                StoredProfile lockedProfile = storage.loadProfile(name);
+                if (lockedProfile == null) {
+                    return;
+                }
+                lockedProfile.setOnlinemodePreferred(premium);
 
-            // When switching to cracked (offline mode), clear the premium UUID
-            // so the player uses offline-mode UUID on next login
-            if (!premium) {
-                profile.setId(null);
-            }
+                // When switching to cracked (offline mode), clear the premium UUID
+                // so the player uses offline-mode UUID on next login
+                if (!premium) {
+                    lockedProfile.setId(null);
+                }
 
-            storage.save(profile);
+                storage.save(lockedProfile);
+            });
         } else {
             ctx.status(500).json(of("error", "No storage backend configured"));
             return;
@@ -191,22 +203,35 @@ public class PlayerApiHandler {
      */
     public void handleDelete(Context ctx) {
         String name = ctx.pathParam("name");
-        StoredProfile profile = storage.loadProfile(name);
-
-        if (profile == null) {
-            ctx.status(404).json(of("error", "Player not found"));
+        if (storage == null) {
+            ctx.status(503).json(of("error", "No storage backend configured"));
             return;
         }
 
-        // Only allow deleting cracked players
-        if (profile.isOnlinemodePreferred()) {
-            ctx.status(400).json(of("error", "Cannot delete premium players"));
-            return;
-        }
+        // 0.5.0/F020: run the premium-check and the delete under the same
+        // name-level striped lock so a concurrent premium toggle cannot flip
+        // the row between the check and the delete (TOCTOU).
+        final String[] error = new String[1];
+        boolean deleted = storage.withNameLock(name, () -> {
+            StoredProfile profile = storage.loadProfile(name);
 
-        boolean deleted = storage.deleteProfile(name);
+            if (profile == null) {
+                error[0] = "Player not found";
+                return false;
+            }
 
-        if (deleted) {
+            // Only allow deleting cracked players
+            if (profile.isOnlinemodePreferred()) {
+                error[0] = "Cannot delete premium players";
+                return false;
+            }
+
+            return storage.deleteProfile(name);
+        });
+
+        if (error[0] != null) {
+            ctx.status(error[0].equals("Player not found") ? 404 : 400).json(of("error", error[0]));
+        } else if (deleted) {
             ctx.json(of("success", true, "name", name));
         } else {
             ctx.status(500).json(of("error", "Failed to delete player"));

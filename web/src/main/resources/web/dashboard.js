@@ -706,9 +706,15 @@ function mockData(endpoint, options) {
 // ── Utility ────────────────────────────────────────
 function escapeHtml(text) {
     if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    // Escape &, <, > and both quote styles — quotes matter because escaped
+    // values are also interpolated into HTML attributes (data-name=\"...\").
+    // The textContent/innerHTML trick does NOT escape quotes.
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 function getLoginTypeBadge(type) {

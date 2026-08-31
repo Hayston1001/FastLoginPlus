@@ -52,8 +52,14 @@ public class AsyncToggleMessage implements Runnable {
 
     public AsyncToggleMessage(FastLoginCore<Player, CommandSource, FastLoginVelocity> core,
                               Player sender, String playerName, boolean toPremium, boolean playerSender) {
-        this(core, sender, sender.getUsername(), playerName, toPremium, playerSender);
+        this.core = core;
+        this.sender = sender;
+        this.senderName = sender.getUsername();
+        this.targetPlayer = playerName;
+        this.toPremium = toPremium;
+        this.isPlayerSender = playerSender;
     }
+
 
     /**
      * Creates a toggle task without an in-game sender (e.g. triggered by the

@@ -25,6 +25,8 @@
  */
 package com.github.games647.fastlogin.core.web;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -130,16 +132,21 @@ public class WebServer {
                 return;
             }
 
-            String auth = ctx.header("Authorization");
-            if (auth == null || !auth.equals("Bearer " + token)) {
-                ctx.status(401).json(java.util.Collections.singletonMap("error", "Unauthorized"));
-                return;
-            }
-
-            // Rate limiting
+            // Rate limit BEFORE the token check so invalid-token brute forcing
+            // is throttled too, not only correctly authenticated traffic.
             String clientIp = normalizeIp(ctx.ip());
             if (!checkRateLimit(clientIp)) {
                 ctx.status(429).json(java.util.Collections.singletonMap("error", "Too many requests"));
+                return;
+            }
+
+            // Constant-time comparison — a plain String.equals() on the
+            // Authorization header leaks the token prefix through timing.
+            String auth = ctx.header("Authorization");
+            byte[] expected = ("Bearer " + token).getBytes(StandardCharsets.UTF_8);
+            byte[] provided = (auth == null) ? new byte[0] : auth.getBytes(StandardCharsets.UTF_8);
+            if (auth == null || !MessageDigest.isEqual(expected, provided)) {
+                ctx.status(401).json(java.util.Collections.singletonMap("error", "Unauthorized"));
             }
         });
 

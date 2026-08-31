@@ -52,7 +52,12 @@ public class AsyncToggleMessage implements Runnable {
 
     public AsyncToggleMessage(FastLoginCore<ProxiedPlayer, CommandSender, FastLoginBungee> core,
              ProxiedPlayer sender, String playerName, boolean toPremium, boolean playerSender) {
-        this(core, sender, sender.getName(), playerName, toPremium, playerSender);
+        this.core = core;
+        this.sender = sender;
+        this.senderName = sender.getName();
+        this.targetPlayer = playerName;
+        this.toPremium = toPremium;
+        this.isPlayerSender = playerSender;
     }
 
     /**
