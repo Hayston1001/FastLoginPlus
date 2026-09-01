@@ -63,7 +63,9 @@ public class WebServer {
     private final AntiBotService antiBot;
     private final String pluginVersion;
     private final java.nio.file.Path pluginFolder;
-
+    // Default panel language from the `web.lang` config key; browsers without a
+    // saved preference start with it (they may still switch languages in the UI)
+    private volatile String panelLang = "en";
     private Supplier<List<String>> onlinePlayersSupplier;
     private PremiumToggleListener premiumToggleListener;
     private Javalin app;
@@ -104,6 +106,19 @@ public class WebServer {
         this.premiumToggleListener = listener;
     }
 
+    /**
+     * Set the default panel language served as metadata on {@code GET /api/lang}.
+     *
+     * <p>Platform code reads the {@code web.lang} config key and passes it here
+     * before {@link #start(String, int, String, List)}. Browsers that have never
+     * picked a language in the panel start with this value; a user's own choice
+     * (persisted in localStorage) always wins.</p>
+     *
+     * @param lang the default language code, or null/blank for English
+     */
+    public void setPanelLang(String lang) {
+        this.panelLang = (lang == null || lang.isBlank()) ? "en" : lang.trim();
+    }
     /**
      * Start the HTTP server with no extra CORS origins (same-origin only).
      *
@@ -178,10 +193,11 @@ public class WebServer {
                 }
 
                 // Skip the token check for the language API (public)
-                if (path.startsWith("/api/lang/")) {
+                // Skip the token check for the language API (public): both the
+                // metadata endpoint (/api/lang) and the packs (/api/lang/{code})
+                if (path.equals("/api/lang") || path.startsWith("/api/lang/")) {
                     return;
                 }
-
                 // Constant-time comparison — a plain String.equals() on the
                 // Authorization header leaks the token prefix through timing.
                 String auth = ctx.header("Authorization");
@@ -308,6 +324,11 @@ public class WebServer {
             StatusApiHandler handler = new StatusApiHandler(pluginVersion, storage, antiBot, onlinePlayersSupplier);
             handler.handle(ctx);
         });
+
+        // Panel language metadata (public, like /api/lang/{code}) — the frontend reads
+        // `default` as the initial language when the browser has no saved preference, wiring
+        // the `web.lang` config key to the panel
+        routes.get("/api/lang", ctx -> ctx.json(java.util.Collections.singletonMap("default", panelLang)));
     }
 
     /**

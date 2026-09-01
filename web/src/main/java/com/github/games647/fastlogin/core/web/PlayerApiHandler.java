@@ -98,8 +98,11 @@ public class PlayerApiHandler {
         int total;
 
         if (query != null && !query.isEmpty()) {
-            profiles = storage.searchProfiles(query, offset, size);
-            total = storage.countProfiles(query);
+            // Combined search+count: total includes the offline-UUID scan matches,
+            // keeping pagination in sync with the list
+            SQLStorage.ProfileSearchResult result = storage.searchProfiles(query, offset, size);
+            profiles = result.getProfiles();
+            total = result.getTotal();
         } else {
             profiles = storage.loadAllProfiles(offset, size);
             total = storage.countProfiles(null);

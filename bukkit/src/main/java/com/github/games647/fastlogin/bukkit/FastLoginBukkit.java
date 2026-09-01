@@ -387,6 +387,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             webServer = new WebServer(logger,
                     core.getStorage(), core.getAntiBotService(),
                     version, getPluginFolder());
+            // `web.lang` is the panel's default language (browser choice still wins)
+            webServer.setPanelLang(config.get("web.lang", "en"));
             // 0.6.0/F067: copy the live player view into a snapshot first —
             // streaming the view directly on a Jetty thread races with joins
             ///quits (index shifts cause random 500s)

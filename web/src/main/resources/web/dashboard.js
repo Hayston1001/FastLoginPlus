@@ -2,9 +2,11 @@
 // Improvements: toast notifications, skeleton loaders, debounced search, row flash
 
 // ── State ──────────────────────────────────────────
-const token = localStorage.getItem('flp-token') || '';
-// 0.6.0/F042: demo mode is session-scoped so a stale demo flag can no
-// longer masquerade as the real panel in later sessions
+// F042: the real login token persists in localStorage; the demo token is
+// session-scoped (sessionStorage) so it cannot masquerade as the real panel
+// in later sessions. Both sources are accepted here — otherwise a demo login
+// ping-pongs forever between this page and the login page
+const token = localStorage.getItem('flp-token') || sessionStorage.getItem('flp-token') || '';
 const isDemo = sessionStorage.getItem('flp-demo') === '1';
 
 if (!token) {
@@ -328,8 +330,10 @@ function logout() {
     if (statusRefreshInterval) clearInterval(statusRefreshInterval);
     localStorage.removeItem('flp-token');
     localStorage.removeItem('flp-tab');
-    // 0.6.0/F042: demo mode now lives in sessionStorage (per browser session)
+    // 0.6.0/F042: demo mode now lives in sessionStorage (per browser session) —
+    // clear both the demo flag and the session-scoped demo token
     sessionStorage.removeItem('flp-demo');
+    sessionStorage.removeItem('flp-token');
     location.href = 'index.html';
 }
 

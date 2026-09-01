@@ -287,39 +287,22 @@ proxies:
 # ========================================
 # Web Management Panel
 # ========================================
-# Embedded web UI for managing players and viewing anti-bot stats.
-# In a proxy setup (BungeeCord/Velocity), enable this on the proxy only,
-# not on backend servers (Bukkit/Folia).
-#
-# SECURITY MODEL (0.6.0/F018): the token IS the full admin access to this
-# panel. It is stored in the browser's localStorage, so any code able to run
-# scripts on the panel page can take it (i.e. XSS on the panel origin means
-# panel compromise). The panel is designed for a single admin, bound to
-# localhost/LAN or a trusted reverse proxy. Rotate the token if it may have
-# leaked: stop the server, clear web.token, start again (a fresh token is
-# generated and written to this file).
+# Embedded web UI for player management and anti-bot stats.
+# Requires Java 17+ on the host runtime (the panel is skipped on older JVMs).
+# EFFECT  S=full   P=none           enable the panel in the proxy's config instead
 web:
   enabled: false
-  # Host to bind to
-  #   '' (empty)  - all interfaces, IPv4 + IPv6
-  #   '0.0.0.0'   - all interfaces, IPv4 only
-  #   '::'        - all interfaces, IPv4 + IPv6
-  #   '127.0.0.1' - local access only (default - the panel is a single-admin
-  #                 tool; only widen the binding deliberately)
+  # Bind address: '' (empty) or '::' = all interfaces (IPv4+IPv6),
+  # '0.0.0.0' = IPv4 only, '127.0.0.1' = local access only (default)
   host: '127.0.0.1'
-  # Port to listen on
   port: 8080
-  # Authentication token (min 16 characters, auto-generated on first start if empty)
-  # Access the panel at http://host:port and enter this token
+  # Admin token (min 16 chars; auto-generated on first start if empty).
+  # It grants full panel access — clear this value and restart to rotate it
   token: ''
-  # Language for the web panel. Built-in: "en" (English), "zh" (中文)
-  # You can also use a custom value, e.g. "ja" -> loads webui_ja.json from plugin folder
-  # Users can also switch language in the panel (stored in browser localStorage)
+  # Default panel language. Built-in: "en" (English), "zh" (中文); a custom value
+  # loads webui_<lang>.json from the plugin folder. Per-browser language
+  # switching inside the panel overrides this default
   lang: 'en'
-
-  # CORS: browser origins (besides the panel's own origin) that may call the
-  # panel API cross-origin. The panel is a same-origin single-admin UI, so
-  # this stays empty unless you deliberately host the panel behind another
-  # origin. Example: corsAllowedOrigins: ['http://panel.example.com']
+  # Browser origins (besides the panel's own) allowed to call the panel API
+  # cross-origin. Leave empty — the panel is a same-origin single-admin UI
   corsAllowedOrigins: []
-

@@ -40,6 +40,7 @@ import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -237,5 +238,60 @@ class SQLiteStorageTest {
 
         // Dropped rows must be reported: 2 case-variant rows -> 1 kept
         verify(logger).warn(anyString(), eq(1));
+    }
+
+    @Test
+    void searchFindsDashedFullUuid() {
+        // The DB stores UUIDs in trimmed Mojang form (no dashes); a user pastes the
+        // dashed form into the panel search. It must still match.
+        UUID uuid = UUID.fromString("08c85864-b91b-3ebc-a6ab-f95e7449c594");
+        storage.save(new StoredProfile(uuid, "PremiumGuy", true, FloodgateState.FALSE, "127.0.0.1"));
+
+        SQLStorage.ProfileSearchResult result =
+                storage.searchProfiles("08c85864-b91b-3ebc-a6ab-f95e7449c594", 0, 20);
+
+        assertEquals(1, result.getTotal());
+        assertEquals("PremiumGuy", result.getProfiles().get(0).getName());
+    }
+
+    @Test
+    void searchFindsUuidFragment() {
+        UUID uuid = UUID.fromString("08c85864-b91b-3ebc-a6ab-f95e7449c594");
+        storage.save(new StoredProfile(uuid, "PremiumGuy", true, FloodgateState.FALSE, "127.0.0.1"));
+
+        // Dashed + mixed-case fragment of the stored trimmed UUID
+        SQLStorage.ProfileSearchResult result = storage.searchProfiles("b91b-3E", 0, 20);
+
+        assertEquals(1, result.getTotal());
+        assertEquals("PremiumGuy", result.getProfiles().get(0).getName());
+    }
+
+    @Test
+    void searchFindsCrackedPlayerByDisplayUuid() {
+        // Cracked rows keep UUID = NULL; the panel shows a computed offline UUID
+        // that exists nowhere in the database — both full and fragment searches
+        // must resolve through the offline-UUID scan
+        storage.save(new StoredProfile(null, "Alex", false, FloodgateState.FALSE, "10.0.0.5"));
+        String displayUuid = storage.loadProfile("Alex").getDisplayUuid();
+
+        SQLStorage.ProfileSearchResult full = storage.searchProfiles(displayUuid, 0, 20);
+        assertEquals(1, full.getTotal());
+        assertEquals("Alex", full.getProfiles().get(0).getName());
+
+        String fragment = displayUuid.replace("-", "").substring(0, 8);
+        SQLStorage.ProfileSearchResult frag = storage.searchProfiles(fragment, 0, 20);
+        assertEquals(1, frag.getTotal());
+        assertEquals("Alex", frag.getProfiles().get(0).getName());
+    }
+
+    @Test
+    void searchUuidLikeMissStaysEmpty() {
+        // A UUID-shaped query with no match must report an empty page, not blow up
+        storage.save(new StoredProfile(null, "Steve", true, FloodgateState.FALSE, "127.0.0.1"));
+
+        SQLStorage.ProfileSearchResult result = storage.searchProfiles("0000ffff", 0, 20);
+
+        assertEquals(0, result.getTotal());
+        assertTrue(result.getProfiles().isEmpty());
     }
 }

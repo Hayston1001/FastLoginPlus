@@ -184,6 +184,8 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
             webServer = new WebServer(logger,
                     core.getStorage(), core.getAntiBotService(),
                     version, getPluginFolder());
+            // `web.lang` is the panel's default language (browser choice still wins)
+            webServer.setPanelLang(config.get("web.lang", "en"));
             webServer.setOnlinePlayersSupplier(() ->
                 server.getAllPlayers().stream()
                     .map(Player::getUsername)

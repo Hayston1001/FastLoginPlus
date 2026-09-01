@@ -13,13 +13,27 @@ const I18n = {
      * 3. Fill all data-i18n elements
      */
     async init() {
-        // Determine language: localStorage > server default
+        // Determine language: browser preference > server default (web.lang) > 'en'
         const saved = localStorage.getItem('flp-lang');
         if (saved) {
             this._currentLang = saved;
+        } else {
+            // No browser preference: ask the server for the configured default
+            // (`web.lang` in config.yml, exposed on GET /api/lang)
+            try {
+                const meta = await fetch('/api/lang');
+                if (meta.ok) {
+                    const data = await meta.json();
+                    if (data && data.default) {
+                        this._currentLang = data.default;
+                    }
+                }
+            } catch (e) {
+                // Offline / mock preview without the endpoint — keep 'en'
+                console.warn('Failed to load default language metadata', e);
+            }
         }
 
-        // Load fallback (English) first
         try {
             const resp = await fetch('/api/lang/en');
             if (resp.ok) this._fallback = await resp.json();

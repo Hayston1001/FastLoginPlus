@@ -176,6 +176,8 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
             webServer = new WebServer(logger,
                     core.getStorage(), core.getAntiBotService(),
                     version, getPluginFolder());
+            // `web.lang` is the panel's default language (browser choice still wins)
+            webServer.setPanelLang(config.get("web.lang", "en"));
             webServer.setOnlinePlayersSupplier(() ->
                 getProxy().getPlayers().stream()
                     .map(ProxiedPlayer::getName)

@@ -372,4 +372,31 @@ class WebServerHardeningTest {
         assertEquals(429, overLimit.statusCode(),
                 "the public language endpoint must be rate limited as well (F014)");
     }
+
+    @Test
+    void panelLangMetadataIsPublicAndReflectsConfig() throws Exception {
+        // Default server (no setPanelLang call) reports English
+        HttpResponse<String> response = get("/api/lang", null, null);
+        assertEquals(200, response.statusCode(),
+                "the language metadata endpoint is public and must not 401");
+        assertTrue(response.body().contains("\"default\":\"en\""),
+                "unexpected metadata body: " + response.body());
+
+        // A server configured with web.lang=zh reports it as the panel default
+        WebServer zhServer = new WebServer(LoggerFactory.getLogger("WebServerHardeningTest"),
+                storage, null, "test", null);
+        zhServer.setPanelLang("zh");
+        zhServer.start("127.0.0.1", 0, TOKEN);
+        try {
+            HttpClient http = HttpClient.newHttpClient();
+            HttpResponse<String> zhResponse = http.send(HttpRequest.newBuilder(
+                            URI.create("http://127.0.0.1:" + zhServer.port() + "/api/lang"))
+                    .GET().build(), HttpResponse.BodyHandlers.ofString());
+            assertEquals(200, zhResponse.statusCode());
+            assertTrue(zhResponse.body().contains("\"default\":\"zh\""),
+                    "unexpected metadata body: " + zhResponse.body());
+        } finally {
+            zhServer.stop();
+        }
+    }
 }

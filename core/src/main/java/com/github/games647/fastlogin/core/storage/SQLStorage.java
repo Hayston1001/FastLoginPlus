@@ -33,6 +33,11 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import static java.sql.Statement.RETURN_GENERATED_KEYS;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
@@ -92,13 +97,17 @@ public abstract class SQLStorage implements AuthStorage {
     // Web UI queries - pagination and search
     protected static final String LOAD_ALL_PAGED = "SELECT * FROM `" + PREMIUM_TABLE
             + "` ORDER BY `LastLogin` DESC LIMIT ? OFFSET ?";
+    // No LIMIT/OFFSET: searchProfiles() merges an offline-UUID scan on top of this
+    // result, so pagination is applied in memory after the merge
     protected static final String SEARCH_BY_NAME_OR_UUID = "SELECT * FROM `" + PREMIUM_TABLE
             + "` WHERE LOWER(`Name`) LIKE LOWER(?) OR LOWER(`UUID`) LIKE LOWER(?)"
-            + " ORDER BY `LastLogin` DESC LIMIT ? OFFSET ?";
+            + " ORDER BY `LastLogin` DESC";
     protected static final String COUNT_ALL = "SELECT COUNT(*) FROM `" + PREMIUM_TABLE
             + "`";
-    protected static final String COUNT_SEARCH = "SELECT COUNT(*) FROM `" + PREMIUM_TABLE
-            + "` WHERE LOWER(`Name`) LIKE LOWER(?) OR LOWER(`UUID`) LIKE LOWER(?)";
+    // Cracked players have no stored UUID; their panel UUID is computed from the name.
+    // This scan feeds the offline-UUID search pass in searchProfiles().
+    protected static final String SELECT_UUID_LESS = "SELECT * FROM `" + PREMIUM_TABLE
+            + "` WHERE `UUID` IS NULL";
     protected final Logger log;
     protected final HikariDataSource dataSource;
 
@@ -411,26 +420,77 @@ public abstract class SQLStorage implements AuthStorage {
     }
 
     /**
-     * Search profiles by name or UUID prefix with pagination.
+     * Combined search result: one page of matches plus the total match count.
      *
-     * @param query  the search query (prefix match on Name or UUID)
-     * @param offset the offset (0-based)
-     * @param limit  the maximum number of results
-     * @return a list of matching stored profiles
+     * <p>Search and count come from a single pass because the result set is not
+     * purely the SQL LIKE match — offline display UUIDs are computed (never stored),
+     * so a supplementary in-memory scan can contribute rows. Counting them in a
+     * separate query would desynchronize pagination.</p>
      */
-    public java.util.List<StoredProfile> searchProfiles(String query, int offset, int limit) {
-        java.util.List<StoredProfile> profiles = new java.util.ArrayList<>();
+    public static final class ProfileSearchResult {
+
+        private final java.util.List<StoredProfile> profiles;
+        private final int total;
+
+        private ProfileSearchResult(java.util.List<StoredProfile> profiles, int total) {
+            this.profiles = profiles;
+            this.total = total;
+        }
+
+        /**
+         * @return the profiles on the requested page
+         */
+        public java.util.List<StoredProfile> getProfiles() {
+            return profiles;
+        }
+
+        /**
+         * @return the total number of matching profiles across all pages
+         */
+        public int getTotal() {
+            return total;
+        }
+    }
+
+    /**
+     * Search profiles by name or UUID (full or fragment) with pagination.
+     *
+     * <p>UUID matching is dash-insensitive: the database stores UUIDs in Mojang
+     * trimmed form (no dashes — {@code UUIDAdapter.toMojangId}), while users paste
+     * the dashed form. Cracked players additionally have no stored UUID at all —
+     * the panel shows a computed offline UUID ({@code OfflinePlayer:<name>}, see
+     * {@link StoredProfile#getDisplayUuid()}) — so when the query looks like a UUID
+     * fragment, those computed UUIDs are matched in a supplementary in-memory scan
+     * of the UUID-less rows.</p>
+     *
+     * @param query  the search query (substring match on Name, stored UUID or offline display UUID)
+     * @param offset the offset (0-based)
+     * @param limit  the maximum number of results per page
+     * @return the matching page and the total match count
+     */
+    public ProfileSearchResult searchProfiles(String query, int offset, int limit) {
+        String namePattern = "%" + query.toLowerCase(Locale.ROOT) + "%";
+        // Normalize to the stored (trimmed, lowercase) UUID form so dashed full UUIDs
+        // and dashed fragments both match the `UUID` column
+        String uuidQuery = query.replace("-", "").replace(" ", "").toLowerCase(Locale.ROOT);
+        String uuidPattern = "%" + uuidQuery + "%";
+
+        // Name-keyed merge map: Name is UNIQUE, and the SQL pass and the offline-UUID
+        // pass can both match the same row
+        Map<String, StoredProfile> matches = new LinkedHashMap<>();
+
+        // SQL pass over Name and the stored UUID column — no LIMIT/OFFSET here because
+        // the offline-UUID pass below may contribute more rows; pagination is applied
+        // after merging
         try (Connection con = dataSource.getConnection();
              PreparedStatement stmt = con.prepareStatement(SEARCH_BY_NAME_OR_UUID)) {
-            String pattern = "%" + query + "%";
-            stmt.setString(1, pattern);
-            stmt.setString(2, pattern);
-            stmt.setInt(3, limit);
-            stmt.setInt(4, offset);
+            stmt.setString(1, namePattern);
+            stmt.setString(2, uuidPattern);
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
-                    profiles.add(readCurrentRow(rs));
+                    StoredProfile profile = readCurrentRow(rs);
+                    matches.put(profile.getName().toLowerCase(Locale.ROOT), profile);
                 }
             }
         } catch (Exception ex) {
@@ -438,36 +498,83 @@ public abstract class SQLStorage implements AuthStorage {
             // 0.6.0/F010: surface the outage instead of swallowing it
             throw new StorageUnavailableException("Failed to search profiles", ex);
         }
-        return profiles;
+
+        if (isUuidFragment(uuidQuery)) {
+            matches.putAll(findByOfflineUuid(uuidQuery));
+        }
+
+        java.util.List<StoredProfile> all = new ArrayList<>(matches.values());
+        // Mirror the SQL ORDER BY LastLogin DESC for the merged result
+        all.sort(Comparator.comparing(StoredProfile::getLastLogin,
+                Comparator.nullsFirst(Comparator.naturalOrder())).reversed());
+
+        int total = all.size();
+        int from = Math.min(offset, total);
+        int to = Math.min(from + limit, total);
+        return new ProfileSearchResult(all.subList(from, to), total);
+    }
+
+    /**
+     * Check whether a normalized query looks like a UUID fragment (hex digits only).
+     *
+     * @param normalizedQuery dash/space-stripped, lowercased query
+     * @return true if it is long enough to be meaningful and contains only hex digits
+     */
+    private static boolean isUuidFragment(String normalizedQuery) {
+        return normalizedQuery.length() >= 4 && normalizedQuery.matches("[0-9a-f]+");
+    }
+
+    /**
+     * Match the query against computed offline UUIDs of players without a stored UUID.
+     *
+     * <p>Cracked (and not-yet-migrated Floodgate) players have {@code UUID = NULL};
+     * the panel displays a deterministic offline UUID computed from the name, which
+     * exists nowhere in the database — a plain LIKE search can therefore never find
+     * them by UUID.</p>
+     *
+     * @param uuidQuery dash-stripped, lowercased UUID query
+     * @return matching profiles keyed by lowercase name
+     */
+    private Map<String, StoredProfile> findByOfflineUuid(String uuidQuery) {
+        Map<String, StoredProfile> found = new LinkedHashMap<>();
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement stmt = con.prepareStatement(SELECT_UUID_LESS);
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                StoredProfile profile = readCurrentRow(rs);
+                String displayUuid = profile.getDisplayUuid().replace("-", "");
+                if (displayUuid.contains(uuidQuery)) {
+                    found.put(profile.getName().toLowerCase(Locale.ROOT), profile);
+                }
+            }
+        } catch (Exception ex) {
+            // Best-effort supplement to the SQL pass — a failure here must not lose
+            // the rows the SQL pass already found
+            log.error("Failed to scan offline UUIDs", ex);
+        }
+        return found;
     }
 
     /**
      * Count total profiles or profiles matching a search query.
      *
+     * <p>With a query this delegates to {@link #searchProfiles(String, int, int)} so
+     * the count includes exactly the same matches (including offline display UUIDs)
+     * as the list endpoint.</p>
+     *
      * @param query the search query, or null to count all
      * @return the count
      */
     public int countProfiles(String query) {
-        try (Connection con = dataSource.getConnection()) {
-            if (query != null && !query.isEmpty()) {
-                try (PreparedStatement stmt = con.prepareStatement(COUNT_SEARCH)) {
-                    String pattern = "%" + query + "%";
-                    stmt.setString(1, pattern);
-                    stmt.setString(2, pattern);
-                    try (ResultSet rs = stmt.executeQuery()) {
-                        if (rs.next()) {
-                            return rs.getInt(1);
-                        }
-                    }
-                }
-            } else {
-                try (PreparedStatement stmt = con.prepareStatement(COUNT_ALL)) {
-                    try (ResultSet rs = stmt.executeQuery()) {
-                        if (rs.next()) {
-                            return rs.getInt(1);
-                        }
-                    }
-                }
+        if (query != null && !query.isEmpty()) {
+            return searchProfiles(query, 0, 0).getTotal();
+        }
+
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement stmt = con.prepareStatement(COUNT_ALL);
+             ResultSet rs = stmt.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
             }
         } catch (SQLException ex) {
             log.error("Failed to count profiles", ex);

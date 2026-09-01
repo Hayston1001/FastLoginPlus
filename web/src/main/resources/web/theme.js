@@ -17,6 +17,11 @@ const Theme = {
         }
         this._apply();
         this._setupToggle();
+        // Enable theme-change transitions only after the first paint — applying
+        // them earlier makes the initial dark->theme render fade in (flash)
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => document.documentElement.classList.add('theme-anim'));
+        });
     },
 
     /**
