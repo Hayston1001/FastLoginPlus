@@ -292,8 +292,8 @@ proxies:
 # EFFECT  S=full   P=none           enable the panel in the proxy's config instead
 web:
   enabled: false
-  # Bind address: '' (empty) or '::' = all interfaces (IPv4+IPv6),
-  # '0.0.0.0' = IPv4 only, '127.0.0.1' = local access only (default)
+  # Bind address: '::' = all interfaces (IPv4+IPv6), '0.0.0.0' = IPv4 only,
+  # '127.0.0.1' = local access only (default)
   host: '127.0.0.1'
   port: 8080
   # Admin token (min 16 chars; auto-generated on first start if empty).

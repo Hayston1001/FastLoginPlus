@@ -122,7 +122,8 @@ public class WebServer {
     /**
      * Start the HTTP server with no extra CORS origins (same-origin only).
      *
-     * @param host  the host to bind to (empty string or {@code null} for all interfaces)
+     * @param host  the host to bind to ({@code null} for all interfaces; a blank
+     *         value falls back to the default local binding {@code 127.0.0.1})
      * @param port  the port to listen on
      * @param token the Bearer token for authentication
      */
@@ -133,7 +134,8 @@ public class WebServer {
     /**
      * Start the HTTP server.
      *
-     * @param host                the host to bind to (empty string or {@code null} for all interfaces)
+     * @param host                the host to bind to ({@code null} for all interfaces; a blank
+     *                             value falls back to the default local binding {@code 127.0.0.1})
      * @param port                the port to listen on
      * @param token               the Bearer token for authentication
      * @param corsAllowedOrigins  extra browser origins allowed by CORS; the
@@ -142,6 +144,17 @@ public class WebServer {
      */
     public void start(String host, int port, String token,
                       List<String> corsAllowedOrigins) {
+
+        // F068: a blank host does not bind "all interfaces" — the JDK resolves an
+        // empty hostname to the loopback address, making it silently identical to
+        // the config default. Fall back to that default explicitly (with a warning,
+        // matching the fallback style used for other invalid config values) instead
+        // of relying on JDK resolution quirks.
+        if (host != null && host.isBlank()) {
+            log.warn("web.host is empty - falling back to 127.0.0.1 (local access "
+                    + "only). Use '::' for all interfaces or '0.0.0.0' for IPv4 only.");
+            host = "127.0.0.1";
+        }
         app = Javalin.create(config -> {
             // Serve static files from classpath
             config.staticFiles.add("/web", Location.CLASSPATH);

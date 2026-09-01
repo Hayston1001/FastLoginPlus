@@ -1,5 +1,14 @@
 # FastLoginPlus Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+- **Web panel**: a blank `web.host` now falls back to the default `127.0.0.1` (local access only) with a
+  startup warning. It never actually bound to all interfaces — the JDK resolves an empty hostname to the
+  loopback address — so the config comment no longer advertises `''`; use `'::'` (all interfaces, IPv4+IPv6)
+  or `'0.0.0.0'` (IPv4 only) to widen the bind.
+
 ## v0.6.0
 
 > This is a release focused on stability fixes.
