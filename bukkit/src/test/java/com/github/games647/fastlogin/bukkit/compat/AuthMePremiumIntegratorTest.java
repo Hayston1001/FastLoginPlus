@@ -150,6 +150,38 @@ class AuthMePremiumIntegratorTest {
     }
 
     @Test
+    void offlineSessionUuidMustNotBeAdopted() {
+        // ISS-25: a non-null session UUID is not proof of a verified identity. AuthMe's
+        // Velocity premium handler rewrites GameProfileRequestEvent's profile to the
+        // name-derived offline UUID before FLP's listener reads it (ISS-07), so v3 on the
+        // session means the proxy forwarded an identity nobody verified. Accepting it
+        // stamps a value that AsynchronousJoin's v4 comparison can never match again.
+        UUID offline = offlineUuid("someone");
+        assertEquals(3, offline.version());
+        assertNull(AuthMePremiumIntegrator.resolvePremiumUuid(offline, null));
+    }
+
+    @Test
+    void offlineSessionUuidStillLetsAVerifiedConnectionUuidThrough() {
+        // Rejecting the session UUID must not become a blanket refusal: the fallback is
+        // the very mechanism that covers Spigot backends (ISS-04 / T6), so a v4 value
+        // there must still be adopted.
+        UUID offline = offlineUuid("someone");
+        UUID mojang = UUID.randomUUID();
+        assertEquals(mojang, AuthMePremiumIntegrator.resolvePremiumUuid(offline, mojang));
+    }
+
+    @Test
+    void offlineUuidIsNotStampable() {
+        // ISS-25: the last gate before the value reaches AuthMe's premium_uuid column
+        // must reject on version, not merely on null — otherwise it only moves the
+        // corruption one step downstream.
+        UUID offline = offlineUuid("someone");
+        assertEquals(3, offline.version());
+        assertFalse(AuthMePremiumIntegrator.isStampablePremiumUuid(offline));
+    }
+
+    @Test
     void authMe601DialogIsClosedThroughTheSessionId() throws Exception {
         // ISS-06: AuthMe 6.0.1 re-keyed both response maps from the player UUID to a Long
         // session id held in a separate connectionSessions map. The old Map<UUID, ...>

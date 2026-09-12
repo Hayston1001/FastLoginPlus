@@ -554,11 +554,19 @@ public final class AuthMePremiumIntegrator {
      * and on the first-login branch it would create an AuthMe account with a null UUID
      * and an empty password hash. Only a UUID verified against Mojang may be persisted.</p>
      *
+     * <p><b>Version, not just nullness (ISS-25).</b> A non-null UUID is not sufficient: AuthMe
+     * itself reads v3 as "name-derived, therefore unverified" and only treats v4 as
+     * Mojang-issued. Stamping a v3 value makes
+     * {@code AsynchronousJoin.canBypassWithPremium}'s v4 comparison miss permanently, so the
+     * player silently loses premium auto-login until the record is repaired. Enforcing the
+     * version here is what stops this gate from depending on every caller having already
+     * filtered its input.</p>
+     *
      * @param mojangUuid the UUID to persist, or null when the caller has none
      * @return true if the UUID may be written to AuthMe's database
      */
     static boolean isStampablePremiumUuid(UUID mojangUuid) {
-        return mojangUuid != null;
+        return mojangUuid != null && mojangUuid.version() == 4;
     }
 
     /**
@@ -581,12 +589,20 @@ public final class AuthMePremiumIntegrator {
      * cracked player, or a Floodgate account. AuthMe draws the same distinction in its own
      * {@code canBypassWithPremium}, so this is not a heuristic invented here.</p>
      *
+     * <p><b>The session UUID gets the same treatment (ISS-25).</b> It used to be returned
+     * unchecked, on the assumption that only direct verification and the Paper
+     * configuration phase ever populate it. That assumption is what ISS-07 breaks: AuthMe's
+     * Velocity premium handler rewrites {@code GameProfileRequestEvent}'s profile to the
+     * offline UUID, and FLP's listener read that rewritten value — so a v3 session UUID is
+     * reachable in production. Both sources now clear the same bar, which also removes this
+     * method's dependence on which listener happens to run first.</p>
+     *
      * @param sessionUuid    the UUID carried by the login session, null on the proxy paths
      * @param connectionUuid the joining player's UUID on this backend, null if unavailable
      * @return the UUID to stamp, or null when neither source can be trusted
      */
     public static UUID resolvePremiumUuid(UUID sessionUuid, UUID connectionUuid) {
-        if (sessionUuid != null) {
+        if (sessionUuid != null && sessionUuid.version() == 4) {
             return sessionUuid;
         }
         if (connectionUuid == null || connectionUuid.version() != 4) {
