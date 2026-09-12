@@ -106,6 +106,9 @@ autoLogin: true
 # Use premium UUID for premium players
 # The native proxy API handles the premium UUID. false = override the premium
 # UUID with the offline UUID (demote).
+# This setting is the single authority on which UUID reaches the backend. If
+# AuthMe's proxy plugin (AuthMeBungee / AuthMe Velocity) is installed,
+# FastLoginPlus pins its premium.keepOfflineUuidCompatibility to false and reloads it.
 premiumUuid: true
 
 # Query Mojang API for new players and detect name changes by UUID

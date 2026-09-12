@@ -25,7 +25,9 @@
  */
 package com.github.games647.fastlogin.bungee;
 
+import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentMap;
@@ -50,6 +52,8 @@ import com.github.games647.fastlogin.core.message.NamespaceKey;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
 import com.github.games647.fastlogin.core.UpdateChecker;
 import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
+import com.github.games647.fastlogin.core.shared.AuthMeProxyConfig;
+import com.github.games647.fastlogin.core.shared.AuthMeProxyPin;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 import com.google.common.collect.MapMaker;
@@ -71,6 +75,16 @@ import net.md_5.bungee.api.scheduler.GroupedThreadFactory;
  * BungeeCord version of FastLogin. This plugin keeps track on online mode connections.
  */
 public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSender> {
+
+    /** AuthMe's BungeeCord proxy plugin — owns the config file and the reload command. */
+    private static final String AUTHME_PLUGIN_NAME = "AuthMeBungee";
+    private static final String AUTHME_RELOAD_COMMAND = "abreloadproxy";
+    /** AuthMe's own ConfigMe property holder — the source of truth for the flag. */
+    private static final String AUTHME_CONFIG_PROPERTIES_CLASS =
+            "fr.xephi.authme.bungee.config.BungeeConfigProperties";
+    /** AuthMeBungee registers the reload command from its own onEnable — retry until it exists. */
+    private static final int AUTHME_RELOAD_ATTEMPTS = 6;
+    private static final Duration AUTHME_RELOAD_DELAY = Duration.ofSeconds(2);
 
     private final ConcurrentMap<PendingConnection, BungeeLoginSession> session = new MapMaker().weakKeys().makeMap();
 
@@ -101,6 +115,8 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
             geyserService = new GeyserService(GeyserImpl.getInstance(), core);
         }
 
+        forceAuthMeProxyUuidMode();
+
         //events
         PluginManager pluginManager = getProxy().getPluginManager();
 
@@ -121,7 +137,6 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
     public void onDisable() {
         // 0.5.0/F046: stop scheduling before closing shared resources
         scheduler.shutdown();
-
         // 0.5.0/F074: release the global channel registrations so a reload
         // does not leak them
         getProxy().unregisterChannel(NamespaceKey.getCombined(getName(), ChangePremiumMessage.CHANGE_CHANNEL));
@@ -231,6 +246,111 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
     @Override
     public boolean isPluginInstalled(String name) {
         return getProxy().getPluginManager().getPlugin(name) != null;
+    }
+
+    /**
+     * Pins AuthMe's proxy-side {@code premium.keepOfflineUuidCompatibility} to
+     * {@code false} and reloads AuthMeBungee so the change takes effect.
+     *
+     * <p>With {@code true}, AuthMe performs its own login-phase handshake via
+     * PacketEvents and resumes the login by re-injecting it into the Netty
+     * pipeline. The re-injected login reaches BungeeCord's {@code PreLoginEvent},
+     * where FastLoginPlus turns on online mode — so BungeeCord sends a second
+     * encryption request on top of the cipher layer AuthMe already installed.
+     * Two stacked AES/CFB8 stages corrupt the connection.
+     *
+     * <p>FastLoginPlus performs the same verification itself, so AuthMe's copy is
+     * redundant. Pinning the flag off removes the conflict at its source instead
+     * of racing against it at login time. Whether the backend receives the Mojang
+     * UUID or the name-derived offline UUID is controlled by FastLoginPlus's own
+     * {@code premiumUuid} setting — AuthMe's flag is no longer consulted.
+     *
+     * <p>No-op when AuthMeBungee is absent or the flag is already {@code false}.
+     */
+    private void forceAuthMeProxyUuidMode() {
+        Plugin authMe = getProxy().getPluginManager().getPlugin(AUTHME_PLUGIN_NAME);
+        if (authMe == null) {
+            return;
+        }
+
+        AuthMeProxyPin.Outcome outcome =
+                AuthMeProxyPin.forceOfflineUuidCompatibilityOff(authMe, AUTHME_CONFIG_PROPERTIES_CLASS);
+        if (outcome == AuthMeProxyPin.Outcome.ALREADY_OFF) {
+            return;
+        }
+        if (outcome == AuthMeProxyPin.Outcome.APPLIED) {
+            logPinned();
+            return;
+        }
+
+        logger.warn("Could not drive AuthMeBungee's own configuration objects ({}); falling back to "
+                + "rewriting its config file and triggering /{}",
+                outcome, AUTHME_RELOAD_COMMAND);
+        forceAuthMeProxyUuidModeViaConfig(authMe);
+    }
+
+    /**
+     * Fallback path for {@link #forceAuthMeProxyUuidMode()}: rewrite the config file and ask
+     * AuthMe to reload itself through its own command.
+     *
+     * <p>Used only when AuthMe's object graph is not the expected shape. It is less reliable
+     * than driving the objects — the reload travels through four indirections and BungeeCord
+     * reports success even when the command body throws — but it keeps the fix in place for
+     * the next proxy start.
+     *
+     * @param authMe the AuthMeBungee plugin instance
+     */
+    private void forceAuthMeProxyUuidModeViaConfig(Plugin authMe) {
+        Path configFile = authMe.getDataFolder().toPath().resolve("config.yml");
+        boolean changed;
+        try {
+            changed = AuthMeProxyConfig.forceOfflineUuidCompatibilityOff(configFile);
+        } catch (IOException ex) {
+            logger.warn("Could not pin AuthMeBungee's premium.{}=false in {}. If it is set to true, "
+                    + "proxy premium logins will break with a double encryption handshake.",
+                    AuthMeProxyConfig.OFFLINE_UUID_KEY, configFile, ex);
+            return;
+        }
+
+        if (!changed) {
+            return;
+        }
+
+        logPinned();
+        reloadAuthMeProxy(1);
+    }
+
+    /** Logs what was pinned and why. */
+    private void logPinned() {
+        logger.warn("Forced AuthMeBungee's premium.{}=false (was true). FastLoginPlus performs "
+                + "proxy-side premium verification itself — AuthMe's own login-phase verification "
+                + "would install a second encryption layer on the same connection and corrupt it. "
+                + "Use FastLoginPlus's 'premiumUuid' setting to choose between the Mojang UUID and "
+                + "the offline UUID on the backend.",
+                AuthMeProxyConfig.OFFLINE_UUID_KEY);
+    }
+
+    /**
+     * Runs AuthMe's own reload command, retrying while the command is still unregistered.
+     *
+     * @param attempt the 1-based attempt number
+     */
+    private void reloadAuthMeProxy(int attempt) {
+        scheduler.runAsyncDelayed(() -> {
+            boolean dispatched = getProxy().getPluginManager()
+                    .dispatchCommand(getProxy().getConsole(), AUTHME_RELOAD_COMMAND);
+            if (dispatched) {
+                logger.info("Reloaded AuthMeBungee; premium.{}=false is now active",
+                        AuthMeProxyConfig.OFFLINE_UUID_KEY);
+            } else if (attempt < AUTHME_RELOAD_ATTEMPTS) {
+                reloadAuthMeProxy(attempt + 1);
+            } else {
+                logger.warn("Could not run /{} after {} attempts — AuthMeBungee still holds "
+                        + "premium.{}=true in memory. Restart the proxy to apply the change.",
+                        AUTHME_RELOAD_COMMAND, AUTHME_RELOAD_ATTEMPTS,
+                        AuthMeProxyConfig.OFFLINE_UUID_KEY);
+            }
+        }, AUTHME_RELOAD_DELAY);
     }
 
     public FloodgateService getFloodgateService() {

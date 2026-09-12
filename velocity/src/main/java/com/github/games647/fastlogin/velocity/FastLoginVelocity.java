@@ -31,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -49,6 +50,8 @@ import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.message.SuccessMessage;
 import com.github.games647.fastlogin.core.UpdateChecker;
 import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
+import com.github.games647.fastlogin.core.shared.AuthMeProxyConfig;
+import com.github.games647.fastlogin.core.shared.AuthMeProxyPin;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 import com.github.games647.fastlogin.velocity.listener.ConnectListener;
@@ -62,6 +65,7 @@ import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
+import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -80,6 +84,17 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     private final Logger logger;
     private final ConcurrentMap<InetSocketAddress, VelocityLoginSession> session = new MapMaker().weakKeys().makeMap();
     private static final String PROXY_ID_FILE = "proxyId.txt";
+
+    /** AuthMe's Velocity proxy plugin — owns the config file and the reload command. */
+    private static final String AUTHME_PLUGIN_ID = "authmevelocity";
+    private static final String AUTHME_PLUGIN_NAME = "AuthMe Velocity";
+    private static final String AUTHME_RELOAD_COMMAND = "avreloadproxy";
+    /** AuthMe's own ConfigMe property holder — the source of truth for the flag. */
+    private static final String AUTHME_CONFIG_PROPERTIES_CLASS =
+            "fr.xephi.authme.velocity.config.VelocityConfigProperties";
+    /** AuthMe Velocity registers the reload command from its own init — retry until it exists. */
+    private static final int AUTHME_RELOAD_ATTEMPTS = 6;
+    private static final Duration AUTHME_RELOAD_DELAY = Duration.ofSeconds(2);
 
     private FastLoginCore<Player, CommandSource, FastLoginVelocity> core;
     private AsyncScheduler scheduler;
@@ -113,6 +128,8 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         if (isPluginInstalled("Geyser-Velocity")) {
             geyserService = new GeyserService(GeyserImpl.getInstance(), core);
         }
+
+        forceAuthMeProxyUuidMode();
 
         server.getEventManager().register(this, new ConnectListener(this, core.getAntiBotService()));
         server.getEventManager().register(this, new PluginMessageListener(this));
@@ -183,6 +200,126 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     @Override
     public boolean isPluginInstalled(String name) {
         return server.getPluginManager().isLoaded(name);
+    }
+
+    /**
+     * Pins AuthMe's proxy-side {@code premium.keepOfflineUuidCompatibility} to
+     * {@code false} and reloads AuthMe Velocity so the change takes effect.
+     *
+     * <p>The flag selects whether AuthMe rewrites the game profile back to the
+     * name-derived offline UUID after it has verified the player. Leaving it
+     * {@code true} would make AuthMe a second writer of the same profile field
+     * that FastLoginPlus's {@code premiumUuid} setting controls, so the backend
+     * UUID would depend on which plugin's handler happened to run last.
+     *
+     * <p>Pinning it off makes FastLoginPlus's {@code premiumUuid} the single
+     * authority on both proxy platforms. AuthMe's own verification still runs
+     * (it is gated by the premium name list, not by this flag), so its
+     * compensating behaviour on the backend is preserved.
+     *
+     * <p>No-op when AuthMe Velocity is absent or the flag is already {@code false}.
+     */
+    private void forceAuthMeProxyUuidMode() {
+        Object authMe = server.getPluginManager().getPlugin(AUTHME_PLUGIN_ID)
+                .map(PluginContainer::getInstance)
+                .orElse(null);
+        if (authMe == null) {
+            return;
+        }
+
+        AuthMeProxyPin.Outcome outcome =
+                AuthMeProxyPin.forceOfflineUuidCompatibilityOff(authMe, AUTHME_CONFIG_PROPERTIES_CLASS);
+        if (outcome == AuthMeProxyPin.Outcome.ALREADY_OFF) {
+            return;
+        }
+        if (outcome == AuthMeProxyPin.Outcome.APPLIED) {
+            logPinned();
+            return;
+        }
+
+        logger.warn("Could not drive {}'s own configuration objects ({}); falling back to "
+                + "rewriting its config file and triggering /{}",
+                AUTHME_PLUGIN_NAME, outcome, AUTHME_RELOAD_COMMAND);
+        forceAuthMeProxyUuidModeViaConfig();
+    }
+
+    /**
+     * Fallback path for {@link #forceAuthMeProxyUuidMode()}: rewrite the config file and ask
+     * AuthMe Velocity to reload itself through its own command.
+     *
+     * <p>Used only when AuthMe's object graph is not the expected shape. It keeps the fix in
+     * place for the next proxy start, but cannot confirm that the running instance picked it up.
+     */
+    private void forceAuthMeProxyUuidModeViaConfig() {
+        // Velocity injects <plugins-dir>/<plugin-id> as the data directory, and ours
+        // lives under the same plugins directory
+        Path pluginsDir = dataDirectory.getParent();
+        if (pluginsDir == null) {
+            logger.warn("Could not locate {}'s data directory to pin premium.{}=false",
+                    AUTHME_PLUGIN_NAME, AuthMeProxyConfig.OFFLINE_UUID_KEY);
+            return;
+        }
+
+        Path configFile = pluginsDir.resolve(AUTHME_PLUGIN_ID).resolve("config.yml");
+        if (!Files.isRegularFile(configFile)) {
+            // The layout is derived, not read from AuthMe — say so instead of failing silently,
+            // because a silent no-op leaves the double-handshake conflict in place.
+            logger.warn("{} is installed but its config was not found at {} — premium.{} could not "
+                    + "be pinned to false. If AuthMe runs keepOfflineUuidCompatibility=true, set it "
+                    + "manually.",
+                    AUTHME_PLUGIN_NAME, configFile, AuthMeProxyConfig.OFFLINE_UUID_KEY);
+            return;
+        }
+
+        boolean changed;
+        try {
+            changed = AuthMeProxyConfig.forceOfflineUuidCompatibilityOff(configFile);
+        } catch (IOException ex) {
+            logger.warn("Could not pin {}'s premium.{}=false in {}",
+                    AUTHME_PLUGIN_NAME, AuthMeProxyConfig.OFFLINE_UUID_KEY, configFile, ex);
+            return;
+        }
+
+        if (!changed) {
+            return;
+        }
+
+        logPinned();
+        reloadAuthMeProxy(1);
+    }
+
+    /** Logs what was pinned and why. */
+    private void logPinned() {
+        logger.warn("Forced {}'s premium.{}=false (was true). FastLoginPlus's own "
+                + "'premiumUuid' setting decides whether the backend receives the Mojang UUID or "
+                + "the offline UUID; two plugins writing that profile field would be decided by "
+                + "handler order.",
+                AUTHME_PLUGIN_NAME, AuthMeProxyConfig.OFFLINE_UUID_KEY);
+    }
+
+    /**
+     * Runs AuthMe's own reload command, retrying while the command is still unregistered.
+     *
+     * @param attempt the 1-based attempt number
+     */
+    private void reloadAuthMeProxy(int attempt) {
+        scheduler.runAsyncDelayed(() -> {
+            CommandSource console = server.getConsoleCommandSource();
+            server.getCommandManager().executeAsync(console, AUTHME_RELOAD_COMMAND)
+                    .whenComplete((executed, error) -> {
+                        if (error == null && Boolean.TRUE.equals(executed)) {
+                            logger.info("Reloaded {}; premium.{}=false is now active",
+                                    AUTHME_PLUGIN_NAME, AuthMeProxyConfig.OFFLINE_UUID_KEY);
+                        } else if (attempt < AUTHME_RELOAD_ATTEMPTS) {
+                            reloadAuthMeProxy(attempt + 1);
+                        } else {
+                            logger.warn("Could not run /{} after {} attempts — {} still holds "
+                                    + "premium.{}=true in memory. Restart the proxy to apply.",
+                                    AUTHME_RELOAD_COMMAND, AUTHME_RELOAD_ATTEMPTS,
+                                    AUTHME_PLUGIN_NAME, AuthMeProxyConfig.OFFLINE_UUID_KEY);
+                        }
+                    });
+        }, AUTHME_RELOAD_DELAY);
     }
 
     public FloodgateService getFloodgateService() {

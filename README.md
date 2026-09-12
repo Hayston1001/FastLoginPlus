@@ -103,6 +103,8 @@ An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogi
 
 FastLoginPlus supports both AuthMeReloaded 5.x and 6.0. AuthMeReloaded 6.0 adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP automatically enables `enablePremium: true` and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
 
+If AuthMe's proxy plugin (`AuthMeBungee` / `AuthMeVelocity`) is installed, FLP also pins its `premium.keepOfflineUuidCompatibility` to `false`(default value). FLP's own `premiumUuid` setting is the single authority on whether the backend receives the Mojang UUID or the offline UUID.
+
 ## [Geyser](https://geysermc.org/)/[Floodgate](https://geysermc.org/floodgate/) Support
 
 FastLoginPlus works with Geyser to allow Bedrock players to join your offline-mode Java server.

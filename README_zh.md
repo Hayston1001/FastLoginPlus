@@ -103,6 +103,8 @@ FLP 内置**两套配置模板**；每个平台根据自身角色生成 `config.
 
 FastLoginPlus 同时支持 AuthMeReloaded 5.x 和 6.0. AuthMeReloaded 6.0 新增了 **preJoin 对话框(Paper) 以及 enablePremium 配置**, FLP 会自动启用 `enablePremium: true` 并注销 AuthMe 自带的正版验证监听器. 无需手动配置. 
 
+若安装了 AuthMe 的代理插件(`AuthMeBungee` / `AuthMeVelocity`), FLP 还会将 `premium.keepOfflineUuidCompatibility` 固定为 `false`(默认值). 也就是说, 后端拿到正版 UUID 还是离线 UUID 由 FLP 自己的 `premiumUuid` 配置唯一决定.
+
 ## 基岩版玩家支持(Geyser/Floodgate)
 
 FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入离线模式 Java 服务器.
