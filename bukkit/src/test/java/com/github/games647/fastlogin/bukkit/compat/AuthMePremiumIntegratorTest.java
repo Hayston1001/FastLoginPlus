@@ -28,7 +28,10 @@ package com.github.games647.fastlogin.bukkit.compat;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -45,6 +48,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The ISS-04 UUID gate is pinned here too: AuthMe reads a null {@code premium_uuid}
  * as "not premium", so a null write is destructive rather than inert — and
  * {@code resolvePremiumUuid} decides which fallback source, if any, may replace it.</p>
+ *
+ * <p>The ISS-06 tests pin the AuthMe 6.0.1 dialog key change: both pending response maps
+ * moved from a player-UUID key to a {@code Long} session id, so the old lookup kept
+ * compiling (generics are erased at runtime) and kept running while always missing. The
+ * dual-key lookup that replaces it is exercised through the same reflective path
+ * production uses, against listener stand-ins matching each AuthMe shape.</p>
  */
 class AuthMePremiumIntegratorTest {
 
@@ -138,6 +147,142 @@ class AuthMePremiumIntegratorTest {
     @Test
     void missingConnectionUuidYieldsNothing() {
         assertNull(AuthMePremiumIntegrator.resolvePremiumUuid(null, null));
+    }
+
+    @Test
+    void authMe601DialogIsClosedThroughTheSessionId() throws Exception {
+        // ISS-06: AuthMe 6.0.1 re-keyed both response maps from the player UUID to a Long
+        // session id held in a separate connectionSessions map. The old Map<UUID, ...>
+        // cast still compiled and still ran, but get(playerUuid) always missed — leaving
+        // the dialog open until AuthMe's own 30s timeout, with no exception and no log.
+        SessionKeyedListener listener = new SessionKeyedListener();
+        Object connection = new Object();
+        UUID playerId = UUID.randomUUID();
+        CompletableFuture<String> pending = new CompletableFuture<>();
+        listener.connectionSessions.put(connection, 42L);
+        listener.pendingRegisterResponses.put(42L, pending);
+
+        assertEquals(42L, AuthMePremiumIntegrator.completePendingDialog(
+            SessionKeyedListener.class, listener, "pendingRegisterResponses",
+            connection, playerId));
+        assertTrue(pending.isDone());
+        assertNull(pending.join());
+    }
+
+    @Test
+    void preFixUuidLookupWouldHaveMissedTheSixOhOneDialog() {
+        // Regression evidence for ISS-06, pinned so the fix cannot be mistaken for a
+        // no-op: this is exactly the lookup the old code performed, and it must miss.
+        SessionKeyedListener listener = new SessionKeyedListener();
+        Object connection = new Object();
+        UUID playerId = UUID.randomUUID();
+        CompletableFuture<String> pending = new CompletableFuture<>();
+        listener.connectionSessions.put(connection, 42L);
+        listener.pendingRegisterResponses.put(42L, pending);
+
+        assertNull(listener.pendingRegisterResponses.get(playerId));
+        assertFalse(pending.isDone());
+    }
+
+    @Test
+    void authMe600DialogIsStillClosedThroughThePlayerUuid() throws Exception {
+        // The 6.0.0 shape has no connectionSessions field at all and keeps the response
+        // maps UUID-keyed. Both versions ship in the wild, so this path must survive.
+        LegacyKeyedListener listener = new LegacyKeyedListener();
+        UUID playerId = UUID.randomUUID();
+        CompletableFuture<String> pending = new CompletableFuture<>();
+        listener.pendingLoginResponses.put(playerId, pending);
+
+        assertEquals(playerId, AuthMePremiumIntegrator.completePendingDialog(
+            LegacyKeyedListener.class, listener, "pendingLoginResponses",
+            new Object(), playerId));
+        assertTrue(pending.isDone());
+    }
+
+    @Test
+    void uuidLookupIsTheFallbackWhenNoSessionIsOpen() throws Exception {
+        // 6.0.1 before its handler registered the connection, and 6.0.0 servers, both land
+        // here: no session id, so the UUID key is tried. A miss is harmless —
+        // ConcurrentHashMap.get returns null for a key of an unrelated type.
+        SessionKeyedListener listener = new SessionKeyedListener();
+        UUID playerId = UUID.randomUUID();
+        CompletableFuture<String> pending = new CompletableFuture<>();
+        listener.pendingLoginResponses.put(playerId, pending);
+
+        assertEquals(playerId, AuthMePremiumIntegrator.completePendingDialog(
+            SessionKeyedListener.class, listener, "pendingLoginResponses",
+            new Object(), playerId));
+        assertTrue(pending.isDone());
+    }
+
+    @Test
+    void missingConnectionStillClosesThroughTheUuid() throws Exception {
+        // Defensive: when the connection object could not be extracted from the configure
+        // event, the lookup must degrade to the UUID key rather than give up.
+        LegacyKeyedListener listener = new LegacyKeyedListener();
+        UUID playerId = UUID.randomUUID();
+        CompletableFuture<String> pending = new CompletableFuture<>();
+        listener.pendingRegisterResponses.put(playerId, pending);
+
+        assertNull(AuthMePremiumIntegrator.resolveDialogSessionId(
+            LegacyKeyedListener.class, listener, null));
+        assertEquals(playerId, AuthMePremiumIntegrator.completePendingDialog(
+            LegacyKeyedListener.class, listener, "pendingRegisterResponses", null, playerId));
+        assertTrue(pending.isDone());
+    }
+
+    @Test
+    void absentDialogIsInertRatherThanDestructive() throws Exception {
+        // No pending dialog registered: both keys miss and nothing is completed. The worst
+        // case of the dual-key lookup therefore equals the pre-fix behaviour — a dialog
+        // that times out, never a completion of somebody else's future.
+        SessionKeyedListener listener = new SessionKeyedListener();
+        assertNull(AuthMePremiumIntegrator.completePendingDialog(
+            SessionKeyedListener.class, listener, "pendingRegisterResponses",
+            new Object(), UUID.randomUUID()));
+        assertNull(AuthMePremiumIntegrator.completePendingDialog(
+            SessionKeyedListener.class, listener, "pendingLoginResponses",
+            new Object(), UUID.randomUUID()));
+    }
+
+    @Test
+    void nonLongSessionValueIsIgnored() {
+        // A future AuthMe refactor to a different session id type must degrade to the UUID
+        // path, not to completing an unrelated future.
+        SessionKeyedListener listener = new SessionKeyedListener();
+        Object connection = new Object();
+        listener.connectionSessions.put(connection, "not-an-id");
+
+        assertNull(AuthMePremiumIntegrator.resolveDialogSessionId(
+            SessionKeyedListener.class, listener, connection));
+    }
+
+    @Test
+    void dialogFutureOnlyAcceptsAFuture() {
+        assertFalse(AuthMePremiumIntegrator.completeDialogFuture(null));
+        assertFalse(AuthMePremiumIntegrator.completeDialogFuture("not a future"));
+        CompletableFuture<String> future = new CompletableFuture<>();
+        assertTrue(AuthMePremiumIntegrator.completeDialogFuture(future));
+        assertNull(future.join());
+    }
+
+    /** Mimics AuthMe 6.0.1: response maps keyed by a {@code Long} session id. */
+    private static final class SessionKeyedListener {
+
+        private final Map<Object, CompletableFuture<String>> pendingLoginResponses =
+            new ConcurrentHashMap<>();
+        private final Map<Object, CompletableFuture<String>> pendingRegisterResponses =
+            new ConcurrentHashMap<>();
+        private final Map<Object, Object> connectionSessions = new ConcurrentHashMap<>();
+    }
+
+    /** Mimics AuthMe 6.0.0: response maps UUID-keyed, no session registry at all. */
+    private static final class LegacyKeyedListener {
+
+        private final Map<Object, CompletableFuture<String>> pendingLoginResponses =
+            new ConcurrentHashMap<>();
+        private final Map<Object, CompletableFuture<String>> pendingRegisterResponses =
+            new ConcurrentHashMap<>();
     }
 
     private static UUID offlineUuid(String name) {

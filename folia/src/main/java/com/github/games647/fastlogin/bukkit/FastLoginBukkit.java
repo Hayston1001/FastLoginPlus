@@ -482,12 +482,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         String playerName;
         java.util.UUID connectionUuid;
         java.net.InetSocketAddress address;
+        // Retained for AuthMe 6.0.1's dialog session lookup — its pending responses
+        // are keyed by a session id resolved from the connection object itself.
+        final Object connection;
         try {
-            Object conn = event.getClass().getMethod("getConnection").invoke(event);
-            Object profile = conn.getClass().getMethod("getProfile").invoke(conn);
+            connection = event.getClass().getMethod("getConnection").invoke(event);
+            Object profile = connection.getClass().getMethod("getProfile").invoke(connection);
             playerName = (String) profile.getClass().getMethod("getName").invoke(profile);
             connectionUuid = (java.util.UUID) profile.getClass().getMethod("getId").invoke(profile);
-            address = (java.net.InetSocketAddress) conn.getClass().getMethod("getClientAddress").invoke(conn);
+            address = (java.net.InetSocketAddress) connection.getClass()
+                .getMethod("getClientAddress").invoke(connection);
         } catch (Exception e) {
             logger.warn("Failed to extract player info from configure event", e);
             return;
@@ -546,8 +550,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     // Close both register AND login dialogs.  AuthMe may show
                     // a login dialog for existing records (cracked→premium)
                     // if the async task hasn't updated the record yet.
-                    integrator.closePreJoinRegisterDialog(connectionUuid);
-                    integrator.closePreJoinLoginDialog(connectionUuid);
+                    integrator.closePreJoinRegisterDialog(connectionUuid, connection);
+                    integrator.closePreJoinLoginDialog(connectionUuid, connection);
                 }
 
                 BukkitLoginSession session = new BukkitLoginSession(playerName, true);

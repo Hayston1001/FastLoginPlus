@@ -59,6 +59,10 @@ import java.util.UUID;
  */
 public final class AuthMePremiumIntegrator {
 
+    /** AuthMe's Paper preJoin dialog listener — holds the pending response maps. */
+    private static final String PAPER_DIALOG_LISTENER_CLASS =
+        "fr.xephi.authme.listener.PaperDialogFlowListener";
+
     private final FastLoginBukkit plugin;
     private final AuthMeVersionDetector versionDetector;
 
@@ -1164,34 +1168,22 @@ public final class AuthMePremiumIntegrator {
      * Closes AuthMe 6.0's blocking preJoin registration dialog for the given
      * player by completing the pending register response CompletableFuture.
      *
-     * @param playerId the player's connection UUID (v3 or v4, as assigned by Paper)
+     * @param playerId   the player's connection UUID (v3 or v4, as assigned by Paper)
+     * @param connection the Paper {@code PlayerConfigurationConnection} of this login
+     *                   attempt, or null when unavailable — used to resolve AuthMe
+     *                   6.0.1's per-connection dialog session id
      */
-    public void closePreJoinRegisterDialog(UUID playerId) {
+    public void closePreJoinRegisterDialog(UUID playerId, Object connection) {
         if (!versionDetector.isAuthMe6()) {
             return;
         }
         try {
-            Object injector = getAuthMeInjector();
-            if (injector == null) {
-                return;
-            }
-            Class<?> dialogListenerClass = Class.forName(
-                "fr.xephi.authme.listener.PaperDialogFlowListener");
-            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
-            Object dialogListener = getSingleton.invoke(injector, dialogListenerClass);
+            Object dialogListener = getPaperDialogFlowListener();
             if (dialogListener == null) {
                 return;
             }
-            java.lang.reflect.Field responsesField = dialogListenerClass
-                .getDeclaredField("pendingRegisterResponses");
-            responsesField.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>> responses =
-                (java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>>)
-                    responsesField.get(dialogListener);
-            java.util.concurrent.CompletableFuture<String> future = responses.get(playerId);
-            if (future != null) {
-                future.complete(null);
+            if (completePreJoinDialog(dialogListener, "pendingRegisterResponses",
+                    connection, playerId)) {
                 plugin.getLog().info("Closed AuthMe preJoin register dialog for {}", playerId);
             }
         } catch (Exception e) {
@@ -1208,40 +1200,183 @@ public final class AuthMePremiumIntegrator {
      * that AuthMe's HIGHEST handler sees as non-premium (async timing race)
      * and shows a login dialog.
      *
-     * @param playerId the player's connection UUID (v3 or v4, as assigned by Paper)
+     * @param playerId   the player's connection UUID (v3 or v4, as assigned by Paper)
+     * @param connection the Paper {@code PlayerConfigurationConnection} of this login
+     *                   attempt, or null when unavailable — used to resolve AuthMe
+     *                   6.0.1's per-connection dialog session id
      */
-    public void closePreJoinLoginDialog(UUID playerId) {
+    public void closePreJoinLoginDialog(UUID playerId, Object connection) {
         if (!versionDetector.isAuthMe6()) {
             return;
         }
         try {
-            Object injector = getAuthMeInjector();
-            if (injector == null) {
-                return;
-            }
-            Class<?> dialogListenerClass = Class.forName(
-                "fr.xephi.authme.listener.PaperDialogFlowListener");
-            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
-            Object dialogListener = getSingleton.invoke(injector, dialogListenerClass);
+            Object dialogListener = getPaperDialogFlowListener();
             if (dialogListener == null) {
                 return;
             }
-            java.lang.reflect.Field responsesField = dialogListenerClass
-                .getDeclaredField("pendingLoginResponses");
-            responsesField.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>> responses =
-                (java.util.concurrent.ConcurrentMap<UUID, java.util.concurrent.CompletableFuture<String>>)
-                    responsesField.get(dialogListener);
-            java.util.concurrent.CompletableFuture<String> future = responses.get(playerId);
-            if (future != null) {
-                future.complete(null);
+            if (completePreJoinDialog(dialogListener, "pendingLoginResponses",
+                    connection, playerId)) {
                 plugin.getLog().info("Closed AuthMe preJoin login dialog for {}", playerId);
             }
         } catch (Exception e) {
             if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("Failed to close AuthMe preJoin login dialog: {}", e);
+                plugin.getLog().info("Failed to close AuthMe preJoin dialog: {}", e);
             }
         }
+    }
+
+    /**
+     * Resolves AuthMe's {@code PaperDialogFlowListener} singleton, which holds
+     * the pending preJoin dialog responses.
+     *
+     * @return the listener instance, or null when AuthMe is not injected yet
+     * @throws Exception when AuthMe's injector cannot be queried
+     */
+    private Object getPaperDialogFlowListener() throws Exception {
+        Object injector = getAuthMeInjector();
+        if (injector == null) {
+            return null;
+        }
+        Class<?> dialogListenerClass = Class.forName(PAPER_DIALOG_LISTENER_CLASS);
+        Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+        return getSingleton.invoke(injector, dialogListenerClass);
+    }
+
+    /**
+     * Completes the pending preJoin dialog future registered for the given connection.
+     *
+     * <p>AuthMe 6.0.1 changed the key type of {@code pendingLoginResponses} and
+     * {@code pendingRegisterResponses} from the player {@link UUID} to a {@code Long}
+     * session id.  The session id lives in the separate {@code connectionSessions}
+     * map, which is keyed by the connection object.  Java erases generics at runtime,
+     * so the previous {@code Map<UUID, ...>} lookup still compiled and still ran — it
+     * merely always returned null, leaving the dialog open until AuthMe's own timeout
+     * fired, with no exception and no log line to show for it.
+     *
+     * <p>Both key shapes are tried instead of branching on a version number: a version
+     * check needs a reliable way to read AuthMe's version and would silently break
+     * again on the next refactor, whereas a lookup miss is harmless —
+     * {@code ConcurrentHashMap.get} returns null for a key of an unrelated type.
+     * When neither key matches, nothing happens, which is the pre-fix behaviour.
+     *
+     * <p>The register dialog cannot go through AuthMe's own
+     * {@code approvePreJoinForceLogin}: {@code handleBlockingRegisterDialog} never
+     * registers its future with {@code PreJoinDialogService}, only the login dialog
+     * does, so that method cannot reach it.
+     *
+     * @param dialogListener AuthMe's {@code PaperDialogFlowListener} singleton
+     * @param fieldName      {@code pendingRegisterResponses} or {@code pendingLoginResponses}
+     * @param connection     the Paper connection object, or null
+     * @param playerId       the player's connection UUID
+     * @return true when a pending future was found and completed
+     * @throws Exception when the response map cannot be read reflectively
+     */
+    private boolean completePreJoinDialog(Object dialogListener, String fieldName,
+            Object connection, UUID playerId) throws Exception {
+        Object matchedKey = completePendingDialog(Class.forName(PAPER_DIALOG_LISTENER_CLASS),
+            dialogListener, fieldName, connection, playerId);
+        if (matchedKey == null) {
+            return false;
+        }
+        if (matchedKey instanceof Long && plugin.getCore().isDebug()) {
+            plugin.getLog().info("Closed AuthMe {} via session id {}", fieldName, matchedKey);
+        }
+        return true;
+    }
+
+    /**
+     * Completes the pending preJoin dialog future registered for the given connection.
+     *
+     * <p>AuthMe 6.0.1 changed the key type of {@code pendingLoginResponses} and
+     * {@code pendingRegisterResponses} from the player {@link UUID} to a {@code Long}
+     * session id.  The session id lives in the separate {@code connectionSessions}
+     * map, which is keyed by the connection object.  Java erases generics at runtime,
+     * so the previous {@code Map<UUID, ...>} lookup still compiled and still ran — it
+     * merely always returned null, leaving the dialog open until AuthMe's own timeout
+     * fired, with no exception and no log line to show for it.
+     *
+     * <p>Both key shapes are tried instead of branching on a version number: a version
+     * check needs a reliable way to read AuthMe's version and would silently break
+     * again on the next refactor, whereas a lookup miss is harmless —
+     * {@code ConcurrentHashMap.get} returns null for a key of an unrelated type.
+     * When neither key matches, nothing happens, which is the pre-fix behaviour.
+     *
+     * <p>The register dialog cannot go through AuthMe's own
+     * {@code approvePreJoinForceLogin}: {@code handleBlockingRegisterDialog} never
+     * registers its future with {@code PreJoinDialogService}, only the login dialog
+     * does, so that method cannot reach it.
+     *
+     * @param listenerClass AuthMe's {@code PaperDialogFlowListener} class
+     * @param listener      the listener singleton holding the pending response maps
+     * @param fieldName     {@code pendingRegisterResponses} or {@code pendingLoginResponses}
+     * @param connection    the Paper connection object, or null
+     * @param playerId      the player's connection UUID
+     * @return the key the future was found under — the session id on 6.0.1, the player
+     *         UUID on 6.0.0 — or null when no pending dialog was registered
+     * @throws Exception when the response map cannot be read reflectively
+     */
+    static Object completePendingDialog(Class<?> listenerClass, Object listener, String fieldName,
+            Object connection, UUID playerId) throws Exception {
+        Field responsesField = listenerClass.getDeclaredField(fieldName);
+        responsesField.setAccessible(true);
+        Object responsesValue = responsesField.get(listener);
+        if (!(responsesValue instanceof java.util.Map)) {
+            return null;
+        }
+        java.util.Map<?, ?> responses = (java.util.Map<?, ?>) responsesValue;
+
+        // AuthMe 6.0.1 — keyed by the session id opened for this connection
+        Long sessionId = resolveDialogSessionId(listenerClass, listener, connection);
+        if (sessionId != null && completeDialogFuture(responses.get(sessionId))) {
+            return sessionId;
+        }
+
+        // AuthMe 6.0.0 — keyed by the player UUID assigned to the connection
+        return completeDialogFuture(responses.get(playerId)) ? playerId : null;
+    }
+
+    /**
+     * Resolves the preJoin dialog session id AuthMe opened for the given connection.
+     *
+     * @param listenerClass AuthMe's {@code PaperDialogFlowListener} class
+     * @param listener      the listener singleton holding the session registry
+     * @param connection    the Paper connection object, or null
+     * @return the session id, or null when this AuthMe build keeps no session
+     *         registry (6.0.0 and earlier) or has no open session for this connection
+     */
+    static Long resolveDialogSessionId(Class<?> listenerClass, Object listener, Object connection) {
+        if (connection == null) {
+            return null;
+        }
+        try {
+            Field sessionsField = listenerClass.getDeclaredField("connectionSessions");
+            sessionsField.setAccessible(true);
+            Object sessions = sessionsField.get(listener);
+            if (!(sessions instanceof java.util.Map)) {
+                return null;
+            }
+            Object sessionId = ((java.util.Map<?, ?>) sessions).get(connection);
+            return sessionId instanceof Long ? (Long) sessionId : null;
+        } catch (NoSuchFieldException e) {
+            // AuthMe 6.0.0 — the response maps are UUID-keyed, there is no session registry
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Completes a pending dialog future with null, which AuthMe reads as
+     * "no kick message" and proceeds without kicking the player.
+     *
+     * @param future the value read from a response map, or null when absent
+     * @return true when a future was present and has been completed
+     */
+    static boolean completeDialogFuture(Object future) {
+        if (!(future instanceof java.util.concurrent.CompletableFuture)) {
+            return false;
+        }
+        ((java.util.concurrent.CompletableFuture<?>) future).complete(null);
+        return true;
     }
 }
