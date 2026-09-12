@@ -27,8 +27,12 @@ package com.github.games647.fastlogin.bukkit.compat;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -37,7 +41,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * be cleared when FLP's own profile row still exists (stale /cracked retry).
  *
  * <p>Also covers the ISS-02 proxy-sync decision: FLP changes AuthMe's premium state
- * through direct DataSource writes, which bypass the proxy's own premium cache.</p>
+ * through direct DataSource writes, which bypass the proxy's own premium cache.
+ * The ISS-04 UUID gate is pinned here too: AuthMe reads a null {@code premium_uuid}
+ * as "not premium", so a null write is destructive rather than inert — and
+ * {@code resolvePremiumUuid} decides which fallback source, if any, may replace it.</p>
  */
 class AuthMePremiumIntegratorTest {
 
@@ -83,5 +90,58 @@ class AuthMePremiumIntegratorTest {
             AuthMePremiumIntegrator.decideProxySync(false, false));
         assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.WARN,
             AuthMePremiumIntegrator.decideProxySync(false, true));
+    }
+
+    @Test
+    void nullUuidMustNeverBeStamped() {
+        // ISS-04: the proxy LOGIN path (BungeeListener.onLoginMessage) builds its session
+        // without a UUID, and ForceLoginTask used to forward that null straight into
+        // AuthMe. A null premium_uuid means "not premium" to AuthMe, so the write cleared
+        // the flag on existing records instead of setting it — while logging success.
+        assertFalse(AuthMePremiumIntegrator.isStampablePremiumUuid(null));
+    }
+
+    @Test
+    void verifiedUuidMayBeStamped() {
+        assertTrue(AuthMePremiumIntegrator.isStampablePremiumUuid(UUID.randomUUID()));
+    }
+
+    @Test
+    void sessionUuidWinsWhenPresent() {
+        // Direct mode (VerifyResponseTask) and the Paper configuration phase both put the
+        // verified UUID on the session, which is the authoritative source.
+        UUID session = UUID.randomUUID();
+        assertEquals(session, AuthMePremiumIntegrator.resolvePremiumUuid(
+            session, offlineUuid("someone")));
+    }
+
+    @Test
+    void proxyForwardedConnectionUuidFillsTheGap() {
+        // ISS-04 on a Spigot backend: the proxy paths never set a session UUID and there is
+        // no configuration phase, so the player's own UUID is the only source left. It is
+        // Mojang-issued (v4) because the proxy forwarded the verified one.
+        UUID mojang = UUID.randomUUID();
+        assertEquals(4, mojang.version());
+        assertEquals(mojang, AuthMePremiumIntegrator.resolvePremiumUuid(null, mojang));
+    }
+
+    @Test
+    void offlineUuidMustNotBeAdopted() {
+        // v3 = name-derived offline UUID: premiumUuid:false, a cracked player, or a
+        // Floodgate account. Stamping it would advertise premium for an account the proxy
+        // never verified.
+        UUID offline = offlineUuid("someone");
+        assertEquals(3, offline.version());
+        assertNull(AuthMePremiumIntegrator.resolvePremiumUuid(null, offline));
+    }
+
+    @Test
+    void missingConnectionUuidYieldsNothing() {
+        assertNull(AuthMePremiumIntegrator.resolvePremiumUuid(null, null));
+    }
+
+    private static UUID offlineUuid(String name) {
+        return UUID.nameUUIDFromBytes(
+            ("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
     }
 }

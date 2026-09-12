@@ -41,6 +41,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.metadata.FixedMetadataValue;
 
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, BukkitLoginSession, FastLoginBukkit> {
@@ -70,7 +71,22 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
             com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
                 plugin.getAuthMePremiumIntegrator();
             if (integrator != null && integrator.isAuthMePremiumEnabled()) {
-                integrator.markPlayerAsPremium(player.getName(), session.getUuid());
+                // ISS-04: the proxy paths (BungeeListener) build their session without a
+                // UUID. Handing that null to AuthMe would CLEAR premium_uuid instead of
+                // setting it, so fall back to the proxy-forwarded player UUID — the v4
+                // check inside rejects offline (v3) UUIDs. On Paper the configuration
+                // phase already stamped the record; this covers Spigot backends, which
+                // have no such phase and where AuthMe would otherwise never learn the
+                // player is premium.
+                UUID premiumUuid = com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator
+                    .resolvePremiumUuid(session.getUuid(), player.getUniqueId());
+                if (premiumUuid != null) {
+                    integrator.markPlayerAsPremium(player.getName(), premiumUuid);
+                } else if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info(
+                        "Skipping AuthMe premium marking for {}: no verified UUID",
+                        player.getName());
+                }
             }
         }
 

@@ -174,13 +174,29 @@ public final class AuthMePremiumIntegrator {
      * If the player has no AuthMe DB record (first login), pre-creates one
      * with the premium UUID already set so that the preJoin dialog is skipped.
      *
+     * <p>A null {@code mojangUuid} is refused without touching the database — see
+     * {@link #isStampablePremiumUuid(UUID)}.
+     *
      * @param playerName the player name
-     * @param mojangUuid the verified Mojang UUID
+     * @param mojangUuid the verified Mojang UUID (must not be null)
      * @return true if a new DB record was pre-created, false if an existing
-     *         record was updated or the operation failed
+     *         record was updated, the UUID was null, or the operation failed
      */
     public boolean markPlayerAsPremium(String playerName, UUID mojangUuid) {
         if (!versionDetector.isAuthMe6()) {
+            return false;
+        }
+        if (!isStampablePremiumUuid(mojangUuid)) {
+            // ISS-04: the proxy LOGIN path builds its session without a UUID
+            // (BungeeListener.onLoginMessage), so callers can arrive here with null.
+            // AuthMe derives isPremium() from premiumUuid != null, so writing null
+            // would CLEAR the flag on an existing record rather than set it — and on
+            // the first-login branch below it would create an AuthMe account with a
+            // null UUID and an empty password hash. Refuse instead; the UUID-bearing
+            // marking already ran during the configuration phase or direct
+            // verification.
+            plugin.getLog().warn(
+                "Refusing to mark {} as premium in AuthMe: no verified UUID", playerName);
             return false;
         }
         try {
@@ -226,7 +242,11 @@ public final class AuthMePremiumIntegrator {
             boolean success = (boolean) updatePremium.invoke(dataSource, auth);
 
             if (success) {
-                plugin.getLog().info("Marked {} as premium in AuthMe database", playerName);
+                // ISS-04: the UUID is logged because a success line reporting a null
+                // write was exactly how this went unnoticed before — seeing the real
+                // UUID here makes a regression visible in production logs.
+                plugin.getLog().info(
+                    "Marked {} as premium in AuthMe database (uuid={})", playerName, mojangUuid);
                 // ISS-02 (reverse direction): keep the proxy's premium set in sync so
                 // AuthMe's own premium path agrees with the database. Gated on a real
                 // UUID — never advertise premium for a record we failed to stamp.
@@ -518,6 +538,57 @@ public final class AuthMePremiumIntegrator {
      */
     static boolean shouldClearPremiumRecord(boolean authMePremium, boolean existingCrackedPlayer) {
         return authMePremium && existingCrackedPlayer;
+    }
+
+    /**
+     * Whether FLP may stamp AuthMe's {@code premium_uuid} column with the given UUID.
+     * Extracted as a pure function for testability (mirrors
+     * {@link #shouldClearPremiumRecord}).
+     *
+     * <p>AuthMe derives {@code isPremium()} from {@code premiumUuid != null}, so a null
+     * write is not a no-op — it <em>clears</em> the premium flag on an existing record,
+     * and on the first-login branch it would create an AuthMe account with a null UUID
+     * and an empty password hash. Only a UUID verified against Mojang may be persisted.</p>
+     *
+     * @param mojangUuid the UUID to persist, or null when the caller has none
+     * @return true if the UUID may be written to AuthMe's database
+     */
+    static boolean isStampablePremiumUuid(UUID mojangUuid) {
+        return mojangUuid != null;
+    }
+
+    /**
+     * Picks the UUID to stamp into AuthMe when the login session carries none.
+     * Extracted as a pure function for testability (mirrors
+     * {@link #isStampablePremiumUuid(UUID)}).
+     *
+     * <p>The proxy LOGIN/REGISTER paths build their session without a UUID, so
+     * {@code ForceLoginTask} had nothing to hand to
+     * {@link #markPlayerAsPremium(String, UUID)}. On Paper that is masked by the
+     * configuration phase, which stamps the record before the join. A Spigot backend has no
+     * configuration phase and the proxy disables the ProtocolLib path, so nothing ever
+     * marked the record — AuthMe kept treating a verified premium player as a plain offline
+     * account, and FLP silently became a hard dependency: the player's AuthMe password was
+     * generated at random by FLP, so losing FLP would lock them out.</p>
+     *
+     * <p>The backend's own player UUID is the one the proxy forwarded, and its version
+     * separates the two cases: <b>v4</b> is Mojang-issued (the proxy forwarded the verified
+     * UUID), <b>v3</b> is name-derived and therefore offline — {@code premiumUuid:false}, a
+     * cracked player, or a Floodgate account. AuthMe draws the same distinction in its own
+     * {@code canBypassWithPremium}, so this is not a heuristic invented here.</p>
+     *
+     * @param sessionUuid    the UUID carried by the login session, null on the proxy paths
+     * @param connectionUuid the joining player's UUID on this backend, null if unavailable
+     * @return the UUID to stamp, or null when neither source can be trusted
+     */
+    public static UUID resolvePremiumUuid(UUID sessionUuid, UUID connectionUuid) {
+        if (sessionUuid != null) {
+            return sessionUuid;
+        }
+        if (connectionUuid == null || connectionUuid.version() != 4) {
+            return null;
+        }
+        return connectionUuid;
     }
 
     /**
