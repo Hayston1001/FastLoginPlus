@@ -230,7 +230,16 @@ public class ConnectListener {
                 return;
             }
 
-            UUID verifiedUUID = event.getGameProfile().getId();
+            // ISS-07: read the immutable original profile, not the mutable one. AuthMe's
+            // Velocity premium handler (keepOfflineUuidCompatibility=true) caches the real
+            // Mojang UUID and then rewrites the event's profile to the name-derived offline
+            // UUID. Both handlers subscribe at the default priority, so registration order
+            // decides who runs first — and FLP registers later, inside ProxyInitializeEvent.
+            // getGameProfile() would therefore hand us the offline UUID, which we would go
+            // on to store as the player's premium UUID. getOriginalProfile() is backed by a
+            // final field and is the same one AuthMe reads, so the value no longer depends
+            // on listener order.
+            UUID verifiedUUID = event.getOriginalProfile().getId();
             String verifiedUsername = event.getUsername();
             session.setUuid(verifiedUUID);
             session.setVerifiedUsername(verifiedUsername);
