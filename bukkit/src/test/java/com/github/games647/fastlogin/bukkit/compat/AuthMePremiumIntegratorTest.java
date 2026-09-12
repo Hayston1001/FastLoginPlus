@@ -27,6 +27,7 @@ package com.github.games647.fastlogin.bukkit.compat;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -34,6 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Tests the fail-closed gate of the destructive AuthMe cleanup on the
  * cracked-session path (0.5.0/F059): a premium-flagged AuthMe record may only
  * be cleared when FLP's own profile row still exists (stale /cracked retry).
+ *
+ * <p>Also covers the ISS-02 proxy-sync decision: FLP changes AuthMe's premium state
+ * through direct DataSource writes, which bypass the proxy's own premium cache.</p>
  */
 class AuthMePremiumIntegratorTest {
 
@@ -54,5 +58,30 @@ class AuthMePremiumIntegratorTest {
     void nonPremiumRecordShouldNeverBeTouched() {
         assertFalse(AuthMePremiumIntegrator.shouldClearPremiumRecord(false, true));
         assertFalse(AuthMePremiumIntegrator.shouldClearPremiumRecord(false, false));
+    }
+
+    @Test
+    void enabledProxyMustReceiveNotification() {
+        // AuthMe resolved its BungeeSender and the bungeecord hook is on → notify.
+        assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.SEND,
+            AuthMePremiumIntegrator.decideProxySync(true, true));
+    }
+
+    @Test
+    void disabledProxyIntegrationMustStaySilent() {
+        // Direct-connect server (no proxy): there is no remote cache to sync, so a
+        // warning on every cracked toggle would be pure noise.
+        assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.SKIP,
+            AuthMePremiumIntegrator.decideProxySync(true, false));
+    }
+
+    @Test
+    void unresolvableSenderMustWarn() {
+        // ISS-02: the notification did not happen. On the cracked path the proxy keeps
+        // forcing online-mode for a non-premium player, so the admin must be told.
+        assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.WARN,
+            AuthMePremiumIntegrator.decideProxySync(false, false));
+        assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.WARN,
+            AuthMePremiumIntegrator.decideProxySync(false, true));
     }
 }

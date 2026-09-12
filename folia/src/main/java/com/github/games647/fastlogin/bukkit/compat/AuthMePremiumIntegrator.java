@@ -68,6 +68,7 @@ public final class AuthMePremiumIntegrator {
     private Object premiumLoginVerifier;
     private Object dataSource;
     private Object playerCache;
+    private Object bungeeSender;
 
     public AuthMePremiumIntegrator(FastLoginBukkit plugin, AuthMeVersionDetector versionDetector) {
         this.plugin = plugin;
@@ -226,6 +227,12 @@ public final class AuthMePremiumIntegrator {
 
             if (success) {
                 plugin.getLog().info("Marked {} as premium in AuthMe database", playerName);
+                // ISS-02 (reverse direction): keep the proxy's premium set in sync so
+                // AuthMe's own premium path agrees with the database. Gated on a real
+                // UUID — never advertise premium for a record we failed to stamp.
+                if (mojangUuid != null) {
+                    notifyProxyPremiumSet(playerName);
+                }
             }
             return false;
         } catch (Exception e) {
@@ -356,51 +363,65 @@ public final class AuthMePremiumIntegrator {
                 plugin.getLog().warn("Failed to clear AuthMe PlayerCache for {}: {}",
                     playerName, e);
             }
-        } else {
-            // AuthMe 5.x: no premium feature, no caches.
-            // Try synchronous reflection first (direct DataSource access),
-            // fall back to async AuthMeApi if reflection fails.
-            try {
-                // Try to get DataSource from AuthMe plugin via reflection
-                Plugin authMePlugin = Bukkit.getPluginManager().getPlugin("AuthMe");
-                if (authMePlugin != null) {
-                    Field databaseField = authMePlugin.getClass().getDeclaredField("database");
-                    databaseField.setAccessible(true);
-                    Object ds = databaseField.get(authMePlugin);
-                    if (ds != null) {
-                        Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
-                        boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
-                        if (plugin.getCore().isDebug()) {
-                            plugin.getLog().info(
-                                "AuthMe 5.x removeAuth({}) = {} (synchronous)", playerName, removed);
-                        }
-                        if (removed) {
-                            return; // done synchronously
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                if (plugin.getCore().isDebug()) {
-                    plugin.getLog().info(
-                    "AuthMe 5.x synchronous cleanup failed for {}, falling back to async API: {}",
-                    playerName, e);
-                }
-            }
 
-            // Fallback: async AuthMeApi
-            try {
-                AuthMeApi api = AuthMeApi.getInstance();
-                if (api != null && api.isRegistered(lowerName)) {
-                    api.forceUnregister(lowerName);
+            // ISS-02: the proxy keeps its own premium cache — the DB writes above bypass it.
+            notifyProxyPremiumUnset(playerName);
+        } else {
+            clearPlayerPremiumLegacy5x(lowerName, playerName);
+        }
+    }
+
+    /**
+     * AuthMe 5.x cleanup path for {@link #clearPlayerPremium(String)}. That branch has no
+     * premium feature and no caches, so the record is removed via direct DataSource
+     * reflection with an async {@code AuthMeApi} fallback.
+     *
+     * @param lowerName  the lower-cased player name
+     * @param playerName the player name (for logging)
+     */
+    private void clearPlayerPremiumLegacy5x(String lowerName, String playerName) {
+        // Try synchronous reflection first (direct DataSource access),
+        // fall back to async AuthMeApi if reflection fails.
+        try {
+            // Try to get DataSource from AuthMe plugin via reflection
+            Plugin authMePlugin = Bukkit.getPluginManager().getPlugin("AuthMe");
+            if (authMePlugin != null) {
+                Field databaseField = authMePlugin.getClass().getDeclaredField("database");
+                databaseField.setAccessible(true);
+                Object ds = databaseField.get(authMePlugin);
+                if (ds != null) {
+                    Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
+                    boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
                     if (plugin.getCore().isDebug()) {
                         plugin.getLog().info(
-                            "Unregistered {} from AuthMe 5.x (async fallback)", playerName);
+                            "AuthMe 5.x removeAuth({}) = {} (synchronous)", playerName, removed);
+                    }
+                    if (removed) {
+                        return; // done synchronously
                     }
                 }
-            } catch (Exception e) {
-                plugin.getLog().warn("Failed to unregister {} from AuthMe 5.x: {}",
-                    playerName, e);
             }
+        } catch (Exception e) {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info(
+                "AuthMe 5.x synchronous cleanup failed for {}, falling back to async API: {}",
+                playerName, e);
+            }
+        }
+
+        // Fallback: async AuthMeApi
+        try {
+            AuthMeApi api = AuthMeApi.getInstance();
+            if (api != null && api.isRegistered(lowerName)) {
+                api.forceUnregister(lowerName);
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info(
+                        "Unregistered {} from AuthMe 5.x (async fallback)", playerName);
+                }
+            }
+        } catch (Exception e) {
+            plugin.getLog().warn("Failed to unregister {} from AuthMe 5.x: {}",
+                playerName, e);
         }
     }
 
@@ -497,6 +518,40 @@ public final class AuthMePremiumIntegrator {
      */
     static boolean shouldClearPremiumRecord(boolean authMePremium, boolean existingCrackedPlayer) {
         return authMePremium && existingCrackedPlayer;
+    }
+
+    /**
+     * What {@link #notifyProxyPremium} should do, decided from the two facts that only
+     * become known after reflection has run.
+     */
+    enum ProxySyncDecision {
+        /** Push the notification to the proxy. */
+        SEND,
+        /** No proxy integration configured — nothing to keep in sync, stay silent. */
+        SKIP,
+        /** Sender unresolvable — a proxy may exist with a stale cache; warn the admin. */
+        WARN
+    }
+
+    /**
+     * Decides how a premium-state change should reach the AuthMe proxy. Extracted as a
+     * pure function for testability (mirrors {@link #shouldClearPremiumRecord}).
+     *
+     * <p>The {@link ProxySyncDecision#SKIP} / {@link ProxySyncDecision#WARN} split carries
+     * the load: a server with no proxy integration (direct-connect setups) must not log a
+     * warning on every cracked toggle, while an unresolvable sender means the notification
+     * silently did not happen — and on the cracked path that leaves the player forced into
+     * online-mode and unable to join until the proxy resyncs.</p>
+     *
+     * @param senderResolved whether AuthMe's {@code BungeeSender} could be obtained
+     * @param proxyEnabled   whether AuthMe reports its proxy integration as enabled
+     * @return the action to take
+     */
+    static ProxySyncDecision decideProxySync(boolean senderResolved, boolean proxyEnabled) {
+        if (!senderResolved) {
+            return ProxySyncDecision.WARN;
+        }
+        return proxyEnabled ? ProxySyncDecision.SEND : ProxySyncDecision.SKIP;
     }
 
     /**
@@ -599,11 +654,109 @@ public final class AuthMePremiumIntegrator {
             updatePremium.invoke(dataSource, playerAuth);
             plugin.getLog().info(
                 "Pre-created premium AuthMe record for {} (uuid={})", playerName, mojangUuid);
+            // ISS-02 (reverse direction): the record is premium — tell the proxy so its
+            // premium set matches the database instead of waiting for the next resync.
+            if (mojangUuid != null) {
+                notifyProxyPremiumSet(playerName);
+            }
         } else {
             plugin.getLog().warn(
                 "Failed to pre-create premium AuthMe record for {}", playerName);
         }
         return success;
+    }
+
+    /**
+     * Notifies the AuthMe proxy (BungeeCord/Velocity) that the given player is no longer
+     * premium, so the proxy drops the name from its premium cache.
+     *
+     * <p>The proxy keeps its own premium name set — fed only by
+     * {@code premium.set}/{@code premium.unset} messages or a full resync at proxy start —
+     * and drives {@code forceOnlineMode()} from it. Writing AuthMe's database directly (as
+     * this class otherwise does) leaves that set untouched, so a player switched to cracked
+     * keeps being rejected at connect time until the proxy restarts with a player online to
+     * trigger the resync.</p>
+     *
+     * @param playerName the player name
+     * @return true if the notification was handed to AuthMe
+     */
+    public boolean notifyProxyPremiumUnset(String playerName) {
+        return notifyProxyPremium(playerName, "sendPremiumUnset", "unset");
+    }
+
+    /**
+     * Notifies the AuthMe proxy that the given player is now premium, so the proxy adds the
+     * name to its premium cache and forces online-mode verification on the next connection.
+     * Counterpart to {@link #notifyProxyPremiumUnset(String)}.
+     *
+     * @param playerName the player name
+     * @return true if the notification was handed to AuthMe
+     */
+    public boolean notifyProxyPremiumSet(String playerName) {
+        return notifyProxyPremium(playerName, "sendPremiumSet", "set");
+    }
+
+    /**
+     * Resolves AuthMe's {@code BungeeSender} and invokes the given premium notification on
+     * it. Silently no-ops when AuthMe's proxy integration is disabled (there is no remote
+     * cache to update) and warns when the sender cannot be resolved at all.
+     *
+     * @param playerName the player name
+     * @param methodName the {@code BungeeSender} method to invoke
+     * @param action     short action label used in log messages
+     * @return true if the notification was handed to AuthMe
+     */
+    private boolean notifyProxyPremium(String playerName, String methodName, String action) {
+        if (!versionDetector.isAuthMe6()) {
+            return false;
+        }
+        try {
+            Object sender = getBungeeSender();
+            boolean proxyEnabled = false;
+            if (sender != null) {
+                Method isEnabled = sender.getClass().getMethod("isEnabled");
+                proxyEnabled = Boolean.TRUE.equals(isEnabled.invoke(sender));
+            }
+            switch (decideProxySync(sender != null, proxyEnabled)) {
+                case WARN:
+                    warnProxyCacheStale(playerName, action);
+                    return false;
+                case SKIP:
+                    // No proxy integration configured — nothing to keep in sync.
+                    return false;
+                default:
+                    Method notify = sender.getClass().getMethod(methodName, String.class);
+                    notify.invoke(sender, playerName);
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info("Sent premium.{} notification to proxy for {}",
+                            action, playerName);
+                    }
+                    return true;
+            }
+        } catch (Exception e) {
+            warnProxyCacheStale(playerName, action);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("notifyProxyPremium({}) failed: {}", action, e);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Warns that the proxy's premium cache could not be updated. The cracked direction is
+     * the dangerous one: a stale entry makes the proxy force online-mode for a player who
+     * is no longer premium, locking them out until the proxy resyncs.
+     *
+     * @param playerName the player name
+     * @param action     short action label used in the message
+     */
+    private void warnProxyCacheStale(String playerName, String action) {
+        plugin.getLog().warn(
+            "Could not send the AuthMe premium.{} message for {}. If AuthMe runs on both the "
+                + "proxy and the backend, the proxy premium cache is now stale: a player switched "
+                + "to cracked stays forced into online-mode and cannot join until the proxy "
+                + "restarts with a player online to trigger the resync.",
+            action, playerName);
     }
 
     // --- Reflection helpers ---
@@ -695,6 +848,28 @@ public final class AuthMePremiumIntegrator {
         Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
         dataSource = getSingleton.invoke(injector, dsClass);
         return dataSource;
+    }
+
+    /**
+     * Gets the {@code BungeeSender} singleton from AuthMe's DI injector. This is the
+     * same instance AuthMe's own {@code PremiumService} uses, so invoking its
+     * notification methods produces exactly the plugin messages AuthMe itself would
+     * send — no direct database writes, no AuthMe command feedback, no player kick.
+     *
+     * @return the BungeeSender instance, or null if not found
+     */
+    private synchronized Object getBungeeSender() throws Exception {
+        if (bungeeSender != null) {
+            return bungeeSender;
+        }
+        Object injector = getAuthMeInjector();
+        if (injector == null) {
+            return null;
+        }
+        Class<?> senderClass = Class.forName("fr.xephi.authme.service.bungeecord.BungeeSender");
+        Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+        bungeeSender = getSingleton.invoke(injector, senderClass);
+        return bungeeSender;
     }
 
     /**
