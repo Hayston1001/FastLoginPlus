@@ -191,8 +191,10 @@ public final class AuthMePremiumIntegrator {
             return false;
         }
         if (!isStampablePremiumUuid(mojangUuid)) {
-            // ISS-04: the proxy LOGIN path builds its session without a UUID
-            // (BungeeListener.onLoginMessage), so callers can arrive here with null.
+            // ISS-04: callers can arrive here with null. 0.7.0/F10 narrowed the sources —
+            // the proxy now sends its verified Mojang UUID in the force message and
+            // BungeeListener adopts it — so null means "the proxy verified nothing": a
+            // cracked login, Floodgate, a pre-0.7.0 proxy, or the ProtocolSupport path.
             // AuthMe derives isPremium() from premiumUuid != null, so writing null
             // would CLEAR the flag on an existing record rather than set it — and on
             // the first-login branch below it would create an AuthMe account with a
@@ -574,14 +576,18 @@ public final class AuthMePremiumIntegrator {
      * Extracted as a pure function for testability (mirrors
      * {@link #isStampablePremiumUuid(UUID)}).
      *
-     * <p>The proxy LOGIN/REGISTER paths build their session without a UUID, so
+     * <p>Historically the proxy LOGIN/REGISTER paths built their session without a UUID, so
      * {@code ForceLoginTask} had nothing to hand to
-     * {@link #markPlayerAsPremium(String, UUID)}. On Paper that is masked by the
-     * configuration phase, which stamps the record before the join. A Spigot backend has no
+     * {@link #markPlayerAsPremium(String, UUID)}. On Paper that was masked by the
+     * configuration phase, which stamps the record before the join; a Spigot backend has no
      * configuration phase and the proxy disables the ProtocolLib path, so nothing ever
      * marked the record — AuthMe kept treating a verified premium player as a plain offline
      * account, and FLP silently became a hard dependency: the player's AuthMe password was
      * generated at random by FLP, so losing FLP would lock them out.</p>
+     *
+     * <p>0.7.0/F10 closed the proxy half of that gap by carrying the verified UUID in the
+     * force message, so this fallback fires less often. It still covers the sources F10
+     * cannot reach: an older proxy, and the ProtocolSupport path (see ISS-29).</p>
      *
      * <p>The backend's own player UUID is the one the proxy forwarded, and its version
      * separates the two cases: <b>v4</b> is Mojang-issued (the proxy forwarded the verified

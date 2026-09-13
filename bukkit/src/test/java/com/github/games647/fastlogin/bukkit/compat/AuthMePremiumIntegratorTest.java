@@ -103,10 +103,11 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void nullUuidMustNeverBeStamped() {
-        // ISS-04: the proxy LOGIN path (BungeeListener.onLoginMessage) builds its session
-        // without a UUID, and ForceLoginTask used to forward that null straight into
-        // AuthMe. A null premium_uuid means "not premium" to AuthMe, so the write cleared
-        // the flag on existing records instead of setting it — while logging success.
+        // ISS-04: ForceLoginTask used to forward a null session UUID straight into AuthMe.
+        // A null premium_uuid means "not premium" to AuthMe, so the write cleared the flag
+        // on existing records instead of setting it — while logging success.
+        // 0.7.0/F10 narrowed when null can reach here (the proxy now sends its verified
+        // UUID), but "the proxy verified nothing" is still a normal state, so the guard stays.
         assertFalse(AuthMePremiumIntegrator.isStampablePremiumUuid(null));
     }
 
@@ -126,9 +127,11 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void proxyForwardedConnectionUuidFillsTheGap() {
-        // ISS-04 on a Spigot backend: the proxy paths never set a session UUID and there is
-        // no configuration phase, so the player's own UUID is the only source left. It is
+        // ISS-04 on a Spigot backend: there is no configuration phase, so when the session
+        // carries no UUID the player's own connection UUID is the only source left. It is
         // Mojang-issued (v4) because the proxy forwarded the verified one.
+        // 0.7.0/F10 makes the proxy send that UUID in the force message too, so this fallback
+        // fires less often — it still covers an older proxy, and ISS-29.
         UUID mojang = UUID.randomUUID();
         assertEquals(4, mojang.version());
         assertEquals(mojang, AuthMePremiumIntegrator.resolvePremiumUuid(null, mojang));
