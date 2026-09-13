@@ -97,27 +97,34 @@ public class BungeeListener implements PluginMessageListener {
             plugin.getLog().info("Player info {} command for {} from proxy", type, playerName);
         }
         if (type == Type.LOGIN) {
-            onLoginMessage(player, playerName);
+            onLoginMessage(player, playerName, message.getVerifiedPremiumUuid());
         } else if (type == Type.REGISTER) {
-            onRegisterMessage(player, playerName);
+            onRegisterMessage(player, playerName, message.getVerifiedPremiumUuid());
         } else if (type == Type.CRACKED) {
             //we don't start a force login task here so update it manually
             plugin.getPremiumPlayers().put(player.getUniqueId(), PremiumStatus.CRACKED);
         }
     }
 
-    private void onLoginMessage(Player player, String playerName) {
+    private void onLoginMessage(Player player, String playerName, UUID verifiedPremiumUuid) {
         BukkitLoginSession playerSession = new BukkitLoginSession(playerName, true);
+        // 0.7.0/F10: adopt the Mojang UUID the proxy verified. Without it the session carries no
+        // UUID at all, and with premiumUuid:false the fallback in ForceLoginTask (the connection
+        // UUID) is the offline one — so AuthMe would never get a premium_uuid written and the
+        // player would be asked for a password on every single login. Null stays null: the proxy
+        // only omits it when it verified nothing, and resolvePremiumUuid rejects non-v4 values.
+        playerSession.setUuid(verifiedPremiumUuid);
         startLoginTaskIfReady(player, playerSession);
     }
 
-    private void onRegisterMessage(Player player, String playerName) {
+    private void onRegisterMessage(Player player, String playerName, UUID verifiedPremiumUuid) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             AuthPlugin<Player> authPlugin = plugin.getCore().getAuthPluginHook();
             try {
                 //we need to check if the player is registered on Bukkit too
                 if (authPlugin == null || !authPlugin.isRegistered(playerName)) {
                     BukkitLoginSession playerSession = new BukkitLoginSession(playerName, false);
+                    playerSession.setUuid(verifiedPremiumUuid);
                     startLoginTaskIfReady(player, playerSession);
                 }
             } catch (Exception ex) {

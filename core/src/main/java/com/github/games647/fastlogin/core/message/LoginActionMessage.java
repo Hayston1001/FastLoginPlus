@@ -39,10 +39,26 @@ public class LoginActionMessage implements ChannelMessage {
     private String playerName;
     private UUID proxyId;
 
-    public LoginActionMessage(Type type, String playerName, UUID proxyId) {
+    /**
+     * Mojang (version 4) UUID the proxy already verified for this player.
+     * <p>
+     * {@code null} when the proxy has nothing to declare: the connection was not verified as
+     * premium (cracked login, Floodgate, forced login), or the proxy predates this field.
+     * <p>
+     * 0.7.0/F10. The backend used to have no way of learning the verified UUID when
+     * {@code premiumUuid: false} — there the proxy deliberately rewrites the forwarded UUID to
+     * the offline one, so the regular connection UUID carries no premium signal and AuthMe would
+     * never get a {@code premium_uuid} written. The proxy has always known this value (see
+     * {@code ConnectListener.onGameProfileRequest} / {@code onLogin}, which store the immutable
+     * Mojang UUID on the session); it was simply never transmitted.
+     */
+    private UUID verifiedPremiumUuid;
+
+    public LoginActionMessage(Type type, String playerName, UUID proxyId, UUID verifiedPremiumUuid) {
         this.type = type;
         this.playerName = playerName;
         this.proxyId = proxyId;
+        this.verifiedPremiumUuid = verifiedPremiumUuid;
     }
 
     public LoginActionMessage() {
@@ -61,6 +77,15 @@ public class LoginActionMessage implements ChannelMessage {
         return proxyId;
     }
 
+    /**
+     * Gets the Mojang UUID the proxy verified for this player.
+     *
+     * @return the verified premium UUID, or null if the proxy declared none
+     */
+    public UUID getVerifiedPremiumUuid() {
+        return verifiedPremiumUuid;
+    }
+
     @Override
     public void readFrom(ByteArrayDataInput input) {
         // 0.5.0/F027: validate the type byte — a malformed client plugin message
@@ -77,6 +102,27 @@ public class LoginActionMessage implements ChannelMessage {
         long mostSignificantBits = input.readLong();
         long leastSignificantBits = input.readLong();
         this.proxyId = new UUID(mostSignificantBits, leastSignificantBits);
+
+        // 0.7.0/F10: optional trailing field. A proxy older than this field sends nothing here,
+        // and Guava's ByteArrayDataInput surfaces the resulting EOF as an IllegalStateException
+        // (its read methods wrap the checked EOFException). Absence is a supported state, not an
+        // error — it means "this proxy has nothing to declare". The caller decides what to do
+        // with a null; a writer with nothing to declare sends the zero UUID, which the version-4
+        // check in resolvePremiumUuid rejects.
+        try {
+            long uuidMostSignificantBits = input.readLong();
+            long uuidLeastSignificantBits = input.readLong();
+            // The zero UUID is this field's wire encoding of "nothing declared". Normalise it back
+            // to null so the round trip is symmetric and consumers only ever see a real UUID or
+            // null — never a placeholder that looks like a value. No real Mojang UUID can
+            // collide with it: those are version 4, and the zero UUID is version 0.
+            this.verifiedPremiumUuid =
+                    (uuidMostSignificantBits == 0L && uuidLeastSignificantBits == 0L)
+                            ? null
+                            : new UUID(uuidMostSignificantBits, uuidLeastSignificantBits);
+        } catch (IllegalStateException truncated) {
+            this.verifiedPremiumUuid = null;
+        }
     }
 
     @Override
@@ -89,6 +135,18 @@ public class LoginActionMessage implements ChannelMessage {
         //proxy identifier to check if it's an acceptable proxy
         output.writeLong(proxyId.getMostSignificantBits());
         output.writeLong(proxyId.getLeastSignificantBits());
+
+        // 0.7.0/F10: proxy-verified Mojang UUID. Written unconditionally so the frame length is
+        // deterministic; the zero UUID means "nothing to declare" and is filtered out by
+        // resolvePremiumUuid's version-4 check. Old backends stop reading after proxyId and
+        // ignore the trailing bytes, so they are unaffected.
+        if (verifiedPremiumUuid == null) {
+            output.writeLong(0L);
+            output.writeLong(0L);
+        } else {
+            output.writeLong(verifiedPremiumUuid.getMostSignificantBits());
+            output.writeLong(verifiedPremiumUuid.getLeastSignificantBits());
+        }
     }
 
     @Override
@@ -102,6 +160,7 @@ public class LoginActionMessage implements ChannelMessage {
             + "type='" + type + '\''
             + ", playerName='" + playerName + '\''
             + ", proxyId=" + proxyId
+            + ", verifiedPremiumUuid=" + verifiedPremiumUuid
             + '}';
     }
 

@@ -108,7 +108,12 @@ public class ForceLoginTask
         }
 
         UUID proxyId = UUID.fromString(ProxyServer.getInstance().getConfig().getUuid());
-        ChannelMessage loginMessage = new LoginActionMessage(type, player.getName(), proxyId);
+        // 0.7.0/F10: also hand over the Mojang UUID verified at LoginEvent. The backend needs it
+        // to stamp AuthMe's premium_uuid when premiumUuid:false, where the forwarded connection
+        // UUID is deliberately the offline one and therefore carries no premium signal at all.
+        // Null when this connection was not verified as premium.
+        ChannelMessage loginMessage = new LoginActionMessage(type, player.getName(), proxyId,
+                session.getUuid());
 
         core.getPlugin().sendPluginMessage(server, loginMessage);
     }

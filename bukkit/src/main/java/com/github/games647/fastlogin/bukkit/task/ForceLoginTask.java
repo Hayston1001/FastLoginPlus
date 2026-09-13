@@ -71,13 +71,13 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
             com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
                 plugin.getAuthMePremiumIntegrator();
             if (integrator != null && integrator.isAuthMePremiumEnabled()) {
-                // ISS-04: the proxy paths (BungeeListener) build their session without a
-                // UUID. Handing that null to AuthMe would CLEAR premium_uuid instead of
-                // setting it, so fall back to the proxy-forwarded player UUID — the v4
-                // check inside rejects offline (v3) UUIDs. On Paper the configuration
-                // phase already stamped the record; this covers Spigot backends, which
-                // have no such phase and where AuthMe would otherwise never learn the
-                // player is premium.
+                // ISS-04 + 0.7.0/F10: the session UUID is the Mojang UUID the proxy verified
+                // and now sends along with the force message; it is null only when the proxy
+                // verified nothing. Fall back to the connection UUID otherwise. Handing null
+                // to AuthMe would CLEAR premium_uuid instead of setting it, so the v4 check
+                // inside rejects offline (v3) UUIDs. On Paper the configuration phase already
+                // stamped the record; this covers Spigot backends, which have no such phase
+                // and where AuthMe would otherwise never learn the player is premium.
                 UUID premiumUuid = com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator
                     .resolvePremiumUuid(session.getUuid(), player.getUniqueId());
                 if (premiumUuid != null) {
