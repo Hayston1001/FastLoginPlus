@@ -69,6 +69,7 @@ import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.hooks.bedrock.GeyserService;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.FloodgateState;
+import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 
 /**
@@ -543,6 +544,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
     }
 
+
     @SuppressWarnings("unchecked")
     private void onPlayerConfigure(Object event) {
         if (!bungeeManager.isEnabled() || !getConfig().getBoolean("autoRegister")) {
@@ -555,6 +557,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // Retained for AuthMe 6.0.1's dialog session lookup — its pending responses
         // are keyed by a session id resolved from the connection object itself.
         final Object connection;
+        // 0.7.0/F13: the proxy's verified Mojang UUID, forwarded as a GameProfile property.
+        // Null when absent — cracked login, Floodgate, BungeeCord (no injection point) or an
+        // older proxy.
+        UUID forwardedPremiumUuid = null;
         try {
             connection = event.getClass().getMethod("getConnection").invoke(event);
             Object profile = connection.getClass().getMethod("getProfile").invoke(connection);
@@ -562,6 +568,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             connectionUuid = (UUID) profile.getClass().getMethod("getId").invoke(profile);
             address = (java.net.InetSocketAddress) connection.getClass()
                 .getMethod("getClientAddress").invoke(connection);
+            forwardedPremiumUuid = readForwardedPremiumUuid(profile);
         } catch (Exception e) {
             logger.warn("Failed to extract player info from configure event", e);
             return;
@@ -586,6 +593,21 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     playerName);
             // defensive: make sure a relay task exists for the still-queued entry
             scheduleToggleRelay(playerName);
+            return;
+        }
+
+        // 0.7.0/F13 fast path. The proxy attested this connection as premium and forwarded
+        // the Mojang UUID on the GameProfile, which the backend decoded in the login phase.
+        // Run the whole auto-register synchronously: no Mojang lookup to wait for, so AuthMe's
+        // HIGHEST handler cannot show a dialog first — the record exists and the dialogs are
+        // closed before they are ever created. The UUID-equality guard below does not apply:
+        // a mismatch is the entire point of premiumUuid:false, and the attestation came from
+        // the proxy (HMAC-protected by the forwarding secret), not from a name lookup.
+        if (forwardedPremiumUuid != null) {
+            logger.info("Proxy attested {} as premium ({}) in the configure phase",
+                    playerName, forwardedPremiumUuid);
+            applyPremiumAtConfigure(playerName, forwardedPremiumUuid, connectionUuid,
+                    connection, address, isPendingPremium);
             return;
         }
 
@@ -626,72 +648,121 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                         playerName, connectionUuid, premiumUuid);
                 }
 
-                com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
-                    getAuthMePremiumIntegrator();
-                if (integrator != null && integrator.isAuthMePremiumEnabled()) {
-                    integrator.injectVerifiedUuid(playerName, premiumUuid);
-                    integrator.markPlayerAsPremium(playerName, premiumUuid);
-                    // Close both register AND login dialogs.  AuthMe may show
-                    // a login dialog for existing records (cracked→premium)
-                    // if the async task hasn't updated the record yet.
-                    integrator.closePreJoinRegisterDialog(connectionUuid, connection);
-                    integrator.closePreJoinLoginDialog(connectionUuid, connection);
-                }
-
-                // Create session so ForceLoginTask auto-logs the player after join
-                BukkitLoginSession session = new BukkitLoginSession(playerName, true);
-                session.setUuid(premiumUuid);
-                session.setVerifiedPremium(true);
-                putSession(address, session);
-
-                // For pending premium toggles, send the proxy message now
-                // (the player is connected in PLAY phase) and kick. This
-                // avoids waiting for the retry and eliminates the no-auth
-                // window between configure and proxy kick.
-                if (isPendingPremium) {
-                    Bukkit.getScheduler().runTask(FastLoginBukkit.this, () -> {
-                        Player player = Bukkit.getPlayerExact(playerName);
-                        if (player == null) {
-                            // 0.5.0/R1: defensive fallback mirroring the folia
-                            // branch — the carrier vanished between the configure
-                            // phase and this task.  The entry stays queued and is
-                            // delivered by the retry relay task once any player
-                            // reaches the PLAY phase.
-                            scheduleToggleRelay(playerName);
-                            return;
-                        }
-
-                        if (bungeeManager.isEnabled()) {
-                            // Read the CURRENT queued value at send time — the
-                            // entry may have been overwritten by a newer toggle
-                            // command, or already relayed by a retry task, since
-                            // the configure phase ran.
-                            Boolean pendingValue = pendingRelayStore.removeToggle(playerName);
-                            if (pendingValue == null) {
-                                return;
-                            }
-                            ChangePremiumMessage msg = new ChangePremiumMessage(
-                                playerName, pendingValue, false);
-                            bungeeManager.sendPluginMessage(player, msg);
-                            if (getConfig().getBoolean("kick-toggle")) {
-                                logger.info(
-                                    "Relayed pending {} toggle for {} and kicking",
-                                    pendingValue ? "premium" : "cracked", playerName);
-                                player.kickPlayer(core.getMessage(
-                                        pendingValue ? "add-premium" : "remove-premium"));
-                            } else {
-                                logger.info(
-                                    "Relayed pending {} toggle for {} (kick disabled)",
-                                    pendingValue ? "premium" : "cracked", playerName);
-                            }
-                        }
-                    });
-                }
+                applyPremiumAtConfigure(playerName, premiumUuid, connectionUuid,
+                        connection, address, isPendingPremium);
             } catch (Exception e) {
                 logger.warn("AutoRegister in configure phase failed for {}: {}",
                     playerName, e.getMessage());
             }
         });
+    }
+
+    /**
+     * Marks the player as premium in AuthMe and seeds the login session, all inside the
+     * configuration phase so AuthMe's preJoin dialogs are closed before they are created.
+     * Shared by the F13 fast path (proxy-attested UUID) and the async Mojang-lookup path.
+     *
+     * @param playerName the connecting player's name
+     * @param premiumUuid the verified Mojang UUID to stamp
+     * @param connectionUuid the UUID the connection actually carries
+     * @param connection the Paper connection object, for AuthMe's dialog session lookup
+     * @param address the client address the session is keyed by
+     * @param isPendingPremium whether a premium toggle is queued for relay
+     */
+    private void applyPremiumAtConfigure(String playerName, UUID premiumUuid, UUID connectionUuid,
+                                         Object connection, java.net.InetSocketAddress address,
+                                         boolean isPendingPremium) {
+        com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+            getAuthMePremiumIntegrator();
+        if (integrator != null && integrator.isAuthMePremiumEnabled()) {
+            integrator.injectVerifiedUuid(playerName, premiumUuid);
+            integrator.markPlayerAsPremium(playerName, premiumUuid);
+            // Close both register AND login dialogs.  AuthMe may show
+            // a login dialog for existing records (cracked→premium)
+            // if the async task hasn't updated the record yet.
+            integrator.closePreJoinRegisterDialog(connectionUuid, connection);
+            integrator.closePreJoinLoginDialog(connectionUuid, connection);
+        }
+
+        // Create session so ForceLoginTask auto-logs the player after join
+        BukkitLoginSession session = new BukkitLoginSession(playerName, true);
+        session.setUuid(premiumUuid);
+        session.setVerifiedPremium(true);
+        putSession(address, session);
+
+        // For pending premium toggles, send the proxy message now
+        // (the player is connected in PLAY phase) and kick. This
+        // avoids waiting for the retry and eliminates the no-auth
+        // window between configure and proxy kick.
+        if (isPendingPremium) {
+            Bukkit.getScheduler().runTask(FastLoginBukkit.this, () -> {
+                Player player = Bukkit.getPlayerExact(playerName);
+                if (player == null) {
+                    // 0.5.0/R1: defensive fallback mirroring the folia
+                    // branch — the carrier vanished between the configure
+                    // phase and this task.  The entry stays queued and is
+                    // delivered by the retry relay task once any player
+                    // reaches the PLAY phase.
+                    scheduleToggleRelay(playerName);
+                    return;
+                }
+
+                if (bungeeManager.isEnabled()) {
+                    // Read the CURRENT queued value at send time — the
+                    // entry may have been overwritten by a newer toggle
+                    // command, or already relayed by a retry task, since
+                    // the configure phase ran.
+                    Boolean pendingValue = pendingRelayStore.removeToggle(playerName);
+                    if (pendingValue == null) {
+                        return;
+                    }
+                    ChangePremiumMessage msg = new ChangePremiumMessage(
+                        playerName, pendingValue, false);
+                    bungeeManager.sendPluginMessage(player, msg);
+                    if (getConfig().getBoolean("kick-toggle")) {
+                        logger.info(
+                            "Relayed pending {} toggle for {} and kicking",
+                            pendingValue ? "premium" : "cracked", playerName);
+                        player.kickPlayer(core.getMessage(
+                                pendingValue ? "add-premium" : "remove-premium"));
+                    } else {
+                        logger.info(
+                            "Relayed pending {} toggle for {} (kick disabled)",
+                            pendingValue ? "premium" : "cracked", playerName);
+                    }
+                }
+            });
+        }
+    }
+
+    /**
+     * Reads the proxy-attested Mojang UUID off the forwarded GameProfile.
+     *
+     * <p>0.7.0/F13. Read reflectively: this module compiles against spigot-api, while the
+     * profile and its properties are Paper types. Returns null unless the property is present
+     * and holds a version-4 UUID — a malformed or non-v4 value is treated as "not attested",
+     * falling back to the Mojang-lookup path, exactly as if the property were absent.</p>
+     *
+     * @param profile the Paper player profile from the configure event
+     * @return the attested premium UUID, or null if the proxy attested nothing
+     */
+    private UUID readForwardedPremiumUuid(Object profile) {
+        try {
+            Object props = profile.getClass().getMethod("getProperties").invoke(profile);
+            for (Object property : (java.util.Collection<?>) props) {
+                String name = (String) property.getClass().getMethod("getName").invoke(property);
+                if (!ForwardingAttributes.PREMIUM_UUID.equals(name)) {
+                    continue;
+                }
+                String value = (String) property.getClass().getMethod("getValue").invoke(property);
+                UUID uuid = UUID.fromString(value);
+                // a real Mojang UUID is version 4; anything else is not an attestation
+                return uuid.version() == 4 ? uuid : null;
+            }
+        } catch (Exception ignored) {
+            // reflective read failed — treat as absent and fall back
+        }
+        return null;
     }
 
     /**

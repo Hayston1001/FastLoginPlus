@@ -31,6 +31,7 @@ import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
 
 import com.github.games647.fastlogin.velocity.event.VelocityFastLoginAntiBotEvent;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
+import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
@@ -248,6 +249,20 @@ public class ConnectListener {
             playerProfile.setId(verifiedUUID);
             if (!(boolean) plugin.getCore().getConfig().get("premiumUuid")) {
                 UUID offlineUUID = UUIDAdapter.generateOfflineId(event.getUsername());
+                // 0.7.0/F13: hand the verified Mojang UUID to the backend as a GameProfile
+                // property. It rides the modern player-info forwarding payload, which the
+                // backend decodes in the login phase — before AuthMe's preJoin dialog — so
+                // the backend can pre-create the record and close the dialog on the very
+                // first login. A separate plugin message cannot get there that early (see
+                // the F10 experiment). The property is covered by the forwarding HMAC, so
+                // only a proxy holding the secret can set it. Written BEFORE withId so the
+                // rewrite below cannot discard it.
+                // Property's constructor rejects a null signature; an empty string is
+                // accepted and serialises as hasSignature=false.
+                event.setGameProfile(event.getGameProfile().addProperty(new GameProfile.Property(
+                        ForwardingAttributes.PREMIUM_UUID, verifiedUUID.toString(), "")));
+                plugin.getLog().info("Attaching verified premium UUID {} to the forwarded profile",
+                        verifiedUUID);
                 event.setGameProfile(event.getGameProfile().withId(offlineUUID));
                 plugin.getLog().info("Overridden UUID from {} to {} (based of {}) on {}",
                         verifiedUUID, offlineUUID, verifiedUsername, event.getConnection());
