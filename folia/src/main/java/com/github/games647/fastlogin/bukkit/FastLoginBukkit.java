@@ -98,6 +98,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     // dead plugin instances)
     private final AtomicBoolean relayChainsRunning = new AtomicBoolean(true);
 
+    // 0.7.0/F15: /authme reload re-registers AuthMe's own premium packet listener
+    // behind FLP's back — the watchdog re-asserts the takeover every 5 seconds.
+    // Folia cancels the task with the plugin, but a run that already passed its
+    // flag check can still be about to hop to the global region; the second check
+    // inside the sync task keeps that hop from throwing on a disabled plugin.
+    private final AtomicBoolean watchdogRunning = new AtomicBoolean(true);
+    private static final long WATCHDOG_PERIOD_SECONDS = 5L;
+
     // 0.5.0/F014: give up relaying after ~5 minutes (1s interval) and keep the
     // entry queued instead of retrying forever
     private static final int MAX_RELAY_ATTEMPTS = 300;
@@ -145,6 +153,13 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     logger.warn("Failed to fully enforce FastLogin premium control in AuthMe 6.0"
                             + " — premium logins may conflict with AuthMe's own listener");
                 }
+
+                // 0.7.0/F15: /authme reload calls PacketEventsService.setup() again,
+                // which re-registers the listener we just removed (its own
+                // premiumVerificationRegistered flag is false). FLP cannot observe
+                // that command and any login-time hook fires too late — the listener
+                // acts on the first packets of the login. Poll instead.
+                startPremiumListenerWatchdog();
             } else {
                 logger.info("AuthMe 5.x detected: v{} — using standard FLP flow",
                     authMeVersionDetector.getVersion());
@@ -283,6 +298,41 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         getServer().getPluginManager().registerEvents(new UpdateNotifyListener(this), this);
     }
 
+    /**
+     * Re-asserts FLP's premium packet-listener takeover every 5 seconds.
+     *
+     * <p>AuthMe re-registers its own {@code PremiumVerificationPacketListener} on
+     * {@code /authme reload}: {@code ReloadCommand} reloads the settings, which calls
+     * {@code PacketEventsService.reload(settings)} and that ends in {@code setup()}. Since
+     * FLP set {@code premiumVerificationRegistered} to false when it unregistered the
+     * listener, {@code setup()} registers it again. FLP cannot observe the command, so the
+     * takeover has to be re-asserted periodically.
+     *
+     * <p>Why poll instead of checking on login: the listener intercepts START and
+     * ENCRYPTION_RESPONSE, the earliest login packets, so every event FLP could hook fires
+     * too late for the connection being established. {@code unregisterPremiumPacketListener()}
+     * is idempotent and stays silent when the listener is already gone, so a quiet server
+     * logs nothing and a watchdog line always means a re-registration really happened.
+     *
+     * <p>Scheduled as a native fixed-rate async task (like the update check) rather than a
+     * self-chaining {@code runAsyncDelayed} chain: the chain's delay is a {@code Thread.sleep}
+     * on the async pool, so a permanent watchdog would occupy one Folia async thread forever.
+     * The unregister itself hops to the global region — the same thread as the startup call,
+     * since PacketEvents' listener registry is not verified to be thread-safe.
+     */
+    private void startPremiumListenerWatchdog() {
+        Bukkit.getAsyncScheduler().runAtFixedRate(this, task -> {
+            if (!watchdogRunning.get()) {
+                return;
+            }
+            scheduler.getSyncExecutor().execute(() -> {
+                if (watchdogRunning.get()) {
+                    authMePremiumIntegrator.unregisterPremiumPacketListener();
+                }
+            });
+        }, WATCHDOG_PERIOD_SECONDS, WATCHDOG_PERIOD_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
     private boolean initializeFloodgate() {
         // 0.5.0/F010: a plugin being present is not the same as being enabled —
         // a disabled (or not yet initialized) Geyser/floodgate leaves
@@ -325,6 +375,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         scheduler.shutdown();
         // 0.5.0/F073: stop the self-chaining relay retry tasks
         relayChainsRunning.set(false);
+        // 0.7.0/F15: stop the AuthMe premium-listener watchdog
+        watchdogRunning.set(false);
 
         if (core != null) {
             core.close();

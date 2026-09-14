@@ -91,6 +91,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     // 0.5.0/F014: stop relay retry tasks after ~5 minutes (1s interval)
     private static final int MAX_RELAY_ATTEMPTS = 300;
 
+    // 0.7.0/F15: /authme reload re-registers AuthMe's own premium packet listener
+    // behind FLP's back — re-assert the takeover every 5 seconds (100 ticks)
+    private static final long WATCHDOG_PERIOD_TICKS = 100L;
+
     private final BukkitScheduler scheduler;
     private FastLoginCore<Player, CommandSender, FastLoginBukkit> core;
     private FloodgateService floodgateService;
@@ -137,6 +141,13 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     logger.warn("Failed to fully enforce FastLogin premium control in AuthMe 6.0"
                             + " — premium logins may conflict with AuthMe's own listener");
                 }
+
+                // 0.7.0/F15: /authme reload calls PacketEventsService.setup() again,
+                // which re-registers the listener we just removed (its own
+                // premiumVerificationRegistered flag is false). FLP cannot observe
+                // that command and any login-time hook fires too late — the listener
+                // acts on the first packets of the login. Poll instead.
+                startPremiumListenerWatchdog();
             } else {
                 logger.info("AuthMe 5.x detected: v{} — using standard FLP flow",
                     authMeVersionDetector.getVersion());
@@ -285,6 +296,32 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }, 60L);
 
         getServer().getPluginManager().registerEvents(new UpdateNotifyListener(this), this);
+    }
+
+    /**
+     * Re-asserts FLP's premium packet-listener takeover every 5 seconds.
+     *
+     * <p>AuthMe re-registers its own {@code PremiumVerificationPacketListener} on
+     * {@code /authme reload}: {@code ReloadCommand} reloads the settings, which calls
+     * {@code PacketEventsService.reload(settings)} and that ends in {@code setup()}. Since
+     * FLP set {@code premiumVerificationRegistered} to false when it unregistered the
+     * listener, {@code setup()} registers it again. FLP cannot observe the command, so the
+     * takeover has to be re-asserted periodically.
+     *
+     * <p>Why poll instead of checking on login: the listener intercepts START and
+     * ENCRYPTION_RESPONSE, the earliest login packets, so every event FLP could hook fires
+     * too late for the connection being established. {@code unregisterPremiumPacketListener()}
+     * is idempotent and stays silent when the listener is already gone, so a quiet server
+     * logs nothing and a watchdog line always means a re-registration really happened.
+     *
+     * <p>The task is cancelled by Bukkit together with the plugin, so it needs no shutdown
+     * flag. It runs on the main thread like the startup call — PacketEvents' listener
+     * registry is not verified to be thread-safe.
+     */
+    private void startPremiumListenerWatchdog() {
+        Bukkit.getScheduler().scheduleSyncRepeatingTask(this,
+            () -> authMePremiumIntegrator.unregisterPremiumPacketListener(),
+            WATCHDOG_PERIOD_TICKS, WATCHDOG_PERIOD_TICKS);
     }
 
     private boolean initializeFloodgate() {
