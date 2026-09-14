@@ -254,8 +254,9 @@ public class ConnectListener {
                 // backend decodes in the login phase — before AuthMe's preJoin dialog — so
                 // the backend can pre-create the record and close the dialog on the very
                 // first login. A separate plugin message cannot get there that early (see
-                // the F10 experiment). The property is covered by the forwarding HMAC, so
-                // only a proxy holding the secret can set it. Written BEFORE withId so the
+                // the F10 experiment). The forwarding HMAC protects the payload in transit,
+                // but authorship is the proxy process as a whole, not this plugin: any
+                // proxy-side code could inject the same property. Written BEFORE withId so the
                 // rewrite below cannot discard it.
                 // Property's constructor rejects a null signature; an empty string is
                 // accepted and serialises as hasSignature=false.

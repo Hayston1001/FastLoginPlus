@@ -37,8 +37,16 @@ package com.github.games647.fastlogin.core.shared;
  * rewriting, riding Velocity's modern player-information forwarding. The backend reads it back
  * in the configuration phase, before any dialog exists.</p>
  *
- * <p>The property is covered by the forwarding handshake's HMAC, so only a proxy holding the
- * forwarding secret can set it; the backend can trust it without a second signature scheme.
+ * <p>Trust boundary: the forwarding handshake's HMAC protects the payload in transit —
+ * nothing between proxy and backend can tamper with it — but the authority it certifies is
+ * <em>the proxy process as a whole</em>, not this plugin: any code running on the proxy can
+ * inject the same property. The backend therefore reads this as "the proxy attests", never
+ * "FLP attests". Note also that the capability this property enables is not new: the
+ * backend's configure-phase auto-register already trusted the payload's connection UUID
+ * (a holder of the forwarding secret could set it to the victim's public Mojang UUID and
+ * pass the existing equality guard), so the property grants no power the UUID field did not
+ * already carry. Keeping that boundary honest is why the property carries no second
+ * signature scheme — one that would not close the pre-existing path anyway.
  * BungeeCord has no equivalent injection point, so it keeps using the F10 plugin message and
  * therefore still shows the dialog on the first login.</p>
  */
