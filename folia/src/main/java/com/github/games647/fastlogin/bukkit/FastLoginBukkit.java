@@ -162,6 +162,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                             + " — premium logins may conflict with AuthMe's own listener");
                 }
 
+                // 0.7.0/F7 (ISS-31): AuthMe's own verification is off while its command layer
+                // stays registered, and upstream's warning makes it look like the whole
+                // feature is off — say what actually happened.
+                warnOnAuthMeCommandLayerWithoutVerification();
+
                 // 0.7.0/F15: /authme reload calls PacketEventsService.setup() again,
                 // which re-registers the listener we just removed (its own
                 // premiumVerificationRegistered flag is false). FLP cannot observe
@@ -348,6 +353,36 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 }
             });
         }, WATCHDOG_PERIOD_SECONDS, WATCHDOG_PERIOD_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    /**
+     * Warns when AuthMe's own premium verification is inactive while its command layer is
+     * still registered (ISS-31): FLP forced {@code enablePremium=true}, but PacketEvents is
+     * absent, so AuthMe's {@code setup()} gave up without resetting the setting and its
+     * {@code /premium} and {@code /freemium} commands stay usable. FastLoginPlus verifies
+     * premium logins itself and {@link AuthMeCommandGuard} redirects those commands to
+     * {@code /flp}, but upstream's "Premium auto-login is disabled" warning reads as if the
+     * whole feature were off — this line states what actually happened, so admins do not
+     * chase a FastLoginPlus failure that does not exist.
+     *
+     * <p>Deliberately scoped to the missing-PacketEvents case: on a proxy backend AuthMe's
+     * listener is absent for another reason ({@code isProxyMode}) and upstream prints no such
+     * warning there.
+     */
+    private void warnOnAuthMeCommandLayerWithoutVerification() {
+        if (!premiumTakeoverActive
+                || getServer().getPluginManager().isPluginEnabled("packetevents")) {
+            return;
+        }
+
+        logger.warn("AuthMe's enablePremium was forced to true, but PacketEvents is "
+                + "not installed — AuthMe's own premium verification stays off. "
+                + "FastLoginPlus verifies premium logins itself, so this is not a "
+                + "FastLoginPlus failure. AuthMe's /premium and /freemium remain "
+                + "registered; FastLoginPlus intercepts them and points players at "
+                + "/flp. An upstream 'Premium auto-login is disabled' warning refers "
+                + "to AuthMe's own verification, not to FastLoginPlus. Consider "
+                + "denying authme.player.premium and authme.player.freemium.");
     }
 
     private boolean initializeFloodgate() {
@@ -630,8 +665,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // player as premium behind the proxy's back.
                 if (!premiumUuid.equals(connectionUuid)) {
                     if (!isPendingPremium) {
+                        // 0.7.0/F7: say why this is normal. The mismatch is expected whenever
+                        // the proxy hands out the offline UUID — a cracked player, or a premium
+                        // player under premiumUuid:false on a fallback path (Bungee, or a proxy
+                        // too old for the F13 profile attribute); it is not a failure.
                         logger.info(
-                            "Skipping autoRegister for {}: connection UUID {} != premium UUID {}",
+                            "Skipping autoRegister for {}: connection UUID {} != premium UUID {}"
+                                + " (expected when the proxy assigns the offline UUID — a cracked"
+                                + " player, or premiumUuid:false)",
                             playerName, connectionUuid, premiumUuid);
                         return;
                     }
