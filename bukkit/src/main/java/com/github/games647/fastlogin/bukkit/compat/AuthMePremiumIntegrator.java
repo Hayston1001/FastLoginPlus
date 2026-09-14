@@ -37,6 +37,7 @@ import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Integrates FastLoginPlus with AuthMe 6.0's premium system via reflection.
@@ -62,6 +63,20 @@ public final class AuthMePremiumIntegrator {
     /** AuthMe's Paper preJoin dialog listener — holds the pending response maps. */
     private static final String PAPER_DIALOG_LISTENER_CLASS =
         "fr.xephi.authme.listener.PaperDialogFlowListener";
+
+    /**
+     * AuthMe's proxy message receiver — one of the two components that cache
+     * {@code enablePremium} in a field (ISS-11).
+     *
+     * <p>Package-private for the test suite, which pins that this name still resolves to an
+     * AuthMe component implementing {@code SettingsDependent}: a rename upstream would turn the
+     * refresh into a silent no-op, which is the very failure mode the refresh exists to remove.
+     */
+    static final String BUNGEE_RECEIVER_CLASS =
+        "fr.xephi.authme.service.bungeecord.BungeeReceiver";
+
+    /** The single parameter type of a {@code SettingsDependent}'s {@code reload} method. */
+    private static final String AUTHME_SETTINGS_CLASS = "fr.xephi.authme.settings.Settings";
 
     private final FastLoginBukkit plugin;
     private final AuthMeVersionDetector versionDetector;
@@ -1102,8 +1117,9 @@ public final class AuthMePremiumIntegrator {
      *   <li>Modify AuthMe's config.yml on disk (persisted across restarts)</li>
      *   <li>Call Settings.setProperty(ENABLE_PREMIUM, true) to update memory</li>
      *   <li>Call Settings.save() to persist to disk</li>
-     *   <li>Call PacketEventsService.reload(settings) to re-evaluate listener
-     *       registration with the new setting</li>
+     *   <li>Refresh every component that caches {@code enablePremium} in a field
+     *       (PacketEventsService and BungeeReceiver) — see
+     *       {@link #reloadEnablePremiumConsumers}</li>
      * </ol>
      *
      * @return true if the operation succeeded
@@ -1157,12 +1173,88 @@ public final class AuthMePremiumIntegrator {
                 "FLP has forced AuthMe's enablePremium=true (was false). "
                 + "FLP handles Mojang verification; AuthMe's premium checks are now unlocked.");
 
-            // 4. Reload PacketEventsService so it re-evaluates with enablePremium=true
-            reloadPacketEventsService(injector, settings);
+            // 4. Refresh every component that caches enablePremium, so the forced value takes
+            //    effect without a restart or a manual /authme reload
+            reloadEnablePremiumConsumers(injector, settings);
 
             return true;
         } catch (Exception e) {
             plugin.getLog().error("Failed to force-enable AuthMe enablePremium: {}", e);
+            return false;
+        }
+    }
+
+    /**
+     * Refreshes the components that cache {@code enablePremium} in a field, so the value FLP has
+     * just forced in memory takes effect.
+     *
+     * <p>AuthMe's {@code SettingsDependent} contract is "classes that keep a local copy of certain
+     * settings" — such a component picks up a new value only when {@code reload(Settings)} is called
+     * on it. Exactly two components cache this one (checked against AuthMe 6.0.1 by following every
+     * {@code ENABLE_PREMIUM} reference; the other seven read it on each use):
+     * {@code PacketEventsService} and {@code BungeeReceiver}. A stale {@code BungeeReceiver} answers
+     * the next {@code proxy.started} with an empty premium list, which wipes the proxy's cache of
+     * verified premium players (ISS-11).
+     *
+     * <p>Deliberately not a full {@code SettingsDependent} refresh (what AuthMe's own
+     * {@code /authme reload} performs): that would call {@code reload()} on twelve further
+     * components to fix one known stale field.
+     *
+     * @param injector AuthMe's DI injector
+     * @param settings AuthMe's Settings singleton
+     * @throws Exception when PacketEventsService cannot be reloaded
+     */
+    private void reloadEnablePremiumConsumers(Object injector, Object settings) throws Exception {
+        // unchanged from before this fix: a failure here still fails the whole force
+        reloadPacketEventsService(injector, settings);
+
+        // ISS-11: this one must only warn on failure — see refreshCachedEnablePremium
+        refreshCachedEnablePremium(BUNGEE_RECEIVER_CLASS, AUTHME_SETTINGS_CLASS, injector, settings,
+            failure -> plugin.getLog().warn("Could not refresh AuthMe's BungeeReceiver after forcing"
+                + " enablePremium — the proxy's premium list may be wiped on the next"
+                + " proxy.started message (ISS-11): {}", failure));
+    }
+
+    /**
+     * Refreshes one AuthMe component that caches {@code enablePremium} in a field.
+     *
+     * <p>The two failure kinds are kept apart on purpose. A component this AuthMe build does not
+     * ship — the class is looked up by name — is normal and silent: not every build has every
+     * component, and warning on it would fire on every startup of such a build. A component that
+     * exists but cannot be reloaded is handed to {@code warnOnFailure}. Neither is propagated:
+     * a throw here would reach {@code forceEnablePremium}'s catch, which turns any exception into a
+     * {@code false} return and marks the whole AuthMe integration as failed — a disproportionate
+     * answer to a possibly stale proxy premium list.
+     *
+     * <p>The two class names are parameters rather than constants inside this method so that the
+     * refresh can be exercised against a stand-in component — the same reason
+     * {@link #persistPreCreatedPremium} takes its write as a parameter.
+     *
+     * @param consumerClassName the AuthMe component's class name
+     * @param settingsClassName the settings class its {@code reload} method takes as its argument
+     * @param injector          AuthMe's DI injector
+     * @param settings          AuthMe's Settings singleton
+     * @param warnOnFailure     receives the cause when the component exists but cannot be reloaded
+     * @return true when the component was reloaded
+     */
+    static boolean refreshCachedEnablePremium(String consumerClassName, String settingsClassName,
+            Object injector, Object settings, Consumer<Exception> warnOnFailure) {
+        try {
+            Class<?> consumerClass = Class.forName(consumerClassName);
+            Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
+            Object consumer = getSingleton.invoke(injector, consumerClass);
+            if (consumer == null) {
+                // the injector never created this component — nothing to refresh
+                return false;
+            }
+            Method reload = consumerClass.getMethod("reload", Class.forName(settingsClassName));
+            reload.invoke(consumer, settings);
+            return true;
+        } catch (ClassNotFoundException e) {
+            // this AuthMe build has no such component — normal, not a failure
+            return false;
+        } catch (Exception e) {
+            warnOnFailure.accept(e);
             return false;
         }
     }

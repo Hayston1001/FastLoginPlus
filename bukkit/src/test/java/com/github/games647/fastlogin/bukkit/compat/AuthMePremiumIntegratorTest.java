@@ -27,7 +27,10 @@ package com.github.games647.fastlogin.bukkit.compat;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -37,6 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -61,6 +65,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * told it did not land. Getting this wrong is what let a half-built row be treated as a
  * successful pre-create — logged as success, then counted as "registered" while AuthMe
  * read it as "registered but not premium".</p>
+ *
+ * <p>The ISS-11 tests pin the refresh of a second cached setting. FLP changes AuthMe's
+ * {@code enablePremium} in memory, so every AuthMe component that keeps a local copy has to be
+ * told; {@code BungeeReceiver} is the one that otherwise answers the next {@code proxy.started}
+ * from a stale {@code false} and wipes the proxy's premium list. The kinds of failure stay
+ * apart: an absent component is normal and silent, a component that throws is reported and
+ * swallowed, because a throw would reach {@code forceEnablePremium}'s catch and mark the whole
+ * integration as failed.</p>
  *
  * <p><b>Coverage boundary.</b> {@code persistPreCreatedPremium} is reached directly, so
  * what is pinned here is the attempt sequence and the value it returns. The wiring around
@@ -356,6 +368,141 @@ class AuthMePremiumIntegratorTest {
             return false;
         }));
         assertEquals(2, attempts.get(), "exactly one retry, not a loop");
+    }
+
+    @Test
+    void cachedEnablePremiumConsumerIsRefreshedExactlyOnce() {
+        // ISS-11: FLP changes enablePremium in memory, but a component that cached the old value
+        // keeps answering from that copy until its reload(Settings) is called. BungeeReceiver is
+        // the one that answers the next proxy.started — from a stale false it sends an empty
+        // premium list, which wipes the proxy's cache of verified players.
+        AtomicInteger reloads = new AtomicInteger();
+        List<Exception> warnings = new ArrayList<>();
+
+        boolean refreshed = AuthMePremiumIntegrator.refreshCachedEnablePremium(
+            RefreshableComponent.class.getName(), StandInSettings.class.getName(),
+            new StandInInjector(new RefreshableComponent(reloads)), new StandInSettings(),
+            warnings::add);
+
+        assertTrue(refreshed);
+        assertEquals(1, reloads.get(), "one refresh per call, not one per lookup");
+        assertTrue(warnings.isEmpty(), "a successful refresh is not a warning");
+    }
+
+    @Test
+    void absentComponentIsNormalRatherThanAWarning() {
+        // The component is resolved by class name, and not every AuthMe build ships every
+        // component. Warning here would fire on every startup of such a build, so for the caller
+        // a missing class has to look like a refresh that had nothing to do.
+        List<Exception> warnings = new ArrayList<>();
+
+        boolean refreshed = AuthMePremiumIntegrator.refreshCachedEnablePremium(
+            "com.github.games647.fastlogin.bukkit.compat.NoSuchAuthMeComponent",
+            StandInSettings.class.getName(), new StandInInjector(null), new StandInSettings(),
+            warnings::add);
+
+        assertFalse(refreshed);
+        assertTrue(warnings.isEmpty(), "an absent component is not a failure");
+    }
+
+    @Test
+    void componentTheInjectorNeverCreatedIsNormalRatherThanAWarning() {
+        // Second absence shape: the class exists but AuthMe's injector has no instance of it.
+        // There is nothing to refresh, and an admin could not act on the warning either.
+        List<Exception> warnings = new ArrayList<>();
+
+        boolean refreshed = AuthMePremiumIntegrator.refreshCachedEnablePremium(
+            RefreshableComponent.class.getName(), StandInSettings.class.getName(),
+            new StandInInjector(null), new StandInSettings(), warnings::add);
+
+        assertFalse(refreshed);
+        assertTrue(warnings.isEmpty());
+    }
+
+    @Test
+    void failingConsumerRefreshIsReportedAndNotPropagated() {
+        // The fix for ISS-11 must not become a new way to fail forceEnablePremium, which turns
+        // any exception into a false return and marks the whole AuthMe integration as failed.
+        // So a component that throws is reported and swallowed — and the cause has to survive as
+        // far as the caller, or "the proxy list may be wiped" cannot be told apart from a
+        // reflective API change. Reflection wraps the target's throw in InvocationTargetException.
+        IllegalStateException failure = new IllegalStateException("injector is gone");
+        List<Exception> warnings = new ArrayList<>();
+
+        boolean refreshed = AuthMePremiumIntegrator.refreshCachedEnablePremium(
+            ThrowingComponent.class.getName(), StandInSettings.class.getName(),
+            new StandInInjector(new ThrowingComponent(failure)), new StandInSettings(),
+            warnings::add);
+
+        assertFalse(refreshed);
+        assertEquals(1, warnings.size(), "the caller logs exactly this cause");
+        assertTrue(warnings.get(0) instanceof InvocationTargetException);
+        assertSame(failure, warnings.get(0).getCause());
+    }
+
+    @Test
+    void theConfiguredReceiverNameResolvesToAnAuthMeComponent() throws Exception {
+        // The refresh resolves AuthMe's receiver by class name, so a rename upstream would turn
+        // this fix into a silent no-op — the very failure mode it removes. Class.forName is the
+        // half of the contract this classpath can check: the AuthMe jar the module compiles
+        // against must still carry the class, and it must still be a SettingsDependent. The
+        // reload(Settings) signature cannot be checked here — loading AuthMe's Settings needs its
+        // own ConfigMe dependency, which is not on this classpath — so that half rests on reading
+        // the 6.0.1 sources and on the live T3 check.
+        Class<?> receiver = Class.forName(AuthMePremiumIntegrator.BUNGEE_RECEIVER_CLASS);
+        boolean settingsDependent = false;
+        for (Class<?> implemented : receiver.getInterfaces()) {
+            if ("fr.xephi.authme.initialization.SettingsDependent".equals(implemented.getName())) {
+                settingsDependent = true;
+            }
+        }
+        assertTrue(settingsDependent, receiver + " must implement SettingsDependent");
+    }
+
+    /** Mimics an AuthMe component that caches {@code enablePremium} in a field (BungeeReceiver). */
+    static final class RefreshableComponent {
+
+        private final AtomicInteger reloads;
+
+        RefreshableComponent(AtomicInteger reloads) {
+            this.reloads = reloads;
+        }
+
+        public void reload(StandInSettings settings) {
+            reloads.incrementAndGet();
+        }
+    }
+
+    /** Mimics a component whose {@code reload} fails. */
+    static final class ThrowingComponent {
+
+        private final RuntimeException failure;
+
+        ThrowingComponent(RuntimeException failure) {
+            this.failure = failure;
+        }
+
+        public void reload(StandInSettings settings) {
+            throw failure;
+        }
+    }
+
+    /** Mimics AuthMe's {@code Settings} — the one argument of a {@code SettingsDependent.reload}. */
+    static final class StandInSettings {
+    }
+
+    /** Mimics {@code ch.jalu.injector.Injector} as far as the refresh uses it. */
+    static final class StandInInjector {
+
+        private final Object singleton;
+
+        StandInInjector(Object singleton) {
+            this.singleton = singleton;
+        }
+
+        public Object getSingleton(Class<?> type) {
+            return singleton;
+        }
     }
 
     /** Mimics AuthMe 6.0.1: response maps keyed by a {@code Long} session id. */
