@@ -701,13 +701,15 @@ public final class AuthMePremiumIntegrator {
      * @param lowerName lowercase player name (DB key)
      * @param playerName original-case player name (for realName field)
      * @param mojangUuid the verified Mojang UUID
-     * @return true if the record was created (and its premium UUID persisted)
+     * @return true when the AuthMe record was created. Its premium UUID may still be
+     *         missing — see {@link #persistPreCreatedPremium} — but the row exists either
+     *         way, which is what the callers act on. False means no row was inserted.
      * @throws Exception on reflection or database failure
      */
     private boolean preCreatePremiumAuth(Object dataSource, String lowerName,
                                           String playerName, UUID mojangUuid) throws Exception {
         // Build: PlayerAuth.builder().name(lowerName).realName(playerName)
-        //   .password(new HashedPassword(randomHash)).uuid(mojangUuid).premiumUuid(mojangUuid).build()
+        //   .password(new HashedPassword("")).uuid(mojangUuid).premiumUuid(mojangUuid).build()
         Class<?> hashedPasswordClass = Class.forName(
             "fr.xephi.authme.security.crypts.HashedPassword");
         java.lang.reflect.Constructor<?> hpCtor =
@@ -740,27 +742,125 @@ public final class AuthMePremiumIntegrator {
             Class.forName("fr.xephi.authme.data.auth.PlayerAuth"));
         boolean success = (boolean) saveAuth.invoke(dataSource, playerAuth);
 
+        if (!success) {
+            plugin.getLog().warn(
+                "Failed to pre-create premium AuthMe record for {}", playerName);
+            return false;
+        }
+
         // saveAuth does NOT insert the premium_uuid column (AuthMe's AbstractSqlDataSource
         // only inserts NAME, NICK_NAME, PASSWORD, SALT, EMAIL, REGISTRATION_DATE,
-        // REGISTRATION_IP, UUID). We must call updatePremiumUuid separately to persist it.
-        if (success) {
-            Method setPremiumUuid = playerAuth.getClass().getMethod("setPremiumUuid", UUID.class);
-            setPremiumUuid.invoke(playerAuth, mojangUuid);
-            Method updatePremium = dataSource.getClass().getMethod(
-                "updatePremiumUuid", playerAuth.getClass());
-            updatePremium.invoke(dataSource, playerAuth);
+        // REGISTRATION_IP, UUID), so the UUID needs a second write. That write reports a
+        // failure by returning false rather than by throwing (AuthMeColumnsHandler swallows
+        // the SQLException), which is why its result must not be discarded: the caller turns
+        // it into "the player is registered", and a record without a premium UUID is not a
+        // premium record.
+        Method setPremiumUuid = playerAuth.getClass().getMethod("setPremiumUuid", UUID.class);
+        setPremiumUuid.invoke(playerAuth, mojangUuid);
+        Method updatePremium = dataSource.getClass().getMethod(
+            "updatePremiumUuid", playerAuth.getClass());
+        if (persistPreCreatedPremium(new PremiumStampOps() {
+
+            @Override
+            public boolean stampPremiumUuid() {
+                try {
+                    return (boolean) updatePremium.invoke(dataSource, playerAuth);
+                } catch (Exception e) {
+                    // Convert, don't swallow: an AuthMe API change (reflection failure) and
+                    // a transient DB error both arrive here, and the failure log below has
+                    // to let an admin tell which one happened.
+                    if (plugin.getCore().isDebug()) {
+                        plugin.getLog().info(
+                            "AuthMe premium_uuid write for {} threw: {}", playerName, e);
+                    }
+                    return false;
+                }
+            }
+        })) {
             plugin.getLog().info(
                 "Pre-created premium AuthMe record for {} (uuid={})", playerName, mojangUuid);
             // ISS-02 (reverse direction): the record is premium — tell the proxy so its
             // premium set matches the database instead of waiting for the next resync.
+            // Only after a confirmed stamp: advertising premium for a row we failed to
+            // stamp is exactly the drift this class exists to prevent.
             if (mojangUuid != null) {
                 notifyProxyPremiumSet(playerName);
             }
         } else {
-            plugin.getLog().warn(
-                "Failed to pre-create premium AuthMe record for {}", playerName);
+            // The row exists but is not a premium record. AuthMe reads a null premium_uuid
+            // as "not premium", so the player is treated as a cracked account whose
+            // password hash is empty — they cannot answer the login dialog it triggers,
+            // and the session was already started as registered. The next login replays
+            // this path and retries the write, so a transient fault repairs itself.
+            plugin.getLog().error(
+                "Created the AuthMe record for {} but could not persist its premium UUID. "
+                + "The player counts as non-premium until that write succeeds; the next "
+                + "login retries it. If this repeats, check the database connection and "
+                + "AuthMe's schema.", playerName);
         }
-        return success;
+        return true;
+    }
+
+    /**
+     * The premium-UUID write performed right after a record is created. Injected so the
+     * retry below can be tested without an AuthMe datasource.
+     */
+    interface PremiumStampOps {
+
+        /**
+         * Attempts to write the premium UUID onto the row that was just created.
+         *
+         * @return true when AuthMe reports the write as successful
+         */
+        boolean stampPremiumUuid();
+    }
+
+    /**
+     * Persists the premium UUID of a freshly pre-created AuthMe record, retrying once
+     * (ISS-18).
+     *
+     * <p>AuthMe reports a failed {@code updatePremiumUuid} by returning false — the
+     * underlying {@code AuthMeColumnsHandler} catches the {@code SQLException} and only
+     * logs it — so discarding that return value leaves the caller believing it created a
+     * premium record while the row holds no premium UUID. AuthMe reads that null as "not
+     * premium", so the player faces a login dialog for an account whose password hash is
+     * empty, which nobody can satisfy.</p>
+     *
+     * <p>One retry is attempted, because the failures this guards against (SQLite busy, a
+     * dropped MySQL connection) are transient and the write is idempotent — the UUID
+     * already sits on the in-memory {@code PlayerAuth}.</p>
+     *
+     * <p><b>The record is deliberately not rolled back when the write fails.</b> Three
+     * things rule the deletion out; the second is what decided it:</p>
+     * <ul>
+     *   <li>{@code DataSource.removeAuth} reports success for any DELETE that runs without
+     *       raising, matched row or not — AuthMe's SQLite, MySQL and PostgreSQL
+     *       implementations all discard the update count ({@code pst.executeUpdate();
+     *       return true;}) — so "the row is gone" cannot be established without a read-back
+     *       this path does not perform.</li>
+     *   <li>Callers take this method's {@code true} to mean "an AuthMe record now exists".
+     *       {@code FastLoginBukkit.applyPremiumAtConfigure} discards the result and
+     *       hard-codes {@code registered=true}, so a rollback would send it into
+     *       {@code forceLogin} against a row that is gone: AuthMe then does nothing and the
+     *       player is left unauthenticated while the proxy is told the action succeeded.</li>
+     *   <li>Deleting is irreversible and buys little — both alternative end states (a row
+     *       with an empty password hash, a fresh registration whose password FLP generated
+     *       and never told the player) are equally unusable for a password login.</li>
+     * </ul>
+     *
+     * <p>Leaving the row in place also keeps this method's return value meaning exactly what
+     * it meant before the fix, so no caller has to change.</p>
+     *
+     * @param ops the write, injected so the retry can be tested without a datasource
+     * @return true when AuthMe reports the premium UUID as persisted
+     */
+    static boolean persistPreCreatedPremium(PremiumStampOps ops) {
+        if (ops.stampPremiumUuid()) {
+            return true;
+        }
+        // One retry: the failure modes here are transient and the write is idempotent, so a
+        // second attempt costs nothing and usually succeeds. Its result is the one returned.
+        return ops.stampPremiumUuid();
     }
 
     /**

@@ -32,6 +32,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -54,6 +55,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * compiling (generics are erased at runtime) and kept running while always missing. The
  * dual-key lookup that replaces it is exercised through the same reflective path
  * production uses, against listener stand-ins matching each AuthMe shape.</p>
+ *
+ * <p>The ISS-18 tests pin the retry around the {@code premium_uuid} write: AuthMe reports
+ * that failure by returning false, so the write is attempted twice before the caller is
+ * told it did not land. Getting this wrong is what let a half-built row be treated as a
+ * successful pre-create — logged as success, then counted as "registered" while AuthMe
+ * read it as "registered but not premium".</p>
+ *
+ * <p><b>Coverage boundary.</b> {@code persistPreCreatedPremium} is reached directly, so
+ * what is pinned here is the attempt sequence and the value it returns. The wiring around
+ * it is established by reading {@code preCreatePremiumAuth}, not by these tests: that the
+ * reflective {@code updatePremiumUuid} result is what feeds the helper, that only a
+ * stamped outcome releases the proxy notification, and that a failed write leaves the row
+ * in place. Re-discarding the invoke result would leave this suite green — the tests would
+ * only fail on a change to the retry itself. The real end-to-end check is the fault
+ * injection in the report's test criterion 11.</p>
  */
 class AuthMePremiumIntegratorTest {
 
@@ -299,6 +315,47 @@ class AuthMePremiumIntegratorTest {
         CompletableFuture<String> future = new CompletableFuture<>();
         assertTrue(AuthMePremiumIntegrator.completeDialogFuture(future));
         assertNull(future.join());
+    }
+
+    @Test
+    void stampSuccessIsNotRetried() {
+        // ISS-18: the ordinary path writes once. Asserted so the retry below cannot be
+        // mistaken for "always writes twice".
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertTrue(AuthMePremiumIntegrator.persistPreCreatedPremium(() -> {
+            attempts.incrementAndGet();
+            return true;
+        }));
+        assertEquals(1, attempts.get());
+    }
+
+    @Test
+    void stampFailureIsRetriedOnce() {
+        // The failures this guards against (SQLite busy, a dropped MySQL connection) are
+        // transient and the write is idempotent — the UUID already sits on the PlayerAuth.
+        // The retry has to actually happen, and its result has to be the one returned: a
+        // swallowed retry result would make a recovered write look like a failure, which
+        // is precisely how the caller ends up suppressing its own proxy notification.
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertTrue(AuthMePremiumIntegrator.persistPreCreatedPremium(
+            () -> attempts.incrementAndGet() > 1),
+            "the retry's result must be the one returned");
+        assertEquals(2, attempts.get());
+    }
+
+    @Test
+    void persistentStampFailureIsReportedAsFailure() {
+        // Both attempts fail: the caller has to learn that the row carries no premium UUID,
+        // because that is what decides whether the proxy is told the record is premium.
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertFalse(AuthMePremiumIntegrator.persistPreCreatedPremium(() -> {
+            attempts.incrementAndGet();
+            return false;
+        }));
+        assertEquals(2, attempts.get(), "exactly one retry, not a loop");
     }
 
     /** Mimics AuthMe 6.0.1: response maps keyed by a {@code Long} session id. */
