@@ -184,13 +184,17 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         pendingRelayStore = new PendingRelayStore(getPluginFolder(), logger);
         if (pendingRelayStore.load()) {
             if (bungeeManager.isEnabled()) {
-                logger.info("Restored {} pending toggle(s) and {} pending delete(s) from disk; resuming relay",
-                    pendingRelayStore.toggles().size(), pendingRelayStore.deletes().size());
+                logger.info("Restored {} pending toggle(s), {} pending delete(s) and {} pending"
+                        + " premium notice(s) from disk; resuming relay",
+                    pendingRelayStore.toggles().size(), pendingRelayStore.deletes().size(),
+                    pendingRelayStore.premiumNotices().size());
                 pendingRelayStore.toggles().keySet().forEach(this::scheduleToggleRelay);
                 pendingRelayStore.deletes().forEach(this::scheduleDeleteRelay);
+                pendingRelayStore.premiumNotices().keySet().forEach(this::schedulePremiumRelay);
             } else {
                 logger.warn("Discarding {} pending relay(s): proxy support is disabled",
-                    pendingRelayStore.toggles().size() + pendingRelayStore.deletes().size());
+                    pendingRelayStore.toggles().size() + pendingRelayStore.deletes().size()
+                        + pendingRelayStore.premiumNotices().size());
                 pendingRelayStore.clearAll();
             }
         }
@@ -902,5 +906,73 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
             }
         }, 20L, 20L);
+    }
+
+    /**
+     * Retries relaying a queued AuthMe premium notice ({@code premium.set}/{@code premium.unset})
+     * every 20 ticks (1 second) until a player is online to serve as the message carrier.
+     *
+     * <p>AuthMe's own notification cannot be delivered without a carrier and is dropped when
+     * there is none, so this queue exists to keep FLP from reporting a sync that never happened.
+     * The integrator owns the real decision: it re-checks the carrier and clears the entry only
+     * on a successful send, so a player who disconnects mid-flight leaves the entry queued for
+     * the next attempt.</p>
+     *
+     * @param target the player name the notice is about
+     */
+    public void schedulePremiumRelay(String target) {
+        final int[] taskIdHolder = new int[1];
+        final int[] attempts = new int[1];
+        taskIdHolder[0] = Bukkit.getScheduler().scheduleSyncRepeatingTask(this, new Runnable() {
+            @Override
+            public void run() {
+                Boolean isSet = pendingRelayStore.getPremiumNotice(target);
+                if (isSet == null) {
+                    // delivered by the other call site (or by an admin toggle)
+                    Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
+                    return;
+                }
+                // 0.5.0/F014: stop after ~5 minutes of an empty server — the
+                // entry stays queued and is retried after a restart
+                if (++attempts[0] >= MAX_RELAY_ATTEMPTS) {
+                    logger.warn("Gave up relaying the pending AuthMe premium notice for {} after"
+                            + " {} attempts — the entry stays queued and is retried after a restart",
+                            target, attempts[0]);
+                    Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
+                    return;
+                }
+                if (Bukkit.getServer().getOnlinePlayers().isEmpty()) {
+                    return;
+                }
+                if (relayPremiumNotice(target, isSet)) {
+                    Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
+                }
+            }
+        }, 20L, 20L);
+    }
+
+    /**
+     * Hands one queued premium notice to the AuthMe integrator, which re-checks the carrier
+     * itself and clears the queue entry when the message actually went out.
+     *
+     * @param target the player name the notice is about
+     * @param isSet  true for {@code premium.set}, false for {@code premium.unset}
+     * @return true if the entry is gone (delivered, or nothing left to talk to)
+     */
+    private boolean relayPremiumNotice(String target, boolean isSet) {
+        AuthMePremiumIntegrator integrator = authMePremiumIntegrator;
+        if (integrator == null) {
+            // no AuthMe 6.0 on this server — the notice can never be delivered, so retire it
+            // instead of retrying it for five minutes
+            pendingRelayStore.removePremiumNotice(target);
+            return true;
+        }
+
+        if (isSet) {
+            integrator.notifyProxyPremiumSet(target);
+        } else {
+            integrator.notifyProxyPremiumUnset(target);
+        }
+        return !pendingRelayStore.containsPremiumNotice(target);
     }
 }

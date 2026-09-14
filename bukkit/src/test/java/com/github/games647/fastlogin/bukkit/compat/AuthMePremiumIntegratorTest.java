@@ -106,17 +106,30 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void enabledProxyMustReceiveNotification() {
-        // AuthMe resolved its BungeeSender and the bungeecord hook is on → notify.
+        // AuthMe resolved its BungeeSender, the bungeecord hook is on and a player is
+        // online to carry the message → notify.
         assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.SEND,
-            AuthMePremiumIntegrator.decideProxySync(true, true));
+            AuthMePremiumIntegrator.decideProxySync(true, true, true));
+    }
+
+    @Test
+    void noCarrierMustQueueInsteadOfSending() {
+        // ISS-28: AuthMe picks its carrier from the online player list and silently drops
+        // the notification when there is none, so sending here would report a sync that
+        // never happened. The message must be queued for relay instead.
+        assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.QUEUE,
+            AuthMePremiumIntegrator.decideProxySync(true, true, false));
     }
 
     @Test
     void disabledProxyIntegrationMustStaySilent() {
         // Direct-connect server (no proxy): there is no remote cache to sync, so a
-        // warning on every cracked toggle would be pure noise.
+        // warning on every cracked toggle would be pure noise — and queueing is just as
+        // pointless, which is why SKIP wins over QUEUE regardless of the online players.
         assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.SKIP,
-            AuthMePremiumIntegrator.decideProxySync(true, false));
+            AuthMePremiumIntegrator.decideProxySync(true, false, false));
+        assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.SKIP,
+            AuthMePremiumIntegrator.decideProxySync(true, false, true));
     }
 
     @Test
@@ -124,9 +137,9 @@ class AuthMePremiumIntegratorTest {
         // ISS-02: the notification did not happen. On the cracked path the proxy keeps
         // forcing online-mode for a non-premium player, so the admin must be told.
         assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.WARN,
-            AuthMePremiumIntegrator.decideProxySync(false, false));
+            AuthMePremiumIntegrator.decideProxySync(false, false, false));
         assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.WARN,
-            AuthMePremiumIntegrator.decideProxySync(false, true));
+            AuthMePremiumIntegrator.decideProxySync(false, true, true));
     }
 
     @Test

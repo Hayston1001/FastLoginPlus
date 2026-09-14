@@ -54,6 +54,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * Toggle entries: key = player name, value = true for premium, false for cracked.
  * Delete entries: player names.
+ * Premium notice entries: key = player name, value = true for AuthMe's
+ * {@code premium.set}, false for {@code premium.unset}. These travel on AuthMe's own
+ * channel ({@code authme:main}) rather than on FLP's, and they update a different cache
+ * on the proxy, so they get their own slot instead of riding the toggle entries.
  */
 public class PendingRelayStore {
 
@@ -65,6 +69,7 @@ public class PendingRelayStore {
 
     private final Map<String, Boolean> toggles = new ConcurrentHashMap<>();
     private final Set<String> deletes = ConcurrentHashMap.newKeySet();
+    private final Map<String, Boolean> premiumNotices = new ConcurrentHashMap<>();
 
     /**
      * @param pluginFolder plugin data folder (the file lives directly in it)
@@ -116,13 +121,17 @@ public class PendingRelayStore {
         // load() cannot resurrect entries that were relayed and removed since
         toggles.clear();
         deletes.clear();
+        premiumNotices.clear();
         if (data.toggles != null) {
             toggles.putAll(data.toggles);
         }
         if (data.deletes != null) {
             deletes.addAll(data.deletes);
         }
-        return !toggles.isEmpty() || !deletes.isEmpty();
+        if (data.premiumNotices != null) {
+            premiumNotices.putAll(data.premiumNotices);
+        }
+        return !toggles.isEmpty() || !deletes.isEmpty() || !premiumNotices.isEmpty();
     }
 
     /**
@@ -209,13 +218,86 @@ public class PendingRelayStore {
     }
 
     /**
+     * Queues an AuthMe premium notice for later relay and persists it.
+     * <p>
+     * The retry task reads the queued value at send time (see
+     * {@link #removePremiumNotice}), so overwriting an existing entry with a newer state
+     * does not require another retry task.
+     *
+     * @param name player name
+     * @param isSet true for {@code premium.set}, false for {@code premium.unset}
+     * @return true if this call created a new entry; false if an entry for the
+     * name already existed — in that case a retry task is already running for it
+     */
+    public synchronized boolean queuePremiumNotice(String name, boolean isSet) {
+        Boolean previous = premiumNotices.put(name, isSet);
+        if (previous == null || previous.booleanValue() != isSet) {
+            persist();
+        }
+        return previous == null;
+    }
+
+    /**
+     * Removes a queued premium notice (if present) and persists the removal.
+     *
+     * @param name player name
+     * @return true if the entry existed and was removed
+     */
+    public synchronized boolean clearPremiumNotice(String name) {
+        boolean removed = premiumNotices.remove(name) != null;
+        if (removed) {
+            persist();
+        }
+        return removed;
+    }
+
+    /**
+     * Atomically removes a queued premium notice and returns the value it carried.
+     *
+     * @param name player name
+     * @return the removed notice value (true = set, false = unset), or null if
+     * nothing was queued for the name
+     */
+    public synchronized Boolean removePremiumNotice(String name) {
+        Boolean value = premiumNotices.remove(name);
+        if (value != null) {
+            persist();
+        }
+        return value;
+    }
+
+    /**
+     * @param name player name
+     * @return the queued notice value, or null if not queued
+     */
+    public Boolean getPremiumNotice(String name) {
+        return premiumNotices.get(name);
+    }
+
+    /**
+     * @param name player name
+     * @return true if a premium notice is queued for the name
+     */
+    public boolean containsPremiumNotice(String name) {
+        return premiumNotices.containsKey(name);
+    }
+
+    /**
+     * @return snapshot of the queued premium notices (copy — safe to iterate)
+     */
+    public Map<String, Boolean> premiumNotices() {
+        return new LinkedHashMap<>(premiumNotices);
+    }
+
+    /**
      * Clears all entries and persists the empty queue (used when the proxy
      * support is disabled and queued work can no longer be delivered).
      */
     public synchronized void clearAll() {
-        if (!toggles.isEmpty() || !deletes.isEmpty()) {
+        if (!toggles.isEmpty() || !deletes.isEmpty() || !premiumNotices.isEmpty()) {
             toggles.clear();
             deletes.clear();
+            premiumNotices.clear();
             persist();
         }
     }
@@ -259,16 +341,17 @@ public class PendingRelayStore {
     }
 
     /**
-     * @return true if any toggle or delete is queued
+     * @return true if any toggle, delete or premium notice is queued
      */
     public boolean hasPending() {
-        return !toggles.isEmpty() || !deletes.isEmpty();
+        return !toggles.isEmpty() || !deletes.isEmpty() || !premiumNotices.isEmpty();
     }
 
     private void persist() {
         Data data = new Data();
         data.toggles = new LinkedHashMap<>(toggles);
         data.deletes = new ArrayList<>(deletes);
+        data.premiumNotices = new LinkedHashMap<>(premiumNotices);
 
         String json = gson.toJson(data);
         try {
@@ -288,5 +371,6 @@ public class PendingRelayStore {
     private static final class Data {
         private Map<String, Boolean> toggles;
         private ArrayList<String> deletes;
+        private Map<String, Boolean> premiumNotices;
     }
 }

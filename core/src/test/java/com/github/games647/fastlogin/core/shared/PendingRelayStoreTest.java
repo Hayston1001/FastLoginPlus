@@ -172,4 +172,88 @@ class PendingRelayStoreTest {
         assertFalse(store.queueDelete("Notch"));
         assertTrue(store.containsDelete("Notch"));
     }
+
+    @Test
+    void premiumNoticeQueuePersistsAcrossRestart() {
+        PendingRelayStore store = new PendingRelayStore(tempDir, logger());
+        store.queuePremiumNotice("Steve", false);
+        store.queuePremiumNotice("Alex", true);
+
+        PendingRelayStore restored = new PendingRelayStore(tempDir, logger());
+        assertTrue(restored.load());
+        assertEquals(Boolean.FALSE, restored.getPremiumNotice("Steve"));
+        assertEquals(Boolean.TRUE, restored.getPremiumNotice("Alex"));
+        assertTrue(restored.hasPending());
+    }
+
+    @Test
+    void queuePremiumNoticeReturnsTrueOnlyForNewEntries() {
+        PendingRelayStore store = new PendingRelayStore(tempDir, logger());
+
+        assertTrue(store.queuePremiumNotice("Steve", false));
+        // same state again — a retry task already exists for the entry
+        assertFalse(store.queuePremiumNotice("Steve", false));
+        // state change — still covered by the existing retry task (it reads the
+        // current value at send time), so no new task is needed
+        assertFalse(store.queuePremiumNotice("Steve", true));
+
+        assertEquals(Boolean.TRUE, store.getPremiumNotice("Steve"));
+    }
+
+    @Test
+    void removePremiumNoticeReturnsCurrentValueAndClearsEntry() {
+        PendingRelayStore store = new PendingRelayStore(tempDir, logger());
+        store.queuePremiumNotice("Steve", false);
+        // a newer toggle overwrote the state while the retry task was pending
+        store.queuePremiumNotice("Steve", true);
+
+        assertEquals(Boolean.TRUE, store.removePremiumNotice("Steve"));
+        assertFalse(store.hasPending());
+        assertNull(store.removePremiumNotice("Steve"));
+
+        PendingRelayStore restored = new PendingRelayStore(tempDir, logger());
+        assertFalse(restored.load());
+    }
+
+    @Test
+    void premiumNoticeAndToggleShareNeitherSlotNorLifetime() {
+        // The two messages go to different caches on the proxy via different channels,
+        // so clearing one must never drop the other.
+        PendingRelayStore store = new PendingRelayStore(tempDir, logger());
+        store.queueToggle("Steve", false);
+        store.queuePremiumNotice("Steve", false);
+
+        assertTrue(store.clearPremiumNotice("Steve"));
+        assertEquals(Boolean.FALSE, store.getToggle("Steve"));
+        assertTrue(store.hasPending());
+
+        assertTrue(store.clearToggle("Steve"));
+        assertFalse(store.hasPending());
+    }
+
+    @Test
+    void clearAllRemovesPremiumNoticesToo() {
+        PendingRelayStore store = new PendingRelayStore(tempDir, logger());
+        store.queuePremiumNotice("Steve", false);
+
+        store.clearAll();
+        assertFalse(store.hasPending());
+
+        PendingRelayStore restored = new PendingRelayStore(tempDir, logger());
+        assertFalse(restored.load());
+    }
+
+    @Test
+    void loadKeepsTogglesFromAFileWrittenBeforePremiumNoticesExisted() throws Exception {
+        // Downgrade/rollback shape: an older build wrote the file without the
+        // premiumNotices field. Reading it must not lose the entries it does have.
+        Files.write(tempDir.resolve("pending-relay.json"),
+            "{\"toggles\":{\"Steve\":true},\"deletes\":[\"Notch\"]}".getBytes("UTF-8"));
+
+        PendingRelayStore restored = new PendingRelayStore(tempDir, logger());
+        assertTrue(restored.load());
+        assertEquals(Boolean.TRUE, restored.getToggle("Steve"));
+        assertTrue(restored.containsDelete("Notch"));
+        assertTrue(restored.premiumNotices().isEmpty());
+    }
 }

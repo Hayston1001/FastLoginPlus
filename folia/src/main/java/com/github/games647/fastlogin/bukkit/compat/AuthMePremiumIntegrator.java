@@ -639,6 +639,8 @@ public final class AuthMePremiumIntegrator {
     enum ProxySyncDecision {
         /** Push the notification to the proxy. */
         SEND,
+        /** Proxy configured, but nobody is online to carry the message — queue it for relay. */
+        QUEUE,
         /** No proxy integration configured — nothing to keep in sync, stay silent. */
         SKIP,
         /** Sender unresolvable — a proxy may exist with a stale cache; warn the admin. */
@@ -655,15 +657,25 @@ public final class AuthMePremiumIntegrator {
      * silently did not happen — and on the cracked path that leaves the player forced into
      * online-mode and unable to join until the proxy resyncs.</p>
      *
-     * @param senderResolved whether AuthMe's {@code BungeeSender} could be obtained
-     * @param proxyEnabled   whether AuthMe reports its proxy integration as enabled
+     * <p>{@link ProxySyncDecision#QUEUE} is the fourth case: the proxy is configured, but no
+     * player is online to carry the plugin message. AuthMe drops the notification in that
+     * state — its {@code BungeeSender} needs a carrier connection — so it is queued for relay
+     * instead of being sent into a void.</p>
+     *
+     * @param senderResolved   whether AuthMe's {@code BungeeSender} could be obtained
+     * @param proxyEnabled     whether AuthMe reports its proxy integration as enabled
+     * @param carrierAvailable whether a player is online to carry the plugin message
      * @return the action to take
      */
-    static ProxySyncDecision decideProxySync(boolean senderResolved, boolean proxyEnabled) {
+    static ProxySyncDecision decideProxySync(boolean senderResolved, boolean proxyEnabled,
+                                             boolean carrierAvailable) {
         if (!senderResolved) {
             return ProxySyncDecision.WARN;
         }
-        return proxyEnabled ? ProxySyncDecision.SEND : ProxySyncDecision.SKIP;
+        if (!proxyEnabled) {
+            return ProxySyncDecision.SKIP;
+        }
+        return carrierAvailable ? ProxySyncDecision.SEND : ProxySyncDecision.QUEUE;
     }
 
     /**
@@ -890,10 +902,11 @@ public final class AuthMePremiumIntegrator {
      * trigger the resync.</p>
      *
      * @param playerName the player name
-     * @return true if the notification was handed to AuthMe
+     * @return true if the notification was handed to AuthMe; false if it was queued
+     * for relay or could not be sent
      */
     public boolean notifyProxyPremiumUnset(String playerName) {
-        return notifyProxyPremium(playerName, "sendPremiumUnset", "unset");
+        return notifyProxyPremium(playerName, "sendPremiumUnset", "unset", false);
     }
 
     /**
@@ -902,10 +915,11 @@ public final class AuthMePremiumIntegrator {
      * Counterpart to {@link #notifyProxyPremiumUnset(String)}.
      *
      * @param playerName the player name
-     * @return true if the notification was handed to AuthMe
+     * @return true if the notification was handed to AuthMe; false if it was queued
+     * for relay or could not be sent
      */
     public boolean notifyProxyPremiumSet(String playerName) {
-        return notifyProxyPremium(playerName, "sendPremiumSet", "set");
+        return notifyProxyPremium(playerName, "sendPremiumSet", "set", true);
     }
 
     /**
@@ -913,12 +927,21 @@ public final class AuthMePremiumIntegrator {
      * it. Silently no-ops when AuthMe's proxy integration is disabled (there is no remote
      * cache to update) and warns when the sender cannot be resolved at all.
      *
+     * <p>AuthMe can only deliver this message while a player is online to carry it; its
+     * {@code BungeeSender} picks one and otherwise drops the notification after a warning of
+     * its own. Instead of sending into that void, the notification is queued and relayed once
+     * anybody reaches the play phase. This matters most for {@code premium.unset}: the proxy's
+     * premium set drives {@code forceOnlineMode()}, so losing that direction locks a demoted
+     * player out until the proxy restarts.</p>
+     *
      * @param playerName the player name
      * @param methodName the {@code BungeeSender} method to invoke
      * @param action     short action label used in log messages
+     * @param isSet      true for {@code premium.set}, false for {@code premium.unset}
      * @return true if the notification was handed to AuthMe
      */
-    private boolean notifyProxyPremium(String playerName, String methodName, String action) {
+    private boolean notifyProxyPremium(String playerName, String methodName, String action,
+                                       boolean isSet) {
         if (!versionDetector.isAuthMe6()) {
             return false;
         }
@@ -929,16 +952,39 @@ public final class AuthMePremiumIntegrator {
                 Method isEnabled = sender.getClass().getMethod("isEnabled");
                 proxyEnabled = Boolean.TRUE.equals(isEnabled.invoke(sender));
             }
-            switch (decideProxySync(sender != null, proxyEnabled)) {
+
+            // AuthMe picks its carrier from the very same list (its BukkitService delegates
+            // straight to Bukkit#getOnlinePlayers), so this probe cannot count a player that
+            // AuthMe would not. BungeeManager is the second gate: AuthMe's bungeecord hook
+            // being on does not prove a proxy is in front of this server, and queueing for a
+            // proxy that never answers would only rotate the entry forever.
+            boolean carrierAvailable = proxyEnabled
+                    && plugin.getBungeeManager().isEnabled()
+                    && !Bukkit.getOnlinePlayers().isEmpty();
+
+            switch (decideProxySync(sender != null, proxyEnabled, carrierAvailable)) {
                 case WARN:
                     warnProxyCacheStale(playerName, action);
                     return false;
                 case SKIP:
                     // No proxy integration configured — nothing to keep in sync.
                     return false;
+                case QUEUE:
+                    if (plugin.getPendingRelayStore().queuePremiumNotice(playerName, isSet)) {
+                        // schedule a retry only for a newly queued entry — an entry already
+                        // waiting has a live retry task, which reads the latest state at
+                        // send time
+                        plugin.schedulePremiumRelay(playerName);
+                        plugin.getLog().info("Queued AuthMe premium.{} for {} — no online player "
+                                + "available as message carrier; relaying once one is",
+                            action, playerName);
+                    }
+                    return false;
                 default:
                     Method notify = sender.getClass().getMethod(methodName, String.class);
                     notify.invoke(sender, playerName);
+                    // a direct send supersedes anything still queued for the same player
+                    plugin.getPendingRelayStore().removePremiumNotice(playerName);
                     if (plugin.getCore().isDebug()) {
                         plugin.getLog().info("Sent premium.{} notification to proxy for {}",
                             action, playerName);
