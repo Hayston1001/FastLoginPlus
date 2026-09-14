@@ -68,6 +68,10 @@ auto-register: '&2已尝试自动注册，密码为: &7%password&2，建议你�
 no-permission: '&4权限不足'
 no-console: '&4你不是玩家，无法在控制台中为自己切换 Premium 状态'
 
+# AuthMe 命令拦截（FLP 已接管 Premium，参见 AuthMe 兼容性说明）
+authme-premium-blocked: '&c请使用 /flp premium'
+authme-freemium-blocked: '&c请使用 /flp cracked'
+
 # 代理通信
 wait-on-proxy: '&6正在发送请求...（别忘了按照插件页面上的 BungeeCord 设置指南操作）'
 

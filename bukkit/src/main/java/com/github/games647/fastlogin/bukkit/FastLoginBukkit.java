@@ -53,6 +53,7 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator;
 import com.github.games647.fastlogin.bukkit.compat.AuthMeVersionDetector;
 import com.github.games647.fastlogin.bukkit.command.FlpCommand;
+import com.github.games647.fastlogin.bukkit.listener.AuthMeCommandGuard;
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
 import com.github.games647.fastlogin.bukkit.listener.PaperCacheListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.ProtocolLibListener;
@@ -94,6 +95,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     // 0.7.0/F15: /authme reload re-registers AuthMe's own premium packet listener
     // behind FLP's back — re-assert the takeover every 5 seconds (100 ticks)
     private static final long WATCHDOG_PERIOD_TICKS = 100L;
+
+    // 0.7.0/F16: true once FLP forced AuthMe's enablePremium and removed AuthMe's own
+    // premium packet listener. AuthMe's /premium and /freemium stay executable in that
+    // state but no longer converge with FLP's profile, so AuthMeCommandGuard intercepts
+    // them for players who could actually run them.
+    private boolean premiumTakeoverActive;
 
     private final BukkitScheduler scheduler;
     private FastLoginCore<Player, CommandSender, FastLoginBukkit> core;
@@ -137,7 +144,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // listener is the sole Mojang verification source.
                 // 0.5.0/F061: surface partial failures — AuthMe's packet listener may
                 // still be registered, causing a double-interception conflict
-                if (!authMePremiumIntegrator.enforceFlpPremiumControl()) {
+                premiumTakeoverActive = authMePremiumIntegrator.enforceFlpPremiumControl();
+                if (!premiumTakeoverActive) {
                     logger.warn("Failed to fully enforce FastLogin premium control in AuthMe 6.0"
                             + " — premium logins may conflict with AuthMe's own listener");
                 }
@@ -240,6 +248,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         if (isPaper()) {
             pluginManager.registerEvents(new PaperCacheListener(this), this);
         }
+
+        // 0.7.0/F16: while the takeover is active, AuthMe's own /premium and /freemium
+        // are a second entry point that silently diverges from FLP (ISS-12) — intercept
+        // them and point the player at /flp. Inert on AuthMe 5.x and without AuthMe.
+        pluginManager.registerEvents(new AuthMeCommandGuard(this), this);
 
         registerCommands();
 
@@ -388,6 +401,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     public FastLoginCore<Player, CommandSender, FastLoginBukkit> getCore() {
         return core;
+    }
+
+    /**
+     * Whether FLP has taken over AuthMe's premium handling: {@code enablePremium} was forced
+     * to true and AuthMe's own premium packet listener was removed.
+     *
+     * @return true if the AuthMe 6.0 takeover succeeded at startup
+     */
+    public boolean isPremiumTakeoverActive() {
+        return premiumTakeoverActive;
     }
 
     /**
