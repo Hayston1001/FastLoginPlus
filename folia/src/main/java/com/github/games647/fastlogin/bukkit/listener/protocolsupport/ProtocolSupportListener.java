@@ -113,6 +113,11 @@ public class ProtocolSupportListener extends JoinManagement<Player, CommandSende
 
         if (session != null && profileCompleteEvent.getConnection().getProfile().isOnlineMode()) {
             session.setVerifiedPremium(true);
+            // 0.7.0/F11: same reason as F10 — carry the verified Mojang UUID into the session.
+            // ProtocolSupport applies the offline rewrite below to this very profile object once
+            // the event returns, so afterwards neither resolvePremiumUuid source is v4 and AuthMe
+            // would never get a premium_uuid written.
+            session.setUuid(profileCompleteEvent.getConnection().getProfile().getUUID());
 
             if (!plugin.getConfig().getBoolean("premiumUuid")) {
                 String username = Optional.ofNullable(profileCompleteEvent.getForcedName())
