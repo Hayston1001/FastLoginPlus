@@ -155,10 +155,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                             + " — premium logins may conflict with AuthMe's own listener");
                 }
 
-                // 0.7.0/F7 (ISS-31): AuthMe's own verification is off while its command layer
-                // stays registered, and upstream's warning makes it look like the whole
-                // feature is off — say what actually happened.
-                warnOnAuthMeCommandLayerWithoutVerification();
             } else {
                 logger.info("AuthMe 5.x detected: v{} — using standard FLP flow",
                     authMeVersionDetector.getVersion());
@@ -181,6 +177,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         bungeeManager = new BungeeManager(this);
         bungeeManager.initialize();
+
+        // 0.7.0/F7 (ISS-31): AuthMe's own verification is off while its command layer stays
+        // registered. Direct connections only — see the method's javadoc. Proxy mode is part of
+        // that decision, so this has to run after the manager above is initialized.
+        warnOnAuthMeCommandLayerWithoutVerification();
 
         // Restore the durable relay queue after a restart and resume delivery.
         pendingRelayStore = new PendingRelayStore(getPluginFolder(), logger);
@@ -378,13 +379,23 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * whole feature were off — this line states what actually happened, so admins do not
      * chase a FastLoginPlus failure that does not exist.
      *
-     * <p>Deliberately scoped to the missing-PacketEvents case: on a proxy backend AuthMe's
-     * listener is absent for another reason ({@code isProxyMode}) and upstream prints no such
-     * warning there.
+     * <p><b>Direct connections only (2026-09-15).</b> Proxy backends are excluded on purpose.
+     * There AuthMe's listener never registers at all ({@code setup()} requires
+     * {@code !isProxyMode}), so nothing surprising happened; the upstream warning this message
+     * exists to disambiguate is not printed there either; and the command layer is already
+     * covered by {@link AuthMeCommandGuard}. Emitting it anyway put a WARN on every startup of
+     * an AuthMe 6.0 proxy network without PacketEvents, including one sentence about an
+     * upstream warning that cannot appear in that setup.
+     *
+     * <p>Called after {@code bungeeManager.initialize()}, because proxy mode is part of the
+     * decision. A server that disables FLP before that point (online mode, Floodgate failure)
+     * therefore gets no such line — which is correct: "FLP intercepts them" would not be true
+     * there, and those paths log an ERROR of their own.
      */
     private void warnOnAuthMeCommandLayerWithoutVerification() {
-        if (!premiumTakeoverActive
-                || getServer().getPluginManager().isPluginEnabled("packetevents")) {
+        if (!shouldWarnAboutCommandLayer(premiumTakeoverActive,
+                getServer().getPluginManager().isPluginEnabled("packetevents"),
+                bungeeManager.isEnabled())) {
             return;
         }
 
@@ -396,6 +407,25 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 + "/flp. An upstream 'Premium auto-login is disabled' warning refers "
                 + "to AuthMe's own verification, not to FastLoginPlus. Consider "
                 + "denying authme.player.premium and authme.player.freemium.");
+    }
+
+    /**
+     * Whether the ISS-31 warning applies on this server.
+     *
+     * <p>Extracted as a pure function for the same reason as this codebase's other decision
+     * helpers: the test setup cannot mock {@code FastLoginBukkit} (ByteBuddy cannot instrument
+     * the {@code JavaPlugin} hierarchy on this JDK), so a three-way condition can only be
+     * pinned by a static predicate.
+     *
+     * @param takeoverActive      whether FLP forced {@code enablePremium} and removed AuthMe's listener
+     * @param packetEventsEnabled whether the {@code packetevents} plugin is enabled
+     * @param proxyMode           whether this backend sits behind a proxy
+     * @return true only for a direct connection whose AuthMe verification is off <em>because</em>
+     *         PacketEvents is missing
+     */
+    static boolean shouldWarnAboutCommandLayer(boolean takeoverActive,
+            boolean packetEventsEnabled, boolean proxyMode) {
+        return takeoverActive && !packetEventsEnabled && !proxyMode;
     }
 
     private boolean initializeFloodgate() {
