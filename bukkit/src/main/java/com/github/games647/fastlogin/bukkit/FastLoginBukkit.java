@@ -643,7 +643,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * the record is ready and {@code shouldSkipPreJoinDialogForPremium()} returns
      * true — the blocking preJoin dialog is skipped entirely.
      * <p>
-     * Requires Paper 1.20.5+.  On other platforms (or older Paper) the event
+     * Requires Paper 1.21.7+ — the configuration-phase connection event does not exist before
+     * that version. AuthMe 6.0's own pre-join dialogs require 1.21.11+, so on any server where
+     * this handler matters the event is present. On other platforms (or older Paper) the event
      * class won't be found and this silently does nothing.
      */
     private void registerPaperConfigureListener() {

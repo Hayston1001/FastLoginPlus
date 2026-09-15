@@ -37,7 +37,10 @@
 #   # EFFECT  S=<full|none>   P=<scenario|none>   reason
 #   full     - the key works as described in this mode
 #   scenario - the sub-scenario where the key still works in this mode;
-#              currently "Paper" or "Paper 1.20.5+"
+#              currently "Paper" or "Paper 1.21.7+"
+#              (the configuration-phase connection event FLP uses exists from 1.21.7;
+#               AuthMe 6.0's pre-join dialogs require Paper/Folia 1.21.11+, so on any
+#               server where this matters the event is always present)
 #   none     - the key has no effect in this mode; its code paths do not run
 # Keys without an EFFECT line behave identically in both modes.
 #
@@ -52,11 +55,11 @@
 #   Behind a proxy: Editing this section HERE changes NOTHING. You should edit this in proxy's config.yml
 #
 #   --------------------------------
-#   # EFFECT  S=full   P=Paper 1.20.5+  configure-phase pre-registration
+#   # EFFECT  S=full   P=Paper 1.21.7+  configure-phase pre-registration
 #   autoRegister: true
 #   --------------------------------
 #   Standalone: This section fully works HERE.
-#   Behind a proxy: Only on Paper 1.20.5+; On Spigot editing this section HERE changes NOTHING--you should edit this in proxy's config.yml
+#   Behind a proxy: Only on Paper 1.21.7+; On Spigot editing this section HERE changes NOTHING--you should edit this in proxy's config.yml
 #
 #   --------------------------------
 #   autoLogin: true
@@ -121,7 +124,7 @@ anti-bot:
 # Premium Detection
 # ========================================
 # Auto-register new premium players on first join
-# EFFECT  S=full   P=Paper 1.20.5+  configure-phase pre-registration; Spigot: none
+# EFFECT  S=full   P=Paper 1.21.7+  configure-phase pre-registration; Spigot: none
 autoRegister: true
 
 # Enable auto-login for premium players
@@ -171,7 +174,7 @@ forwardSkin: true
 premium-warning: true
 
 # Kick the player from the server after they confirm /flp premium, forcing them to reconnect
-# EFFECT  S=full   P=Paper 1.20.5+  pending-toggle relay kick only
+# EFFECT  S=full   P=Paper 1.21.7+  pending-toggle relay kick only
 kick-toggle: true
 
 # ========================================
@@ -209,7 +212,7 @@ mojang-retry-delay: 500
 verifyClientKeys: false
 
 # IP addresses for rotating Mojang API requests (to avoid rate limits)
-# EFFECT  S=full   P=Paper 1.20.5+  configure-phase lookup only
+# EFFECT  S=full   P=Paper 1.21.7+  configure-phase lookup only
 # ip-addresses:
 #   - 192-168-0-2
 ip-addresses:
@@ -217,7 +220,7 @@ ip-addresses:
 # Max Mojang name->UUID requests per 10 minutes (per IP)
 # EFFECT  S=none   P=none  — the bundled craftapi library currently ignores
 # this value (hardcoded 600/10min); kept for future compatibility
-# (formerly: S=full P=Paper 1.20.5+ configure-phase lookup only)
+# (formerly: S=full P=Paper 1.21.7+ configure-phase lookup only)
 mojang-request-limit: 600
 
 # ========================================
@@ -279,7 +282,7 @@ ServerRSAPublicKeyFile:
 # Proxies
 # ========================================
 # HTTP proxies for Mojang API requests (workaround for rate limits)
-# EFFECT  S=full   P=Paper 1.20.5+  configure-phase lookup only
+# EFFECT  S=full   P=Paper 1.21.7+  configure-phase lookup only
 # proxies:
 #   - 'xyz.com:1337'
 proxies:
