@@ -46,17 +46,49 @@ package com.github.games647.fastlogin.core.shared;
  * (a holder of the forwarding secret could set it to the victim's public Mojang UUID and
  * pass the existing equality guard), so the property grants no power the UUID field did not
  * already carry. Keeping that boundary honest is why the property carries no second
- * signature scheme — one that would not close the pre-existing path anyway.
- * BungeeCord has no equivalent injection point, so it keeps using the F10 plugin message and
- * therefore still shows the dialog on the first login.</p>
+ * signature scheme — one that would not close the pre-existing path anyway.</p>
+ *
+ * <p><b>Two transports, two names.</b> BungeeCord's legacy forwarding appends the login
+ * profile's properties to the handshake's host field as JSON, so the same attestation can ride
+ * it too — but Paper rebuilds the profile from that payload through a name filter, which is
+ * why that path cannot reuse {@link #PREMIUM_UUID}. Both names are read by the backend, so a
+ * network mixing proxy software (or running an older jar on one side) keeps working.</p>
  */
 public final class ForwardingAttributes {
 
     /**
-     * Carries the Mojang UUID the proxy verified for this connection. Written only when the
-     * connection actually was verified as premium; absent otherwise (cracked, Floodgate).
+     * Carries the Mojang UUID the proxy verified for this connection, over Velocity's modern
+     * player-information forwarding. Written only when the connection actually was verified as
+     * premium; absent otherwise (cracked, Floodgate).
      */
     public static final String PREMIUM_UUID = "flp-premium-uuid";
+
+    /**
+     * The same attestation over BungeeCord's legacy forwarding, where the name cannot be
+     * {@link #PREMIUM_UUID}.
+     *
+     * <p>The reason is mechanical: Paper rebuilds the player profile from the legacy handshake
+     * and discards every property whose name does not match {@code \w{0,16}} — letters, digits
+     * and underscores only, at most 16 characters — so a name containing hyphens disappears
+     * there without an error or a log line. Velocity's modern forwarding reads the names
+     * verbatim, which is why that transport keeps the original spelling.</p>
+     */
+    public static final String PREMIUM_UUID_LEGACY = "flp_premium_uuid";
+
+    /**
+     * Whether a GameProfile property name carries FLP's premium attestation, over either
+     * transport.
+     *
+     * <p>The backend does not know — and should not need to care — which proxy software
+     * forwarded the connection, so both spellings are accepted here rather than in the reader.
+     * </p>
+     *
+     * @param name the property name to test
+     * @return true when the property is FLP's premium attestation
+     */
+    public static boolean isPremiumUuidProperty(String name) {
+        return PREMIUM_UUID.equals(name) || PREMIUM_UUID_LEGACY.equals(name);
+    }
 
     private ForwardingAttributes() {
     }

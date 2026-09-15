@@ -848,6 +848,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * and holds a version-4 UUID — a malformed or non-v4 value is treated as "not attested",
      * falling back to the Mojang-lookup path, exactly as if the property were absent.</p>
      *
+     * <p>Both proxy transports use this carrier but spell the name differently: Velocity's
+     * modern forwarding keeps {@link ForwardingAttributes#PREMIUM_UUID}, while BungeeCord's
+     * legacy handshake needs {@link ForwardingAttributes#PREMIUM_UUID_LEGACY} because Paper
+     * filters legacy property names. Either one counts as an attestation (0.7.0/F17).</p>
+     *
      * @param profile the Paper player profile from the configure event
      * @return the attested premium UUID, or null if the proxy attested nothing
      */
@@ -856,7 +861,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             Object props = profile.getClass().getMethod("getProperties").invoke(profile);
             for (Object property : (java.util.Collection<?>) props) {
                 String name = (String) property.getClass().getMethod("getName").invoke(property);
-                if (!ForwardingAttributes.PREMIUM_UUID.equals(name)) {
+                if (!ForwardingAttributes.isPremiumUuidProperty(name)) {
                     continue;
                 }
                 String value = (String) property.getClass().getMethod("getValue").invoke(property);

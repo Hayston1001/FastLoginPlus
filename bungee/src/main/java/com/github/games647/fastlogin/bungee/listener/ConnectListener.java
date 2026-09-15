@@ -36,6 +36,7 @@ import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
 
 import com.github.games647.fastlogin.bungee.event.BungeeFastLoginAntiBotEvent;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
+import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.google.common.base.Throwables;
@@ -49,10 +50,8 @@ import net.md_5.bungee.api.event.PreLoginEvent;
 import net.md_5.bungee.api.event.ServerConnectedEvent;
 import net.md_5.bungee.api.plugin.Listener;
 import net.md_5.bungee.connection.InitialHandler;
-import net.md_5.bungee.connection.LoginResult;
 import net.md_5.bungee.event.EventHandler;
 import net.md_5.bungee.event.EventPriority;
-import net.md_5.bungee.protocol.Property;
 import org.geysermc.floodgate.api.player.FloodgatePlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -114,7 +113,6 @@ public class ConnectListener implements Listener {
 
     private final FastLoginBungee plugin;
     private final AntiBotService antiBotService;
-    private final Property[] emptyProperties = {};
 
     public ConnectListener(FastLoginBungee plugin, AntiBotService antiBotService) {
         this.plugin = plugin;
@@ -188,20 +186,79 @@ public class ConnectListener implements Listener {
             StoredProfile playerProfile = session.getProfile();
             playerProfile.setId(verifiedUUID);
 
-            // BungeeCord will do this automatically so override it on disabled option
-            if (UNIQUE_ID_SETTER != null) {
+            if (connection instanceof InitialHandler) {
                 InitialHandler initialHandler = (InitialHandler) connection;
 
-                if (!(boolean) plugin.getCore().getConfig().get("premiumUuid")) {
-                    setOfflineId(initialHandler, verifiedUsername);
+                // Clear the forwarded properties first: the attestation below appends to the very
+                // same array, so it has to run after this. The operation used to be a typed call
+                // on LoginResult#setProperties with a compile-time Property[] — that reference no
+                // longer links on proxy builds released after BungeeCord #3855 (2025-07), which
+                // took the whole listener down at construction time (0.7.0/F17).
+                if (!(boolean) plugin.getCore().getConfig().get("forwardSkin")) {
+                    clearForwardedProperties(initialHandler, verifiedUsername);
                 }
 
-                if (!(boolean) plugin.getCore().getConfig().get("forwardSkin")) {
-                    // this is null on offline mode
-                    LoginResult loginProfile = initialHandler.getLoginProfile();
-                    loginProfile.setProperties(emptyProperties);
+                if (!(boolean) plugin.getCore().getConfig().get("premiumUuid")) {
+                    // BungeeCord will do this automatically so override it on disabled option.
+                    // Gated on the method handles: rewriting the connection's UUID needs private
+                    // fields, while the attestation below does not — hence the separate branch.
+                    if (UNIQUE_ID_SETTER != null) {
+                        setOfflineId(initialHandler, verifiedUsername);
+                    }
+
+                    // 0.7.0/F17: hand the verified Mojang UUID to the backend over the legacy
+                    // handshake, so it can pre-create the AuthMe record before the preJoin dialog
+                    // is shown — the same guarantee the Velocity side gets from F13.
+                    attachPremiumAttestation(initialHandler, verifiedUsername, verifiedUUID);
                 }
+            } else {
+                plugin.getLog().warn("Unexpected connection type {} — cannot update the login"
+                        + " profile for {}", connection.getClass().getName(), verifiedUsername);
             }
+        }
+    }
+
+    /**
+     * Replaces the login profile's properties with an empty array, dropping the skin the client
+     * sent along (the {@code forwardSkin: false} behaviour).
+     *
+     * @param connection the login connection being established
+     * @param username   the player name, for log messages
+     */
+    private void clearForwardedProperties(InitialHandler connection, String username) {
+        LoginProfileProperties.clear(connection.getLoginProfile(), failure -> {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Could not clear the login profile properties for {}: {}",
+                        username, failure.toString());
+            }
+        });
+    }
+
+    /**
+     * Hands the verified Mojang UUID to the backend as a login profile property.
+     *
+     * <p>BungeeCord serialises those properties into the handshake it sends to the backend when
+     * IP forwarding is enabled, and the backend reads the value back in the configuration phase
+     * — before AuthMe can show its preJoin dialog (0.7.0/F13 on the Velocity side, F17 here).</p>
+     *
+     * <p>The name is not the one Velocity uses: Paper drops legacy-forwarded properties whose
+     * name is not {@code \w{0,16}}, and that spelling contains hyphens
+     * ({@link ForwardingAttributes#PREMIUM_UUID_LEGACY}).</p>
+     *
+     * @param connection  the login connection being established
+     * @param username    the player name, for log messages
+     * @param premiumUuid the Mojang UUID verified for this connection, before the offline rewrite
+     */
+    private void attachPremiumAttestation(InitialHandler connection, String username,
+                                          UUID premiumUuid) {
+        boolean attached = LoginProfileProperties.attach(connection.getLoginProfile(),
+                ForwardingAttributes.PREMIUM_UUID_LEGACY, premiumUuid.toString(),
+                failure -> plugin.getLog().warn("Could not attach the verified premium UUID for {}"
+                        + " to the login profile — AuthMe's first-login dialog is not skipped"
+                        + " (0.7.0/F17): {}", username, failure.toString()));
+        if (attached) {
+            plugin.getLog().info("Attaching verified premium UUID {} to the forwarded profile",
+                    premiumUuid);
         }
     }
 
