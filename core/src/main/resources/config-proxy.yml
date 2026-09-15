@@ -183,9 +183,10 @@ mojang-retry-delay: 500
 #   - 192-168-0-2
 ip-addresses:
 
-# Max Mojang name->UUID requests per 10 minutes (per IP)
+# Max Mojang name->UUID requests per 10 minutes
 # NOTE: currently not applied by the bundled craftapi library (hardcoded
-# 600/10min); kept for future compatibility
+# 600/10min); kept for future compatibility. Setting another value logs a
+# startup WARN — that is expected.
 mojang-request-limit: 600
 
 # ========================================

@@ -217,10 +217,11 @@ verifyClientKeys: false
 #   - 192-168-0-2
 ip-addresses:
 
-# Max Mojang name->UUID requests per 10 minutes (per IP)
+# Max Mojang name->UUID requests per 10 minutes
 # EFFECT  S=none   P=none  — the bundled craftapi library currently ignores
-# this value (hardcoded 600/10min); kept for future compatibility
-# (formerly: S=full P=Paper 1.21.7+ configure-phase lookup only)
+# this value (hardcoded 600/10min); kept for future compatibility.
+# A non-600 value logs a startup WARN — that is expected.
+# (formerly: S=full P=Paper configure-phase lookup only)
 mojang-request-limit: 600
 
 # ========================================
