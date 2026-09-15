@@ -1306,20 +1306,42 @@ public final class AuthMePremiumIntegrator {
     }
 
     /**
-     * Unregisters AuthMe's {@code PremiumVerificationPacketListener} so FLP's
-     * ProtocolLib listener is the sole packet-level Mojang verification.
+     * Removes AuthMe's {@code PremiumVerificationPacketListener} so FLP's ProtocolLib listener is
+     * the sole packet-level Mojang verification — and leaves AuthMe itself believing the listener
+     * is still registered, so it does not put it back.
      *
-     * <p>When {@code enablePremium=true}, AuthMe registers its own PacketEvents
-     * listener that intercepts START/ENCRYPTION_RESPONSE packets. This conflicts
-     * with FLP's ProtocolLib listener which does the same thing. FLP does the
-     * actual verification and injects results into AuthMe's internal state
-     * (PendingPremiumCache, PremiumLoginVerifier), so AuthMe's own listener is
+     * <p>When {@code enablePremium=true}, AuthMe registers its own PacketEvents listener that
+     * intercepts START/ENCRYPTION_RESPONSE packets. This conflicts with FLP's ProtocolLib listener
+     * which does the same thing. FLP does the actual verification and injects results into AuthMe's
+     * internal state (PendingPremiumCache, PremiumLoginVerifier), so AuthMe's own listener is
      * redundant and must be removed.
      *
-     * <p>Uses AuthMe's public {@code PacketInterceptionAdapter.unregisterPremiumVerification()}
-     * method — the same method AuthMe itself uses to clean up the listener.
+     * <p><b>Why the flag is left at {@code true} (ISS-32).</b> AuthMe decides whether to
+     * (re-)register that listener in {@code PacketEventsService.setup()}: when premium packet
+     * verification is needed it registers only {@code if (!premiumVerificationRegistered)}. That
+     * method runs again on every {@code /authme reload} (through {@code reload(settings)}) and
+     * again whenever the {@code packetevents} plugin is enabled. Writing {@code false} after
+     * removing the listener therefore invites AuthMe to re-register it on the next reload, which
+     * silently restores the double interception this method exists to remove — and leaves the
+     * admin's "configuration reloaded" looking trustworthy while it is not. Leaving the flag
+     * {@code true} makes {@code setup()} skip the registration instead, so the takeover survives
+     * a reload. Across AuthMe 6.0.0 and 6.0.1 (byte-identical file) the field appears solely in
+     * {@code setup()} and {@code disable()}, never in a business rule, so this only affects the
+     * register/skip decision.
      *
-     * @return true if the listener was unregistered (or was already unregistered)
+     * <p>Two upstream paths still reset the flag — {@code disable()} when {@code packetevents} is
+     * unloaded, and {@code setup()}'s else-branch when {@code enablePremium} turns false — so this
+     * method stays idempotent and cheap to call again: it is the re-assert primitive used by the
+     * event hooks in {@code AuthMeTakeoverListener} and by the login-time fallback.
+     *
+     * <p>Uses AuthMe's public {@code PacketInterceptionAdapter.unregisterPremiumVerification()}
+     * method — the same method AuthMe itself uses to clean up the listener — whose implementation
+     * null-guards the listener, so calling it without a registered listener is a no-op rather than
+     * an error. Deliberately silent: the callers decide what the event they reacted to deserves to
+     * be logged, because this method can no longer tell "removed one" from "nothing to remove".
+     *
+     * @return true when AuthMe's object graph was driven successfully; false when the listener
+     *         could not be removed (it may still be registered)
      */
     public boolean unregisterPremiumPacketListener() {
         if (!versionDetector.isAuthMe6()) {
@@ -1331,7 +1353,8 @@ public final class AuthMePremiumIntegrator {
                 return false;
             }
 
-            // Get PacketInterceptionAdapter (implemented by PacketEventsListenerRegistry)
+            // Get PacketInterceptionAdapter (implemented by the platform adapter, which
+            // delegates to PacketEventsListenerRegistry)
             Method getSingleton = injector.getClass().getMethod("getSingleton", Class.class);
             Class<?> adapterClass = Class.forName(
                 "fr.xephi.authme.platform.PacketInterceptionAdapter");
@@ -1340,35 +1363,23 @@ public final class AuthMePremiumIntegrator {
                 return false;
             }
 
-            // Check if the premium verification listener is registered
-            // by reflecting on PacketEventsService.premiumVerificationRegistered
+            // Call unregisterPremiumVerification() on the adapter. Upstream null-guards the
+            // listener, so this is a no-op when there is nothing registered (no PacketEvents,
+            // proxy mode, or a previous call already removed it).
+            Method unregister = adapterClass.getMethod("unregisterPremiumVerification");
+            unregister.invoke(adapter);
+
+            // ISS-32: leave AuthMe's flag at "registered" so its own reload path
+            // (PacketEventsService.setup()) skips re-registration — see the javadoc
             Class<?> pesClass = Class.forName(
                 "fr.xephi.authme.listener.packetevents.PacketEventsService");
             Object pes = getSingleton.invoke(injector, pesClass);
             if (pes != null) {
                 Field registeredField = pesClass.getDeclaredField("premiumVerificationRegistered");
                 registeredField.setAccessible(true);
-                boolean isRegistered = registeredField.getBoolean(pes);
-                if (!isRegistered) {
-                    // Already unregistered — nothing to do
-                    return true;
-                }
+                registeredField.setBoolean(pes, true);
             }
 
-            // Call unregisterPremiumVerification() on the adapter
-            Method unregister = adapterClass.getMethod("unregisterPremiumVerification");
-            unregister.invoke(adapter);
-
-            // Set premiumVerificationRegistered = false to keep AuthMe's state consistent
-            if (pes != null) {
-                Field registeredField = pesClass.getDeclaredField("premiumVerificationRegistered");
-                registeredField.setAccessible(true);
-                registeredField.setBoolean(pes, false);
-            }
-
-            plugin.getLog().info(
-                "Unregistered AuthMe's PremiumVerificationPacketListener — "
-                + "FLP is now the sole Mojang verification source.");
             return true;
         } catch (Exception e) {
             if (plugin.getCore().isDebug()) {
@@ -1380,9 +1391,9 @@ public final class AuthMePremiumIntegrator {
 
     /**
      * Performs the full AuthMe 6.0 takeover: forces enablePremium=true and
-     * unregisters AuthMe's redundant packet listener. Called at startup after
-     * AuthMe has fully initialized, and can be called again to re-assert
-     * (e.g. after /authme reload).
+     * unregisters AuthMe's redundant packet listener. Called once at startup after
+     * AuthMe has fully initialized; the individual halves are what later re-assertions
+     * use (see {@link #unregisterPremiumPacketListener()}).
      *
      * @return true if both operations succeeded
      */

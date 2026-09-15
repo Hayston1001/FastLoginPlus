@@ -55,6 +55,7 @@ import com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator;
 import com.github.games647.fastlogin.bukkit.compat.AuthMeVersionDetector;
 import com.github.games647.fastlogin.bukkit.command.FlpCommand;
 import com.github.games647.fastlogin.bukkit.listener.AuthMeCommandGuard;
+import com.github.games647.fastlogin.bukkit.listener.AuthMeTakeoverListener;
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.ProtocolLibListener;
 import com.github.games647.fastlogin.bukkit.listener.protocolsupport.ProtocolSupportListener;
@@ -104,14 +105,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     // state but no longer converge with FLP's profile, so AuthMeCommandGuard intercepts
     // them for players who could actually run them.
     private boolean premiumTakeoverActive;
-
-    // 0.7.0/F15: /authme reload re-registers AuthMe's own premium packet listener
-    // behind FLP's back — the watchdog re-asserts the takeover every 5 seconds.
-    // Folia cancels the task with the plugin, but a run that already passed its
-    // flag check can still be about to hop to the global region; the second check
-    // inside the sync task keeps that hop from throwing on a disabled plugin.
-    private final AtomicBoolean watchdogRunning = new AtomicBoolean(true);
-    private static final long WATCHDOG_PERIOD_SECONDS = 5L;
 
     // 0.5.0/F014: give up relaying after ~5 minutes (1s interval) and keep the
     // entry queued instead of retrying forever
@@ -166,13 +159,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // stays registered, and upstream's warning makes it look like the whole
                 // feature is off — say what actually happened.
                 warnOnAuthMeCommandLayerWithoutVerification();
-
-                // 0.7.0/F15: /authme reload calls PacketEventsService.setup() again,
-                // which re-registers the listener we just removed (its own
-                // premiumVerificationRegistered flag is false). FLP cannot observe
-                // that command and any login-time hook fires too late — the listener
-                // acts on the first packets of the login. Poll instead.
-                startPremiumListenerWatchdog();
             } else {
                 logger.info("AuthMe 5.x detected: v{} — using standard FLP flow",
                     authMeVersionDetector.getVersion());
@@ -260,6 +246,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // them and point the player at /flp. Inert on AuthMe 5.x and without AuthMe.
         pluginManager.registerEvents(new AuthMeCommandGuard(this), this);
 
+        // 0.7.0/F15 (ISS-32): keep the takeover asserted across the events that can start
+        // AuthMe's own premium listener again — see AuthMeTakeoverListener
+        registerAuthMeTakeoverListener();
+
         registerCommands();
 
         if (pluginManager.isPluginEnabled("PlaceholderAPI")) {
@@ -321,38 +311,61 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     /**
-     * Re-asserts FLP's premium packet-listener takeover every 5 seconds.
+     * Registers the hooks that keep FLP's AuthMe premium takeover asserted after the events that
+     * can start AuthMe's own premium listener again (ISS-32).
      *
-     * <p>AuthMe re-registers its own {@code PremiumVerificationPacketListener} on
-     * {@code /authme reload}: {@code ReloadCommand} reloads the settings, which calls
-     * {@code PacketEventsService.reload(settings)} and that ends in {@code setup()}. Since
-     * FLP set {@code premiumVerificationRegistered} to false when it unregistered the
-     * listener, {@code setup()} registers it again. FLP cannot observe the command, so the
-     * takeover has to be re-asserted periodically.
+     * <p>The reload case is normally prevented at the source: FLP leaves AuthMe's "listener
+     * registered" flag set, so {@code PacketEventsService.setup()} skips re-registration on
+     * {@code /authme reload}. Two upstream paths still reset that flag (the packet library being
+     * unloaded, and {@code enablePremium} turning false), and enabling the packet library re-runs
+     * {@code setup()} from scratch — so the takeover is re-asserted after those events instead of
+     * being polled for.
      *
-     * <p>Why poll instead of checking on login: the listener intercepts START and
-     * ENCRYPTION_RESPONSE, the earliest login packets, so every event FLP could hook fires
-     * too late for the connection being established. {@code unregisterPremiumPacketListener()}
-     * is idempotent and stays silent when the listener is already gone, so a quiet server
-     * logs nothing and a watchdog line always means a re-registration really happened.
-     *
-     * <p>Scheduled as a native fixed-rate async task (like the update check) rather than a
-     * self-chaining {@code runAsyncDelayed} chain: the chain's delay is a {@code Thread.sleep}
-     * on the async pool, so a permanent watchdog would occupy one Folia async thread forever.
-     * The unregister itself hops to the global region — the same thread as the startup call,
-     * since PacketEvents' listener registry is not verified to be thread-safe.
+     * <p>Registered whenever the takeover is active; the per-event conditions live in
+     * {@link #reassertAuthMeTakeover(String)}, because a server can gain the packet library while
+     * it is running.
      */
-    private void startPremiumListenerWatchdog() {
-        Bukkit.getAsyncScheduler().runAtFixedRate(this, task -> {
-            if (!watchdogRunning.get()) {
-                return;
-            }
-            scheduler.getSyncExecutor().execute(() -> {
-                if (watchdogRunning.get()) {
-                    authMePremiumIntegrator.unregisterPremiumPacketListener();
-                }
-            });
-        }, WATCHDOG_PERIOD_SECONDS, WATCHDOG_PERIOD_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+    private void registerAuthMeTakeoverListener() {
+        if (!premiumTakeoverActive) {
+            return;
+        }
+
+        getServer().getPluginManager().registerEvents(new AuthMeTakeoverListener(this), this);
+        if (!bungeeManager.isEnabled()
+                && getServer().getPluginManager().isPluginEnabled("packetevents")) {
+            // only true here: on a proxy backend AuthMe never registers that listener, and
+            // without the packet library it cannot
+            logger.info("Took over AuthMe's premium packet verification — FLP is the sole "
+                    + "Mojang verification source on this server");
+        }
+    }
+
+    /**
+     * Re-asserts FLP's AuthMe premium takeover one tick after an event that may have started
+     * AuthMe's own packet listener (ISS-32).
+     *
+     * <p>The delay is the point: both event hooks fire <em>before</em> the work they announce —
+     * the command has not executed yet, and AuthMe's own plugin-enable handler runs at HIGHEST
+     * priority. Re-asserting inside the event would undo nothing. It runs in the global region,
+     * the same thread as the startup call, because AuthMe's packet-listener registry is not
+     * verified to be thread-safe.
+     *
+     * <p>Silent and cheap when AuthMe's listener cannot exist on this server (proxy backend, or no
+     * packet library): there is nothing to keep removed, so nothing is logged and no task is
+     * scheduled. Only reachable while the takeover is active — the listener is registered under
+     * that condition.
+     *
+     * @param reason short description of the triggering event, used in the log line
+     */
+    public void reassertAuthMeTakeover(String reason) {
+        if (authMePremiumIntegrator == null || bungeeManager == null || bungeeManager.isEnabled()
+                || !getServer().getPluginManager().isPluginEnabled("packetevents")) {
+            return;
+        }
+
+        logger.info("Detected {} — re-asserting FLP's AuthMe premium takeover", reason);
+        Bukkit.getGlobalRegionScheduler().runDelayed(this,
+            task -> authMePremiumIntegrator.unregisterPremiumPacketListener(), 1L);
     }
 
     /**
@@ -427,8 +440,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         scheduler.shutdown();
         // 0.5.0/F073: stop the self-chaining relay retry tasks
         relayChainsRunning.set(false);
-        // 0.7.0/F15: stop the AuthMe premium-listener watchdog
-        watchdogRunning.set(false);
 
         if (core != null) {
             core.close();

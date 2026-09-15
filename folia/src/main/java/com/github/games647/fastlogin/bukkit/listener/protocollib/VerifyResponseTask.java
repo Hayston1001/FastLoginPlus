@@ -237,9 +237,10 @@ public class VerifyResponseTask implements Runnable {
         com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
             plugin.getAuthMePremiumIntegrator();
         if (integrator != null && integrator.isAuthMePremiumEnabled()) {
-            // Lazy re-assert: /authme reload may have re-registered AuthMe's
-            // PremiumVerificationPacketListener. Re-unregister it here so FLP
-            // stays the sole verification source. Idempotent — no-op if already done.
+            // Last-resort re-assert: the events that make AuthMe start its own premium listener
+            // are covered by AuthMeTakeoverListener, and the reload path is prevented at the
+            // source (FLP leaves AuthMe's flag at "registered"). This covers what neither can see —
+            // a path that fires no event at all. Idempotent, and silent in the normal case.
             integrator.unregisterPremiumPacketListener();
 
             UUID mojangUuid = verification.getId();
