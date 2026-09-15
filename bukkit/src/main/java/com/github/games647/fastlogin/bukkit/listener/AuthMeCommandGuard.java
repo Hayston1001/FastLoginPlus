@@ -57,8 +57,9 @@ import java.util.function.Predicate;
  * absent, or when the takeover failed, {@code /premium} is still AuthMe's own working command
  * and must not be touched.
  *
- * <p>Teamed with the README note (F7) that asks admins to revoke {@code authme.player.premium}
- * and {@code authme.player.freemium}: the note manages the admin, this guard manages the player.
+ * <p>Teamed with the F7 startup warning that asks admins to deny {@code authme.player.premium}
+ * and {@code authme.player.freemium} (the README note originally planned for F7 was dropped):
+ * the warning manages the admin, this guard manages the player.
  */
 public class AuthMeCommandGuard implements Listener {
 
