@@ -104,6 +104,13 @@
                 <enabled>false</enabled>
             </snapshots>
         </repository>
+        <!-- craftapi (core's Mojang client) lives only here.  Declared at the root, and with the
+             same id core uses, so every module can resolve it without depending on which module
+             happened to download it first - the enforcer below resolves per module. -->
+        <repository>
+            <id>codemc-repo</id>
+            <url>https://repo.codemc.io/repository/maven-public/</url>
+        </repository>
     </repositories>
 
     <build>
@@ -111,6 +118,51 @@
         <finalName>${project.name}-${revision}-${git.commit.id.abbrev}</finalName>
 
         <plugins>
+            <!--
+                Guards the runtime floor each platform module promises (AGENTS.md: core/bukkit Java 8,
+                bungee/velocity 17, folia 21).  Compiling with release 8 links against newer bytecode
+                without a warning, so a dependency bump can raise a floor silently and only fail on
+                a user's JVM with UnsupportedClassVersionError.  maxJdkVersion is the module's own
+                maven.compiler.release, so a module that raises it deliberately needs no second edit.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.5.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>extra-enforcer-rules</artifactId>
+                        <version>1.9.0</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>enforce-dependency-bytecode</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <enforceBytecodeVersion>
+                                    <maxJdkVersion>${maven.compiler.release}</maxJdkVersion>
+                                    <ignoredScopes>
+                                        <!-- Test jars (JUnit 5, Mockito) never reach a user. -->
+                                        <ignoredScope>test</ignoredScope>
+                                        <!-- Provided jars are the server's: Geyser/Floodgate target
+                                             Java 17+ and only load when those plugins are present,
+                                             and the BungeeCord proxy is the proxy's own business.
+                                             What is left is what we actually shade in. -->
+                                        <ignoredScope>provided</ignoredScope>
+                                    </ignoredScopes>
+                                </enforceBytecodeVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <!-- Update compiler plugin for old Maven versions like GH runner -->
                 <artifactId>maven-compiler-plugin</artifactId>
