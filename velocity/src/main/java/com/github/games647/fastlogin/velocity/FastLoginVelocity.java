@@ -66,6 +66,7 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.PluginContainer;
+import com.velocitypowered.api.plugin.PluginManager;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
@@ -203,6 +204,26 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     }
 
     /**
+     * Resolves the live instance of another plugin.
+     *
+     * <p>{@link PluginContainer#getInstance()} returns an {@link java.util.Optional}, so the lookup
+     * has to be <em>flattened</em>: mapping the container with {@code map} hands the caller an
+     * {@code Optional} wrapper instead of the plugin instance. That is exactly what used to happen
+     * here — {@link AuthMeProxyPin} received an {@code Optional}, found none of the fields it looks
+     * for on it and reported {@code UNSUPPORTED} on every startup, silently relegating the
+     * reflective pin to its config-file fallback.
+     *
+     * @param pluginManager the proxy's plugin manager
+     * @param pluginId      the id of the plugin to look up
+     * @return the plugin instance, or {@code null} when the plugin is absent or not instantiated
+     */
+    static Object resolvePluginInstance(PluginManager pluginManager, String pluginId) {
+        return pluginManager.getPlugin(pluginId)
+                .flatMap(PluginContainer::getInstance)
+                .orElse(null);
+    }
+
+    /**
      * Pins AuthMe's proxy-side {@code premium.keepOfflineUuidCompatibility} to
      * {@code false} and reloads AuthMe Velocity so the change takes effect.
      *
@@ -220,9 +241,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
      * <p>No-op when AuthMe Velocity is absent or the flag is already {@code false}.
      */
     private void forceAuthMeProxyUuidMode() {
-        Object authMe = server.getPluginManager().getPlugin(AUTHME_PLUGIN_ID)
-                .map(PluginContainer::getInstance)
-                .orElse(null);
+        Object authMe = resolvePluginInstance(server.getPluginManager(), AUTHME_PLUGIN_ID);
         if (authMe == null) {
             return;
         }
