@@ -145,53 +145,97 @@
             </exclusions>
         </dependency>
 
-        <!--BungeeCord with also the part outside the API-->
+        <!--
+            BungeeCord API surface. These are *released* coordinates (Maven Central), so the
+            artifact we ship is no longer built against a moving target. bungeecord-api pulls
+            bungeecord-chat / -config / -event in at the same version; the API-only packages are
+            all we are allowed to link (see BungeePublicApiOnlyTest). protocol is excluded here
+            and re-declared for tests only; netty and snakeyaml are dropped here too (the proxy
+            supplies them at runtime, the test-only snakeyaml is re-declared below).
+            Rationale and the previous (non-reproducible) setup: deps/bungeecord/1.21-R0.4.md
+            §5.4 / ISS-B4 / F-B5.
+        -->
         <dependency>
             <groupId>net.md-5</groupId>
-            <artifactId>bungeecord-proxy</artifactId>
-            <version>1.20-R0.2-SNAPSHOT</version>
+            <artifactId>bungeecord-api</artifactId>
+            <version>1.20-R0.2</version>
             <scope>provided</scope>
-            <!-- Use our own newer api version -->
             <exclusions>
                 <exclusion>
-                    <groupId>org.slf4j</groupId>
-                    <artifactId>slf4j-api</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.mysql</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-                <exclusion>
                     <groupId>net.md-5</groupId>
-                    <artifactId>bungeecord-native</artifactId>
-                </exclusion>
-
-                <exclusion>
-                    <groupId>net.md-5</groupId>
-                    <artifactId>bungeecord-query</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>net.md-5</groupId>
-                    <artifactId>bungeecord-slf4j</artifactId>
-                </exclusion>
-
-                <exclusion>
-                    <groupId>net.sf.jopt-simple</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.maven</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>org.apache.maven.resolver</groupId>
-                    <artifactId>*</artifactId>
+                    <artifactId>bungeecord-protocol</artifactId>
                 </exclusion>
                 <exclusion>
                     <groupId>io.netty</groupId>
                     <artifactId>*</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.yaml</groupId>
+                    <artifactId>snakeyaml</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- Declared explicitly so the event package does not depend on api's transitive set -->
+        <dependency>
+            <groupId>net.md-5</groupId>
+            <artifactId>bungeecord-event</artifactId>
+            <version>1.20-R0.2</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!--
+            The proxy implementation half. Upstream publishes it as a snapshot only (no release
+            exists in any repository), and a snapshot coordinate cannot be pinned to a build - the
+            timestamped artifacts are only reachable through the -SNAPSHOT metadata. So the exact
+            build we compile and test against is vendored into lib/ instead of being resolved.
+
+            Source: net.md-5:bungeecord-proxy:1.20-R0.2-SNAPSHOT build 20240119.213723-10 (CodeMC)
+            sha1:   38199420eca157e313ab03f93e9a9f004b2ffa77
+            Needed by ConnectListenerTest (real InitialHandler/BungeeCord/conf.Configuration) and
+            by LoginProfilePropertiesRealProxyTest (real connection.LoginResult).
+            Never packaged: system scope behaves like provided.
+        -->
+        <dependency>
+            <groupId>net.md-5</groupId>
+            <artifactId>bungeecord-proxy</artifactId>
+            <version>1.20-R0.2-20240119.213723-10</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/lib/bungeecord-proxy-1.20-R0.2-20240119.213723-10.jar</systemPath>
+        </dependency>
+
+        <!--
+            All of the following are test-only and exist purely because the tests instantiate real
+            proxy classes. They used to arrive transitively from bungeecord-proxy; the vendored jar
+            brings nothing along, so the ones the tests actually load are declared here.
+
+            protocol: the vendored LoginResult carries a protocol.Property[] field.
+            log:      BungeeCord's static initialiser links jline's console API (jline:jline:2.12.1).
+            snakeyaml: conf.Configuration extends the bungeecord-config YamlConfiguration.
+        -->
+        <dependency>
+            <groupId>net.md-5</groupId>
+            <artifactId>bungeecord-protocol</artifactId>
+            <version>1.20-R0.2</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>net.md-5</groupId>
+            <artifactId>bungeecord-log</artifactId>
+            <version>1.20-R0.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>2.2</version>
+            <scope>test</scope>
         </dependency>
 
         <!--Floodgate for Xbox Live Authentication-->
