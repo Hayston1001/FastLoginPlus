@@ -29,6 +29,8 @@ import java.util.UUID;
 
 import org.bukkit.Bukkit;
 
+import com.github.games647.craftapi.model.skin.SkinProperty;
+
 import net.skinsrestorer.api.SkinsRestorerProvider;
 
 /**
@@ -77,6 +79,37 @@ public final class SkinsRestorerCompat {
                 plugin.getLog().info("SkinsRestorer API check failed for {}: {}", uuid, e.getMessage());
             }
             return false;
+        }
+    }
+
+    /**
+     * Fetches the custom skin SkinsRestorer has stored for the given player.
+     * <p>
+     * The result is FastLoginPlus' own skin model, so callers do not have to link against the
+     * SkinsRestorer API themselves. Returns {@code null} when the player has no stored skin, the
+     * plugin is absent, or its API is not available (for example proxy mode without a shared
+     * database).
+     *
+     * @param uuid the player's UUID (premium UUID preferred)
+     * @return the stored skin, or null if there is none to apply
+     */
+    public SkinProperty getCustomSkin(UUID uuid) {
+        if (!available || uuid == null) {
+            return null;
+        }
+
+        try {
+            return SkinsRestorerProvider.get()
+                    .getPlayerStorage()
+                    .getSkinOfPlayer(uuid)
+                    .map(skin -> new SkinProperty(skin.getValue(), skin.getSignature()))
+                    .orElse(null);
+        } catch (Exception e) {
+            // SR API not initialized (e.g. proxy mode without local DB) — safe to ignore
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("SkinsRestorer API check failed for {}: {}", uuid, e.getMessage());
+            }
+            return null;
         }
     }
 
