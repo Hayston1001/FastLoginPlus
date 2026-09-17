@@ -307,6 +307,10 @@ public final class AuthMePremiumIntegrator {
 
         String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
 
+        // 0.7.0/F20: let this administrative switch win over a premium marking that is still in
+        // flight for the same player — that task would otherwise re-create the record below.
+        plugin.markCrackedOverride(lowerName);
+
         if (versionDetector.isAuthMe6()) {
             // AuthMe 6.0: clear caches + DB premium flag + forceUnregister.
             // Each step is independent — a failure in one does not skip the others.

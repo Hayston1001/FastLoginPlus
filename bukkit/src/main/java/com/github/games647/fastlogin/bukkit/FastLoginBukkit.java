@@ -86,6 +86,40 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     private final Map<UUID, PremiumStatus> premiumPlayers = new ConcurrentHashMap<>();
     private final Map<UUID, FloodgateState> playerFloodgateState = new ConcurrentHashMap<>();
+
+    /**
+     * Premium UUIDs observed on the profile at {@code AsyncPlayerPreLoginEvent}, keyed by player
+     * name. Consumed during the configuration phase to prove that an attestation seen there
+     * actually arrived with this login.
+     *
+     * <p>Paper keeps the fully filled profile — properties included — in its
+     * {@code filledProfileCache}, indexed by both name and UUID. With {@code premiumUuid: false}
+     * a premium login is rewritten to the name-derived offline UUID, i.e. the very UUID a cracked
+     * login with the same name carries, so a later cracked connection can be handed that cached
+     * profile and would be mistaken for proxy-attested premium. The pre-login profile is not
+     * affected by that cache, so requiring the two to agree makes an attestation single-use.
+     *
+     * <p>The entry is overwritten or cleared on every pre-login and removed when consumed; a name
+     * that never reaches configuration leaves at most one stale entry behind.
+     */
+    private final ConcurrentMap<String, UUID> preLoginAttestations = new ConcurrentHashMap<>();
+
+    /**
+     * How long an administrator's {@code /flp cracked} keeps suppressing premium marking for the
+     * affected player, see {@link #crackedOverrides}.
+     */
+    private static final long CRACKED_OVERRIDE_TTL_MILLIS = 30_000L;
+
+    /**
+     * Names an administrator explicitly switched to cracked, with the instant it happened.
+     *
+     * <p>A login that was already in flight keeps a premium marking running on an async task; that
+     * task can reach {@link #applyPremiumAtConfigure} <em>after</em> {@code /flp cracked} deleted
+     * the record, and would then re-create it — with the Mojang UUID and no password, leaving the
+     * player unable to log in or to register. The command therefore wins for a short window, which
+     * only has to outlive a single login.
+     */
+    private final ConcurrentMap<String, Long> crackedOverrides = new ConcurrentHashMap<>();
     private final Logger logger;
 
     private boolean serverStarted;
@@ -726,6 +760,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             address = (java.net.InetSocketAddress) connection.getClass()
                 .getMethod("getClientAddress").invoke(connection);
             forwardedPremiumUuid = readForwardedPremiumUuid(profile);
+            // 0.7.0/F19: an attestation only counts when this very login already carried it,
+            // before Paper's profile cache could have supplied a stale profile.
+            UUID configureAttestation = forwardedPremiumUuid;
+            UUID preLoginAttestation = preLoginAttestations.remove(playerName);
+            forwardedPremiumUuid = resolveAttestedUuid(configureAttestation, preLoginAttestation);
+            if (configureAttestation != null && forwardedPremiumUuid == null) {
+                logger.warn("Ignoring premium attestation for {} — it was not present on this "
+                        + "login's pre-login profile; refusing a possible profile-cache replay",
+                        playerName);
+            }
         } catch (Exception e) {
             logger.warn("Failed to extract player info from configure event", e);
             return;
@@ -835,6 +879,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private void applyPremiumAtConfigure(String playerName, UUID premiumUuid, UUID connectionUuid,
                                          Object connection, java.net.InetSocketAddress address,
                                          boolean isPendingPremium) {
+        // 0.7.0/F20: an administrator's /flp cracked wins over a premium marking that is still in
+        // flight. Skipping here is what stops the async task from re-creating the record the
+        // command just deleted.
+        if (isCrackedOverrideActive(System.currentTimeMillis(), crackedOverrides.get(playerName),
+                CRACKED_OVERRIDE_TTL_MILLIS)) {
+            logger.info("Skipping premium marking for {}: an administrator switched this player "
+                    + "to cracked", playerName);
+            return;
+        }
+
         com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
             getAuthMePremiumIntegrator();
         if (integrator != null && integrator.isAuthMePremiumEnabled()) {
@@ -931,6 +985,61 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             // reflective read failed — treat as absent and fall back
         }
         return null;
+    }
+
+    /**
+     * Marks a player as explicitly switched to cracked by an administrator, so that a premium
+     * marking already in flight does not resurrect the record ({@link #crackedOverrides}).
+     *
+     * @param playerName the player the administrator switched
+     */
+    public void markCrackedOverride(String playerName) {
+        long now = System.currentTimeMillis();
+        crackedOverrides.entrySet().removeIf(entry
+                -> now - entry.getValue() > CRACKED_OVERRIDE_TTL_MILLIS);
+        crackedOverrides.put(playerName, now);
+    }
+
+    /**
+     * Whether an administrator's cracked switch still suppresses premium marking.
+     *
+     * @param now        current time in milliseconds
+     * @param markedAt   when the switch happened, or {@code null} when there was none
+     * @param ttlMillis  how long the switch stays authoritative
+     * @return {@code true} while the switch must win over premium marking
+     */
+    static boolean isCrackedOverrideActive(long now, Long markedAt, long ttlMillis) {
+        return markedAt != null && now - markedAt <= ttlMillis;
+    }
+
+    /**
+     * Records — or clears — the premium attestation carried by the profile at the pre-login stage.
+     *
+     * <p>Must be called for every login attempt, including ones without an attestation: clearing
+     * on absence is what stops a stale entry from authorising a later cached profile.
+     *
+     * @param playerName the logging-in player's name
+     * @param profile    the Paper player profile from {@code AsyncPlayerPreLoginEvent}
+     */
+    public void recordPreLoginAttestation(String playerName, Object profile) {
+        UUID attested = readForwardedPremiumUuid(profile);
+        if (attested == null) {
+            preLoginAttestations.remove(playerName);
+        } else {
+            preLoginAttestations.put(playerName, attested);
+        }
+    }
+
+    /**
+     * Accepts a configuration-phase attestation only when the same UUID was already present on the
+     * profile at the pre-login stage (0.7.0/F19).
+     *
+     * @param configurePhase UUID read from the configure-phase profile, may be {@code null}
+     * @param preLogin       UUID recorded at {@code AsyncPlayerPreLoginEvent}, may be {@code null}
+     * @return the attested UUID when the two agree, otherwise {@code null}
+     */
+    static UUID resolveAttestedUuid(UUID configurePhase, UUID preLogin) {
+        return configurePhase != null && configurePhase.equals(preLogin) ? configurePhase : null;
     }
 
     /**

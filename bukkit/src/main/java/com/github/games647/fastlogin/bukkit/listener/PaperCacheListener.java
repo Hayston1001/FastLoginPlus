@@ -49,6 +49,10 @@ public class PaperCacheListener implements Listener {
     // (which may contain a stale skin from a previous session).
     // Setting the skin here ensures the profile already has correct textures before complete(true).
     public void onAsyncPlayerPreLogin(AsyncPlayerPreLoginEvent event) {
+        // 0.7.0/F19: remember this login's attestation before Paper's filledProfileCache can hand
+        // the configuration phase a stale premium profile from an earlier session.
+        plugin.recordPreLoginAttestation(event.getName(), event.getPlayerProfile());
+
         if (event.getLoginResult() != Result.ALLOWED) {
             return;
         }

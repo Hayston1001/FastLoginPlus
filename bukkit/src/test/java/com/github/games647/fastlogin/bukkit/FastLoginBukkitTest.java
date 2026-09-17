@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.bukkit;
 
 import com.github.games647.fastlogin.core.CommonUtil;
+import java.util.UUID;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.chat.ComponentSerializer;
@@ -33,6 +34,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FastLoginBukkitTest {
@@ -72,5 +74,55 @@ class FastLoginBukkitTest {
         String expected = "{\"bold\":true,\"color\":\"#00a00b\",\"text\":\"Text\"}";
         //noinspection deprecation
         assertEquals(ComponentSerializer.toString(components), expected);
+    }
+
+    /**
+     * 0.7.0/F19. Paper caches the fully filled profile — injected properties included — and indexes
+     * it by name <em>and</em> UUID. Because {@code premiumUuid: false} rewrites a premium login to
+     * the name-derived offline UUID, a cracked login with the same name carries the identical UUID
+     * and could be served that cached profile; the backend would then treat it as proxy-attested
+     * premium and create AuthMe records for it. Requiring the attestation to match the one carried
+     * at pre-login makes it single-use per login.
+     */
+    @Test
+    void attestationMustMatchTheOneCarriedAtPreLogin() {
+        UUID attested = UUID.fromString("272cb3e9-24d3-4dcd-b47c-4b786e7421f8");
+        UUID other = UUID.fromString("08c85864-b91b-3ebc-a6ab-f95e7449c594");
+
+        // the normal case: the proxy attested this very login
+        assertEquals(attested, FastLoginBukkit.resolveAttestedUuid(attested, attested));
+
+        // a cached profile shows up at configure time although this login carried nothing
+        assertNull(FastLoginBukkit.resolveAttestedUuid(attested, null));
+
+        // stale entry from an earlier login still in the map
+        assertNull(FastLoginBukkit.resolveAttestedUuid(attested, other));
+
+        // no attestation at configure time stays "not attested", never a resurrected map entry
+        assertNull(FastLoginBukkit.resolveAttestedUuid(null, attested));
+        assertNull(FastLoginBukkit.resolveAttestedUuid(null, null));
+    }
+
+    /**
+     * 0.7.0/F20. A login that is already in flight keeps a premium marking running on an async task,
+     * which can reach the configure-phase marking <em>after</em> {@code /flp cracked} deleted the
+     * record — and would then re-create it with the Mojang UUID and no password, leaving the player
+     * able to neither log in nor register. The administrative switch therefore wins for a window.
+     */
+    @Test
+    void administratorCrackedSwitchSuppressesPremiumMarkingForAWindow() {
+        long now = 1_000_000L;
+        long ttl = 30_000L;
+
+        // never switched: nothing to suppress
+        assertFalse(FastLoginBukkit.isCrackedOverrideActive(now, null, ttl));
+
+        // the in-flight marking lands right after the command
+        assertTrue(FastLoginBukkit.isCrackedOverrideActive(now, now, ttl));
+        assertTrue(FastLoginBukkit.isCrackedOverrideActive(now + 2_500L, now, ttl));
+
+        // still inside the window at the boundary, outside one millisecond later
+        assertTrue(FastLoginBukkit.isCrackedOverrideActive(now + ttl, now, ttl));
+        assertFalse(FastLoginBukkit.isCrackedOverrideActive(now + ttl + 1L, now, ttl));
     }
 }
