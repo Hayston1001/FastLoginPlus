@@ -76,9 +76,17 @@ public class BungeeListener implements PluginMessageListener {
             return;
         }
 
-        // fail if target player is blocked because already authenticated or wrong bungeecord id
+        // A player who is already authenticated is the normal case here, not a fault: on a Paper
+        // backend the configure phase logs premium players in before the proxy's own message can
+        // arrive, so that message is a redundant duplicate whose payload is ignored on purpose.
+        // The metadata itself stays — ForceLoginTask sets it as the proxy-ID brute-force guard — but
+        // this line belongs in debug: as a warning it read like a failure on every premium login and
+        // drowned the messages that do matter (untrusted proxy id, missing player).
         if (targetPlayer.hasMetadata(plugin.getName())) {
-            plugin.getLog().warn("Received message {} from a blocked player {}", loginMessage, targetPlayer);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Ignoring duplicate proxy action {} for already authenticated {}",
+                        loginMessage, targetPlayer);
+            }
         } else {
             UUID sourceId = loginMessage.getProxyId();
             if (plugin.getBungeeManager().isProxyAllowed(sourceId)) {
