@@ -68,23 +68,21 @@ public class PaperCacheListener implements Listener {
                 continue;
             }
 
-            // Skip FLP skin if SkinsRestorer has a custom skin — SR skin takes priority.
-            // Hand Paper SkinsRestorer's own skin instead of an empty placeholder: SR decides
-            // "has online properties" by the property SET being non-empty, and its own pre-login
-            // handler (default priority) runs before this one, so writing "" here destroyed the
-            // skin that handler had just applied and players rendered with the default skin.
-            // Writing the real property keeps the filledProfileCache guard working without
-            // depending on either handler's execution order.
-            if (plugin.getSkinsRestorerCompat().hasCustomSkin(session.getUuid())) {
+            // SkinsRestorer wins when it has a custom skin for the player. Look up both UUIDs this
+            // login can have: the verified Mojang one, and the one the connection actually carries —
+            // they differ under premiumUuid:false and SkinsRestorer is keyed by the latter. Write its
+            // skin instead of the empty placeholder used until 0.7.0: that placeholder counted as
+            // "online properties" for SkinsRestorer while destroying the skin its own pre-login
+            // handler (default priority, i.e. before this one) had just applied, so players
+            // connected with the default skin instead of their custom one.
+            ProfileProperty customSkin = skinPropertyFor(plugin.getSkinsRestorerCompat()
+                    .getCustomSkin(session.getUuid(), event.getUniqueId()));
+            if (customSkin != null) {
                 if (plugin.getCore().isDebug()) {
                     plugin.getLog().info("Skipping FastLogin skin for {} — SkinsRestorer custom skin detected",
                     session.getUsername());
                 }
-                ProfileProperty customSkin = skinPropertyFor(
-                        plugin.getSkinsRestorerCompat().getCustomSkin(session.getUuid()));
-                if (customSkin != null) {
-                    event.getPlayerProfile().setProperty(customSkin);
-                }
+                event.getPlayerProfile().setProperty(customSkin);
                 break;
             }
 

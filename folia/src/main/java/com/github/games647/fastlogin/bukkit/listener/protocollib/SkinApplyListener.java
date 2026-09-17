@@ -58,8 +58,12 @@ public class SkinApplyListener implements Listener {
         //loginEvent.getAddress is just a InetAddress not InetSocketAddress, so not unique enough
         for (BukkitLoginSession session : plugin.getLoginSessions().values()) {
             if (session.getUsername().equals(player.getName())) {
-                // Skip if SkinsRestorer has a custom skin for this player — SR skin takes priority
-                if (plugin.getSkinsRestorerCompat().hasCustomSkin(session.getUuid())) {
+                // Skip if SkinsRestorer has a custom skin for this player — SR skin takes priority.
+                // Both UUIDs this login can have are checked: the verified Mojang one and the one the
+                // connection actually carries (they differ under premiumUuid:false, and SkinsRestorer
+                // is keyed by the latter).
+                if (plugin.getSkinsRestorerCompat()
+                        .getCustomSkin(session.getUuid(), player.getUniqueId()) != null) {
                     if (plugin.getCore().isDebug()) {
                         plugin.getLog().info("Skipping FastLogin skin for {} — SkinsRestorer custom skin detected",
                         session.getUsername());
