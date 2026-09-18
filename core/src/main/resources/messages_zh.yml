@@ -62,7 +62,7 @@ delete-premium-denied: '&4不能删除正版玩家的记录'
 auto-login: '&2已自动登录'
 
 # 自动注册（密码自动生成）
-auto-register: '&2已尝试自动注册，密码为: &7%password&2，建议你尽快修改密码'
+auto-register: '&2密码: &7%password&2 &2（仅作手动 /login 的备用密码，正版登录不会用到它）'
 
 # 权限
 no-permission: '&4权限不足'

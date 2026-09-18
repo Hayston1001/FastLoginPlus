@@ -62,7 +62,7 @@ delete-premium-denied: '&4Cannot delete a premium player record'
 auto-login: '&2Auto logged in'
 
 # Auto register (password is auto-generated)
-auto-register: '&2Tried auto registering with password: &7%password&2. You may want change it?'
+auto-register: '&2Password: &7%password&2 &2(backup for a manual /login only — premium logins skip it)'
 
 # Permissions
 no-permission: '&4Not enough permissions'
