@@ -70,6 +70,24 @@ public interface AuthPlugin<P> {
     boolean forceRegister(P player, String password);
 
     /**
+     * Whether the message carrying the password FastLogin generated should be sent to the player.
+     * <p>
+     * The password is only useful if the plugin really stored it: it is the player's only way back
+     * into an account FastLogin registered on their behalf, in case the name is ever treated as
+     * cracked (an administrator switching them to cracked, a lost premium session, or a server that
+     * goes offline mode). Plugins that persist it keep the default.
+     * <p>
+     * AuthMe 6.0's takeover answers {@code false}: FastLogin pre-creates that record itself with an
+     * empty password hash, so the generated password never reaches the database and announcing it
+     * would promise something the player cannot use.
+     *
+     * @return true when the generated password is stored and worth telling the player about
+     */
+    default boolean notifyGeneratedPassword() {
+        return true;
+    }
+
+    /**
      * Checks whether an account exists for this player name.
      * <p>
      * This check should check if a cracked player account exists,

@@ -162,9 +162,13 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
         }
 
         String generatedPassword = core.getPasswordGenerator().getRandomPassword(player);
-        boolean success = core.getAuthPluginHook().forceRegister(player, generatedPassword);
+        AuthPlugin<P> authPlugin = core.getAuthPluginHook();
+        boolean success = authPlugin.forceRegister(player, generatedPassword);
 
-        String message = core.getMessage("auto-register");
+        // 0.7.0/F25: only announce the generated password when the auth plugin really stored it.
+        // AuthMe 6.0's takeover pre-creates the record with an empty password hash, so in that
+        // configuration the message would hand out a password the database does not have.
+        String message = authPlugin.notifyGeneratedPassword() ? core.getMessage("auto-register") : null;
         if (success && message != null) {
             message = message.replace("%password", generatedPassword);
             core.getPlugin().sendMessage(player, message);

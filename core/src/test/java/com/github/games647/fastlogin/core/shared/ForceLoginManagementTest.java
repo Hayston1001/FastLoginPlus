@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.core.shared;
 
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
+import com.github.games647.fastlogin.core.hooks.DefaultPasswordGenerator;
 import com.github.games647.fastlogin.core.shared.event.FastLoginAutoLoginEvent;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -40,6 +41,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.mockito.ArgumentCaptor;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -75,6 +78,8 @@ class ForceLoginManagementTest {
         when(plugin.getLog()).thenReturn(logger);
         // mock FastLoginCore never initializes localeMessages → stub to no-op
         doNothing().when(core).sendLocaleMessage(anyString(), any());
+        // plugins that store the generated password keep the interface default (0.7.0/F25)
+        when(authPlugin.notifyGeneratedPassword()).thenReturn(true);
         // 0.5.0/F020: the production save windows run inside withNameLock - the
         // mock must execute the passed runnable so the wrapped saves still happen
         doAnswer(inv -> {
@@ -184,6 +189,53 @@ class ForceLoginManagementTest {
         assertFalse(profile.isOnlinemodePreferred());
         assertNull(profile.getId());
         verify(storage).save(profile);
+    }
+
+    // ---- generated password message (0.7.0/F25) ----
+
+    @Test
+    void generatedPasswordIsAnnouncedWhenTheAuthPluginStoredIt() throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(core.getPasswordGenerator()).thenReturn(new DefaultPasswordGenerator<>());
+        when(core.getMessage("auto-register")).thenReturn("Password: %password");
+        when(config.get("autoLogin")).thenReturn(true);
+        when(config.get("auto-register-unknown")).thenReturn(true);
+        when(authPlugin.isRegistered("TestUser")).thenReturn(false);
+        when(authPlugin.forceRegister(any(), anyString())).thenReturn(true);
+        when(authPlugin.notifyGeneratedPassword()).thenReturn(true);
+
+        TestLoginSession session = new TestLoginSession("TestUser", true, null);
+        session.setUuid(UUID.randomUUID());
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.run();
+
+        ArgumentCaptor<String> message = ArgumentCaptor.forClass(String.class);
+        verify(plugin).sendMessage(any(), message.capture());
+        assertFalse(message.getValue().contains("%password"),
+                "the placeholder must be replaced with the generated password");
+        assertTrue(message.getValue().startsWith("Password: "));
+    }
+
+    @Test
+    void generatedPasswordIsNotAnnouncedWhenTheAuthPluginDidNotStoreIt() throws Exception {
+        // AuthMe 6.0's takeover pre-creates the record with an empty password hash: announcing
+        // the generated password would promise one that the database does not have.
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(core.getPasswordGenerator()).thenReturn(new DefaultPasswordGenerator<>());
+        when(core.getMessage("auto-register")).thenReturn("Password: %password");
+        when(config.get("autoLogin")).thenReturn(true);
+        when(config.get("auto-register-unknown")).thenReturn(true);
+        when(authPlugin.isRegistered("TestUser")).thenReturn(false);
+        when(authPlugin.forceRegister(any(), anyString())).thenReturn(true);
+        when(authPlugin.notifyGeneratedPassword()).thenReturn(false);
+
+        TestLoginSession session = new TestLoginSession("TestUser", true, null);
+        session.setUuid(UUID.randomUUID());
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.run();
+
+        verify(authPlugin).forceRegister(any(), anyString());
+        verify(plugin, never()).sendMessage(any(), anyString());
     }
 
     @SuppressWarnings("unchecked")

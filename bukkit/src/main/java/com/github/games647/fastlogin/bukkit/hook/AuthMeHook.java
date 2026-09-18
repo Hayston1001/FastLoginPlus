@@ -90,6 +90,18 @@ public class AuthMeHook implements AuthPlugin<Player>, Listener {
     }
 
     @Override
+    public boolean notifyGeneratedPassword() {
+        // 0.7.0/F25: AuthMe 6.0's takeover pre-creates the record itself with an empty password
+        // hash (AuthMePremiumIntegrator), so the password FastLogin passes to forceRegister()
+        // never reaches the database - announcing it would promise a password that cannot be
+        // used. Verified on a real Spigot backend: the row ends up with password=''. AuthMe 5.x
+        // registers through AuthMe's own API and does store it, so it keeps the default.
+        com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+            plugin.getAuthMePremiumIntegrator();
+        return integrator == null || !integrator.isAuthMePremiumEnabled();
+    }
+
+    @Override
     public boolean forceLogin(Player player) {
         if (authmeAPI.isAuthenticated(player)) {
             if (plugin.getCore().isDebug()) {
