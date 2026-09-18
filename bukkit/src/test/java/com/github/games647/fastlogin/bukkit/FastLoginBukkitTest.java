@@ -30,6 +30,7 @@ import java.util.UUID;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.chat.ComponentSerializer;
+import com.github.games647.craftapi.UUIDAdapter;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -101,6 +102,31 @@ class FastLoginBukkitTest {
         // no attestation at configure time stays "not attested", never a resurrected map entry
         assertNull(FastLoginBukkit.resolveAttestedUuid(null, attested));
         assertNull(FastLoginBukkit.resolveAttestedUuid(null, null));
+    }
+
+    /**
+     * 0.7.0/F26. With {@code premiumUuid: true} the proxy keeps the Mojang UUID and attaches no
+     * attestation property, so the configuration phase has to recognise the forwarded UUID itself
+     * instead of falling back to the asynchronous Mojang lookup - that lookup is what let AuthMe's
+     * preJoin dialog appear before the record existed.
+     */
+    @Test
+    void forwardedUuidIsUsedWhenNoPropertyWasAttached() {
+        UUID mojangUuid = UUID.fromString("272cb3e9-24d3-4dcd-b47c-4b786e7421f8");
+        UUID offlineUuid = UUIDAdapter.generateOfflineId("Hayston1001");
+
+        // premiumUuid: true - no property, but the connection carries the proxy's Mojang UUID
+        assertTrue(FastLoginBukkit.usesForwardedUuidAttestation(null, mojangUuid, "Hayston1001"));
+
+        // premiumUuid: false - the property is present and stays the attestation (checked before)
+        assertFalse(FastLoginBukkit.usesForwardedUuidAttestation(mojangUuid, offlineUuid, "Hayston1001"));
+
+        // a cracked login: offline UUID, nothing forwarded
+        assertFalse(FastLoginBukkit.usesForwardedUuidAttestation(null, offlineUuid, "Hayston1001"));
+
+        // direct connection (no proxy involved): nothing to recognise
+        assertFalse(FastLoginBukkit.usesForwardedUuidAttestation(null, mojangUuid, null));
+        assertFalse(FastLoginBukkit.usesForwardedUuidAttestation(null, null, "Hayston1001"));
     }
 
     /**

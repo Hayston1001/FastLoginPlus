@@ -28,6 +28,7 @@ package com.github.games647.fastlogin.bukkit;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.shared.PendingRelayStore;
+import com.github.games647.fastlogin.core.shared.ProxyForwardedUuid;
 
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
@@ -739,6 +740,23 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
+        // 0.7.0/F26: with premiumUuid: true the proxy keeps the Mojang UUID and therefore attaches
+        // no attestation property (see the Velocity ConnectListener), so the attestation is the
+        // UUID itself — an offline UUID is always version 3, so a version-4 connection UUID can
+        // only have come from the proxy. Mark the record synchronously here, exactly like the
+        // property path above: the asynchronous Mojang lookup below is what used to let AuthMe's
+        // HIGHEST handler open its preJoin dialog before the record existed, which the player saw
+        // as the dialog staying on screen for the length of that lookup. The same structural
+        // signal already drives the pre-login path on Spigot, where this phase does not exist.
+        if (usesForwardedUuidAttestation(forwardedPremiumUuid, connectionUuid, playerName)) {
+            logger.info("Proxy forwarded the Mojang UUID {} for {} in the configure phase — "
+                    + "marking the AuthMe record synchronously (no Mojang lookup needed)",
+                    connectionUuid, playerName);
+            applyPremiumAtConfigure(playerName, connectionUuid, connectionUuid,
+                    connection, address, isPendingPremium);
+            return;
+        }
+
         scheduler.runAsync(() -> {
             try {
                 java.util.Optional<com.github.games647.craftapi.model.Profile> mojang =
@@ -815,6 +833,27 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             // reflective read failed — treat as absent and fall back
         }
         return null;
+    }
+
+
+    /**
+     * Whether the configuration phase can mark the player as premium from the UUID the connection
+     * carries, without the asynchronous Mojang lookup (0.7.0/F26).
+     * <p>
+     * This is the configuration-phase counterpart of the pre-login path used on platforms without
+     * a configuration phase: the property the proxy attaches is only present when it rewrote the
+     * UUID ({@code premiumUuid: false}), while with {@code premiumUuid: true} the forwarded Mojang
+     * UUID is the attestation. Callers only reach it when the property was absent.
+     *
+     * @param forwardedPremiumUuid the attestation read from the profile, null when absent
+     * @param connectionUuid       the UUID the connection carries
+     * @param playerName           the connecting player's name
+     * @return true when the synchronous path may be taken from the connection UUID
+     */
+    static boolean usesForwardedUuidAttestation(UUID forwardedPremiumUuid, UUID connectionUuid,
+                                                String playerName) {
+        return forwardedPremiumUuid == null
+                && ProxyForwardedUuid.isForwardedMojangUuid(connectionUuid, playerName);
     }
 
     /**
