@@ -276,6 +276,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         pluginManager.registerEvents(
                 new com.github.games647.fastlogin.bukkit.listener.PaperCacheListener(this), this);
 
+        // 0.7.0/F24 (N14) intentionally not mirrored from the bukkit module: that change adds a
+        // pre-login pre-create fallback for platforms WITHOUT a configuration phase (Spigot).
+        // Folia is Paper-based and therefore always has the configuration phase, where
+        // applyPremiumAtConfigure() already pre-creates the AuthMe record before AuthMe's join
+        // handler can open its dialog - the fallback would be dead code here.
+
         // 0.7.0/F16: while the takeover is active, AuthMe's own /premium and /freemium
         // are a second entry point that silently diverges from FLP (ISS-12) — intercept
         // them and point the player at /flp. Inert on AuthMe 5.x and without AuthMe.

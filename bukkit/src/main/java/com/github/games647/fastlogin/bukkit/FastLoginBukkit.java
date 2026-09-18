@@ -28,6 +28,7 @@ package com.github.games647.fastlogin.bukkit;
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
 import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.shared.PendingRelayStore;
+import com.github.games647.fastlogin.core.shared.ProxyForwardedUuid;
 
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
@@ -57,6 +58,7 @@ import com.github.games647.fastlogin.bukkit.listener.AuthMeCommandGuard;
 import com.github.games647.fastlogin.bukkit.listener.AuthMeTakeoverListener;
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
 import com.github.games647.fastlogin.bukkit.listener.PaperCacheListener;
+import com.github.games647.fastlogin.bukkit.listener.PreLoginPremiumListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.ProtocolLibListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.SkinApplyListener;
 import com.github.games647.fastlogin.bukkit.listener.UpdateNotifyListener;
@@ -282,6 +284,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         if (isPaper()) {
             pluginManager.registerEvents(new PaperCacheListener(this), this);
         }
+
+        // 0.7.0/F24 (N14): Spigot has no configuration phase, so the AuthMe record has to be
+        // pre-created in the login phase instead — otherwise AuthMe shows its blocking
+        // post-join register dialog, which only a completed login can close. The listener
+        // decides nothing itself: applyPremiumAtPreLogin() gates on platform, proxy mode,
+        // autoRegister and the structurally forwarded UUID, and is a no-op on Paper/Folia
+        // where F13 already covers this.
+        pluginManager.registerEvents(new PreLoginPremiumListener(this), this);
 
         // 0.7.0/F16: while the takeover is active, AuthMe's own /premium and /freemium
         // are a second entry point that silently diverges from FLP (ISS-12) — intercept
@@ -862,6 +872,58 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     playerName, e.getMessage());
             }
         });
+    }
+
+    /**
+     * Pre-creates the AuthMe premium record for a proxy-forwarded login on platforms that have
+     * no configuration phase (0.7.0/F24).
+     *
+     * <p>Paper/Folia get this guarantee from the configuration phase (F13), which runs before
+     * AuthMe can show a dialog. Spigot has neither that phase nor access to the forwarded
+     * profile property: by the time the proxy's force message arrives the player is already in
+     * the world and AuthMe's blocking post-join register dialog is on screen — a state only a
+     * completed login can leave (see {@code ForceLoginManagement}'s register branch, F24's
+     * other half). Recognising the forwarded UUID structurally
+     * ({@link ProxyForwardedUuid#isForwardedMojangUuid}) is enough to create the record
+     * <em>before</em> the join, after which AuthMe authenticates the player itself through
+     * {@code canBypassWithPremium}'s v4 branch and never creates the dialog at all.</p>
+     *
+     * <p>Only the database record is written here. No login session can be registered yet —
+     * sessions are keyed by address <em>including the port</em>, which this event does not
+     * carry — and none is needed, because AuthMe performs the login on its own.</p>
+     *
+     * @param playerName     the requested player name
+     * @param connectionUuid the UUID the connection carries
+     * @return true when a new AuthMe record was pre-created
+     */
+    public boolean applyPremiumAtPreLogin(String playerName, UUID connectionUuid) {
+        if (isPaper() || !bungeeManager.isEnabled() || !getConfig().getBoolean("autoRegister")) {
+            return false;
+        }
+
+        if (!ProxyForwardedUuid.isForwardedMojangUuid(connectionUuid, playerName)) {
+            return false;
+        }
+
+        // 0.7.0/F20: an administrator's /flp cracked wins over a premium marking that is still
+        // in flight — the same guard the configuration-phase path applies.
+        if (isCrackedOverrideActive(System.currentTimeMillis(), crackedOverrides.get(playerName),
+                CRACKED_OVERRIDE_TTL_MILLIS)) {
+            logger.info("Skipping premium pre-creation for {}: an administrator switched this player "
+                    + "to cracked", playerName);
+            return false;
+        }
+
+        AuthMePremiumIntegrator integrator = getAuthMePremiumIntegrator();
+        if (integrator == null || !integrator.isAuthMePremiumEnabled()) {
+            return false;
+        }
+
+        boolean created = integrator.markPlayerAsPremium(playerName, connectionUuid);
+        logger.info("Proxy attested {} as premium ({}) at pre-login — pre-created the AuthMe "
+                + "record before the join (no configuration phase on this platform)",
+                playerName, connectionUuid);
+        return created;
     }
 
     /**

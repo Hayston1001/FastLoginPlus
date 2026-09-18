@@ -80,9 +80,18 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
                 // and where AuthMe would otherwise never learn the player is premium.
                 UUID premiumUuid = com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator
                     .resolvePremiumUuid(session.getUuid(), player.getUniqueId());
-                if (premiumUuid != null) {
-                    integrator.markPlayerAsPremium(player.getName(), premiumUuid);
-                } else if (plugin.getCore().isDebug()) {
+                if (premiumUuid != null && integrator.markPlayerAsPremium(player.getName(), premiumUuid)) {
+                    // 0.7.0/F24 (N14): the record was created *here*, i.e. after the join - so on a
+                    // platform without a configuration phase (Spigot) AuthMe has already shown its
+                    // blocking post-join register dialog, and only a completed login closes it
+                    // (AuthMe clears the dialog state in its synchronous login completion). The
+                    // register branch in ForceLoginManagement ran before this marking, so the login
+                    // has to be attempted now, once the record exists. On Paper/Folia the record was
+                    // already stamped during the configuration phase, markPlayerAsPremium() reports
+                    // "existing record" (false) and nothing is attempted here - if it ever did, the
+                    // login is a no-op that reports "already authenticated".
+                    forceLogin(player);
+                } else if (premiumUuid == null && plugin.getCore().isDebug()) {
                     plugin.getLog().info(
                         "Skipping AuthMe premium marking for {}: no verified UUID",
                         player.getName());
