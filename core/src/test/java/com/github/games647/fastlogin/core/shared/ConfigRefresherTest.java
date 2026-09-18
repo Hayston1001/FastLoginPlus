@@ -194,4 +194,22 @@ class ConfigRefresherTest {
             return provider.load(reader);
         }
     }
+
+    @Test
+    void refreshedConfigEndsWithSingleTrailingNewline() throws IOException {
+        // The bundled templates end with a newline, so the rewritten file must
+        // too — otherwise a git-managed config.yml gains a
+        // "\ No newline at end of file" diff on every startup.
+        for (String template : Arrays.asList(FULL_TEMPLATE, PROXY_TEMPLATE)) {
+            // copyResource always targets the same file name, so clear it first
+            Files.deleteIfExists(tempDir.resolve("config.yml"));
+            Path config = copyResource(template);
+
+            ConfigRefresher.refresh(getClass().getClassLoader(), config, load(config), template);
+
+            String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
+            assertTrue(output.endsWith("\n"), template + " must end with a newline");
+            assertFalse(output.endsWith("\n\n"), template + " must not end with a blank line");
+        }
+    }
 }

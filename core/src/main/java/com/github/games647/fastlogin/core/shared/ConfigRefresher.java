@@ -197,11 +197,12 @@ public final class ConfigRefresher {
     private static void writeOutput(List<String> output, Path configPath)
             throws IOException {
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < output.size(); i++) {
-            sb.append(output.get(i));
-            if (i < output.size() - 1) {
-                sb.append('\n');
-            }
+        for (String line : output) {
+            // Every line gets a trailing newline, including the last one: the
+            // bundled templates end with one, so the rewritten file must too.
+            // Otherwise a git-managed config.yml shows a spurious
+            // "\ No newline at end of file" diff on every startup.
+            sb.append(line).append('\n');
         }
         byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
         // Atomic rewrite (0.5.0/F026): a crash mid-write must never truncate
