@@ -147,9 +147,9 @@
 - **其他**: 离线白名单在出错时 fail-closed; bungee 登录/成功处理器对缺失会话判空; cracked 自助
   命令发送正确的消息; bukkit 更新检查间隔与文档的小时语义一致; 对已断开玩家的补踢改为静默跳过
   (例如原版"登录耗时过长"已将其踢出时); 清理死代码与失效语言键; 修正失实文档; 多处判空与竞态小修.
-- **插件消息认证(后端 → 代理)**: `ch-st`、`del-st`、`succ` 三个通道现在携带发送方后端的代理白名单作为尾随字段, 代理端在校验回传集合不包含自身 ID 时丢弃消息并输出 WARN(fail-closed)—— 封堵最后一条无认证的插件消息通道, 此前网络内任意后端都可以伪造正版切换、删除或成功回执来篡改代理端数据库
+- **插件消息认证(后端 → 代理)**: `ch-st`, `del-st`, `succ` 三个通道现在携带发送方后端的代理白名单作为尾随字段, 代理端在校验回传集合不包含自身 ID 时丢弃消息并输出 WARN(fail-closed)—— 封堵最后一条无认证的插件消息通道, 此前网络内任意后端都可以伪造正版切换, 删除或成功回执来篡改代理端数据库
 - 新增 `verify-backend-messages` 配置键(代理端模板): 仅在滚动升级期间临时设为 `false` —— 先升级全部后端, 最后升级代理(旧后端不带回传字段会被拒绝). 单代理网络下等价于共享密钥; 多代理网络中被入侵的后端仍可回显自身白名单(信任模型边界已在代码注释与设计文档中说明)
-- **存储并发**: 新增 64 条纹的名字级锁覆盖全部 load-modify-save 窗口(登录流程、强制登录持久化、代理端切换、成功回执落库、premium/cracked 命令), 同一玩家的并发流程不再互相静默覆盖; 快速连续的 `/flp premium|cracked` 也不再重复落库/重复触发事件
+- **存储并发**: 新增 64 条纹的名字级锁覆盖全部 load-modify-save 窗口(登录流程, 强制登录持久化, 代理端切换, 成功回执落库, premium/cracked 命令), 同一玩家的并发流程不再互相静默覆盖; 快速连续的 `/flp premium|cracked` 也不再重复落库/重复触发事件
 - **SQLite upsert**: 首次保存改为 `INSERT ... ON CONFLICT(Name) DO UPDATE`, 并带字节级大小写守卫(与 MySQL 的 HEX 保护对齐), 两个并发的首次保存会收敛为一行而不是丢失记录; upsert 走更新分支且 `getGeneratedKeys()` 无行时回退按名查询回填 rowId; 保存失败通过 `saveQuietly` 上报而不是静默吞掉. 回归测试使用真实 SQLite 数据库, 含去掉锁必失败的判别用例
 - **Velocity**: `EventTask.withContinuation` 的续体现在在所有路径上恰好 resume 一次 —— 每事件一个 CAS 守卫, 所有 resume 收敛到 `resumeOnce`; 应用反机器人决策(或触发反机器人事件)抛出异常时会被捕获并仍然恢复登录, 不再把连接挂死到读超时
 - **Bukkit**: configure 阶段 premium 分支在载体玩家缺失时补上防御性中继调度(与 Folia 分支对齐)—— 空服期间排队的正版切换不再要等重启才能投递
@@ -165,7 +165,7 @@
 - Retry-task accumulation bounded: `queueToggle`/`queueDelete` now report whether a NEW entry was created, and commands only schedule a retry task for new entries — an already-queued entry keeps its live task, which picks up overwritten values at send time.
 - Known limitations (documented, unchanged by design): the pending queue is per-backend (a toggle queued on backend A is delivered when A has a player online, not on other backends); entries have no TTL — admin intent is preserved until delivered or until proxy support is disabled (`clearAll`).
 
-- 修复异值双击竞态: 控制台先执行 `/flp premium X` 再执行 `/flp cracked X` 时, 中继任务可能发送任务创建时捕获的旧值 —— 现在中继任务通过新增的 `PendingRelayStore.removeToggle` 原子地取出队列当前值再发送, 保证最后一条命令生效(bukkit、folia 及 Paper configure 阶段的自中继路径). 
+- 修复异值双击竞态: 控制台先执行 `/flp premium X` 再执行 `/flp cracked X` 时, 中继任务可能发送任务创建时捕获的旧值 —— 现在中继任务通过新增的 `PendingRelayStore.removeToggle` 原子地取出队列当前值再发送, 保证最后一条命令生效(bukkit, folia 及 Paper configure 阶段的自中继路径). 
 - 修复 pending cracked 在目标玩家本人连入时被 Paper configure 监听器静默吞掉的问题(跳过 autoRegister 的同时不再清除队列条目): 条目保留并在任意玩家进入 PLAY 阶段后转发给代理, 代理数据库实际切换为 cracked. 
 - 修复 Folia 载体玩家断连竞态: 异步在线检查与 global-region 执行之间玩家退出时, 任务会先复查 `isOnline()` 再取队列条目, 载体已离开则重新链式重试; 发送本身失败时回滚入队并重试(toggle 与 delete 一致). 
 - 代理端(bungee + velocity)不再对"本来就是盗版"的目标玩家执行 kick: 无状态变化的切换与 already-premium 跳过行为对齐, 同时遵守 `kick-toggle: false` 配置, 并移除无操作时误导性的"已移除高级登录"踢出文案. 
@@ -192,7 +192,7 @@
 - The decision to keep the ProtocolLib login listener registered as an async handler is now documented in `PROTOCOLLIB-ASYNC-DESIGN.md` at the repository root: rationale, compensating controls, residual risk with operator guidance for the startup self-check warning, and re-evaluation triggers
 - A misleading comment in the ProtocolLib kick source was corrected (bukkit + folia)
 
-- 保持 ProtocolLib 登录监听器以 async 方式注册的决策已记录到仓库根目录的 `PROTOCOLLIB-ASYNC-DESIGN.md`: 决策理由、补偿措施、残余风险与启动自检告警的处置指引、重新评估触发条件
+- 保持 ProtocolLib 登录监听器以 async 方式注册的决策已记录到仓库根目录的 `PROTOCOLLIB-ASYNC-DESIGN.md`: 决策理由, 补偿措施, 残余风险与启动自检告警的处置指引, 重新评估触发条件
 - 修正 ProtocolLib 踢出源码中的一处误导性注释(bukkit + folia)
 
 ### Reminder
@@ -209,7 +209,7 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 
 - The offline relay queue for proxy toggle/delete messages now survives restarts: messages are persisted to `pending-relay.json` (atomic rewrite), restored on startup, and corrupt files are moved aside instead of crashing the plugin. Toggles/deletes queued while nobody was online to carry them are now eventually delivered to the proxy once a player joins again.
 
-- 代理切换/删除消息的离线中继队列现在可以跨重启存活: 消息持久化到 `pending-relay.json`(原子重写)、启动时恢复, 损坏文件会被移开而不是导致插件崩溃. 此前仅存在内存中的队列(重启即丢), 现在会在玩家重新上线后最终送达代理. 
+- 代理切换/删除消息的离线中继队列现在可以跨重启存活: 消息持久化到 `pending-relay.json`(原子重写), 启动时恢复, 损坏文件会被移开而不是导致插件崩溃. 此前仅存在内存中的队列(重启即丢), 现在会在玩家重新上线后最终送达代理. 
 
 ### /flp toggle null-profile guards
 
@@ -230,8 +230,8 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 - `del-st` 消息现在携带 `isSourceInvoker` 标志: 玩家自己执行 `/flp delete` 时结果消息发给玩家本人, 控制台发起(或借中继玩家转发)时结果发给代理控制台 —— 中继玩家不再收到无关的删除结果
 - 后端无玩家在线时不再静默丢弃: 删除请求入队并每秒重试直到有玩家上线(与 toggle 命令行为对齐); Folia 因无全局循环调度器改用链式延迟任务
 - 代理端 `/flp delete` 在数据库查询本身失败时提示 `database-error`(不再谎报"记录不存在"), 删除成功时 fire 正版切换事件, 且 `deleteProfile` 返回 false 时复查记录以区分真失败与并发删除
-- standalone 报错路径改用本地化 `database-error` 消息, 移除硬编码英文; 读取旧格式消息(仅玩家名、无标志)时降级为"控制台发起"
-- 新增 `DeletePremiumMessageTest`: 覆盖往返序列化、控制台中继标志与旧格式容错
+- standalone 报错路径改用本地化 `database-error` 消息, 移除硬编码英文; 读取旧格式消息(仅玩家名, 无标志)时降级为"控制台发起"
+- 新增 `DeletePremiumMessageTest`: 覆盖往返序列化, 控制台中继标志与旧格式容错
 
 ### Per-platform config templates
 
@@ -240,8 +240,8 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 - ConfigRefresher preserves values for scalar keys written without a template value (e.g. `ServerRSAPublicKeyFile`)
 - `loadFile` defaults now follow the selected config template (backend vs proxy), and `setConfigTemplate` fails fast when called after `load` instead of silently misbehaving
 
-- BungeeCord/Velocity 现在使用专属的 `config-proxy.yml` 模板生成 `config.yml`: 后端专属键(`verifyClientKeys`、`respectIpLimit`)不再出现, 注释描述代理端职责(决策方: Mojang 查询、数据库、转发强制登录)
-- Bukkit/Folia 的配置注释现在标明代理子服模式下失效(或仅部分生效)的键 — `database`、`anti-bot`、Floodgate 相关键、JoinManagement 相关键等
+- BungeeCord/Velocity 现在使用专属的 `config-proxy.yml` 模板生成 `config.yml`: 后端专属键(`verifyClientKeys`, `respectIpLimit`)不再出现, 注释描述代理端职责(决策方: Mojang 查询, 数据库, 转发强制登录)
+- Bukkit/Folia 的配置注释现在标明代理子服模式下失效(或仅部分生效)的键 — `database`, `anti-bot`, Floodgate 相关键, JoinManagement 相关键等
 - ConfigRefresher 现在会保留模板中无默认值的标量键(如 `ServerRSAPublicKeyFile`)的用户值
 
 ### Proxy premium row persistence
@@ -254,7 +254,7 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 - 代理在验证正版会话后现在由自身直接写入 `premium=true` 行(`ForceLoginManagement` 的 null hook 分支), 不再单独依赖后端 `SuccessMessage` 回执 —— AuthMe 6.0 代理部署下该回执不会发送(REGISTER 动作因 AuthMe 记录已存在跳过 ForceLoginTask; LOGIN 动作 `forceLogin` 因 `AsynchronousJoin` 已认证返回 false)
 - 已核实正版但认证插件报失败(`forceLogin` 返回 false)的会话现在也会向代理补发回执, 恢复回执持久化通道
 - 修复 #5: 有正版记录的玩家不会再因会话过期被 `secondAttemptCracked` 放行进离线模式
-- 新增 `ForceLoginManagementTest`, 覆盖代理 null 分支落库、行升级语义、AuthMe 6.0 bypass 补发回执、成功路径回归与 cracked 路径回归
+- 新增 `ForceLoginManagementTest`, 覆盖代理 null 分支落库, 行升级语义, AuthMe 6.0 bypass 补发回执, 成功路径回归与 cracked 路径回归
 
 ### SQLite case-insensitive names
 
@@ -262,15 +262,15 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 - On startup, an existing case-sensitive `premium` table is migrated in one transaction (rename → recreate → copy → drop); the migration is idempotent, preserves all rows, and keeps one row per name variant when a database already contains premium + cracked rows that differ only by case (premium wins, otherwise the oldest row)
 - Add `SQLiteStorageTest` covering case-insensitive lookup, case-variant duplicate rejection, legacy table migration and migration idempotency
 
-- SQLite `premium` 表的 `Name` 列现在使用 `COLLATE NOCASE` 创建: Minecraft 玩家名不区分大小写("Steve" 与 "steve" 是同一账号), 同一玩家不会再出现仅大小写不同的两行(一行正版、一行离线) —— 与 MySQL 默认不区分大小写的 collation 对齐
+- SQLite `premium` 表的 `Name` 列现在使用 `COLLATE NOCASE` 创建: Minecraft 玩家名不区分大小写("Steve" 与 "steve" 是同一账号), 同一玩家不会再出现仅大小写不同的两行(一行正版, 一行离线) —— 与 MySQL 默认不区分大小写的 collation 对齐
 - 启动时对既有的区分大小写 `premium` 表做一次性迁移(重命名 → 重建 → 复制 → 删除, 单事务), 迁移幂等且保留所有行
-- 新增 `SQLiteStorageTest`, 覆盖不敏感查找、大小写变体重复行拒绝、旧表迁移与迁移幂等性
+- 新增 `SQLiteStorageTest`, 覆盖不敏感查找, 大小写变体重复行拒绝, 旧表迁移与迁移幂等性
 
 ### AsyncToggleMessage NPE on database failure
 
 - `/premium` and `/cracked` toggles (BungeeCord + Velocity) no longer throw NullPointerException when the profile lookup fails (SQLite lock timeout, MySQL down, dropped connection). The task aborts, sends the new `database-error` message to the invoker and logs the abort — previously the command silently did nothing and only a stack trace appeared on the proxy console
 
-- BungeeCord 与 Velocity 的 `/premium`、`/cracked` 切换在数据库查询失败时(SQLite 锁超时、MySQL 宕机、连接断开)不再抛空指针异常: 任务中止, 向操作者发送新增的 `database-error` 提示并记录日志 —— 此前命令无声无息地无效, 只在代理控制台留下一行堆栈
+- BungeeCord 与 Velocity 的 `/premium`, `/cracked` 切换在数据库查询失败时(SQLite 锁超时, MySQL 宕机, 连接断开)不再抛空指针异常: 任务中止, 向操作者发送新增的 `database-error` 提示并记录日志 —— 此前命令无声无息地无效, 只在代理控制台留下一行堆栈
 
 ### Other Bug Fixes
 
@@ -288,7 +288,7 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 
 - Added proxy-side debug logs for the premium toggle flow and `/flp` command diagnostics (registration result, invocation)
 
-- 新增代理端正版切换流程的 debug 日志与 `/flp` 命令诊断日志(注册结果、命令调用)
+- 新增代理端正版切换流程的 debug 日志与 `/flp` 命令诊断日志(注册结果, 命令调用)
 
 ### Documentation
 
@@ -325,7 +325,7 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 - When a player switches from premium to cracked, FLP now thoroughly cleans AuthMe records: clears premium flag, force-unregisters accounts (supports AuthMe 5.x and 6.0), purges in-memory caches
 - Second-chance cleanup via `ensureNotPremium()` on cracked login
 
-- 正版玩家切换到离线时, FLP 彻底清理 AuthMe 记录：清除 premium 标记, 强制注销账号(支持 AuthMe 5.x 和 6.0), 清除内存缓存
+- 正版玩家切换到离线时, FLP 彻底清理 AuthMe 记录: 清除 premium 标记, 强制注销账号(支持 AuthMe 5.x 和 6.0), 清除内存缓存
 - 离线登录时通过 `ensureNotPremium()` 二次兜底清理
 
 ### Bug Fixes
@@ -375,7 +375,7 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 - Fix SkinsRestorer skin overwritten by Paper filledProfileCache — set empty placeholder textures to prevent `complete(true)` pulling stale skin
 - Guard against null `floodgate_data_handler` in ProtocolLib pipeline — prevent NPE if Floodgate renames/removes the handler
 
-- 反机器人模块审计 — 6 个 bug 修复：TickingRateLimiter 时钟回退不再抛异常, 批量过期陈旧记录, compareTo 使用正确的 expireTime, 全局限制在每 IP 限制之前检查, 每 100 连接定期清理, 日志中用户名消毒
+- 反机器人模块审计 — 6 个 bug 修复: TickingRateLimiter 时钟回退不再抛异常, 批量过期陈旧记录, compareTo 使用正确的 expireTime, 全局限制在每 IP 限制之前检查, 每 100 连接定期清理, 日志中用户名消毒
 - 修复 Paper 上 `forwardSkin: false` 无效 — PaperCacheListener 现在在设置皮肤前检查配置
 - 修复 SkinsRestorer 皮肤被 Paper filledProfileCache 覆盖 — 设置空占位纹理防止 `complete(true)` 拉取旧皮肤
 - 防止 ProtocolLib pipeline 中 `floodgate_data_handler` 为 null — 避免 Floodgate 重命名/移除 handler 时 NPE
@@ -460,8 +460,8 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 - Lazy re-assert on each premium login to handle `/authme reload` re-registering the listener
 
 - FLP 自动接管 AuthMe 6.0 正版验证——无需手动设置 `enablePremium=true`
-- `forceEnablePremium()`：通过 AuthMe 的 Settings API 设置 `enablePremium=true` 并持久化到 config.yml
-- `unregisterPremiumPacketListener()`：注销 AuthMe 的 PacketEvents 监听器, FLP 成为唯一验证源
+- `forceEnablePremium()`: 通过 AuthMe 的 Settings API 设置 `enablePremium=true` 并持久化到 config.yml
+- `unregisterPremiumPacketListener()`: 注销 AuthMe 的 PacketEvents 监听器, FLP 成为唯一验证源
 - 每次正版登录时懒式重新断言, 防止 `/authme reload` 重新注册监听器
 
 ### AuthMe 6.0 First-Time Premium Fix
@@ -496,7 +496,7 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 
 - 修复 AuthMe 6.0 preJoin 对话框阻塞正版玩家
 - 修复对话框阻塞连接导致 premium 标记永远无法写入的死锁
-- 新增启动验证：当 AuthMe 6.0 的 preJoin 开启但 `enablePremium` 未启用时输出 ERROR 日志
+- 新增启动验证: 当 AuthMe 6.0 的 preJoin 开启但 `enablePremium` 未启用时输出 ERROR 日志
 
 ### Tab Completion
 
@@ -546,7 +546,7 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 
 - 新增 UpdateChecker 检查 GitHub Releases, 支持启动时和周期性检查
 - OP 玩家登录时会收到更新通知
-- 配置项：check-update(默认：true)
+- 配置项: check-update(默认: true)
 
 ### FastLoginAntiBotEvent
 
@@ -565,12 +565,12 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 - AntiBotService: refactored as multi-layer orchestrator (trusted IP → ban check → per-IP limit → global limit)
 - New config keys: per-ip-connections, per-ip-expire, burst-limit, burst-window, ban-duration, trusted-ips
 
-- PerIpRateLimiter：双窗口(突发 + 长期)每 IP 速率限制
-- IpBanManager：临时 IP 封禁, 自动过期
-- TrustedIpSet：不可变白名单, 绕过所有反机器人检查
-- WindowCounter：每 IP 线程安全双窗口计数器
-- AntiBotService：重构为多层编排器(可信 IP → 封禁检查 → 每 IP 限制 → 全局限制)
-- 新配置项：per-ip-connections, per-ip-expire, burst-limit, burst-window, ban-duration, trusted-ips
+- PerIpRateLimiter: 双窗口(突发 + 长期)每 IP 速率限制
+- IpBanManager: 临时 IP 封禁, 自动过期
+- TrustedIpSet: 不可变白名单, 绕过所有反机器人检查
+- WindowCounter: 每 IP 线程安全双窗口计数器
+- AntiBotService: 重构为多层编排器(可信 IP → 封禁检查 → 每 IP 限制 → 全局限制)
+- 新配置项: per-ip-connections, per-ip-expire, burst-limit, burst-window, ban-duration, trusted-ips
 
 ### Bug Fixes
 
@@ -590,7 +590,7 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 - Remove legacy standalone command definitions from plugin.yml
 - Update command references in config comments and user-facing messages
 
-- 统一所有命令到 `/flp` 命名空间：`/premium` → `/flp premium`, `/cracked` → `/flp cracked`, `/fldelete` → `/flp delete`
+- 统一所有命令到 `/flp` 命名空间: `/premium` → `/flp premium`, `/cracked` → `/flp cracked`, `/fldelete` → `/flp delete`
 - 从 plugin.yml 移除旧的独立命令定义
 - 更新配置注释和用户消息中的命令引用
 
@@ -644,7 +644,7 @@ Full compatibility with AuthMe 6.0's premium system. FLP auto-detects AuthMe ver
 - **Startup logging** — detailed AuthMe compatibility info on server start (version, enablePremium status, active behavior)
 - All reflection calls wrapped in try-catch — falls back to no-op if AuthMe internal classes change
 
-完整兼容 AuthMe 6.0 的正版系统. FLP 启动时自动检测 AuthMe 版本并适配, 无需用户手动配置：
+完整兼容 AuthMe 6.0 的正版系统. FLP 启动时自动检测 AuthMe 版本并适配, 无需用户手动配置: 
 
 - **运行时版本检测** — 通过 `PendingPremiumCache` 类存在性判断(比版本号解析更可靠)
 - **正版状态注入** — Mojang 验证后通过反射注入 `PendingPremiumCache` + `PremiumLoginVerifier`, 跳过 AuthMe 的 Pre-Join 对话框
@@ -664,7 +664,7 @@ Added automatic retry for Mojang session server verification (Spigot+ProtocolLib
 - HTTP 204 (auth rejection) is NOT retried — only network errors
 - New kick message `session-retry-exhausted` shown when all retries fail
 
-新增 Mojang 会话服务器验证自动重试(仅 Spigot+ProtocolLib)：
+新增 Mojang 会话服务器验证自动重试(仅 Spigot+ProtocolLib): 
 
 - 当 `hasJoined` 因网络错误(IOException)失败时, 插件会自动重试, 最多 `mojang-retry-count` 次(默认 3), 每次间隔 `mojang-retry-delay` 毫秒(默认 1000)
 - HTTP 204(认证拒绝)不会重试, 仅重试网络错误
@@ -678,7 +678,7 @@ Improved login flow log readability:
 - Moved internal details (packet type override, encryption setup) to DEBUG level
 - Added "Verifying session for {player}" log at session check start
 
-优化登录流程日志可读性：
+优化登录流程日志可读性: 
 
 - 用人类可读的消息替代原始 ProtocolLib 包名输出
 - 将内部细节(包类型覆盖, 加密初始化)降为 DEBUG 级别
@@ -698,7 +698,7 @@ Fixed FastLogin overriding SkinsRestorer custom skins ([TuxCoding/FastLogin#1347
 - Added `SkinsRestorerCompat` helper using SR's official API (`PlayerStorage.getSkinIdOfPlayer`)
 - SkinsRestorer listed as `softdepend` in `plugin.yml` to ensure correct load order
 
-修复 FastLogin 覆盖 SkinsRestorer 自定义皮肤的问题([TuxCoding/FastLogin#1347](https://github.com/TuxCoding/FastLogin/issues/1347))：
+修复 FastLogin 覆盖 SkinsRestorer 自定义皮肤的问题([TuxCoding/FastLogin#1347](https://github.com/TuxCoding/FastLogin/issues/1347)): 
 
 - 通过 SkinsRestorer `/skin` 命令设置的皮肤现在会被保留 — 当 SR 有玩家的自定义皮肤时, FastLoginPlus 会跳过自身皮肤
 - 新增 `SkinsRestorerCompat` 辅助类, 使用 SR 官方 API(`PlayerStorage.getSkinIdOfPlayer`)
@@ -708,7 +708,7 @@ Fixed FastLogin overriding SkinsRestorer custom skins ([TuxCoding/FastLogin#1347
 
 - **`forwardSkin: false` not working on Paper**: The `PaperCacheListener` was always registered on Paper regardless of the `forwardSkin` config. Now respects the setting.
 
-- **Paper 服务端 `forwardSkin: false` 无效**：`PaperCacheListener` 在 Paper 上无论 `forwardSkin` 设置如何都会注册, 现已修复为正确读取配置. 
+- **Paper 服务端 `forwardSkin: false` 无效**: `PaperCacheListener` 在 Paper 上无论 `forwardSkin` 设置如何都会注册, 现已修复为正确读取配置. 
 
 ## v0.0.2
 
@@ -722,7 +722,7 @@ Replaced `switchMode` with a new standalone **offline-whitelist** feature:
 - Existing cracked players in the database continue to join normally
 - The Mojang API check is automatically triggered when `offline-whitelist` is enabled (no need to enable `autoRegister` or `nameChangeCheck` separately)
 
-用新的独立 **离线白名单** 功能替代 `switchMode`：
+用新的独立 **离线白名单** 功能替代 `switchMode`: 
 
 - `offline-whitelist: true` — 仅数据库中已有记录的玩家可以离线模式加入
 - 新的离线玩家会被踢出, 显示本地化消息
@@ -755,7 +755,7 @@ FastLoginPlus 首个独立版本, 基于 [FastLogin](https://github.com/TuxCodin
 
 - **switchMode kicked new premium players**: When `switchMode` was enabled, premium players joining for the first time were incorrectly kicked ([#1359](https://github.com/TuxCoding/FastLogin/issues/1359)). Now premium players are properly detected via Mojang API and allowed to join. (Note: `switchMode` has since been replaced by `offline-whitelist` in v0.0.2)
 
-- **switchMode 误踢正版新玩家**：上游 `switchMode` 开启后, 首次加入的正版玩家会被错误踢出([#1359](https://github.com/TuxCoding/FastLogin/issues/1359)). 修复后, 正版玩家会通过 Mojang API 自动检测并正确放行. (注：`switchMode` 已在 v0.0.2 中被 `offline-whitelist` 替代)
+- **switchMode 误踢正版新玩家**: 上游 `switchMode` 开启后, 首次加入的正版玩家会被错误踢出([#1359](https://github.com/TuxCoding/FastLogin/issues/1359)). 修复后, 正版玩家会通过 Mojang API 自动检测并正确放行. (注: `switchMode` 已在 v0.0.2 中被 `offline-whitelist` 替代)
 
 ### SQLite Concurrency
 
@@ -776,7 +776,7 @@ The upstream `fldelete` was bare-bones (hardcoded English, no premium protection
 - BungeeCord support via PluginMessage forwarding
 - Fires `BukkitFastLoginPremiumToggleEvent` on successful deletion
 
-上游的 `fldelete` 实现较为简陋(硬编码英文, 无 premium 保护, BungeeCord 下不可用), 本版本重写了完整实现：
+上游的 `fldelete` 实现较为简陋(硬编码英文, 无 premium 保护, BungeeCord 下不可用), 本版本重写了完整实现: 
 
 - 消息文本改为本地化, 支持多语言
 - 新增 premium 玩家保护——不允许删除在线模式玩家的记录
@@ -793,6 +793,6 @@ The upstream `fldelete` was bare-bones (hardcoded English, no premium protection
 
 - 内置 **英文**(`messages_en.yml`)和 **中文**(`messages_zh.yml`)语言文件
 - `config.yml` 中通过 `language` 选项指定使用的语言(`en` / `zh` / 自定义)
-- 支持自定义语言文件：设置任意值(如 `ja`), 插件自动加载 `messages_ja.yml`, 不存在时回退到英文
+- 支持自定义语言文件: 设置任意值(如 `ja`), 插件自动加载 `messages_ja.yml`, 不存在时回退到英文
 - 启动时自动检测语言文件完整性, 缺失的键值从英文默认文件补全
 - 配置文件注释改为中英双语
