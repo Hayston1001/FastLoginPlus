@@ -1,13 +1,82 @@
 # FastLoginPlus Changelog
 
+## v0.7.0
+
+> This release focuses on compatibility:  
+> *Enhanced support for AuthMeReloaded 6.0.0 and 6.0.1*;  
+> *Adapted for newer versions of BungeeCord*;  
+> *Optimized support for custom skins from SkinsRestorer*
+
+> 本次更新聚焦兼容性:  
+> *强化对 AuthMeReloaded 6.0.0 和 6.0.1 的支持*;  
+> *适配高版本 BungeeCord*;  
+> *优化对 SkinsRestorer 自定义皮肤的支持*
+
+### AuthMeReloaded 6.x
+
+- **Significantly reduced cases where players get stuck in dialogues on first login**: Players without AuthMe records will be registered during the login phase
+- **Premium login now writes the correct UUID**: Logs will be printed if writing fails, instead of marking it as successful; offline UUIDs will no longer be stored in the database as Mojang-verified UUIDs
+- **No longer prompt non-existent passwords**: FLP will no longer tell players an auto-registered password that was never saved
+- **Single source of premium status**: FLP keeps AuthMe's built-in premium verification disabled, blocks `/authme reload`, and pushes premium status changes to AuthMe's proxy plugin
+- **Block AuthMe's `/premium` and `/freemium` commands**: Prompt players to use the corresponding FLP commands to avoid database and player state inconsistency
+- **On Velocity**: Premium UUIDs are read from the player's original profile, and overwrites by AuthMeReloaded will no longer pollute them
+
+- **首次登录被对话框卡住的情况大大减少**: 没有 AuthMe 记录的玩家会在登录阶段就被注册
+- **正版登录现在会写入正确的 UUID**: 写入失败会打印日志,不再当成成功; 离线UUID 不再被当作 Mojang 验证过的 UUID 存进库里
+- **不再提示并不存在的密码**: FLP 不会再告诉玩家一个从未被保存过的自动注册密码
+- **正版状态只有一个来源**: FLP 保持 AuthMe 自带的正版验证关闭, 拦截 `/authme reload`, 并把正版状态变更推给 AuthMe 的代理插件
+- **拦截 AuthMe 的 `/premium` 与 `/freemium` 命令**: 提示玩家改用 FLP 相应命令, 避免数据库和玩家的状态混乱
+- **在 Velocity 上**: 正版 UUID 从玩家的原始档案读取, AuthMeReloaded 的改写不再污染它
+
+### BungeeCord
+
+- **Plugin available on newer BungeeCord versions**: Verified premium UUIDs are also sent alongside the traditional handshake; proxy connection classes are resolved at runtime
+
+- **插件在高版本 BungeeCord 上可用**: 已验证的正版 UUID 也会随传统握手一起发送; 代理的连接类改为运行时解析
+
+### SkinsRestorer
+
+- **Custom skins no longer conflict with FLP**: Players' custom skins persist after rejoin
+- **SR compatibility still works when `premiumUuid: false`**: FLP queries using the UUID obtained during verification instead of the UUID carried at connection time
+
+- **自定义皮肤不再与 FLP 竞争**: 玩家的自定义皮肤在重登后一直保留
+- **`premiumUuid: false` 时 SR 兼容仍生效**: FLP 先用验证时的 UUID 查询而非连接时携带的 UUID
+
+### Other fixes
+
+- Duplicate proxy messages on proxy backends no longer emit warning logs
+- Preserve trailing newlines when rewriting `config.yml`
+- Corrected description for `mojang-request-limit` (this option is functional)
+- Build now enforces minimum Java version checks for each module; dependency upgrades will no longer silently raise the required Java version
+- UUIDs verified by ProtocolSupport are no longer discarded
+
+- 代理后端上重复的代理消息不再输出警告日志
+- 重写 `config.yml` 时保留文件末尾的换行
+- 修正了 `mojang-request-limit` 的说明(该选项是生效的)
+- 构建现在会强制校验每个模块的 Java 版本下限, 依赖升级不会再悄悄抬高所需的 Java 版本
+- ProtocolSupport 验证过的 UUID 不再被丢弃
+
+### Upgrade notes
+
+- FLP modifies some AuthMeReloaded configurations to prevent compatibility issues: sets `enablePremium` to `true`; locks `premium.keepOfflineUuidCompatibility` of AuthMeBungee/AuthMeVelocity to `false`
+- Proxy users are recommended to update FLP on both backend and frontend at the same time to avoid unexpected issues
+
+- FLP 会修改 AuthMeReloaded 的部分配置以避免兼容性问题: 把 `enablePremium` 设为 `true`; 把 AuthMeBungee/AuthMeVelocity 的 `premium.keepOfflineUuidCompatibility` 固定为 `false`
+- 使用代理的用户建议同时更新前后端的 FLP 以避免出现非预期问题
+
+### Known issues
+
+- **Rare edge case**: Players disconnect while the AuthMeReloaded dialogue is open (backend logs `keepalive ... out-of-order`). This is currently identified as a server-side issue.
+
+- 极小概率: 玩家在 AuthMeReloaded 对话框打开期间断开(后端会记录 `keepalive ... out-of-order`). 目前定位为服务端侧问题
+
 ## v0.6.0
 
 > This is a release focused on stability fixes.
 
 ### Bug Fixes
 
-<details>
-<summary><strong>0.5.0 Audit Fixes</strong></summary>
+**0.5.0 Audit Fixes**
 
 - **AuthMe integration**: premium-record cleanup during cracked sessions is now fail-closed —
   a premium-flagged AuthMe record without a matching FastLogin profile row (database reset or
@@ -86,10 +155,7 @@
 - **Bukkit**: configure 阶段 premium 分支在载体玩家缺失时补上防御性中继调度(与 Folia 分支对齐)—— 空服期间排队的正版切换不再要等重启才能投递
 - **插件消息加固**: 登录动作消息的类型字节在读取时校验 —— 格式错误的客户端插件消息现在快速失败为监听器可捕获的异常, 不再抛出未捕获的 `ArrayIndexOutOfBoundsException`
 
-</details>
-
-<details>
-<summary><strong>Pending relay audit fixes</strong></summary>
+**Pending relay audit fixes**
 
 - Fixed a race where two conflicting console toggles (`/flp premium X` then `/flp cracked X`) could relay the stale captured value: the relay task now atomically removes the queue entry and sends the CURRENT queued value (`PendingRelayStore.removeToggle`), so the last command always wins (bukkit, folia and the Paper configure-phase self-relay path).
 - A pending cracked toggle for a player who joins while nobody else is online is no longer silently dropped by the Paper configure listener (autoRegister skip): the entry stays queued and is relayed to the proxy once any player reaches the PLAY phase, so the proxy database is actually flipped to cracked.
@@ -107,38 +173,27 @@
 - 重试任务堆积受限: `queueToggle`/`queueDelete` 现在返回是否新建了条目, 命令只为新条目安排重试任务 —— 已在队列中的条目沿用存活的重试任务, 其在发送时读取被覆盖后的最新值. 
 - 已知限制(设计如此, 保持不变): 排队队列是按后端隔离的(在 A 后端排队的 toggle 只在 A 有玩家上线时投递); 条目无 TTL —— 管理员意图会保留直到成功投递或代理支持被关闭(`clearAll`). 
 
-</details>
-
 ### Changes
 
-<details>
-<summary><strong>/flp help restricted to operators</strong></summary>
+**/flp help restricted to operators**
 
 - The bare `/flp` command now requires server operator permission: other senders receive the localized `no-permission` message
 
 - 裸 `/flp` 命令现在仅限服务器管理员(OP)使用: 其他发送者会收到本地化的 `no-permission` 提示
 
-</details>
-
-<details>
-<summary><strong>Quieter update-check failures</strong></summary>
+**Quieter update-check failures**
 
 - Update-check network failures are now logged as a single WARN line with the failure reason instead of an INFO entry with a full stack trace (the trace moved to debug level)
 
 - 更新检查的网络失败现在以一条简短的 WARN 日志记录失败原因, 不再以 INFO 级别输出完整堆栈(堆栈移至 debug 级别)
 
-</details>
-
-<details>
-<summary><strong>ProtocolLib async design record</strong></summary>
+**ProtocolLib async design record**
 
 - The decision to keep the ProtocolLib login listener registered as an async handler is now documented in `PROTOCOLLIB-ASYNC-DESIGN.md` at the repository root: rationale, compensating controls, residual risk with operator guidance for the startup self-check warning, and re-evaluation triggers
 - A misleading comment in the ProtocolLib kick source was corrected (bukkit + folia)
 
 - 保持 ProtocolLib 登录监听器以 async 方式注册的决策已记录到仓库根目录的 `PROTOCOLLIB-ASYNC-DESIGN.md`: 决策理由、补偿措施、残余风险与启动自检告警的处置指引、重新评估触发条件
 - 修正 ProtocolLib 踢出源码中的一处误导性注释(bukkit + folia)
-
-</details>
 
 ### Reminder
 
@@ -154,7 +209,7 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 
 - The offline relay queue for proxy toggle/delete messages now survives restarts: messages are persisted to `pending-relay.json` (atomic rewrite), restored on startup, and corrupt files are moved aside instead of crashing the plugin. Toggles/deletes queued while nobody was online to carry them are now eventually delivered to the proxy once a player joins again.
 
-- 代理切换/删除消息的离线中继队列现在可以跨重启存活：消息持久化到 `pending-relay.json`(原子重写)、启动时恢复, 损坏文件会被移开而不是导致插件崩溃. 此前仅存在内存中的队列(重启即丢), 现在会在玩家重新上线后最终送达代理. 
+- 代理切换/删除消息的离线中继队列现在可以跨重启存活: 消息持久化到 `pending-relay.json`(原子重写)、启动时恢复, 损坏文件会被移开而不是导致插件崩溃. 此前仅存在内存中的队列(重启即丢), 现在会在玩家重新上线后最终送达代理. 
 
 ### /flp toggle null-profile guards
 
