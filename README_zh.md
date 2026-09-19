@@ -6,7 +6,7 @@
 
 许多 Minecraft 服务器运行在"离线模式"(不走 Mojang 认证)以允许盗版客户端加入, 但这迫使所有玩家——包括已购游戏的正版玩家——每次进入都要输密码.FastLoginPlus 在登录时通过 Mojang API 检查玩家身份: 如果是正版, 直接跳过登录插件, 自动使用正版 UUID 和皮肤.
 
-> 必需依赖 [ProtocolLib](https://github.com/dmulloy2/ProtocolLib). [ForDetails→](PROTOCOLLIB-ASYNC-DESIGN.md)
+> 与 [ProtocolLib](https://github.com/dmulloy2/ProtocolLib) 配合使用. [ForDetails→](PROTOCOLLIB-ASYNC-DESIGN.md)
 
 ## 功能
 
@@ -34,9 +34,9 @@
 
 ## 快速开始
 
-**Spigot/Paper**: 将 `FastLoginPlusBukkit.jar` `一个登录插件` 和 [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) 放入 `plugins/` → 设置 `online-mode=false`
+**Spigot/Paper**: 将 `FastLoginPlusBukkit.jar`、一个登录插件和 [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) 放入 `plugins/` → 设置 `online-mode=false`
 
-**Folia**: 将 `FastLoginPlusFolia.jar` `一个登录插件` 和 [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) 放入 `plugins/` → 设置 `online-mode=false`
+**Folia**: 将 `FastLoginPlusFolia.jar`、一个登录插件和 [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) 放入 `plugins/` → 设置 `online-mode=false`
 
 ### 代理配置
 
@@ -48,7 +48,7 @@
 后端只接受来自受信任代理的登录指令. 每个代理有一个唯一 UUID, 需要加入后端的白名单: 
 
 - **Velocity** — FLP 首次启动时自动生成 UUID 到 `plugins/fastloginplus/proxyId.txt`. 从该文件复制 UUID. 
-- **BungeeCord** — 使用 BungeeCord 自身的实例 UUID, 在 `bungee/config.yml` 的 `connection_uuid` 字段中. 
+- **BungeeCord** — 使用 BungeeCord 自身的实例 UUID, 即 BungeeCord `config.yml` 中的 `stats` 值(BungeeCord 首次启动时会写入并一直复用; 删掉该行会导致它重新生成, 所有后端白名单随之失效). 
 
 将 UUID 粘贴到每个后端服务器的 `plugins/fastloginplus/allowed-proxies.txt` 中, 每行一个 UUID. 添加后重启后端. 
 
@@ -101,9 +101,11 @@ FLP 内置**两套配置模板**；每个平台根据自身角色生成 `config.
 
 ## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 5.x / 6.0 支持
 
-FastLoginPlus 同时支持 AuthMeReloaded 5.x 和 6.0. AuthMeReloaded 6.0 新增了 **preJoin 对话框(Paper) 以及 enablePremium 配置**, FLP 会自动启用 `enablePremium: true` 并注销 AuthMe 自带的正版验证监听器. 无需手动配置. 
+FastLoginPlus 同时支持 AuthMeReloaded 5.x 和 6.0. AuthMeReloaded 6.0 新增了 **preJoin 对话框(Paper) 以及 enablePremium 配置**, FLP 会自动启用 `enablePremium: true` 并注销 AuthMe 自带的正版验证监听器.
 
-若安装了 AuthMe 的代理插件(`AuthMeBungee` / `AuthMeVelocity`), FLP 还会将 `premium.keepOfflineUuidCompatibility` 固定为 `false`(默认值). 也就是说, 后端拿到正版 UUID 还是离线 UUID 由 FLP 自己的 `premiumUuid` 配置唯一决定.
+在 FLP 接管正版处理期间, AuthMe 自带的 `/premium` 与 `/freemium` 会被拦截, 提示玩家改用 `/flp premium` / `/flp cracked`.
+
+若安装了 AuthMe 的代理插件(`AuthMeBungee` / `AuthMeVelocity`), FLP 还会将 `premium.keepOfflineUuidCompatibility` 固定为 `false`(AuthMe 默认值). 也就是说, 后端拿到正版 UUID 还是离线 UUID 由 FLP 自己的 `premiumUuid` 配置唯一决定.
 
 ## 基岩版玩家支持(Geyser/Floodgate)
 
@@ -125,6 +127,9 @@ FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入
 | `/flp delete <玩家>` | 删除玩家记录 | `fastloginplus.bukkit.command.delete` | op |
 
 添加 `.other` 后缀可操作其他玩家(默认: op).
+
+- 不带子命令的 `/flp` 会打印版本与用法, 且仅限服务器管理员(OP)使用.
+- Folia 上的权限前缀是 `fastloginplus.folia.command.*`, 而非 `fastloginplus.bukkit.command.*`.
 
 > 当玩家执行指令 `/flp cracked` 从正版验证模式切换至离线模式时, FLP 会自动清除该玩家在 AuthMeReloaded 内的账号数据, 保证玩家重新加入服务器后可通过自行设置的密码正常登录. 若未执行该数据清理操作, 玩家再次进入服务器时 AuthMeReloaded 会强制要求登录; 但该玩家此前为正版账号时, FLP 已自动使用随机密码完成注册, 玩家本身并不知晓该密码.  
 > 对于非 Authme 登录插件, FLP 暂时没有类似处理, 需要手动解决.

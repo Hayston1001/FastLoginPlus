@@ -14,18 +14,18 @@
 
 ### AuthMeReloaded 6.x
 
-- **Significantly reduced cases where players get stuck in dialogues on first login**: Players without AuthMe records will be registered during the login phase
+- **Significantly reduced cases where players get stuck in dialogues on first login**: Players without AuthMeReloaded records will be registered during the login phase
 - **Premium login now writes the correct UUID**: Logs will be printed if writing fails, instead of marking it as successful; offline UUIDs will no longer be stored in the database as Mojang-verified UUIDs
 - **No longer prompt non-existent passwords**: FLP will no longer tell players an auto-registered password that was never saved
-- **Single source of premium status**: FLP keeps AuthMe's built-in premium verification disabled, blocks `/authme reload`, and pushes premium status changes to AuthMe's proxy plugin
-- **Block AuthMe's `/premium` and `/freemium` commands**: Prompt players to use the corresponding FLP commands to avoid database and player state inconsistency
+- **Single source for premium status**: FLP keeps AuthMeReloaded's built-in premium verification disabled, retakes control after `/authme reload`, and pushes premium status changes to AuthMeReloaded's proxy plugin
+- **Block AuthMeReloaded's `/premium` and `/freemium` commands**: Prompt players to use the corresponding FLP commands to avoid database and player state inconsistency
 - **On Velocity**: Premium UUIDs are read from the player's original profile, and overwrites by AuthMeReloaded will no longer pollute them
 
-- **首次登录被对话框卡住的情况大大减少**: 没有 AuthMe 记录的玩家会在登录阶段就被注册
+- **首次登录被对话框卡住的情况大大减少**: 没有 AuthMeReloaded 记录的玩家会在登录阶段就被注册
 - **正版登录现在会写入正确的 UUID**: 写入失败会打印日志,不再当成成功; 离线UUID 不再被当作 Mojang 验证过的 UUID 存进库里
 - **不再提示并不存在的密码**: FLP 不会再告诉玩家一个从未被保存过的自动注册密码
-- **正版状态只有一个来源**: FLP 保持 AuthMe 自带的正版验证关闭, 拦截 `/authme reload`, 并把正版状态变更推给 AuthMe 的代理插件
-- **拦截 AuthMe 的 `/premium` 与 `/freemium` 命令**: 提示玩家改用 FLP 相应命令, 避免数据库和玩家的状态混乱
+- **正版状态来源单一化**: FLP 保持 AuthMeReloaded 自带的正版验证关闭, 并在 `/authme reload` 之后重新接管, 把正版状态变更推给 AuthMeReloaded 的代理插件
+- **拦截 AuthMeReloaded 的 `/premium` 与 `/freemium` 命令**: 提示玩家改用 FLP 相应命令, 避免数据库和玩家的状态混乱
 - **在 Velocity 上**: 正版 UUID 从玩家的原始档案读取, AuthMeReloaded 的改写不再污染它
 
 ### BungeeCord

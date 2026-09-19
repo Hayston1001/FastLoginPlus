@@ -124,11 +124,13 @@ Build requirements:
   per-module `maven.compiler.release` settings above make javac reject APIs
   newer than each module's target, so a single modern JDK is all you need —
   but do not use Java-9+ APIs in `core`/`bukkit` or Java-18+ APIs in
-  `bungee`/`velocity`.
-- **Maven 3.9+**. A git clone is expected (the build embeds the commit hash
-- **Maven 3.6.3+** (required by the plugins in use; 3.9.x is used for development).
-  A git clone is expected — the build embeds the commit hash into the final
-  JAR name and manifest.
+  `bungee`/`velocity`. Note that `--release` only guards the APIs *you* compile
+  against: it does not stop a newer dependency from silently raising the
+  module's *runtime* requirement, which is what the bytecode-floor check below
+  is for.
+- **Maven 3.6.3+** (required by the plugins in use; 3.9.x is used for
+  development). A git clone is expected — the build embeds the commit hash
+  into the final JAR name and manifest.
 
 Some auth-plugin APIs (CrazyLogin, UltraAuth, BungeeAuth) are provided as
 system-scoped JARs in the `lib/` directory of each module — no manual
@@ -151,7 +153,6 @@ mvn package -pl bukkit -am --batch-mode -DskipTests
 mvn package -pl folia -am --batch-mode -DskipTests
 ```
 
-Finished JARs land in the respective `target/` directories, named
 Finished JARs land in each module's `target/` directory, named like
 `FastLoginPlusBukkit-<version>-<commit>` (module name + revision + commit hash).
 
@@ -179,6 +180,15 @@ and verify before pushing:
 3. **Line endings and final newline** — `.gitattributes` normalizes all text
    files to LF and every file must end with a newline (`NewlineAtEndOfFile`).
    On Windows, let git handle conversion; do not commit CRLF.
+4. **Per-module runtime bytecode floor** (`enforceBytecodeVersion`, root
+   `pom.xml`, runs at `validate`) — every dependency shaded into a module must
+   not be compiled for a newer Java version than that module's own
+   `maven.compiler.release` (core/bukkit 8, bungee/velocity 17, folia 21).
+   Without it a dependency bump can raise the module's runtime requirement with
+   no build-time signal at all. Raising a floor is a deliberate decision:
+   change that module's `maven.compiler.release` and update `AGENTS.md` plus
+   both readmes together. `test` and `provided` scopes are excluded — test jars
+   never reach a user, and provided ones belong to the server or proxy.
 
 ## Testing
 
@@ -213,10 +223,15 @@ and verify before pushing:
   When adding a config option, decide which template(s) it belongs in and
   update both files as needed. Defaults shown to users come from these
   templates, not from code.
-- **Shaded dependencies** — HikariCP, SLF4J, SnakeYAML, and Gson are relocated
-  into the final JARs (relocation sets differ per module; see the shade-plugin
-  configs). `sqlite-jdbc`/`mariadb` are `provided` in `core`/`bukkit` (the
-  server ships them) but bundled in `bungee`/`velocity`. Keep this in mind
+- **Shaded dependencies** — HikariCP, SLF4J, SnakeYAML, Gson, Guava, PaperLib
+  and the BungeeCord config shim are relocated into the final JARs, but the set
+  differs per module (see the shade-plugin configs): `bukkit` relocates all of
+  them, `folia` is `bukkit` minus PaperLib, `bungee` relocates only HikariCP +
+  SLF4J, and `velocity` relocates HikariCP + the config shim + the bundled
+  MariaDB driver. On the proxies Gson and SnakeYAML are excluded from the
+  shaded set entirely — the proxy ships its own. `sqlite-jdbc`/`mariadb` are
+  `provided` in `core`/`bukkit` (the server ships them) but bundled in
+  `bungee`/`velocity`. Keep this in mind
   when adding dependencies — prefer `provided` scope for anything a modern
   server already provides.
 
@@ -228,7 +243,8 @@ The project follows **Conventional Commits** style:
 <type>(<optional scope>): <short summary in lowercase>
 ```
 
-Types seen in history: `feat`, `fix`, `docs`, `test`, `chore`, `version`.
+Types seen in history: `feat`, `fix`, `docs`, `test`, `chore`, `build`,
+`version`.
 Useful scopes: module names (`bukkit`, `folia`, `bungee`, `velocity`, `core`),
 or areas (`storage`, `proxy-msg`, `config`, `changelog`).
 

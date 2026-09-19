@@ -64,7 +64,7 @@ softdepend:
 commands:
     flp:
         description: 'FastLoginPlus commands'
-        usage: /<command> premium|cracked|delete [player]
+        usage: '/<command> premium|cracked|delete [player]'
 
 permissions:
     ${project.artifactId}.command.premium:

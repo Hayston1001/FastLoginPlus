@@ -34,9 +34,9 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 ## Quick Start
 
-**Spigot/Paper**: drop `FastLoginPlusBukkit.jar` `an Auth pl` and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
+**Spigot/Paper**: drop `FastLoginPlusBukkit.jar`, an auth plugin and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
 
-**Folia**: drop `FastLoginPlusFolia.jar` `an Auth pl` and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
+**Folia**: drop `FastLoginPlusFolia.jar`, an auth plugin and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
 
 ### Proxy Configuration
 
@@ -48,7 +48,7 @@ When running behind a proxy (BungeeCord or Velocity), the proxy must be configur
 The backend only accepts login commands from trusted proxies. Each proxy has a unique UUID that must be added to the backend's whitelist:
 
 - **Velocity** — FLP auto-generates a UUID to `plugins/fastloginplus/proxyId.txt` on first start. Copy the UUID from that file.
-- **BungeeCord** — uses BungeeCord's own instance UUID from `bungee/config.yml` (the `connection_uuid` field).
+- **BungeeCord** — uses BungeeCord's own instance UUID, i.e. the `stats` value in BungeeCord's `config.yml` (BungeeCord writes it there on first start and reuses it; deleting that line makes it generate a new one, which invalidates every backend whitelist).
 
 Paste the UUID into `plugins/fastloginplus/allowed-proxies.txt` on every backend server, one UUID per line. Restart the backends after adding the UUID.
 
@@ -99,11 +99,13 @@ The file on disk is always named `config.yml`. Copying a config file between a p
 
 An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin). [SeeFullList→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
 
-## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) Support
+## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) Support (5.x / 6.0)
 
-FastLoginPlus supports both AuthMeReloaded 5.x and 6.0. AuthMeReloaded 6.0 adds the **preJoin dialog (Paper) and enablePremium configuration**, for which FLP automatically enables `enablePremium: true` and unregisters AuthMe's own premium verification listener. No manual configuration is needed.
+FastLoginPlus supports both AuthMeReloaded 5.x and 6.0. AuthMeReloaded 6.0 adds the **preJoin dialogue (Paper) and the enablePremium configuration**. FLP automatically enables `enablePremium: true` and unregisters AuthMe's built-in premium verification listener.
 
-If AuthMe's proxy plugin (`AuthMeBungee` / `AuthMeVelocity`) is installed, FLP also pins its `premium.keepOfflineUuidCompatibility` to `false`(default value). FLP's own `premiumUuid` setting is the single authority on whether the backend receives the Mojang UUID or the offline UUID.
+While FLP handles premium authentication, AuthMe's native `/premium` and `/freemium` commands are blocked. Players will be prompted to use `/flp premium` / `/flp cracked` instead.
+
+If AuthMe's proxy plugin (`AuthMeBungee` / `AuthMeVelocity`) is installed, FLP also locks `premium.keepOfflineUuidCompatibility` to `false` (AuthMe's default value). In other words, whether the backend receives a premium UUID or an offline UUID is solely determined by FLP's own `premiumUuid` configuration.
 
 ## [Geyser](https://geysermc.org/)/[Floodgate](https://geysermc.org/floodgate/) Support
 
@@ -125,6 +127,9 @@ FastLoginPlus works with Geyser to allow Bedrock players to join your offline-mo
 | `/flp delete <player>` | Delete player record | `fastloginplus.bukkit.command.delete` | op |
 
 Add `.other` suffix for targeting other players (default: op).
+
+- A bare `/flp` prints the version and usage, and requires server operator permission.
+- On Folia the permission prefix is `fastloginplus.folia.command.*` instead of `fastloginplus.bukkit.command.*`.
 
 > When a player switches from premium to cracked via `/flp cracked`, FLP will automatically purge the player’s records stored in AuthMeReloaded, ensuring the player can log in normally with their own password upon rejoining. Without this cleanup process, AuthMeReloaded will prompt the player for login credentials after they re-enter the server. However, when the player previously joined as a premium user, FLP automatically registered their account with a random password unknown to the player.  
 > For login plugins other than AuthMe, FLP does not have equivalent handling logic for the time being, requiring manual intervention.
