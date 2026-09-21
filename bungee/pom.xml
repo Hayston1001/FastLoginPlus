@@ -280,6 +280,44 @@
             </exclusions>
         </dependency>
 
+        <!-- Supplemental types referenced by the excluded Geyser/Floodgate dependencies -->
+        <dependency>
+            <groupId>org.geysermc.api</groupId>
+            <artifactId>base-api</artifactId>
+            <version>${geyser-base-api.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.geysermc.geyser</groupId>
+            <artifactId>common</artifactId>
+            <version>${geyser.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>it.unimi.dsi</groupId>
+            <artifactId>fastutil-core</artifactId>
+            <version>${fastutil.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.geysermc.cumulus</groupId>
+            <artifactId>cumulus</artifactId>
+            <version>${cumulus.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- Netty needed for mocking BungeeCord in tests (previously from Geyser core jar) -->
         <dependency>
             <groupId>io.netty</groupId>

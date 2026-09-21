@@ -275,6 +275,44 @@
             </exclusions>
         </dependency>
 
+        <!-- Supplemental types referenced by the excluded Geyser/Floodgate dependencies -->
+        <dependency>
+            <groupId>org.geysermc.api</groupId>
+            <artifactId>base-api</artifactId>
+            <version>${geyser-base-api.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.geysermc.geyser</groupId>
+            <artifactId>common</artifactId>
+            <version>${geyser.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>it.unimi.dsi</groupId>
+            <artifactId>fastutil-core</artifactId>
+            <version>${fastutil.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.geysermc.cumulus</groupId>
+            <artifactId>cumulus</artifactId>
+            <version>${cumulus.version}</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- Netty classes used by ProtocolLibListener for Floodgate channel access -->
         <!-- Previously bundled inside Geyser core 2.2.x jar, removed in 2.10.x -->
         <dependency>
