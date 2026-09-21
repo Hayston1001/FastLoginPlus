@@ -76,6 +76,7 @@
     </properties>
 
     <modules>
+        <module>craftapi</module>
         <module>core</module>
         <module>bukkit</module>
         <module>folia</module>
@@ -104,13 +105,6 @@
                 <enabled>false</enabled>
             </snapshots>
         </repository>
-        <!-- craftapi (core's Mojang client) lives only here.  Declared at the root, and with the
-             same id core uses, so every module can resolve it without depending on which module
-             happened to download it first - the enforcer below resolves per module. -->
-        <repository>
-            <id>codemc-repo</id>
-            <url>https://repo.codemc.io/repository/maven-public/</url>
-        </repository>
     </repositories>
 
     <build>
@@ -119,7 +113,7 @@
 
         <plugins>
             <!--
-                Guards the runtime floor each platform module promises (AGENTS.md: core/bukkit Java 8,
+                Guards the runtime floor each platform module promises (core/bukkit/craftapi 8,
                 bungee/velocity 17, folia 21).  Compiling with release 8 links against newer bytecode
                 without a warning, so a dependency bump can raise a floor silently and only fail on
                 a user's JVM with UnsupportedClassVersionError.  maxJdkVersion is the module's own

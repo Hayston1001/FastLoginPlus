@@ -6,7 +6,7 @@
 
 许多 Minecraft 服务器运行在"离线模式"(不走 Mojang 认证)以允许盗版客户端加入, 但这迫使所有玩家——包括已购游戏的正版玩家——每次进入都要输密码.FastLoginPlus 在登录时通过 Mojang API 检查玩家身份: 如果是正版, 直接跳过登录插件, 自动使用正版 UUID 和皮肤.
 
-> 与 [ProtocolLib](https://github.com/dmulloy2/ProtocolLib) 配合使用. [ForDetails→](PROTOCOLLIB-ASYNC-DESIGN.md)
+> 与 [ProtocolLib](https://github.com/dmulloy2/ProtocolLib) 配合使用. [细节→](docs/en/PROTOCOLLIB-ASYNC-DESIGN.md)
 
 ## 功能
 

@@ -23,29 +23,27 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.github.games647.fastlogin.core;
+package com.github.games647.craftapi;
 
-import com.github.games647.craftapi.model.auth.Verification;
-import com.github.games647.craftapi.resolver.MojangResolver;
+import com.google.gson.TypeAdapter;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonWriter;
 
 import java.io.IOException;
-import java.net.InetAddress;
-import java.util.Optional;
+import java.time.Instant;
 
 /**
- * An extension to {@link MojangResolver} which allows connection using transparent reverse proxies.
- * The significant difference is that unlike MojangResolver from the CraftAPI implementation, which sends the
- * "ip" parameter when the hostIp parameter is an IPv4 address, but skips it for IPv6, this implementation
- * never sends it - effectively enabling transparent proxies to work.
- *
- * @author games647, Enginecrafter77
+ * Converts the milliseconds into Java 8's Instant objects.
  */
-public class ProxyAgnosticMojangResolver extends MojangResolver {
+public class InstantAdapter extends TypeAdapter<Instant> {
 
     @Override
-    public Optional<Verification> hasJoined(String username, String serverHash, InetAddress hostIp)
-        throws IOException {
-        // a null address is defined as "do not send the ip parameter" by the base implementation
-        return super.hasJoined(username, serverHash, null);
+    public void write(JsonWriter out, Instant value) throws IOException {
+        out.value(value.toEpochMilli());
+    }
+
+    @Override
+    public Instant read(JsonReader in) throws IOException {
+        return Instant.ofEpochMilli(in.nextLong());
     }
 }

@@ -1,5 +1,7 @@
 # ProtocolLib async listener — design decision and residual risk
 
+[中文→](../zh/PROTOCOLLIB-ASYNC-DESIGN.md)
+
 FastLoginPlus intercepts the Minecraft login packets (`START`, `ENCRYPTION_BEGIN`)
 with ProtocolLib. This document records **why the listener is registered as an
 async handler**, which compensations keep that safe, what risk remains, and when

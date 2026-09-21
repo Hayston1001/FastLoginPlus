@@ -23,29 +23,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.github.games647.fastlogin.core;
+package com.github.games647.craftapi;
 
-import com.github.games647.craftapi.model.auth.Verification;
-import com.github.games647.craftapi.resolver.MojangResolver;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.util.Optional;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 /**
- * An extension to {@link MojangResolver} which allows connection using transparent reverse proxies.
- * The significant difference is that unlike MojangResolver from the CraftAPI implementation, which sends the
- * "ip" parameter when the hostIp parameter is an IPv4 address, but skips it for IPv6, this implementation
- * never sends it - effectively enabling transparent proxies to work.
- *
- * @author games647, Enginecrafter77
+ * Validate if it's a valid Mojang player account name.
  */
-public class ProxyAgnosticMojangResolver extends MojangResolver {
+public class NamePredicate implements Predicate<String> {
 
+    // this includes a-zA-Z1-9_
+    // compile the pattern only on plugin enable -> and this have to be thread-safe
+    private final Pattern validNameMatcher = Pattern.compile("^[a-zA-z0-9]{2,16}$");
+
+    /**
+     * @param playerName player name that should be checked
+     * @return true if it's a valid Mojang account name
+     */
     @Override
-    public Optional<Verification> hasJoined(String username, String serverHash, InetAddress hostIp)
-        throws IOException {
-        // a null address is defined as "do not send the ip parameter" by the base implementation
-        return super.hasJoined(username, serverHash, null);
+    public boolean test(String playerName) {
+        return validNameMatcher.matcher(playerName).matches();
     }
 }

@@ -199,11 +199,15 @@
             </exclusions>
         </dependency>
 
-        <!--Common component for contacting the Mojang API-->
+        <!--Common component for contacting the Mojang API.
+            Built from the vendored craftapi/ module, pinned to the upstream tree the shipped
+            craftapi-0.8.1.jar was built from plus local fixes to the name lookup.  Package
+            names are unchanged as com.github.games647.craftapi, so nothing in this module
+            changes.-->
         <dependency>
-            <groupId>com.github.games647</groupId>
-            <artifactId>craftapi</artifactId>
-            <version>0.8.1</version>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>fastloginplus.craftapi</artifactId>
+            <version>${project.version}</version>
         </dependency>
 
         <!-- Database driver included in Spigot -->

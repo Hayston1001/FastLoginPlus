@@ -1,5 +1,7 @@
 # FastLoginPlus Login Flow
 
+[中文→](../zh/LOGIN-FLOW.md)
+
 ## Overview
 
 When a player connects, FastLoginPlus makes its decisions in this order:

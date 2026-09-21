@@ -95,7 +95,6 @@
                             <include>com.zaxxer:HikariCP</include>
                             <include>net.md-5:bungeecord-config</include>
                             <include>org.yaml:snakeyaml</include>
-                            <include>com.github.games647:craftapi</include>
                             <include>org.mariadb.jdbc:mariadb-java-client</include>
                             <include>org.xerial:sqlite-jdbc</include>
                         </includes>
