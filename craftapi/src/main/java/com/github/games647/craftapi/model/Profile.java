@@ -23,29 +23,68 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.github.games647.fastlogin.core;
+package com.github.games647.craftapi.model;
 
-import com.github.games647.craftapi.model.auth.Verification;
-import com.github.games647.craftapi.resolver.MojangResolver;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.util.Optional;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
- * An extension to {@link MojangResolver} which allows connection using transparent reverse proxies.
- * The significant difference is that unlike MojangResolver from the CraftAPI implementation, which sends the
- * "ip" parameter when the hostIp parameter is an IPv4 address, but skips it for IPv6, this implementation
- * never sends it - effectively enabling transparent proxies to work.
- *
- * @author games647, Enginecrafter77
+ * Mojang game profile.
  */
-public class ProxyAgnosticMojangResolver extends MojangResolver {
+public class Profile {
+
+    protected UUID id;
+    protected String name;
+
+    /**
+     * Mojang premium game profile
+     *
+     * @param id premium UUID
+     * @param name case-sensitive player name
+     */
+    public Profile(UUID id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    /**
+     * @return premium UUID
+     */
+    public UUID getId() {
+        return id;
+    }
+
+    /**
+     * @return case-sensitive player name
+     */
+    public String getName() {
+        return name;
+    }
 
     @Override
-    public Optional<Verification> hasJoined(String username, String serverHash, InetAddress hostIp)
-        throws IOException {
-        // a null address is defined as "do not send the ip parameter" by the base implementation
-        return super.hasJoined(username, serverHash, null);
+    public boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+
+        if (other instanceof Profile) {
+            Profile that = (Profile) other;
+            return Objects.equals(id, that.id);
+        }
+
+        return false;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return this.getClass().getSimpleName() + '{'
+                + "id=" + id
+                + ", name='" + name + '\''
+                + '}';
     }
 }

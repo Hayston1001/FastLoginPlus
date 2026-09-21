@@ -23,29 +23,39 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.github.games647.fastlogin.core;
+package com.github.games647.craftapi.resolver;
 
-import com.github.games647.craftapi.model.auth.Verification;
-import com.github.games647.craftapi.resolver.MojangResolver;
-
-import java.io.IOException;
-import java.net.InetAddress;
-import java.util.Optional;
+import java.util.UUID;
 
 /**
- * An extension to {@link MojangResolver} which allows connection using transparent reverse proxies.
- * The significant difference is that unlike MojangResolver from the CraftAPI implementation, which sends the
- * "ip" parameter when the hostIp parameter is an IPv4 address, but skips it for IPv6, this implementation
- * never sends it - effectively enabling transparent proxies to work.
- *
- * @author games647, Enginecrafter77
+ * Exception that occurs if we made too many requests against an online resolver.
  */
-public class ProxyAgnosticMojangResolver extends MojangResolver {
+public class RateLimitException extends Exception {
 
-    @Override
-    public Optional<Verification> hasJoined(String username, String serverHash, InetAddress hostIp)
-        throws IOException {
-        // a null address is defined as "do not send the ip parameter" by the base implementation
-        return super.hasJoined(username, serverHash, null);
+    public static final int RATE_LIMIT_RESPONSE_CODE = 429;
+
+    /**
+     * Generic rate limitation
+     */
+    public RateLimitException() {
+        super("Too many requests", null, true, false);
+    }
+
+    /**
+     * Rate limitation for the given player name.
+     *
+     * @param playerName name of the player whose UUID could not be resolved
+     */
+    public RateLimitException(String playerName) {
+        super("Too many requests for the UUID of player " + playerName, null, true, false);
+    }
+
+    /**
+     * Rate limit for skin download of the specified account UUID.
+     *
+     * @param skinId UUID of the account whose skin could not be resolved
+     */
+    public RateLimitException(UUID skinId) {
+        super("Too many requests for skin " + skinId, null, true, false);
     }
 }

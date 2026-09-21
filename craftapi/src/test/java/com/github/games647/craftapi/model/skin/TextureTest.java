@@ -23,29 +23,24 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.github.games647.fastlogin.core;
+package com.github.games647.craftapi.model.skin;
 
-import com.github.games647.craftapi.model.auth.Verification;
-import com.github.games647.craftapi.resolver.MojangResolver;
+import com.github.games647.craftapi.model.skin.Texture.Type;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.util.Optional;
+import java.net.URL;
 
-/**
- * An extension to {@link MojangResolver} which allows connection using transparent reverse proxies.
- * The significant difference is that unlike MojangResolver from the CraftAPI implementation, which sends the
- * "ip" parameter when the hostIp parameter is an IPv4 address, but skips it for IPv6, this implementation
- * never sends it - effectively enabling transparent proxies to work.
- *
- * @author games647, Enginecrafter77
- */
-public class ProxyAgnosticMojangResolver extends MojangResolver {
+import org.junit.jupiter.api.Test;
 
-    @Override
-    public Optional<Verification> hasJoined(String username, String serverHash, InetAddress hostIp)
-        throws IOException {
-        // a null address is defined as "do not send the ip parameter" by the base implementation
-        return super.hasJoined(username, serverHash, null);
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+class TextureTest {
+
+    private static final String URL_PREFIX = "http://textures.minecraft.net/texture/";
+
+    @Test
+    void testLongUrl() throws Exception {
+        Texture model = new Texture(Type.SKIN, "52847ba3eb656e7ac69f2af9cec58d4ec2f5a2ea7e18968c97907e87efa9cc4");
+        URL url = new URL(URL_PREFIX + "52847ba3eb656e7ac69f2af9cec58d4ec2f5a2ea7e18968c97907e87efa9cc4");
+        assertEquals(model.getURL(), url);
     }
 }

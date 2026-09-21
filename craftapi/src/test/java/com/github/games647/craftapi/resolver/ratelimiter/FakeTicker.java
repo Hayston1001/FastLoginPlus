@@ -23,29 +23,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.github.games647.fastlogin.core;
+package com.github.games647.craftapi.resolver.ratelimiter;
 
-import com.github.games647.craftapi.model.auth.Verification;
-import com.github.games647.craftapi.resolver.MojangResolver;
+import com.google.common.base.Ticker;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.util.Optional;
+import java.time.Duration;
 
-/**
- * An extension to {@link MojangResolver} which allows connection using transparent reverse proxies.
- * The significant difference is that unlike MojangResolver from the CraftAPI implementation, which sends the
- * "ip" parameter when the hostIp parameter is an IPv4 address, but skips it for IPv6, this implementation
- * never sends it - effectively enabling transparent proxies to work.
- *
- * @author games647, Enginecrafter77
- */
-public class ProxyAgnosticMojangResolver extends MojangResolver {
+public class FakeTicker extends Ticker {
+
+    private long timestamp;
+
+    public FakeTicker(long initial) {
+        timestamp = initial;
+    }
 
     @Override
-    public Optional<Verification> hasJoined(String username, String serverHash, InetAddress hostIp)
-        throws IOException {
-        // a null address is defined as "do not send the ip parameter" by the base implementation
-        return super.hasJoined(username, serverHash, null);
+    public long read() {
+        return timestamp;
+    }
+
+    public void add(Duration duration) {
+        timestamp += duration.toNanos();
     }
 }

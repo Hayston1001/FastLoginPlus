@@ -228,15 +228,24 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             }
         }
 
-        // 0.5.0/F044: craftapi 0.8.1's setMaxNameRequests only stores the value
-        // — its profile limiter keeps the built-in 600/10min.  Warn so admins
-        // don't rely on the configured value.
-        int mojangRequestLimit = config.getInt("mojang-request-limit");
-        if (mojangRequestLimit != 600) {
-            plugin.getLog().warn("mojang-request-limit is currently not applied by the bundled"
-                    + " craftapi library (always {}) — configured value {} is ignored",
-                    600, mojangRequestLimit);
+        // 0.7.0/F-C6: the vendored craftapi honours this value now, so the old
+        // "library ignores it, always 600" warning is gone.  Values outside 0..600 are clamped, and
+        // 0 (never query Mojang directly) needs at least one proxy: without one every uncached
+        // lookup would fail as rate-limited, i.e. every new premium player would be taken for cracked.
+        int configuredLimit = config.getInt("mojang-request-limit", MojangResolver.MAX_NAME_REQUESTS_LIMIT);
+        int mojangRequestLimit = Math.max(0,
+                Math.min(MojangResolver.MAX_NAME_REQUESTS_LIMIT, configuredLimit));
+        if (mojangRequestLimit != configuredLimit) {
+            plugin.getLog().warn("mojang-request-limit {} is outside 0..{}, using {} instead",
+                    configuredLimit, MojangResolver.MAX_NAME_REQUESTS_LIMIT, mojangRequestLimit);
         }
+
+        if (mojangRequestLimit == 0 && proxies.isEmpty()) {
+            plugin.getLog().warn("mojang-request-limit is 0 (never query Mojang directly) but no"
+                    + " proxies are configured - using {} instead", MojangResolver.MAX_NAME_REQUESTS_LIMIT);
+            mojangRequestLimit = MojangResolver.MAX_NAME_REQUESTS_LIMIT;
+        }
+
         resolver.setMaxNameRequests(mojangRequestLimit);
         resolver.setProxySelector(new RotatingProxySelector(proxies));
         resolver.setOutgoingAddresses(addresses);

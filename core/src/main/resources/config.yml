@@ -218,10 +218,11 @@ verifyClientKeys: false
 ip-addresses:
 
 # Max Mojang name->UUID requests per 10 minutes
-# EFFECT  S=none   P=none  — the bundled craftapi library currently ignores
-# this value (hardcoded 600/10min); kept for future compatibility.
-# A non-600 value logs a startup WARN — that is expected.
-# (formerly: S=full P=Paper configure-phase lookup only)
+# EFFECT  S=full   P=Paper configure-phase lookup only
+# Mojang allows 600 requests per 10 minutes per outgoing IPv4 address. Lower this to
+# leave room for other plugins, or raise it while using 'proxies' below. Valid range
+# 0..600, other values are clamped. 0 means "never call Mojang directly" and requires
+# at least one proxy entry; without one the value is reset to 600.
 mojang-request-limit: 600
 
 # ========================================

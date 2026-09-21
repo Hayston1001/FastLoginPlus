@@ -184,9 +184,10 @@ mojang-retry-delay: 500
 ip-addresses:
 
 # Max Mojang name->UUID requests per 10 minutes
-# NOTE: currently not applied by the bundled craftapi library (hardcoded
-# 600/10min); kept for future compatibility. Setting another value logs a
-# startup WARN — that is expected.
+# Mojang allows 600 requests per 10 minutes per outgoing IPv4 address. Lower this to
+# leave room for other plugins, or raise it while using 'proxies' below. Valid range
+# 0..600, other values are clamped. 0 means "never call Mojang directly" and requires
+# at least one proxy entry; without one the value is reset to 600.
 mojang-request-limit: 600
 
 # ========================================
