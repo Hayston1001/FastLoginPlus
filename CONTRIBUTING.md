@@ -1,5 +1,7 @@
 # Contributing Guide
 
+[中文→](CONTRIBUTING_zh.md)
+
 Thank you for your interest in contributing to FastLoginPlus! This guide covers
 everything you need to build the project, follow its conventions, and submit a
 pull request that passes CI on the first try.
@@ -105,7 +107,7 @@ graph TB
 ```
 
 A detailed, source-verified description of the login decision flow lives in
-[LOGIN-FLOW.md](LOGIN-FLOW.md) — read it before touching `JoinManagement`,
+[LOGIN-FLOW.md](docs/en/LOGIN-FLOW.md) — read it before touching `JoinManagement`,
 listeners, or the proxy relay path.
 
 ## Project layout
@@ -277,11 +279,18 @@ When opening an issue, include:
 
 ## Additional developer documentation
 
-- [LOGIN-FLOW.md](LOGIN-FLOW.md) — the full login decision tree, verified
+- [LOGIN-FLOW.md](docs/en/LOGIN-FLOW.md) — the full login decision tree, verified
   against the source
-- [PROTOCOLLIB-ASYNC-DESIGN.md](PROTOCOLLIB-ASYNC-DESIGN.md) — why the packet
+- [PROTOCOLLIB-ASYNC-DESIGN.md](docs/en/PROTOCOLLIB-ASYNC-DESIGN.md) — why the packet
   listener is async and which races are compensated; read before changing
   ProtocolLib listener code
+- [CRAFTAPI-BASELINE.md](docs/en/CRAFTAPI-BASELINE.md) — the baseline record of the
+  vendored `craftapi/` module: what changed locally, what must not change silently,
+  and how to update it
+
+These documents are canonical in English under `docs/en/`; `docs/zh/` holds the
+Chinese translations of the same files (keep both in sync when editing). This
+guide itself is bilingual as well: [CONTRIBUTING_zh.md](CONTRIBUTING_zh.md).
 
 ## License
 
