@@ -46,27 +46,12 @@
 
     <name>FastLoginPlusCore</name>
 
-    <repositories>
-        <repository>
-            <id>luck-repo</id>
-            <url>https://ci.lucko.me/plugin/repository/everything/</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </repository>
-        <repository>
-            <id>codemc-repo</id>
-            <url>https://repo.codemc.io/repository/maven-public/</url>
-        </repository>
-        <!-- Floodgate -->
-        <repository>
-            <id>opencollab</id>
-            <url>https://repo.opencollab.dev/maven-snapshots/</url>
-            <releases>
-                <enabled>false</enabled>
-            </releases>
-        </repository>
-    </repositories>
+    <!--
+        No repositories here: OpenCollab (Geyser, Floodgate, base-api, cumulus) is declared once in
+        the root POM as opencollab-main.  A second declaration under the same id - or a second id
+        for the same URL - is what made an already resolved snapshot build untraceable, because
+        maven-metadata-<id>.xml and _remote.repositories are keyed on the repository id.
+    -->
 
     <build>
         <plugins>

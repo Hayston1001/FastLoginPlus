@@ -23,4 +23,7 @@ jobs:
           cache: 'maven'
 
       - name: Build and test
-        run: mvn package --batch-mode --threads 2.0C --no-snapshot-updates --strict-checksums
+        # Geyser and Floodgate publish SNAPSHOT coordinates only, so no --no-snapshot-updates: the
+        # default daily snapshot policy keeps a cached runner at most a day behind, instead of
+        # serving whatever stale build happened to be in the cache.
+        run: mvn package --batch-mode --threads 2.0C --strict-checksums

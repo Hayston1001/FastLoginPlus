@@ -136,11 +136,9 @@
                 </enabled>
             </releases>
         </repository>
-
-        <repository>
-            <id>opencollab</id>
-            <url>https://repo.opencollab.dev/main/</url>
-        </repository>
+        <!-- OpenCollab is deliberately absent here: it is declared once in the root POM as
+             opencollab-main.  The copy that used to sit here reused the old id and made the
+             resolved snapshot build untraceable - see the note in the root POM. -->
     </repositories>
 
     <dependencies>

@@ -100,7 +100,14 @@
     </distributionManagement>
 
     <repositories>
-        <!-- GeyserMC/Floodgate releases and snapshots -->
+        <!--
+            OpenCollab's aggregate repository, and the only Geyser/Floodgate source: both publish
+            nothing but -SNAPSHOT coordinates (it serves their regular releases too, such as
+            base-api and cumulus).  Declared once, here, on purpose - Maven keys
+            maven-metadata-<id>.xml and _remote.repositories on the id, so a module-level copy
+            under the same id pointing elsewhere, or a second id for the same URL, makes it
+            impossible to tell which repository a resolved snapshot build came from.
+        -->
         <repository>
             <id>opencollab-main</id>
             <url>https://repo.opencollab.dev/main/</url>
