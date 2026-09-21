@@ -6,7 +6,7 @@
 
 Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow cracked clients, but this forces all players — including those with paid accounts — to type a password every time they join. FastLoginPlus checks each player against Mojang's API on login: if they own the game, they skip the auth plugin entirely and get their real UUID and skin automatically.
 
-> Works with [ProtocolLib](https://github.com/dmulloy2/ProtocolLib). [ForDetails→](PROTOCOLLIB-ASYNC-DESIGN.md)
+> Works with [ProtocolLib](https://github.com/dmulloy2/ProtocolLib). [ForDetails→](docs/en/PROTOCOLLIB-ASYNC-DESIGN.md)
 
 ## Features
 
