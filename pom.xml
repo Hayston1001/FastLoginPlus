@@ -67,7 +67,7 @@
         <skinsrestorer.version>15.11.0</skinsrestorer.version>
         <bouncycastle.version>1.78.1</bouncycastle.version>
         <logit.version>9e3581db27</logit.version>
-        <passky.version>v3.0.0</passky.version>
+        <passky.version>v3.3.0</passky.version>
         <xauth.version>2.6</xauth.version>
         <crazycore.version>10.7.7</crazycore.version>
         <crazylogin.version>7.23</crazylogin.version>
