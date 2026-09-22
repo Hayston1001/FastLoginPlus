@@ -1,19 +1,32 @@
 name: CodeQL
 
 on:
+  # Post-merge scan of main: the Build workflow runs first, so CodeQL only re-builds a commit that
+  # has already compiled and passed the tests.
   workflow_run:
     workflows: ["Build"]
     branches: [main]
     types: [completed]
+  # Pre-merge scan: every PR targeting main, so findings land on the PR's "Code scanning results"
+  # check instead of only on main after the fact. The pull_request event is deliberately used here:
+  # GitHub always permits code scanning uploads on a pull_request run, even with the read-only
+  # GITHUB_TOKEN that Dependabot and fork PRs get - a push-triggered scan of the same commit would
+  # fail with 403 "Resource not accessible by integration".
+  pull_request:
+    branches: [main]
 
 jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    # workflow_run fires for every completed Build run, failures included - gate on the conclusion.
+    if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
 
     permissions:
+      contents: read
+      actions: read
+      packages: read
       security-events: write
 
     strategy:
