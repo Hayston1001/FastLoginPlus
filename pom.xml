@@ -61,7 +61,7 @@
         <protocolsupport.version>master-66b494a8dd-1</protocolsupport.version>
         <datafixerupper.version>7.1.15</datafixerupper.version>
         <netty.version>4.1.103.Final</netty.version>
-        <placeholderapi.version>2.11.6</placeholderapi.version>
+        <placeholderapi.version>2.12.3</placeholderapi.version>
         <authme.version>5.6.0</authme.version>
         <loginsecurity.version>3.3.0</loginsecurity.version>
         <skinsrestorer.version>15.11.0</skinsrestorer.version>
