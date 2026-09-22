@@ -56,10 +56,12 @@ updates:
       - dependency-name: "org.mockito:*"
       - dependency-name: "org.bouncycastle:*"
 
-    # Order matters: a dependency lands in the first group it matches, so the
-    # build tooling is matched before the development dependencies catch the
-    # plugins.  Majors stay out of every group (update-types) and arrive as
-    # individual PRs for review.
+    # The groups are pattern-based and mutually exclusive: Dependabot assigns a
+    # dependency to the first group whose rules it matches, and which
+    # production/development bucket it puts a Maven plugin in is not something we
+    # control -- so the split is spelled out here instead of relying on that
+    # classification.  Majors stay out of every group (update-types) and arrive
+    # as individual PRs for review.
     groups:
       build-tooling:
         applies-to: "version-updates"
@@ -75,7 +77,10 @@ updates:
 
       test-dependencies:
         applies-to: "version-updates"
-        dependency-type: "development"
+        patterns:
+          - "org.junit.jupiter:*"
+          - "org.mockito:*"
+          - "org.bouncycastle:*"
         update-types:
           - "minor"
           - "patch"
