@@ -170,6 +170,7 @@ mvn package -pl folia -am --batch-mode -DskipTests
   (BungeeCord/Velocity, 裁掉了后端专属键)两者并存是有意为之.
   新增配置项时, 先决定它属于哪个(哪些)模板, 再按需更新这两个文件. 展示给用户的默认值来自这些模板, 而不是代码.
 - **被 shade 的依赖** —— HikariCP、SLF4J、SnakeYAML、Gson、Guava、PaperLib 以及 BungeeCord 的 config shim 都会被 relocate 进最终 JAR, 但每个模块的集合不同(见各 shade-plugin 配置): `bukkit` 全部 relocate, `folia` = `bukkit` 减去 PaperLib, `bungee` 只 relocate HikariCP + SLF4J, `velocity` relocate HikariCP + config shim + 内置的 MariaDB 驱动. 在代理端, Gson 与 SnakeYAML 被完全排除在 shade 集合之外 —— 代理自带. `sqlite-jdbc`/`mariadb` 在 `core`/`bukkit` 里是 `provided`(服务器自带), 在 `bungee`/`velocity` 里则被内置. 加依赖时请记住这些 —— 现代服务器已经提供的东西优先用 `provided` 作用域.
+- **依赖更新** —— `.github/dependabot.yml` 是**白名单**: 只有里面列出的依赖会被自动跟进(被 shade 的库、构建工具、测试依赖). 平台 API(`paper-api`、`folia-api`、`velocity-api`、`bungeecord-*`)、其他插件的 hook API(ProtocolLib、AuthMe、SkinsRestorer、PlaceholderAPI、Geyser/Floodgate 等)、`*/lib` 里检入的 JAR、以及共享的 `netty.version` 都是有意钉住的 —— 运行期真正生效的是用户的服务器/插件版本, 不是我们的. 因此新增会被 shade 进 JAR 的库或构建插件时, 请同时把条目加进该文件的 `allow`, 否则它会永远不被更新.
 
 ## 提交信息
 

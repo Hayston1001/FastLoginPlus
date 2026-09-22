@@ -8,24 +8,88 @@ updates:
     schedule:
       interval: "monthly"
 
-  # The root POM owns the complete multi-module reactor. Production dependencies
-  # deliberately stay ungrouped: platform APIs, shaded libraries and build plugins
-  # have different Java floors and compatibility requirements.
+  # The root POM owns the complete multi-module reactor.
+  #
+  # This entry is an ALLOW list, not an ignore list: only the dependencies named
+  # below are followed automatically.  Everything else is pinned on purpose,
+  # because the version that decides at runtime is the user's server or plugin,
+  # not ours:
+  #
+  #   - platform APIs: paper-api, folia-api, velocity-api, net.md-5:bungeecord-*
+  #     (see bungee/pom.xml and deps/bungeecord/1.21-R0.4.md -- moving the
+  #     compile baseline is a reviewed change, and a partial bump splits it)
+  #   - other plugins' hook APIs: ProtocolLib, AuthMe, SkinsRestorer,
+  #     PlaceholderAPI, Geyser/Floodgate, Passky, LoginSecurity, xAuth, ...
+  #   - the fixed JARs checked into */lib and the shared io.netty version
+  #     (provided for bukkit/folia, where the server supplies netty)
+  #
+  # When a library that gets shaded into a JAR, or a build plugin, is added to a
+  # POM, add it here as well -- otherwise it will never be updated.
   - package-ecosystem: "maven"
     directory: "/"
     schedule:
       interval: "monthly"
 
-    # The default limit is 5, and the ungrouped production updates alone can fill
-    # it: once five version-update PRs are open for this entry, Dependabot stops
-    # opening new ones until some are merged or closed -- the remaining updates
-    # are not deferred, they are silently not proposed at all.
-    open-pull-requests-limit: 15
+    # The default limit of 5 is enough once the updates are grouped; the point of
+    # the allow list is that the candidate set stays small and deliberate.
+    open-pull-requests-limit: 5
 
+    allow:
+      # Shaded into the JARs: the only dependencies where a CVE is ours to fix.
+      - dependency-name: "com.zaxxer:HikariCP"
+      - dependency-name: "org.slf4j:*"
+      - dependency-name: "org.yaml:snakeyaml"
+      - dependency-name: "com.google.code.gson:gson"
+      - dependency-name: "com.google.guava:guava"
+      - dependency-name: "org.xerial:sqlite-jdbc"
+      - dependency-name: "org.mariadb.jdbc:mariadb-java-client"
+
+      # Build tooling.
+      - dependency-name: "org.apache.maven.plugins:*"
+      - dependency-name: "org.codehaus.mojo:*"
+      - dependency-name: "com.mycila:license-maven-plugin"
+      - dependency-name: "io.github.git-commit-id:git-commit-id-maven-plugin"
+      - dependency-name: "com.puppycrawl.tools:checkstyle"
+
+      # Tests.
+      - dependency-name: "org.junit.jupiter:*"
+      - dependency-name: "org.mockito:*"
+      - dependency-name: "org.bouncycastle:*"
+
+    # Order matters: a dependency lands in the first group it matches, so the
+    # build tooling is matched before the development dependencies catch the
+    # plugins.  Majors stay out of every group (update-types) and arrive as
+    # individual PRs for review.
     groups:
+      build-tooling:
+        applies-to: "version-updates"
+        patterns:
+          - "org.apache.maven.plugins:*"
+          - "org.codehaus.mojo:*"
+          - "com.mycila:license-maven-plugin"
+          - "io.github.git-commit-id:git-commit-id-maven-plugin"
+          - "com.puppycrawl.tools:checkstyle"
+        update-types:
+          - "minor"
+          - "patch"
+
       test-dependencies:
         applies-to: "version-updates"
         dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+
+      shaded-libraries:
+        applies-to: "version-updates"
+        patterns:
+          - "com.zaxxer:HikariCP"
+          - "org.slf4j:*"
+          - "org.yaml:snakeyaml"
+          - "com.google.code.gson:gson"
+          - "com.google.guava:guava"
+          - "org.xerial:sqlite-jdbc"
+          - "org.mariadb.jdbc:mariadb-java-client"
         update-types:
           - "minor"
           - "patch"
@@ -34,18 +98,3 @@ updates:
       # HikariCP 5+ dropped the Java 8 support required by core and Bukkit.
       - dependency-name: "com.zaxxer:HikariCP"
         update-types: ["version-update:semver-major"]
-
-      # The BungeeCord family is pinned to the released 1.20-R0.2 compile
-      # baseline on purpose (bungee/pom.xml, deps/bungeecord/1.21-R0.4.md).
-      # Bumping one artifact at a time splits the baseline, and 1.21-R0.4 moves
-      # net.md_5.bungee.protocol.Property into protocol.data, which the
-      # old-shape compatibility tests deliberately keep asserting.  Moving the
-      # baseline is a reviewed change, never a dependency bump.
-      - dependency-name: "net.md-5:bungeecord-*"
-
-      # These dependencies are fixed JARs checked into module lib directories.
-      # Updating only their POM version would not replace the actual JAR.
-      - dependency-name: "de.st_ddt.crazy:CrazyCore"
-      - dependency-name: "de.st_ddt.crazy:CrazyLogin"
-      - dependency-name: "ultraauth:ultraauth"
-      - dependency-name: "me.vik1395:BungeeAuth"

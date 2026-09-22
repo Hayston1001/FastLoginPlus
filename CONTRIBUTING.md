@@ -236,6 +236,15 @@ and verify before pushing:
   `bungee`/`velocity`. Keep this in mind
   when adding dependencies — prefer `provided` scope for anything a modern
   server already provides.
+- **Dependency updates** — `.github/dependabot.yml` is an *allow* list: only the
+  dependencies named there are followed automatically (the shaded libraries, the
+  build tooling and the test dependencies). Platform APIs (`paper-api`,
+  `folia-api`, `velocity-api`, `bungeecord-*`), other plugins' hook APIs
+  (ProtocolLib, AuthMe, SkinsRestorer, PlaceholderAPI, Geyser/Floodgate, ...),
+  the JARs checked into `*/lib` and the shared `netty.version` are pinned on
+  purpose — the version that decides at runtime is the user's server or plugin,
+  not ours. So when you add a library that gets shaded into a JAR, or a build
+  plugin, add it to `allow` in that file too, otherwise it will never be updated.
 
 ## Commit messages
 
