@@ -90,12 +90,15 @@ FLP 内置**两套配置模板**；每个平台根据自身角色生成 `config.
 
 ## 环境要求
 
-| 平台 | Java | 备注 |
-|------|------|------|
-| Spigot/Paper | 8+ | 需要 [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
-| Folia | 21+ | 需要 [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
-| BungeeCord/Waterfall | 17+ | — |
-| Velocity | 17+ | — |
+| 平台 | 插件 floor | 服务端/代理自身要求 | 备注 |
+|------|-----------|--------------------|------|
+| Spigot/Paper | Java 8+ | 通常更高 —— Paper 1.20.5+ 需要 Java 21 | 需要 [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
+| Folia | Java 21+ | Java 21 | 需要 [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
+| BungeeCord/Waterfall | Java 17+ | 由代理自身决定 | — |
+| Velocity | Java 17+ | 由代理自身决定 (3.3+ 需要 Java 17+) | — |
+
+**插件 floor** 是能*加载*我们产物的最低 JRE —— 它是 jar 字节码的属性, 不是你服务器的属性.
+你的服务端/代理可能要求更高, 以更高者为准.
 
 需要后端安装登录插件(如 AuthMe、LoginSecurity、CrazyLogin). [完整列表→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
 
@@ -116,7 +119,7 @@ FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入
 
 > **建议: ** 在 Geyser 基础上额外安装 Floodgate, 以获得更好的安全性和身份隔离.FLP 不强制要求 Floodgate, 但在 Java 与基岩玩家共存的服务器上强烈推荐使用.
 
-> **版本要求: ** Geyser 运行需要 **Java 21+**.Geyser-Spigot 要求 Paper/Spigot 服务器版本在 **1.20.5 或以上**.低于 1.20.5 的服务器仍然可以通过 [ViaVersion](https://viaversion.com/) 使用 Geyser——在后端安装 ViaVersion 并通过代理(Velocity/BungeeCord)运行 Geyser, 或直接搭建 Geyser-Standalone 配合 ViaVersion.ViaVersion 让服务器接受新版本 Java 客户端连接, Geyser 则以此为翻译目标实现基岩版接入.详见 [Geyser 支持的版本](https://geysermc.org/wiki/geyser/supported-versions/).
+> **运行环境要求(非 FastLoginPlus 的要求): ** Geyser 运行需要 **Java 21+**.Geyser-Spigot 要求 Paper/Spigot 服务器版本在 **1.20.5 或以上**.低于 1.20.5 的服务器仍然可以通过 [ViaVersion](https://viaversion.com/) 使用 Geyser——在后端安装 ViaVersion 并通过代理(Velocity/BungeeCord)运行 Geyser, 或直接搭建 Geyser-Standalone 配合 ViaVersion.ViaVersion 让服务器接受新版本 Java 客户端连接, Geyser 则以此为翻译目标实现基岩版接入.详见 [Geyser 支持的版本](https://geysermc.org/wiki/geyser/supported-versions/).
 
 ## 命令与权限
 

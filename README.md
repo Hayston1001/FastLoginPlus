@@ -90,12 +90,16 @@ The file on disk is always named `config.yml`. Copying a config file between a p
 
 ## Environment
 
-| Platform | Java | Notes |
-|----------|------|-------|
-| Spigot / Paper | 8+ | Requires [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
-| Folia | 21+ | Requires [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
-| BungeeCord / Waterfall | 17+ | — |
-| Velocity | 17+ | — |
+| Platform | Plugin floor | Server / proxy itself requires | Notes |
+|----------|--------------|-------------------------------|-------|
+| Spigot / Paper | Java 8+ | usually higher — Paper 1.20.5+ needs Java 21 | Requires [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
+| Folia | Java 21+ | Java 21 | Requires [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
+| BungeeCord / Waterfall | Java 17+ | the proxy's own requirement | — |
+| Velocity | Java 17+ | the proxy's own requirement (3.3+ needs Java 17+) | — |
+
+**Plugin floor** is the lowest JRE that can *load* our jar — a property of its bytecode,
+not of your server. Your server or proxy can require more, and that requirement wins: run
+the higher of the two.
 
 An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin). [SeeFullList→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
 
@@ -116,7 +120,7 @@ FastLoginPlus works with Geyser to allow Bedrock players to join your offline-mo
 
 > **Recommendation:** Install Floodgate alongside Geyser for better security and identity separation. FLP does not require Floodgate to function, but it is strongly recommended when both Java and Bedrock players share the same server.
 
-> **Version requirements:** Geyser requires **Java 21+** to run. Geyser-Spigot requires a Paper/Spigot server on **1.20.5 or above**. Servers below 1.20.5 can still use Geyser by installing [ViaVersion](https://viaversion.com/) on the backend and running Geyser on a proxy (Velocity/BungeeCord), or by using Geyser-Standalone with ViaVersion. ViaVersion allows the server to accept newer Java clients, which Geyser uses as the translation target. See [Geyser supported versions](https://geysermc.org/wiki/geyser/supported-versions/) for details.
+> **Environment requirement (not a FastLoginPlus requirement):** Geyser requires **Java 21+** to run. Geyser-Spigot requires a Paper/Spigot server on **1.20.5 or above**. Servers below 1.20.5 can still use Geyser by installing [ViaVersion](https://viaversion.com/) on the backend and running Geyser on a proxy (Velocity/BungeeCord), or by using Geyser-Standalone with ViaVersion. ViaVersion allows the server to accept newer Java clients, which Geyser uses as the translation target. See [Geyser supported versions](https://geysermc.org/wiki/geyser/supported-versions/) for details.
 
 ## Commands & Permissions
 

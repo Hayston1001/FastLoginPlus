@@ -112,7 +112,7 @@ listeners, or the proxy relay path.
 
 ## Project layout
 
-| Module    | Java release | Description                                                        |
+| Module    | Java floor | Description                                                        |
 |-----------|--------------|--------------------------------------------------------------------|
 | `core`    | 8            | Shared library: login flow, storage, anti-bot, messaging, events   |
 | `bukkit`  | 8            | Spigot/Paper plugin (ProtocolLib packet handling, auth-plugin hooks) |
@@ -120,17 +120,33 @@ listeners, or the proxy relay path.
 | `bungee`  | 17           | BungeeCord proxy plugin                                            |
 | `velocity`| 17           | Velocity proxy plugin                                              |
 
+The `Java floor` column is the module's `maven.compiler.release`. An artifact's
+**runtime floor** — the lowest JRE that can *load* it — is the higher of that value
+and the highest bytecode among the dependencies that get shaded into it, so a
+dependency bump can raise a floor without touching this column. `META-INF/versions/N`
+multi-release branches are add-ons for newer JREs and never count towards the floor.
+Floors are unrelated to the build JDK below: the build runs on JDK 21 even though
+`bungee`/`velocity` refuse to load on anything below 17.
+
 Build requirements:
 
-- **JDK 21** (the version pinned in `.java-version` and used by CI). The
+- **JDK 21** (the version pinned in `.java-version` and used by CI) — this is a *build*
+  requirement and says nothing about what the built artifacts need at runtime (see the
+  `Java floor` column). The
   per-module `maven.compiler.release` settings above make javac reject APIs
   newer than each module's target, so a single modern JDK is all you need —
   but do not use Java-9+ APIs in `core`/`bukkit` or Java-18+ APIs in
   `bungee`/`velocity`. Note that `--release` only guards the APIs *you* compile
   against: it does not stop a newer dependency from silently raising the
   module's *runtime* requirement, which is what the bytecode-floor check below
-  is for.
-- **Maven 3.6.3+** (required by the plugins in use; 3.9.x is used for
+  is for. That check is not enough on its own — `enforceBytecodeVersion` exempts
+  `module-info.class` (Guava 33+ ships exactly that at class-file 53 while every
+  real class in it is still Java 8) — so a floor claim is verified by reading the
+  bytecode: the highest class-file major version outside `META-INF/versions/`
+  (52 = Java 8, 55 = 11, 61 = 17, 65 = 21), for the dependency JAR and for the
+  built artifact.
+- **Maven 3.9.0+** (required since `git-commit-id-maven-plugin` 10 dropped Maven
+  3.6.3 when it went EOL; 3.9.x is used for
   development). A git clone is expected — the build embeds the commit hash
   into the final JAR name and manifest.
 

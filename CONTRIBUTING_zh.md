@@ -102,7 +102,7 @@ graph TB
 
 ## 项目结构
 
-| 模块      | Java release | 说明                                                              |
+| 模块      | Java floor | 说明                                                              |
 |-----------|--------------|-------------------------------------------------------------------|
 | `core`    | 8            | 共享库: 登录流程、存储、反机器人、消息、事件                        |
 | `bukkit`  | 8            | Spigot/Paper 插件(ProtocolLib 数据包处理、登录插件钩子)             |
@@ -110,10 +110,16 @@ graph TB
 | `bungee`  | 17           | BungeeCord 代理插件                                                |
 | `velocity`| 17           | Velocity 代理插件                                                  |
 
+`Java floor` 这一列就是该模块的 `maven.compiler.release`. 而产物的**运行时 floor**
+—— 能*加载*它的最低 JRE —— 取"这个值"与"被 shade 进来的依赖中最高的字节码"两者中更高的那个,
+所以依赖升级可以在不动这一列的情况下抬高 floor. `META-INF/versions/N` 多版本分支是给更高 JRE 的
+附加实现, 永远不计入 floor. floor 与下面的构建 JDK 无关: 构建跑在 JDK 21 上, 而
+`bungee`/`velocity` 的产物在 17 以下的 JRE 上根本加载不了.
+
 构建要求:
 
-- **JDK 21**(写在 `.java-version` 里、CI 使用的版本). 上表各模块的 `maven.compiler.release` 会让 javac 拒绝比该模块目标更新的 API, 所以你只需要一个现代 JDK —— 但不要在 `core`/`bukkit` 里用 Java 9+ 的 API, 也不要在 `bungee`/`velocity` 里用 Java 18+ 的 API. 注意 `--release` 只约束*你自己*编译时用到的 API: 它无法阻止更新的依赖悄悄抬高模块的*运行时*要求, 下面那条字节码地板检查就是为此存在的.
-- **Maven 3.6.3+**(所用插件的最低要求; 开发时使用 3.9.x). 需要是 git clone —— 构建会把 commit hash 写进最终 JAR 的文件名与 manifest.
+- **JDK 21**(写在 `.java-version` 里、CI 使用的版本) —— 这是**构建**要求, 与产物运行时需要什么无关(见上表 `Java floor`). 上表各模块的 `maven.compiler.release` 会让 javac 拒绝比该模块目标更新的 API, 所以你只需要一个现代 JDK —— 但不要在 `core`/`bukkit` 里用 Java 9+ 的 API, 也不要在 `bungee`/`velocity` 里用 Java 18+ 的 API. 注意 `--release` 只约束*你自己*编译时用到的 API: 它无法阻止更新的依赖悄悄抬高模块的*运行时*要求, 下面那条字节码地板检查就是为此存在的. 但那条检查本身也不够 —— `enforceBytecodeVersion` 豁免 `module-info.class`(Guava 33+ 正好就带一个 class 53 的 module-info, 而它真正的类全是 Java 8) —— 所以 floor 的结论要用字节码来验证: 取 `META-INF/versions/` **之外**最高的 class 文件主版本号(52 = Java 8, 55 = 11, 61 = 17, 65 = 21), 依赖 JAR 与最终产物都要看.
+- **Maven 3.9.0+**(`git-commit-id-maven-plugin` 10 在 Maven 3.6.3 EOL 后不再支持它, 因此提高下限; 开发时使用 3.9.x). 需要是 git clone —— 构建会把 commit hash 写进最终 JAR 的文件名与 manifest.
 
 部分登录插件的 API(CrazyLogin、UltraAuth、BungeeAuth)以 system 作用域的 JAR 放在各模块的 `lib/` 目录里 —— 不需要手动安装.
 
