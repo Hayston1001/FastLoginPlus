@@ -16,6 +16,12 @@ updates:
     schedule:
       interval: "monthly"
 
+    # The default limit is 5, and the ungrouped production updates alone can fill
+    # it: once five version-update PRs are open for this entry, Dependabot stops
+    # opening new ones until some are merged or closed -- the remaining updates
+    # are not deferred, they are silently not proposed at all.
+    open-pull-requests-limit: 15
+
     groups:
       test-dependencies:
         applies-to: "version-updates"
@@ -29,10 +35,17 @@ updates:
       - dependency-name: "com.zaxxer:HikariCP"
         update-types: ["version-update:semver-major"]
 
+      # The BungeeCord family is pinned to the released 1.20-R0.2 compile
+      # baseline on purpose (bungee/pom.xml, deps/bungeecord/1.21-R0.4.md).
+      # Bumping one artifact at a time splits the baseline, and 1.21-R0.4 moves
+      # net.md_5.bungee.protocol.Property into protocol.data, which the
+      # old-shape compatibility tests deliberately keep asserting.  Moving the
+      # baseline is a reviewed change, never a dependency bump.
+      - dependency-name: "net.md-5:bungeecord-*"
+
       # These dependencies are fixed JARs checked into module lib directories.
       # Updating only their POM version would not replace the actual JAR.
       - dependency-name: "de.st_ddt.crazy:CrazyCore"
       - dependency-name: "de.st_ddt.crazy:CrazyLogin"
       - dependency-name: "ultraauth:ultraauth"
       - dependency-name: "me.vik1395:BungeeAuth"
-      - dependency-name: "net.md-5:bungeecord-proxy"
