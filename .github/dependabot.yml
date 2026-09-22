@@ -1,32 +1,38 @@
 version: 2
 
 updates:
-  # Updates for workflow files
+  # Keep workflow actions current. Major action upgrades stay in separate PRs so
+  # runner and permission changes can be reviewed independently.
   - package-ecosystem: "github-actions"
-    # Workflow files stored in the
-    # default location of `.github/workflows`
     directory: "/"
     schedule:
       interval: "monthly"
 
-  # Maven project
+  # The root POM owns the complete multi-module reactor. Production dependencies
+  # deliberately stay ungrouped: platform APIs, shaded libraries and build plugins
+  # have different Java floors and compatibility requirements.
   - package-ecosystem: "maven"
     directory: "/"
     schedule:
       interval: "monthly"
 
     groups:
-      production-dependencies:
-        dependency-type: "production"
-      development-dependencies:
+      test-dependencies:
+        applies-to: "version-updates"
         dependency-type: "development"
-        exclude-patterns:
-          # Create single PR for these
-          # Plugin require special evaluation about their compatibility
-          - "com.lenis0012.bukkit:loginsecurity"
-          - "com.comphenix.protocol:ProtocolLib"
+        update-types:
+          - "minor"
+          - "patch"
 
     ignore:
-      # HikariCP dropped Java 8 support with 5.0
+      # HikariCP 5+ dropped the Java 8 support required by core and Bukkit.
       - dependency-name: "com.zaxxer:HikariCP"
         update-types: ["version-update:semver-major"]
+
+      # These dependencies are fixed JARs checked into module lib directories.
+      # Updating only their POM version would not replace the actual JAR.
+      - dependency-name: "de.st_ddt.crazy:CrazyCore"
+      - dependency-name: "de.st_ddt.crazy:CrazyLogin"
+      - dependency-name: "ultraauth:ultraauth"
+      - dependency-name: "me.vik1395:BungeeAuth"
+      - dependency-name: "net.md-5:bungeecord-proxy"
