@@ -75,7 +75,7 @@
 
         <!-- Shared across bungee + velocity -->
         <sqlite.version>3.42.0.0</sqlite.version>
-        <mariadb.version>3.4.0</mariadb.version>
+        <mariadb.version>3.5.10</mariadb.version>
     </properties>
 
     <modules>
