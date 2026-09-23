@@ -14,7 +14,7 @@ Maven 坐标是 `com.github.games647:fastloginplus.craftapi:${revision}`(`maven.
 - 上游 `1.0` 线是 Java 11 字节码(`v55`). `javac --release 8` 编译它不会有任何告警, 所以直接引入会把 bukkit 的运行时下限从 Java 8 悄悄抬到 Java 11, 而且只在用户服务器上以 `UnsupportedClassVersionError` 的形式暴露. 它还会丢掉公开的 `setOutgoingAddresses` / `sslFactory` 入口, 也就是 `ip-addresses` 功能.
 - 我们发布的那份构建里有两个缺陷在此修复(见下): `mojang-request-limit` 形同虚设, 以及代理回退请求的是端点根路径而不是玩家名.
 
-本文是内化模块的**基线档案**: 来自哪棵上游树、本地改了什么、什么不许静默改变、以及如何升级. 它是一份纳入版本管理的常青文档, 位于 `docs/en/` —— 相当于本地 `deps/` 目录里那些依赖评估的对应物, 之所以提升到这里, 是因为它描述的是我们自己拥有的模块, 而不是我们跟踪的外部依赖. 插件 JAR 不受影响: 只有 `craftapi/src/main/resources` 会被打包, 所以这个文件永远不会进入用户的服务器.
+本文是内化模块的**基线档案**: 来自哪棵上游树、本地改了什么、什么不许静默改变、以及如何升级. 它是一份纳入版本管理的常青文档, 位于 `docs/en/`, 因为描述的是我们自己拥有的模块, 而不是我们跟踪的外部依赖. 插件 JAR 不受影响: 只有 `craftapi/src/main/resources` 会被打包, 所以这个文件永远不会进入用户的服务器.
 
 ## 上游基线
 

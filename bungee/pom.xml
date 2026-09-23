@@ -152,8 +152,6 @@
             all we are allowed to link (see BungeePublicApiOnlyTest). protocol is excluded here
             and re-declared for tests only; netty and snakeyaml are dropped here too (the proxy
             supplies them at runtime, the test-only snakeyaml is re-declared below).
-            Rationale and the previous (non-reproducible) setup: deps/bungeecord/1.21-R0.4.md
-            §5.4 / ISS-B4 / F-B5.
         -->
         <dependency>
             <groupId>net.md-5</groupId>

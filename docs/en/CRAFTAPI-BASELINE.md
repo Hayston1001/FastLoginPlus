@@ -27,8 +27,7 @@ The last upstream release is not reproducible and cannot be upgraded safely:
 
 This is the **baseline record** of the vendored module: which upstream tree it came from, what changed
 locally, what must not change silently and how to update it. It is a tracked, evergreen document under
-`docs/en/` — the counterpart of the dependency assessments in the local-only `deps/` directory, promoted
-here because it describes a module we own rather than an external dependency we track. The plugin jars are
+`docs/en/` because it describes a module we own rather than an external dependency we track. The plugin jars are
 unaffected: only `craftapi/src/main/resources` is packaged, so this file never reaches a user's server.
 
 ## Upstream base

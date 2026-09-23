@@ -16,8 +16,8 @@ updates:
   # not ours:
   #
   #   - platform APIs: paper-api, folia-api, velocity-api, net.md-5:bungeecord-*
-  #     (see bungee/pom.xml and deps/bungeecord/1.21-R0.4.md -- moving the
-  #     compile baseline is a reviewed change, and a partial bump splits it)
+  #     (moving the compile baseline is a reviewed change -- a partial bump splits
+  #     bungeecord-api from the proxy the user actually runs)
   #   - other plugins' hook APIs: ProtocolLib, AuthMe, SkinsRestorer,
   #     PlaceholderAPI, Geyser/Floodgate, Passky, LoginSecurity, xAuth, ...
   #   - the fixed JARs checked into */lib and the shared io.netty version
