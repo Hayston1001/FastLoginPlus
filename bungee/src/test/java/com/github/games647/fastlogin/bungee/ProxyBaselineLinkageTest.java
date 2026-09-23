@@ -51,6 +51,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -131,6 +132,25 @@ class ProxyBaselineLinkageTest {
     }
 
     private record ParsedRefs(Set<String> classes, Set<MemberRef> members) {
+    }
+
+    private static class ConstructorParent {
+
+        ConstructorParent(String value) {
+        }
+    }
+
+    private static class ConstructorChild extends ConstructorParent {
+
+        ConstructorChild() {
+            super("test");
+        }
+    }
+
+    @Test
+    void constructorsMustBeDeclaredOnTheReferencedClass() {
+        assertTrue(memberExists(ConstructorChild.class, "<init>", "()V"));
+        assertFalse(memberExists(ConstructorChild.class, "<init>", "(Ljava/lang/String;)V"));
     }
 
     @Test
@@ -275,7 +295,7 @@ class ProxyBaselineLinkageTest {
                 if (!visitedRoots.add(jarPath)) {
                     return;
                 }
-                Path jar = Paths.get(URI.create("file:" + jarPath));
+                Path jar = Paths.get(URI.create(jarPath));
                 try (ZipFile zip = new ZipFile(jar.toFile())) {
                     for (ZipEntry entry : java.util.Collections.list(zip.entries())) {
                         String name = entry.getName();
@@ -455,6 +475,9 @@ class ProxyBaselineLinkageTest {
     }
 
     private static boolean memberExists(Class<?> owner, String name, String desc) {
+        if ("<init>".equals(name)) {
+            return declaredHere(owner, name, desc);
+        }
         for (Class<?> current = owner; current != null; current = current.getSuperclass()) {
             if (declaredHere(current, name, desc) || interfaceChainMatches(current.getInterfaces(), name, desc)) {
                 return true;

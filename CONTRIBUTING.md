@@ -213,7 +213,8 @@ and verify before pushing:
 - Tests use **JUnit 6** and **Mockito (inline mock maker — required for static
   mocks)**; both are declared in the root POM. JUnit 6 raises the floor for
   *running* tests to **JDK 17+** — the pinned build JDK 21 already satisfies
-  this, but `mvn test` will not start on anything older. Tests are `test`\  scope and never ship, so no module's runtime floor changes with it.
+  this, but `mvn test` will not start on anything older. Tests are `test`
+  scope and never ship, so no module's runtime floor changes with it.
 - Unit tests live in each module's `src/test/java`; `bukkit` additionally has
   an `integration` test package.
 - Add tests for bug fixes (a failing-test-first commit for non-trivial bugs is
@@ -247,9 +248,9 @@ and verify before pushing:
   and the BungeeCord config shim are relocated into the final JARs, but the set
   differs per module (see the shade-plugin configs): `bukkit` relocates all of
   them, `folia` is `bukkit` minus PaperLib, `bungee` relocates only HikariCP +
-  SLF4J, and `velocity` relocates HikariCP + the config shim + the bundled
-  MariaDB driver. On the proxies Gson and SnakeYAML are excluded from the
-  shaded set entirely — the proxy ships its own. `sqlite-jdbc`/`mariadb` are
+  SLF4J, and `velocity` relocates HikariCP + the config shim + SnakeYAML +
+  the bundled MariaDB driver. Both proxies use their own Gson; BungeeCord
+  also provides SnakeYAML. `sqlite-jdbc`/`mariadb` are
   `provided` in `core`/`bukkit` (the server ships them) but bundled in
   `bungee`/`velocity`. Keep this in mind
   when adding dependencies — prefer `provided` scope for anything a modern
