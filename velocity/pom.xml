@@ -83,6 +83,10 @@
                             <pattern>org.mariadb</pattern>
                             <shadedPattern>fastlogin.mariadb</shadedPattern>
                         </relocation>
+                        <relocation>
+                            <pattern>org.yaml.snakeyaml</pattern>
+                            <shadedPattern>fastlogin.yaml</shadedPattern>
+                        </relocation>
 
                     </relocations>
                     <transformers>
@@ -111,6 +115,18 @@
                             <includes>
                                 <include>**</include>
                             </includes>
+                        </filter>
+                        <!--
+                            Shade rewrites Multi-Release branch content but cannot rename the
+                            entry paths, so the relocated Java 9 branch would stay under
+                            META-INF/versions/9/org/yaml/... as a dead entry. Same filter and
+                            rationale as bukkit/folia - see the comment in bukkit/pom.xml.
+                        -->
+                        <filter>
+                            <artifact>org.yaml:snakeyaml</artifact>
+                            <excludes>
+                                <exclude>META-INF/versions/**</exclude>
+                            </excludes>
                         </filter>
                     </filters>
                 </configuration>
