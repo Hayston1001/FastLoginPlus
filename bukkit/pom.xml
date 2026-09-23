@@ -101,6 +101,23 @@
                                 <exclude>**/module-info.class</exclude>
                             </excludes>
                         </filter>
+                        <!--
+                            Shade rewrites the content of Multi-Release branches but cannot rename
+                            their entry paths, so after relocating org.yaml.snakeyaml its Java 9
+                            branch stays under META-INF/versions/9/org/yaml/... while the classes
+                            inside are already named fastlogin.yaml.* - a dead entry that is never
+                            found via the relocated name and only a wrong-name trap under the old
+                            one. Dropping the branch is behavior-identical: the base variant (always
+                            present) is what actually loads today. If a shaded dependency ever puts
+                            functional classes into a versioned branch, they need real path renaming
+                            instead of this filter.
+                        -->
+                        <filter>
+                            <artifact>org.yaml:snakeyaml</artifact>
+                            <excludes>
+                                <exclude>META-INF/versions/**</exclude>
+                            </excludes>
+                        </filter>
                     </filters>
                 </configuration>
                 <executions>
