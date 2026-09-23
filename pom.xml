@@ -75,6 +75,15 @@
 
         <!-- Shared across bungee + velocity -->
         <sqlite.version>3.53.4.0</sqlite.version>
+        <!--
+            The oldest server-provided sqlite-jdbc we promise to work with.  core compiles against
+            sqlite.version (the newest known driver - also the copy bundled into bungee/velocity),
+            while bukkit/folia load whatever driver the user's server ships at runtime.  The
+            sqlite-floor-test execution in core/ re-runs the storage tests against exactly this
+            floor jar, so using a driver API newer than the floor fails the build instead of
+            failing on a user's server.  Raise it only deliberately, together with the user docs.
+        -->
+        <sqlite.floor.version>3.36.0</sqlite.floor.version>
         <mariadb.version>3.5.10</mariadb.version>
     </properties>
 

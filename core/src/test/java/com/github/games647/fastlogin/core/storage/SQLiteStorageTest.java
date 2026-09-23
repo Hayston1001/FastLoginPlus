@@ -34,6 +34,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -75,6 +76,28 @@ class SQLiteStorageTest {
     void tearDown() {
         if (storage != null) {
             storage.close();
+        }
+    }
+
+    /**
+     * Guards the classpath swap of the {@code sqlite-floor-test} execution (see core/pom.xml):
+     * that execution re-runs the storage tests against {@code sqlite.floor.version}, the oldest
+     * server-provided driver we promise to support. If the exclusion of the newest driver ever
+     * silently matched nothing, the floor run would just re-test the newest driver and prove
+     * nothing - so whenever the expectation is passed in as a system property, verify which jar
+     * the driver classes actually came from.
+     *
+     * @throws Exception if the SQLite driver is not on the test classpath
+     */
+    @Test
+    void driverUnderTestMatchesExpectedVersion() throws Exception {
+        URL location = Class.forName("org.sqlite.JDBC").getProtectionDomain().getCodeSource().getLocation();
+
+        String expected = System.getProperty("expected.sqlite.driver.version");
+        if (expected != null) {
+            assertTrue(location.toString().contains(expected),
+                    "Expected sqlite-jdbc " + expected + " on the test classpath, but the driver was loaded from "
+                            + location);
         }
     }
 
