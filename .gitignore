@@ -1,8 +1,7 @@
 # dev
 .worktrees/
 .playwright-mcp/
-audit/
-deps/
+local-docs/
 dev_web_server.py
 
 # Eclipse
