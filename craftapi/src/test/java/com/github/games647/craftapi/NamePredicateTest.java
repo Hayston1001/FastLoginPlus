@@ -100,7 +100,13 @@ class NamePredicateTest {
             "Mr.Denis",
             // dash
             //https://sessionserver.mojang.com/session/minecraft/profile/cca4953341074ef5a196a6e67104277d
-            "football-flo"
+            "football-flo",
+            // characters that lie between 'Z' and 'a' - an [a-zA-z] range would let them through
+            "rashomon[",
+            "rasho\\mon",
+            "rashomon]",
+            "rasho^mon",
+            "rasho`mon"
     })
     void testInvalidCharacters(String name) {
         assertFalse(predicate.test(name));
