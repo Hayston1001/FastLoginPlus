@@ -41,6 +41,7 @@ Maven 坐标是 `com.github.games647:fastloginplus.craftapi:${revision}`(`maven.
 9. 端点字段(`uuidUrl`、`backupUuidUrl`、`useBackupUuidUrl`、`hasJoinedUrlRaw`、`hasJoinedUrlProxyCheck`)改为包内可见, 以便测试重定向它们; FLP 从不把它们暴露为配置.
 10. `MojangResolver` —— 粘滞的 `403` 状态不再兼作"本次请求走了备用端点": 在途请求的端点改由参数传递(`viaBackupEndpoint`), 该标记是 `volatile` 的. 两个并发查询若都从主端点收到 `403`, 现在会各自回退, 而不是其中一个读到另一个刚设下的标记、然后抛出 `Both Mojang APIs returned 403 Forbidden`. (FLP 在并发登录线程上查名字, 所以这在生产上是可达的, 上游 1.0 也是同样的形态.)
 11. `MojangResolver` —— 每个非 `200` 响应都会在分支返回、递归或抛异常之前被读取完(`drainQuietly`), `hasJoined` 对其 `404`/`204` 的提前返回同样如此, 而未产生响应的连接会用 `disconnect()` 释放. 未读的错误响应体会让客户端丢弃 socket 而不是把它还回 keep-alive 池, 所以以前成片的 `429` 或代理错误会留下连接残留.
+12. `NamePredicate` —— 名字的正则改为 `^[a-zA-Z0-9_]{2,16}$`; 上游写的是 `[a-zA-z0-9]`, 该范围还会匹配 `Z` 与 `a` 之间的六个 ASCII 字符(`[`、`\`、`]`、`^`、`_`、`` ` ``). 于是含其中之一的登录名(独立服上可达 —— 包监听先于服务端自己的名字校验)不会被本地短路, 而是真的去查 Mojang, 一次连接最多浪费三次受限流配额并走一轮 `IOException` 重试循环. 这不是注入: `.`、`/`、`?`、`&`、`%` 与空白仍然被拒, 名字逃不出所在路径段. **下划线必须保持合法**(它当年只是被这个范围顺带放行的), 所以重新内化时绝不能改回 `[a-zA-Z0-9]`.
 
 整理性改动: 所有文件加上 FLP 的 MIT 许可证头(FastUUID 保留其上游声明)并满足 Checkstyle(`OperatorWrap` 换行、花括号、javadoc 的 `@param`). 唯一对 API 可见的后果是 `FastUUID` 变为 `final`、`Textures.KEY` 变为 `static final`(值相同)—— 两者都被 `bukkit`/`folia` 引用, 因此该改动由 reactor 构建做编译检查.
 

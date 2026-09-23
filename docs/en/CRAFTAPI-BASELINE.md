@@ -82,6 +82,13 @@ Behaviour fixes (all covered by offline tests):
     produced a response is released with `disconnect()`.  An unread error body makes the client drop the
     socket instead of returning it to the keep-alive pool, so bursts of `429`s or proxy errors used to leave
     connections behind.
+12. `NamePredicate` — the name pattern is `^[a-zA-Z0-9_]{2,16}$`; upstream writes `[a-zA-z0-9]`, whose range
+    also matches the six ASCII characters between `Z` and `a` (`[`, `\`, `]`, `^`, `_`, `` ` ``).  A login name
+    containing one of them (reachable standalone — the packet listener runs before the server's own name
+    check) therefore reached Mojang instead of being short-circuited locally, costing up to three rate-limited
+    requests and an `IOException` retry loop per connection.  Not an injection: `.`, `/`, `?`, `&`, `%` and
+    whitespace stay rejected, so the name cannot leave its path segment.  **The underscore must stay legal**
+    (it was only accepted because of that range), so re-vendoring must not restore `[a-zA-Z0-9]`.
 
 Housekeeping: FLP's MIT license header on every file (FastUUID keeps its upstream notice) and Checkstyle
 conformance (`OperatorWrap` line breaks, braces, javadoc `@param`). The only API-visible consequence is
