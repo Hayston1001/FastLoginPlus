@@ -31,23 +31,33 @@
 # ========================================
 # This template ships with the Bukkit/Folia plugin and covers BOTH deployment
 # modes:
-#   S = standalone      - no proxy, direct connections
-#   P = proxy backend   - spigot.yml bungee:true or Velocity forwarding
-# Keys whose behavior differs between modes carry an EFFECT line:
-#   # EFFECT  S=<full|none>   P=<scenario|none>   reason
-#   full     - the key works as described in this mode
-#   scenario - the sub-scenario where the key still works in this mode;
-#              currently "Paper" or "Paper 1.21.7+"
-#              (the configuration-phase connection event FLP uses exists from 1.21.7;
-#               AuthMe 6.0's pre-join dialogs require Paper/Folia 1.21.11+, so on any
-#               server where this matters the event is always present)
-#   none     - the key has no effect in this mode; its code paths do not run
-# Keys without an EFFECT line behave identically in both modes.
+#   standalone    - no proxy, direct connections
+#   proxy backend - behind a Bungee or Velocity server
 #
-# Examples — how to read an EFFECT line:
+# A key that behaves differently in the two modes says so in its own comment, with a
+# "Behind a proxy:" line. It describes what THIS server does when it IS a proxy
+# backend.
+#
+# Three shapes appear:
+#   ignored here        - this server never reads the key. The proxy decides, from
+#                         its own copy of the key in the proxy's config.yml - that
+#                         is the one to edit.
+#   standalone only     - this server never reads the key, and the proxy has no such
+#                         key either: it exists only in standalone deployments.
+#   only Paper reads it - still read here, but only in Paper's connection
+#                         configuration phase; on Spigot this degenerates to
+#                         "ignored here", above.
+#                         (The configuration-phase connection event FLP uses exists
+#                          from 1.21.7 onwards; AuthMe 6.0's pre-join dialogs require
+#                          Paper/Folia 1.21.11+, so on any server where this matters
+#                          the event is always present.)
+#
+# Keys without a "Behind a proxy:" line behave identically in both modes.
+#
+# Examples — how to read a "Behind a proxy:" line:
 #
 #   --------------------------------
-#   # EFFECT  S=full   P=none
+#   # Behind a proxy: ignored here - the proxy runs its own anti-bot checks
 #   anti-bot:
 #     enabled: true
 #   --------------------------------
@@ -55,16 +65,16 @@
 #   Behind a proxy: Editing this section HERE changes NOTHING. You should edit this in proxy's config.yml
 #
 #   --------------------------------
-#   # EFFECT  S=full   P=Paper 1.21.7+  configure-phase pre-registration
+#   # Behind a proxy: only Paper reads it, in the configure phase (pre-registration)
 #   autoRegister: true
 #   --------------------------------
 #   Standalone: This section fully works HERE.
-#   Behind a proxy: Only on Paper 1.21.7+; On Spigot editing this section HERE changes NOTHING--you should edit this in proxy's config.yml
+#   Behind a proxy: Only on Paper; On Spigot editing this section HERE changes NOTHING--you should edit this in proxy's config.yml
 #
 #   --------------------------------
 #   autoLogin: true
 #   --------------------------------
-#   No EFFECT line: behaves identically in both modes.
+#   No "Behind a proxy:" line: behaves identically in both modes.
 
 # ========================================
 # Language
@@ -86,7 +96,7 @@ update-check-interval: 24
 # Anti-bot
 # ========================================
 # Simple anti-bot protection. For serious protection, use a dedicated firewall
-# EFFECT  S=full   P=none           the proxy enforces anti-bot checks
+# Behind a proxy: ignored here - the proxy runs its own anti-bot checks
 anti-bot:
   enabled: true
   # Total connections allowed in the time window
@@ -124,7 +134,7 @@ anti-bot:
 # Premium Detection
 # ========================================
 # Auto-register new premium players on first join
-# EFFECT  S=full   P=Paper 1.21.7+  configure-phase pre-registration; Spigot: none
+# Behind a proxy: only Paper reads it, in the configure phase (pre-registration)
 autoRegister: true
 
 # Enable auto-login for premium players
@@ -133,18 +143,18 @@ autoLogin: true
 # Use premium UUID for premium players
 # In standalone mode, true = inject the premium UUID into the offline-mode
 # server (ProtocolLib reflection)
-# EFFECT  S=full   P=none           the proxy decides the UUID
+# Behind a proxy: ignored here - the proxy decides the UUID
 premiumUuid: true
 
 # Query Mojang API for new players and detect name changes by UUID
 # If a player's name is not in the database but their UUID is (under an old name),
 # the old record is updated with the new name and they log in as premium
-# EFFECT  S=full   P=none           the proxy detects name changes
+# Behind a proxy: ignored here - the proxy detects name changes
 nameChangeCheck: true
 
 # If an offline player uses a premium username but fails authentication, 
 # remember them so they can join in offline mode next time (not recommended)
-# EFFECT  S=full   P=none           the cracked fallback runs on the proxy
+# Behind a proxy: ignored here - the cracked fallback runs on the proxy
 secondAttemptCracked: false
 
 # ========================================
@@ -155,7 +165,7 @@ secondAttemptCracked: false
 # No restrictions apply to online players
 # Use /flp cracked <player> to add offline players to the database
 # Use /flp delete <player> to remove offline players from the database
-# EFFECT  S=full   P=none           the proxy enforces the whitelist
+# Behind a proxy: ignored here - the proxy enforces the whitelist
 offline-whitelist: false
 
 # ========================================
@@ -163,18 +173,18 @@ offline-whitelist: false
 # ========================================
 # Forward premium skin to the player
 # Even when enabled, SkinsRestorer custom skins take priority (if SR is installed)
-# EFFECT  S=full   P=none           the proxy forwards or strips the skin itself
+# Behind a proxy: ignored here - the proxy forwards or strips the skin itself
 forwardSkin: true
 
 # ========================================
 # Command Behavior
 # ========================================
 # Show warning before /flp premium command takes effect
-# EFFECT  S=full   P=none           the proxy reads its own copy
+# Behind a proxy: ignored here - the proxy asks for the confirmation
 premium-warning: true
 
 # Kick the player from the server after they confirm /flp premium, forcing them to reconnect
-# EFFECT  S=full   P=Paper 1.21.7+  pending-toggle relay kick only
+# Behind a proxy: only Paper reads it, to kick after relaying a queued toggle
 kick-toggle: true
 
 # ========================================
@@ -196,29 +206,30 @@ respectIpLimit: false
 # Useful behind DNAT / transparent reverse proxies
 # In standalone mode it omits the ip parameter in hasJoined, so verification
 # matches even when the backend observes a different IP than the client used
-# EFFECT  S=full   P=none           hasJoined never runs behind a proxy
+# Behind a proxy: standalone only - hasJoined never runs here; the proxy has no such key
 useProxyAgnosticResolver: true
 
 # Mojang API retry
 # Retry count for Mojang API calls (Name→UUID lookup + session verification)
 # Total attempts per request
-# EFFECT  S=full   P=none           no retried Mojang call runs behind a proxy
+# Behind a proxy: ignored here - no retried Mojang call is made by this server
 mojang-retry-count: 3
 # Base delay between retries in milliseconds (exponential backoff: delay * 2^(attempt-1), capped at 10s)
+# Behind a proxy: ignored here - no retried Mojang call is made by this server
 mojang-retry-delay: 500
 
 # Verify client public key signature (1.19+, standalone ProtocolLib)
-# EFFECT  S=full   P=none           ProtocolLib is not registered behind a proxy
+# Behind a proxy: standalone only - ProtocolLib never runs here; the proxy has no such key
 verifyClientKeys: false
 
 # IP addresses for rotating Mojang API requests (to avoid rate limits)
-# EFFECT  S=full   P=Paper 1.21.7+  configure-phase lookup only
+# Behind a proxy: only Paper reads it, in the configure phase
 # ip-addresses:
 #   - 192-168-0-2
 ip-addresses:
 
 # Max Mojang name->UUID requests per 10 minutes
-# EFFECT  S=full   P=Paper configure-phase lookup only
+# Behind a proxy: only Paper reads it, in the configure phase
 # Mojang allows 600 requests per 10 minutes per outgoing IPv4 address. Lower this to
 # leave room for other plugins, or raise it while using 'proxies' below. Valid range
 # 0..600, other values are clamped. 0 means "never call Mojang directly" and requires
@@ -229,22 +240,22 @@ mojang-request-limit: 600
 # Floodgate / Bedrock
 # ========================================
 # Auto-login for Floodgate (Bedrock) players. Values: false / true / linked / no-conflict
-# EFFECT  S=full   P=none           the proxy handles Bedrock players
+# Behind a proxy: ignored here - the proxy handles Bedrock players
 autoLoginFloodgate: false
 
 # Allow Bedrock players to join even if their name conflicts with a Java premium account
-# EFFECT  S=full   P=none           the proxy enforces the conflict policy
+# Behind a proxy: ignored here - the proxy enforces the conflict policy
 allowFloodgateNameConflict: false
 
 # Auto-register Floodgate players. Requires autoLoginFloodgate
-# EFFECT  S=full   P=none           the proxy handles Bedrock players
+# Behind a proxy: ignored here - the proxy handles Bedrock players
 autoRegisterFloodgate: false
 
 # ========================================
 # Database
 # ========================================
-# EFFECT  S=full   P=none           setupDatabase() is skipped; the proxy DB is
-#                                  the single source of truth
+# Behind a proxy: ignored here - this server never opens a database; the proxy's
+#                                DB is the single source of truth
 # Database driver: 'sqlite' (default) or 'mysql'
 driver: 'sqlite'
 
@@ -284,7 +295,7 @@ ServerRSAPublicKeyFile:
 # Proxies
 # ========================================
 # HTTP proxies for Mojang API requests (workaround for rate limits)
-# EFFECT  S=full   P=Paper 1.21.7+  configure-phase lookup only
+# Behind a proxy: only Paper reads it, in the configure phase
 # proxies:
 #   - 'xyz.com:1337'
 proxies:
