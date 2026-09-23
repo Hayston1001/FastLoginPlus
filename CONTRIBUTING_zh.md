@@ -161,7 +161,7 @@ mvn package -pl folia -am --batch-mode -DskipTests
 
 ## 测试
 
-- 测试使用 **JUnit 5** 与 **Mockito(inline mock maker —— 静态 mock 必需)**; 两者都在根 POM 中声明.
+- 测试使用 **JUnit 6** 与 **Mockito(inline mock maker —— 静态 mock 必需)**; 两者都在根 POM 中声明. JUnit 6 把*运行*测试的下限抬到了 **JDK 17+** —— `.java-version` 钉住的构建 JDK 21 已满足, 但更低的 JDK 上 `mvn test` 无法启动. 测试是 `test` 作用域、不会随产物发布, 因此任何模块的运行时 floor 都不受影响.
 - 单元测试位于各模块的 `src/test/java`; `bukkit` 另有一个 `integration` 测试包.
 - 修 bug 请补测试(非平凡 bug 建议先写一个失败的测试再提交), `core` 中新的决策逻辑也要补测试.
 - 如果你改的是数据包处理或登录流程, 至少要为受影响的 `core` 逻辑新增/扩充测试 —— 完整的跨平台行为需要人工验证, 请在 PR 里描述你验证的方式(用到的平台、服务器版本、登录插件).

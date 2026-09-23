@@ -210,8 +210,10 @@ and verify before pushing:
 
 ## Testing
 
-- Tests use **JUnit 5** and **Mockito (inline mock maker — required for static
-  mocks)**; both are declared in the root POM.
+- Tests use **JUnit 6** and **Mockito (inline mock maker — required for static
+  mocks)**; both are declared in the root POM. JUnit 6 raises the floor for
+  *running* tests to **JDK 17+** — the pinned build JDK 21 already satisfies
+  this, but `mvn test` will not start on anything older. Tests are `test`\  scope and never ship, so no module's runtime floor changes with it.
 - Unit tests live in each module's `src/test/java`; `bukkit` additionally has
   an `integration` test package.
 - Add tests for bug fixes (a failing-test-first commit for non-trivial bugs is
