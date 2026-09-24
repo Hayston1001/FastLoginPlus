@@ -149,6 +149,8 @@ Build requirements:
   3.6.3 when it went EOL; 3.9.x is used for
   development). A git clone is expected — the build embeds the commit hash
   into the final JAR name and manifest.
+- **Gradle 9.6.1** is supplied by the wrapper; no separate Gradle installation is
+  needed. Both builds use JDK 21 and the same per-module Java targets.
 
 Some auth-plugin APIs (CrazyLogin, UltraAuth, BungeeAuth) are provided as
 system-scoped JARs in the `lib/` directory of each module — no manual
@@ -160,7 +162,7 @@ installation is required.
 # Build all modules, skipping tests
 mvn package --batch-mode -DskipTests
 
-# Build and run the test suite (what CI does)
+# Build and run the Maven test suite
 mvn package --batch-mode
 
 # Run tests only
@@ -174,6 +176,23 @@ mvn package -pl folia -am --batch-mode -DskipTests
 Finished JARs land in each module's `target/` directory, named like
 `FastLoginPlusBukkit-<version>-<commit>` (module name + revision + commit hash).
 
+The Gradle build is available alongside Maven during the migration. On Windows
+use `gradlew.bat` in place of `./gradlew`:
+
+```bash
+./gradlew build                         # all modules, tests and checks
+./gradlew assemble                      # all plugin JARs, without tests
+./gradlew :bukkit:build :folia:build    # selected modules and their dependencies
+./gradlew :core:sqliteFloorTest         # server SQLite compatibility floor
+```
+
+Gradle's installable plugin JARs land in each platform module's `build/libs/`
+directory with the same version and commit naming as Maven. The `-plain.jar`
+files are unshaded build intermediates; use the JAR without `-plain`. Maven's
+`target/` artifacts and release workflow remain available while both CI builds
+run independently. When changing a dependency or release number, update both
+the root `pom.xml` and `build.gradle`.
+
 ## Enforced checks — the build fails without these
 
 These run on **every** build (locally and in CI). Save yourself a round-trip
@@ -183,7 +202,8 @@ and verify before pushing:
    license header (`license-maven-plugin`, checked against the root `LICENSE`
    file; resources and `.java-version` are excluded). When creating a new
    file, copy the header from an existing one.
-2. **Checkstyle** (`checkstyle.xml`, severity `error`, `failsOnError`).
+2. **Checkstyle** (`checkstyle.xml`, severity `error`, `failsOnError`; both builds
+   check main Java sources).
    Highlights beyond the usual naming/whitespace rules:
    - Line length ≤ **120** characters (Java files)
    - Methods ≤ **160** lines; `final` parameters; no star imports; no unused

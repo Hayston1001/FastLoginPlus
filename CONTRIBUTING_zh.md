@@ -120,6 +120,7 @@ graph TB
 
 - **JDK 21**(写在 `.java-version` 里、CI 使用的版本) —— 这是**构建**要求, 与产物运行时需要什么无关(见上表 `Java floor`). 上表各模块的 `maven.compiler.release` 会让 javac 拒绝比该模块目标更新的 API, 所以你只需要一个现代 JDK —— 但不要在 `core`/`bukkit` 里用 Java 9+ 的 API, 也不要在 `bungee`/`velocity` 里用 Java 18+ 的 API. 注意 `--release` 只约束*你自己*编译时用到的 API: 它无法阻止更新的依赖悄悄抬高模块的*运行时*要求, 下面那条字节码地板检查就是为此存在的. 但那条检查本身也不够 —— `enforceBytecodeVersion` 豁免 `module-info.class`(Guava 33+ 正好就带一个 class 53 的 module-info, 而它真正的类全是 Java 8) —— 所以 floor 的结论要用字节码来验证: 取 `META-INF/versions/` **之外**最高的 class 文件主版本号(52 = Java 8, 55 = 11, 61 = 17, 65 = 21), 依赖 JAR 与最终产物都要看.
 - **Maven 3.9.0+**(`git-commit-id-maven-plugin` 10 在 Maven 3.6.3 EOL 后不再支持它, 因此提高下限; 开发时使用 3.9.x). 需要是 git clone —— 构建会把 commit hash 写进最终 JAR 的文件名与 manifest.
+- **Gradle 9.6.1** 由 wrapper 提供, 无需单独安装. 两套构建都使用 JDK 21 和相同的模块 Java 目标版本.
 
 部分登录插件的 API(CrazyLogin、UltraAuth、BungeeAuth)以 system 作用域的 JAR 放在各模块的 `lib/` 目录里 —— 不需要手动安装.
 
@@ -129,7 +130,7 @@ graph TB
 # 构建全部模块, 跳过测试
 mvn package --batch-mode -DskipTests
 
-# 构建并运行测试套件(CI 就是这么做的)
+# 构建并运行 Maven 测试套件
 mvn package --batch-mode
 
 # 只跑测试
@@ -143,12 +144,26 @@ mvn package -pl folia -am --batch-mode -DskipTests
 产出的 JAR 落在各模块的 `target/` 目录下, 命名形如
 `FastLoginPlusBukkit-<version>-<commit>`(模块名 + revision + commit hash).
 
+迁移期间 Gradle 与 Maven 并存. Windows 下把 `./gradlew` 换成 `gradlew.bat`:
+
+```bash
+./gradlew build                         # 全模块、测试和检查
+./gradlew assemble                      # 全部插件 JAR, 不运行测试
+./gradlew :bukkit:build :folia:build    # 指定模块及其依赖
+./gradlew :core:sqliteFloorTest         # 服务器 SQLite 最低版本复测
+```
+
+Gradle 可安装的插件 JAR 位于各平台模块的 `build/libs/`, 版本和提交哈希命名与 Maven 相同.
+带 `-plain.jar` 的文件未包含依赖, 安装时使用不带 `-plain` 的 JAR. 并存期间 Maven 的
+`target/` 产物及发布流程继续保留, 两套 CI 构建独立运行. 更新依赖或版本时, 同时修改
+根目录 `pom.xml` 与 `build.gradle`.
+
 ## 强制检查 —— 不满足则构建失败
 
 这些检查在**每一次**构建(本地与 CI)都会跑. 与其等 CI 回你一轮, 不如推之前先自己跑一遍:
 
 1. **MIT 许可证头** —— 每个 Java 与 XML 文件都必须带项目许可证头(`license-maven-plugin`, 对着根目录 `LICENSE` 校验; 资源文件与 `.java-version` 被排除). 新建文件时, 从已有文件里拷贝头部.
-2. **Checkstyle**(`checkstyle.xml`, severity 为 `error`, `failsOnError`).
+2. **Checkstyle**(`checkstyle.xml`, severity 为 `error`, `failsOnError`; 两套构建都检查 main Java 源码).
    除常规命名/空白规则外, 重点还有:
    - 行长 ≤ **120** 字符(Java 文件)
    - 方法 ≤ **160** 行; 参数必须 `final`; 禁止星号导入; 禁止未使用的导入; 禁止 tab
