@@ -25,6 +25,8 @@
  */
 
 plugins { id 'com.gradleup.shadow' }
+// Lowest JRE that can load this artifact - keep in sync with the module table in CONTRIBUTING.md.
+ext.javaFloor = 8
 apply from: rootProject.file('gradle/platform-common.gradle')
 
 dependencies {
@@ -35,14 +37,6 @@ dependencies {
         exclude group: 'com.google.code.gson'
         exclude group: 'io.netty'
     }
-}
-
-// Keep the server API baseline versions used for this jar; the vendored
-// CraftAPI module resolves newer versions for its own tests.
-configurations.matching {
-    it.name in ['compileClasspath', 'runtimeClasspath', 'testCompileClasspath', 'testRuntimeClasspath']
-}.configureEach {
-    resolutionStrategy.force 'com.google.code.gson:gson:2.10.1', 'com.google.guava:guava:32.1.2-jre'
 }
 
 tasks.named('shadowJar') {

@@ -25,6 +25,8 @@
  */
 
 plugins { id 'com.gradleup.shadow' }
+// Lowest JRE that can load this artifact - keep in sync with the module table in CONTRIBUTING.md.
+ext.javaFloor = 17
 apply from: rootProject.file('gradle/bedrock.gradle')
 
 dependencies {
@@ -50,8 +52,8 @@ dependencies {
 }
 configurations.testImplementation.extendsFrom(configurations.compileOnly)
 tasks.named('test') {
-    def proxyJar = providers.gradleProperty('flp.proxy.jar')
-    if (proxyJar.isPresent()) systemProperty 'flp.proxy.jar', proxyJar.get()
+    // Opt-in check against a real, current proxy jar: ./gradlew :bungee:test -Pflp.proxy.jar=<jar>
+    systemProperty 'flp.proxy.jar', providers.gradleProperty('flp.proxy.jar').orElse('').get()
 }
 configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
     resolutionStrategy.force 'com.google.guava:guava:32.1.2-jre', 'com.google.code.gson:gson:2.10.1'
@@ -63,7 +65,11 @@ tasks.named('shadowJar') {
     relocate 'org.slf4j', 'fastlogin.slf4j'
     mergeServiceFiles()
     minimize {
+        // Bundled as-is, like the Maven build did: it exempted sqlite-jdbc from
+        // minimization with an <includes>**</includes> filter.
         exclude(dependency('org.xerial:sqlite-jdbc:.*'))
+        // The provider is named only in META-INF/services, so the minimizer cannot see
+        // it - see platform-common.gradle for the same reasoning.
         exclude(dependency('org.slf4j:.*:.*'))
     }
     exclude '**/module-info.class'

@@ -24,6 +24,11 @@
  * SOFTWARE.
  */
 
+// Lowest JRE that can load this artifact - keep in sync with the module table in
+// CONTRIBUTING.md. Replaces the old maven.compiler.release and is enforced by the
+// root build's checkRuntimeBytecode / verifyPluginJar tasks.
+ext.javaFloor = 8
+
 dependencies {
     api libs.gson
     api libs.guava

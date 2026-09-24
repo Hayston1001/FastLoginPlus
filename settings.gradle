@@ -31,6 +31,17 @@ pluginManagement {
     }
 }
 
+// build.gradle pins the JDK 21 toolchain (JavaLanguageVersion.of(21)). Declaring a
+// toolchain download repository is what makes that a supported configuration: without one
+// Gradle can only use JDKs it finds on the machine, and falling back to a JDK it
+// provisioned itself is deprecated (Gradle 10 turns it into an error). With the Foojay
+// resolver a machine with no JDK 21 - a fresh contributor box, a container - downloads one
+// instead of failing with "No matching toolchains found". An installed JDK 21 is still
+// preferred, so CI and developer machines with one never touch the network for this.
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {

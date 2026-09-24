@@ -46,6 +46,7 @@ updates:
 
       # Build tooling.
       - dependency-name: "com.gradleup.shadow"
+      - dependency-name: "org.gradle.toolchains.foojay-resolver-convention"
       - dependency-name: "com.puppycrawl.tools:checkstyle"
 
       # Tests.
@@ -64,6 +65,7 @@ updates:
         applies-to: "version-updates"
         patterns:
           - "com.gradleup.shadow"
+          - "org.gradle.toolchains.foojay-resolver-convention"
           - "com.puppycrawl.tools:checkstyle"
         update-types:
           - "minor"

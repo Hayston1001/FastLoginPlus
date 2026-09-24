@@ -25,6 +25,8 @@
  */
 
 plugins { id 'com.gradleup.shadow' }
+// Lowest JRE that can load this artifact: folia-api 1.21.x is Java 21 bytecode.
+ext.javaFloor = 21
 apply from: rootProject.file('gradle/platform-common.gradle')
 
 dependencies {

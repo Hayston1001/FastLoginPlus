@@ -26,6 +26,16 @@
 
 apply from: rootProject.file('gradle/bedrock.gradle')
 
+// bukkit and folia both shade Guava and Gson (relocated below), and both take their
+// version from the server API they run on, not from what craftapi declares for its own
+// tests. Without this pin Gradle resolves craftapi's newer versions instead: the server
+// API is compileOnly and so does not take part in resolving the packaged classpath.
+configurations.matching {
+    it.name in ['compileClasspath', 'runtimeClasspath', 'testCompileClasspath', 'testRuntimeClasspath']
+}.configureEach {
+    resolutionStrategy.force 'com.google.code.gson:gson:2.10.1', 'com.google.guava:guava:32.1.2-jre'
+}
+
 dependencies {
     compileOnly(libs.datafixerupper) { transitive = false }
     compileOnly(libs.protocol.lib) { transitive = false }
@@ -58,13 +68,14 @@ tasks.named('shadowJar') {
         exclude 'com.google.common.collect.Multimap'
     }
     mergeServiceFiles()
+    // Shrink the jar like the Maven build did (`minimizeJar=true`): only classes
+    // reachable from ours are kept. Gson, Guava and SnakeYAML are minimized too - not
+    // exempting them is what keeps these jars at the size of the 0.7.0 releases. SLF4J
+    // must stay exempt: its provider is named only in META-INF/services, which the
+    // minimizer cannot see, and losing that class makes SLF4J silently fall back to a
+    // no-op logger instead of failing.
     minimize {
-        // Gson adapters and Guava helpers are created reflectively. Shadow's
-        // reachability analysis otherwise drops classes needed at runtime.
-        exclude(dependency('com.google.code.gson:gson:.*'))
-        exclude(dependency('com.google.guava:guava:.*'))
         exclude(dependency('org.slf4j:.*:.*'))
-        exclude(dependency('org.yaml:snakeyaml:.*'))
     }
     exclude '**/module-info.class'
 }

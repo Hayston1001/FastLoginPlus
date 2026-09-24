@@ -42,10 +42,25 @@ def junitLauncher = libs.junit.launcher
 def mockitoCore = libs.mockito
 def checkstyleCore = libs.checkstyle
 
-def licensedSources = fileTree(rootDir) {
-    include '**/*.java', '**/*.xml', '**/*.gradle'
-    exclude '**/build/**', '**/target/**', '**/.gradle/**', '**/.worktrees/**',
-        '**/src/main/resources/**', '**/src/test/resources/**', 'gradle/wrapper/**'
+// Only files tracked by git are checked. A directory walk would also pick up
+// whatever a developer happens to have in the working tree - IDE project files,
+// local notes, a leftover .flattened-pom.xml - and fail the build for one machine
+// only. Source tarballs without a .git directory fall back to the walk.
+def licenseHeaderExcludes = ['**/build/**', '**/target/**', '**/.gradle/**', '**/.worktrees/**',
+    '**/src/main/resources/**', '**/src/test/resources/**', 'gradle/wrapper/**']
+def gitListing = providers.exec {
+    commandLine 'git', 'ls-files', '--', '*.java', '*.xml', '*.gradle'
+    ignoreExitValue = true
+}
+def gitTrackedExitCode = gitListing.result.get().exitValue
+def licensedSources = files(gitTrackedExitCode == 0
+    ? gitListing.standardOutput.asText.get().readLines().findAll { it }.collect { file(it) }
+    : fileTree(rootDir) {
+        include '**/*.java', '**/*.xml', '**/*.gradle'
+        exclude licenseHeaderExcludes
+    })
+if (gitTrackedExitCode != 0) {
+    logger.lifecycle('checkLicenseHeaders: no git checkout, scanning the working tree instead')
 }
 tasks.register('checkLicenseHeaders') {
     group = 'verification'
@@ -94,7 +109,11 @@ subprojects {
     group = rootProject.group
     version = rootProject.version
 
-    def javaFloor = project.name == 'folia' ? 21 : (project.name in ['bungee', 'velocity'] ? 17 : 8)
+    // Every module declares its own runtime floor as `ext.javaFloor` at the top of its
+    // build.gradle - that replaces the old maven.compiler.release. Read lazily, so a
+    // module script can still set it after this block was configured, and fail in
+    // projectsEvaluated() when a module forgot to declare one.
+    def javaFloor = providers.provider { project.ext.javaFloor as Integer }
     // Compile-only server APIs and test libraries may target the build JDK.
     // The packaged runtime classpath is checked against each module's floor.
     configurations.matching { it.name in ['compileClasspath', 'testCompileClasspath', 'testRuntimeClasspath'] }
@@ -155,6 +174,17 @@ subprojects {
         def moduleName = project.name
         def modulePath = project.path
         def moduleVersion = project.version.toString()
+        // Names listed in a META-INF/services file: no bytecode references them, so a jar
+        // can look complete and still fail at runtime (the minimizer and the relocation
+        // both work behind the file's back).
+        def serviceProviders = { java.util.zip.ZipFile zip, String path ->
+            def entry = zip.getEntry(path)
+            if (entry == null) return []
+            zip.getInputStream(entry).getText('UTF-8').readLines()
+                .collect { it.contains('#') ? it.substring(0, it.indexOf('#')) : it }
+                .collect { it.trim() }
+                .findAll { !it.isEmpty() }
+        }
         tasks.named('jar') { archiveClassifier = 'plain' }
         tasks.named('shadowJar') {
             archiveBaseName = tasks.named('jar').get().archiveBaseName.get()
@@ -165,6 +195,9 @@ subprojects {
                 'Implementation-Title': archiveBaseName.get())
         }
         tasks.named('assemble') { dependsOn tasks.named('shadowJar') }
+        // `check` is enough for CI, but assemble is what produces the installable jar;
+        // verify there too so `./gradlew assemble` cannot emit a broken plugin jar.
+        tasks.named('assemble') { dependsOn verifyPluginJar }
         def verifyPluginJar = tasks.register('verifyPluginJar') {
             group = 'verification'
             dependsOn tasks.named('shadowJar')
@@ -195,13 +228,20 @@ subprojects {
                         throw new GradleException("${modulePath}: unfiltered ${descriptor}")
                     }
                     if (moduleName in ['bungee', 'velocity']) {
-                        def drivers = zip.getInputStream(zip.getEntry('META-INF/services/java.sql.Driver'))
-                            .getText('UTF-8').readLines().findAll { it && !it.startsWith('#') }
+                        def drivers = serviceProviders(zip, 'META-INF/services/java.sql.Driver')
                         def expectedDrivers = moduleName == 'bungee' ? ['org.sqlite.JDBC'] :
                             ['org.sqlite.JDBC', 'fastlogin.mariadb.jdbc.Driver']
                         expectedDrivers.each { driver ->
-                            if (!drivers.contains(driver) || !names.contains(driver.replace('.', '/') + '.class')) {
+                            if (!drivers.contains(driver)) {
                                 throw new GradleException("${modulePath}: missing JDBC service provider ${driver}")
+                            }
+                        }
+                    }
+                    names.findAll { it.startsWith('META-INF/services/') }.each { serviceFile ->
+                        serviceProviders(zip, serviceFile).each { provider ->
+                            if (!names.contains(provider.replace('.', '/') + '.class')) {
+                                throw new GradleException("${modulePath}: ${serviceFile} names ${provider}, " +
+                                    'but that class is not in the jar')
                             }
                         }
                     }
@@ -212,8 +252,9 @@ subprojects {
                             byte[] header = new byte[8]
                             if (stream.read(header) == 8) {
                                 int major = ((header[6] & 255) << 8) | (header[7] & 255)
-                                if (major > javaFloor + 44) throw new GradleException(
-                                    "${modulePath}: ${entry.name} exceeds Java ${javaFloor} (class ${major})")
+                                if (major > javaFloor.get() + 44) throw new GradleException(
+                                    "${modulePath}: ${entry.name} exceeds Java ${javaFloor.get()} " +
+                                        "(class ${major})")
                             }
                         }
                     }
@@ -230,7 +271,7 @@ subprojects {
         def runtime = configurations.runtimeClasspath
         inputs.files(runtime)
         doLast {
-            int maxMajor = javaFloor + 44
+            int maxMajor = javaFloor.get() + 44
             runtime.resolvedConfiguration.resolvedArtifacts.each { artifact ->
                 def file = artifact.file
                 if (!file.name.endsWith('.jar')) return
@@ -244,7 +285,7 @@ subprojects {
                                 int major = ((header[6] & 255) << 8) | (header[7] & 255)
                                 if (major > maxMajor) throw new GradleException(
                                     "${project.path}: ${artifact.moduleVersion.id} contains ${entry.name} " +
-                                    "(class version ${major}; Java floor ${javaFloor})")
+                                    "(class version ${major}; Java floor ${javaFloor.get()})")
                             }
                         }
                     }
@@ -252,5 +293,19 @@ subprojects {
             }
         }
     }
+    // Maven ran this at `validate`, so it fired on every build; keep it on assemble too
+    // and a dependency bump cannot raise a module's floor without failing the build.
+    tasks.named('assemble') { dependsOn checkRuntimeBytecode }
     tasks.named('check') { dependsOn checkRuntimeBytecode }
+}
+
+// A new module that does not declare a floor would silently be compiled for Java 8
+// (and only fail later, in checkRuntimeBytecode). Say so immediately instead.
+gradle.projectsEvaluated {
+    subprojects.each { sub ->
+        if (!sub.ext.has('javaFloor')) {
+            throw new GradleException("${sub.path} does not declare its Java floor: add " +
+                "`ext.javaFloor = <8|17|21>` to ${sub.name}/build.gradle")
+        }
+    }
 }

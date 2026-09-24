@@ -24,6 +24,11 @@
  * SOFTWARE.
  */
 
+// Lowest JRE that can load this artifact - keep in sync with the module table in
+// CONTRIBUTING.md. The Java 21 scheduler in src/main/java21 is a multi-release branch
+// and does not change the floor.
+ext.javaFloor = 8
+
 apply from: rootProject.file('gradle/bedrock.gradle')
 
 configurations { sqliteFloor }

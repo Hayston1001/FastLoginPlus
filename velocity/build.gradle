@@ -25,6 +25,8 @@
  */
 
 plugins { id 'com.gradleup.shadow' }
+// Lowest JRE that can load this artifact - keep in sync with the module table in CONTRIBUTING.md.
+ext.javaFloor = 17
 apply from: rootProject.file('gradle/bedrock.gradle')
 
 dependencies {
@@ -74,8 +76,10 @@ tasks.named('shadowJar') {
     relocate 'org.yaml.snakeyaml', 'fastlogin.yaml'
     mergeServiceFiles()
     minimize {
+        // Both JDBC drivers are bundled as-is, like the Maven build did: it exempted them
+        // from minimization with <includes>**</includes> filters. Everything else (HikariCP,
+        // SnakeYAML, our own classes) is minimized as before.
         exclude(dependency('org.xerial:sqlite-jdbc:.*'))
         exclude(dependency('org.mariadb.jdbc:mariadb-java-client:.*'))
-        exclude(dependency('org.yaml:snakeyaml:.*'))
     }
 }
