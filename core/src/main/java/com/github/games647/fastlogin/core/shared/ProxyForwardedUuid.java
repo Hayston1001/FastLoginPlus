@@ -31,7 +31,7 @@ import java.util.UUID;
 
 /**
  * Recognises the UUID a proxy forwarded for a premium player, without reading the
- * forwarded profile property (0.7.0/F24).
+ * forwarded profile property.
  *
  * <p>On Paper/Folia the proxy's attestation travels as a GameProfile property that the
  * backend can read in the configuration phase. Spigot has no configuration phase and no

@@ -33,7 +33,7 @@ import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 
 /**
  * Pre-creates the AuthMe premium record before the join on platforms without a
- * configuration phase (0.7.0/F24).
+ * configuration phase.
  *
  * <p>The decision and the guard rails live in
  * {@link FastLoginBukkit#applyPremiumAtPreLogin(String, java.util.UUID)} — this listener only

@@ -44,44 +44,36 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests the fail-closed gate of the destructive AuthMe cleanup on the
- * cracked-session path (0.5.0/F059): a premium-flagged AuthMe record may only
- * be cleared when FLP's own profile row still exists (stale /cracked retry).
+ * Tests the fail-closed gate of the destructive AuthMe cleanup on the cracked-session path: a
+ * premium-flagged AuthMe record may only be cleared when FLP's own profile row still exists
+ * (stale /cracked retry). Four further contracts are pinned here:
  *
- * <p>Also covers the ISS-02 proxy-sync decision: FLP changes AuthMe's premium state
- * through direct DataSource writes, which bypass the proxy's own premium cache.
- * The ISS-04 UUID gate is pinned here too: AuthMe reads a null {@code premium_uuid}
- * as "not premium", so a null write is destructive rather than inert — and
- * {@code resolvePremiumUuid} decides which fallback source, if any, may replace it.</p>
+ * <ul>
+ *   <li>the proxy-sync decision — FLP's direct DataSource writes bypass the proxy's premium
+ *       cache, so they have to be announced to it;</li>
+ *   <li>the UUID gate — AuthMe reads a null {@code premium_uuid} as "not premium", so a null
+ *       write destroys the flag instead of being inert, and {@code resolvePremiumUuid} decides
+ *       which fallback source, if any, may replace it;</li>
+ *   <li>the dialog-key change in AuthMe 6.0.1 — both pending response maps moved to a {@code Long}
+ *       session id, and the old player-UUID lookup kept compiling (generics are erased) while
+ *       always missing. The dual-key replacement is exercised through the same reflective path
+ *       production uses, against listener stand-ins matching each AuthMe shape;</li>
+ *   <li>the retry around the {@code premium_uuid} write — AuthMe signals that failure by returning
+ *       false, so the write is attempted twice before the caller is told it did not land. Getting
+ *       this wrong let a half-built row pass as a successful pre-create: logged as success, then
+ *       counted as "registered" while AuthMe read it as "registered but not premium".</li>
+ * </ul>
  *
- * <p>The ISS-06 tests pin the AuthMe 6.0.1 dialog key change: both pending response maps
- * moved from a player-UUID key to a {@code Long} session id, so the old lookup kept
- * compiling (generics are erased at runtime) and kept running while always missing. The
- * dual-key lookup that replaces it is exercised through the same reflective path
- * production uses, against listener stand-ins matching each AuthMe shape.</p>
+ * <p>The refresh tests pin a second cached setting: FLP changes AuthMe's {@code enablePremium} in
+ * memory, so every component holding a local copy has to be told. {@code BungeeReceiver} otherwise
+ * answers the next {@code proxy.started} from a stale {@code false} and wipes the proxy's premium
+ * list. An absent component is silent, a throwing one is reported and swallowed — a throw would
+ * reach {@code forceEnablePremium}'s catch and mark the whole integration as failed.</p>
  *
- * <p>The ISS-18 tests pin the retry around the {@code premium_uuid} write: AuthMe reports
- * that failure by returning false, so the write is attempted twice before the caller is
- * told it did not land. Getting this wrong is what let a half-built row be treated as a
- * successful pre-create — logged as success, then counted as "registered" while AuthMe
- * read it as "registered but not premium".</p>
- *
- * <p>The ISS-11 tests pin the refresh of a second cached setting. FLP changes AuthMe's
- * {@code enablePremium} in memory, so every AuthMe component that keeps a local copy has to be
- * told; {@code BungeeReceiver} is the one that otherwise answers the next {@code proxy.started}
- * from a stale {@code false} and wipes the proxy's premium list. The kinds of failure stay
- * apart: an absent component is normal and silent, a component that throws is reported and
- * swallowed, because a throw would reach {@code forceEnablePremium}'s catch and mark the whole
- * integration as failed.</p>
- *
- * <p><b>Coverage boundary.</b> {@code persistPreCreatedPremium} is reached directly, so
- * what is pinned here is the attempt sequence and the value it returns. The wiring around
- * it is established by reading {@code preCreatePremiumAuth}, not by these tests: that the
- * reflective {@code updatePremiumUuid} result is what feeds the helper, that only a
- * stamped outcome releases the proxy notification, and that a failed write leaves the row
- * in place. Re-discarding the invoke result would leave this suite green — the tests would
- * only fail on a change to the retry itself. The real end-to-end check is the fault
- * injection in the report's test criterion 11.</p>
+ * <p><b>Coverage boundary.</b> Only the attempt sequence and its return value are pinned here; the
+ * wiring around {@code persistPreCreatedPremium} is established by reading, not by these tests.
+ * Re-discarding the invoke result would leave this suite green, so the full path is only covered by
+ * fault injection against a live server.</p>
  */
 class AuthMePremiumIntegratorTest {
 
@@ -114,7 +106,7 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void noCarrierMustQueueInsteadOfSending() {
-        // ISS-28: AuthMe picks its carrier from the online player list and silently drops
+        // AuthMe picks its carrier from the online player list and silently drops
         // the notification when there is none, so sending here would report a sync that
         // never happened. The message must be queued for relay instead.
         assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.QUEUE,
@@ -134,7 +126,7 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void unresolvableSenderMustWarn() {
-        // ISS-02: the notification did not happen. On the cracked path the proxy keeps
+        // The notification did not happen. On the cracked path the proxy keeps
         // forcing online-mode for a non-premium player, so the admin must be told.
         assertEquals(AuthMePremiumIntegrator.ProxySyncDecision.WARN,
             AuthMePremiumIntegrator.decideProxySync(false, false, false));
@@ -144,10 +136,10 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void nullUuidMustNeverBeStamped() {
-        // ISS-04: ForceLoginTask used to forward a null session UUID straight into AuthMe.
+        // ForceLoginTask used to forward a null session UUID straight into AuthMe.
         // A null premium_uuid means "not premium" to AuthMe, so the write cleared the flag
         // on existing records instead of setting it — while logging success.
-        // 0.7.0/F10 narrowed when null can reach here (the proxy now sends its verified
+        // narrowed when null can reach here (the proxy now sends its verified
         // UUID), but "the proxy verified nothing" is still a normal state, so the guard stays.
         assertFalse(AuthMePremiumIntegrator.isStampablePremiumUuid(null));
     }
@@ -168,11 +160,11 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void proxyForwardedConnectionUuidFillsTheGap() {
-        // ISS-04 on a Spigot backend: there is no configuration phase, so when the session
+        // On a Spigot backend there is no configuration phase, so when the session
         // carries no UUID the player's own connection UUID is the only source left. It is
         // Mojang-issued (v4) because the proxy forwarded the verified one.
-        // 0.7.0/F10 makes the proxy send that UUID in the force message too, so this fallback
-        // fires less often — it still covers an older proxy, and ISS-29.
+        // makes the proxy send that UUID in the force message too, so this fallback
+        // fires less often — it still covers an older proxy and the ProtocolSupport path.
         UUID mojang = UUID.randomUUID();
         assertEquals(4, mojang.version());
         assertEquals(mojang, AuthMePremiumIntegrator.resolvePremiumUuid(null, mojang));
@@ -195,9 +187,9 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void offlineSessionUuidMustNotBeAdopted() {
-        // ISS-25: a non-null session UUID is not proof of a verified identity. AuthMe's
+        // a non-null session UUID is not proof of a verified identity. AuthMe's
         // Velocity premium handler rewrites GameProfileRequestEvent's profile to the
-        // name-derived offline UUID before FLP's listener reads it (ISS-07), so v3 on the
+        // name-derived offline UUID before FLP's listener reads it, so v3 on the
         // session means the proxy forwarded an identity nobody verified. Accepting it
         // stamps a value that AsynchronousJoin's v4 comparison can never match again.
         UUID offline = offlineUuid("someone");
@@ -208,7 +200,7 @@ class AuthMePremiumIntegratorTest {
     @Test
     void offlineSessionUuidStillLetsAVerifiedConnectionUuidThrough() {
         // Rejecting the session UUID must not become a blanket refusal: the fallback is
-        // the very mechanism that covers Spigot backends (ISS-04 / T6), so a v4 value
+        // the very mechanism that covers Spigot backends, so a v4 value
         // there must still be adopted.
         UUID offline = offlineUuid("someone");
         UUID mojang = UUID.randomUUID();
@@ -217,7 +209,7 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void offlineUuidIsNotStampable() {
-        // ISS-25: the last gate before the value reaches AuthMe's premium_uuid column
+        // the last gate before the value reaches AuthMe's premium_uuid column
         // must reject on version, not merely on null — otherwise it only moves the
         // corruption one step downstream.
         UUID offline = offlineUuid("someone");
@@ -227,7 +219,7 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void authMe601DialogIsClosedThroughTheSessionId() throws Exception {
-        // ISS-06: AuthMe 6.0.1 re-keyed both response maps from the player UUID to a Long
+        // AuthMe 6.0.1 re-keyed both response maps from the player UUID to a Long
         // session id held in a separate connectionSessions map. The old Map<UUID, ...>
         // cast still compiled and still ran, but get(playerUuid) always missed — leaving
         // the dialog open until AuthMe's own 30s timeout, with no exception and no log.
@@ -247,8 +239,8 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void preFixUuidLookupWouldHaveMissedTheSixOhOneDialog() {
-        // Regression evidence for ISS-06, pinned so the fix cannot be mistaken for a
-        // no-op: this is exactly the lookup the old code performed, and it must miss.
+        // Regression evidence for the dialog-key change, pinned so the fix cannot be mistaken
+        // for a no-op: this is exactly the lookup the old code performed, and it must miss.
         SessionKeyedListener listener = new SessionKeyedListener();
         Object connection = new Object();
         UUID playerId = UUID.randomUUID();
@@ -344,7 +336,7 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void stampSuccessIsNotRetried() {
-        // ISS-18: the ordinary path writes once. Asserted so the retry below cannot be
+        // the ordinary path writes once. Asserted so the retry below cannot be
         // mistaken for "always writes twice".
         AtomicInteger attempts = new AtomicInteger();
 
@@ -385,7 +377,7 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void cachedEnablePremiumConsumerIsRefreshedExactlyOnce() {
-        // ISS-11: FLP changes enablePremium in memory, but a component that cached the old value
+        // FLP changes enablePremium in memory, but a component that cached the old value
         // keeps answering from that copy until its reload(Settings) is called. BungeeReceiver is
         // the one that answers the next proxy.started — from a stale false it sends an empty
         // premium list, which wipes the proxy's cache of verified players.
@@ -434,7 +426,7 @@ class AuthMePremiumIntegratorTest {
 
     @Test
     void failingConsumerRefreshIsReportedAndNotPropagated() {
-        // The fix for ISS-11 must not become a new way to fail forceEnablePremium, which turns
+        // This refresh must not become a new way to fail forceEnablePremium, which turns
         // any exception into a false return and marks the whole AuthMe integration as failed.
         // So a component that throws is reported and swallowed — and the cause has to survive as
         // far as the caller, or "the proxy list may be wiped" cannot be told apart from a
@@ -460,8 +452,8 @@ class AuthMePremiumIntegratorTest {
         // half of the contract this classpath can check: the AuthMe jar the module compiles
         // against must still carry the class, and it must still be a SettingsDependent. The
         // reload(Settings) signature cannot be checked here — loading AuthMe's Settings needs its
-        // own ConfigMe dependency, which is not on this classpath — so that half rests on reading
-        // the 6.0.1 sources and on the live T3 check.
+        // own ConfigMe dependency, which is not on this classpath — so that half rests on
+        // reading the 6.0.1 sources and on a manual check against a live server.
         Class<?> receiver = Class.forName(AuthMePremiumIntegrator.BUNGEE_RECEIVER_CLASS);
         boolean settingsDependent = false;
         for (Class<?> implemented : receiver.getInterfaces()) {

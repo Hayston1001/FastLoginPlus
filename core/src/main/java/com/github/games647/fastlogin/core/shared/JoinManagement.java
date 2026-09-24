@@ -59,7 +59,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
 
         String ip = source.getAddress().getAddress().getHostAddress();
 
-        // 0.5.0/F020: load and mutate an existing profile under the name-level
+        // load and mutate an existing profile under the name-level
         // striped lock so a concurrent admin toggle or plugin-message save for the
         // same player cannot interleave with this window.  The new-player branch
         // performs Mojang API lookups (network I/O) and must not hold the lock —
@@ -190,7 +190,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             }
         } catch (Exception ex) {
             core.getPlugin().getLog().error("Failed to check premium state of {}", username, ex);
-            // 0.5.0/F002 fail-closed: an error in the decision tree must not
+            // Fail closed: an error in the decision tree must not
             // open a registration window — kick like the whitelist miss above
             if ((boolean) core.getConfig().get("offline-whitelist")) {
                 try {

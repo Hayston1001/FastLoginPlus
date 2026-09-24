@@ -145,7 +145,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
 
     @Subscribe
     public void onProxyShutdown(ProxyShutdownEvent event) {
-        // 0.5.0/F046: stop scheduling before closing shared resources
+        // stop scheduling before closing shared resources
         scheduler.shutdown();
 
         if (core != null) {

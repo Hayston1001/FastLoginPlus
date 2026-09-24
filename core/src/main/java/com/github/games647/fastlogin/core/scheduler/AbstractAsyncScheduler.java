@@ -38,7 +38,7 @@ public abstract class AbstractAsyncScheduler {
     protected final Executor processingPool;
     protected final AtomicInteger currentlyRunning = new AtomicInteger();
 
-    // 0.5.0/F046: after the plugin disabled, no further tasks may run — they
+    // after the plugin disabled, no further tasks may run — they
     // would touch resources closed by core.close() (e.g. the HikariDataSource)
     private volatile boolean shutdown;
 

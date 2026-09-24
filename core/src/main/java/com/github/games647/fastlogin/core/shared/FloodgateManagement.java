@@ -82,7 +82,7 @@ public abstract class FloodgateManagement<P extends C, C, L extends LoginSession
 
         profile = core.getStorage().loadProfile(username);
 
-        // 0.5.0/F028: loadProfile only returns null on a database error —
+        // loadProfile only returns null on a database error —
         // abort like JoinManagement does instead of NPE-ing the login task
         if (profile == null) {
             core.getPlugin().getLog().warn(

@@ -53,7 +53,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * 0.5.0/F020: the upsert insert path, the row-id backfill of the update branch
+ * the upsert insert path, the row-id backfill of the update branch
  * and the name-level striped lock that closes concurrent load-modify-save
  * windows.  Runs against a real SQLite database (xerial driver in test scope).
  */
@@ -143,7 +143,7 @@ class SQLStorageUpsertLockTest {
     @Test
     void unlockedWindowsLoseUpdates() {
         // discriminator: WITHOUT the name lock two interleaved load-modify-save
-        // windows on the same row lose the first write (this is 0.5.0/F020 (b))
+        // windows on the same row lose the first write
         storage.saveQuietly(newProfile("Steve", false, "1.1.1.1"));
 
         StoredProfile windowA = storage.loadProfile("Steve");
@@ -217,7 +217,7 @@ class SQLStorageUpsertLockTest {
 
     @Test
     void concurrentFirstSavesProduceSingleRow() throws Exception {
-        // 0.5.0/F020 (a): two threads save a NEW profile for the same name at the
+        // two threads save a NEW profile for the same name at the
         // same time — the upsert must collapse this into exactly one row
         CyclicBarrier barrier = new CyclicBarrier(2);
         AtomicBoolean firstOk = new AtomicBoolean(false);

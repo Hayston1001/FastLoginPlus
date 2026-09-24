@@ -29,30 +29,26 @@ package com.github.games647.fastlogin.core.shared;
  * Name of the custom GameProfile property the proxy uses to hand the verified Mojang UUID to
  * the backend.
  *
- * <p>0.7.0/F13. With {@code premiumUuid: false} the proxy rewrites the forwarded UUID to the
- * offline one, so the backend cannot tell a verified premium connection from a cracked one and
- * AuthMe shows its preJoin dialog on the very first login. Rather than shipping the value in a
- * separate plugin message — which cannot reach the backend before the configuration phase (see
- * the F10 experiment) — the proxy attaches it as a property on the GameProfile it is already
- * rewriting, riding Velocity's modern player-information forwarding. The backend reads it back
- * in the configuration phase, before any dialog exists.</p>
+ * <p>With {@code premiumUuid: false} the proxy rewrites the forwarded UUID to the offline one, so
+ * the backend cannot tell a verified premium connection from a cracked one and AuthMe shows its
+ * preJoin dialog on the very first login. A separate plugin message cannot reach the backend that
+ * early, so the proxy attaches the value as a property on the GameProfile it is already rewriting,
+ * riding Velocity's modern player-information forwarding; the backend reads it back in the
+ * configuration phase, before any dialog exists.</p>
  *
- * <p>Trust boundary: the forwarding handshake's HMAC protects the payload in transit —
- * nothing between proxy and backend can tamper with it — but the authority it certifies is
- * <em>the proxy process as a whole</em>, not this plugin: any code running on the proxy can
- * inject the same property. The backend therefore reads this as "the proxy attests", never
- * "FLP attests". Note also that the capability this property enables is not new: the
- * backend's configure-phase auto-register already trusted the payload's connection UUID
- * (a holder of the forwarding secret could set it to the victim's public Mojang UUID and
- * pass the existing equality guard), so the property grants no power the UUID field did not
- * already carry. Keeping that boundary honest is why the property carries no second
- * signature scheme — one that would not close the pre-existing path anyway.</p>
+ * <p>Trust boundary: the forwarding handshake's HMAC protects the payload in transit, but the
+ * authority it certifies is <em>the proxy process as a whole</em>, not this plugin — any code on
+ * the proxy can inject the same property. The backend therefore reads this as "the proxy attests",
+ * never "FLP attests". The capability is not new either: the configure-phase auto-register already
+ * trusted the payload's connection UUID, which a holder of the forwarding secret could set to the
+ * victim's Mojang UUID. That is also why the property carries no second signature scheme — one
+ * would not close the pre-existing path anyway.</p>
  *
- * <p><b>Two transports, two names.</b> BungeeCord's legacy forwarding appends the login
- * profile's properties to the handshake's host field as JSON, so the same attestation can ride
- * it too — but Paper rebuilds the profile from that payload through a name filter, which is
- * why that path cannot reuse {@link #PREMIUM_UUID}. Both names are read by the backend, so a
- * network mixing proxy software (or running an older jar on one side) keeps working.</p>
+ * <p><b>Two transports, two names.</b> BungeeCord's legacy forwarding appends the login profile's
+ * properties to the handshake's host field as JSON, so the same attestation can ride it — but Paper
+ * rebuilds the profile from that payload through a name filter, which is why that path cannot reuse
+ * {@link #PREMIUM_UUID}. Both names are read by the backend, so a network mixing proxy software (or
+ * running an older jar on one side) keeps working.</p>
  */
 public final class ForwardingAttributes {
 

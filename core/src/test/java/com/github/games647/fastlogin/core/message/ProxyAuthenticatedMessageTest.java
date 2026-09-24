@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 0.5.0/F054: the backend -> proxy channels (ch-st, del-st, succ) carry the
+ * the backend -> proxy channels (ch-st, del-st, succ) carry the
  * sending backend's echoed proxy allowlist as a trailing optional wire field.
  */
 class ProxyAuthenticatedMessageTest {

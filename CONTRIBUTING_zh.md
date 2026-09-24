@@ -157,7 +157,7 @@ mvn package -pl folia -am --batch-mode -DskipTests
    - `DesignForExtension`、`FinalClass`、`HideUtilityClassConstructor` —— 面向继承的设计规则; 工具类标记 `final` 并写私有构造器; 除非有意允许继承, 否则类要 `final`
    - Javadoc: 被文档化的方法必须有 `@param`/`@return`/`@throws`; 包级 javadoc(`JavadocPackage`)也会检查
 3. **换行符与文件末尾换行** —— `.gitattributes` 把所有文本文件规范为 LF, 且每个文件必须以换行结尾(`NewlineAtEndOfFile`). 在 Windows 上交给 git 转换; 不要提交 CRLF.
-4. **每模块的运行时字节码地板**(`enforceBytecodeVersion`, 根 `pom.xml`, 在 `validate` 阶段运行) —— 任何被 shade 进某模块的依赖, 其编译目标都不得高于该模块自身的 `maven.compiler.release`(core/bukkit 8, bungee/velocity 17, folia 21). 没有它, 一次依赖升级就可能在毫无构建期信号的情况下抬高模块的运行时要求. 抬高地板是**有意决策**: 改该模块的 `maven.compiler.release`, 并同步更新 `AGENTS.md` 与两个 readme. `test` 与 `provided` 作用域被排除 —— 测试 JAR 永远不会到达用户手里, provided 的那些属于服务器或代理.
+4. **每模块的运行时字节码地板**(`enforceBytecodeVersion`, 根 `pom.xml`, 在 `validate` 阶段运行) —— 任何被 shade 进某模块的依赖, 其编译目标都不得高于该模块自身的 `maven.compiler.release`(core/bukkit 8, bungee/velocity 17, folia 21). 没有它, 一次依赖升级就可能在毫无构建期信号的情况下抬高模块的运行时要求. 抬高地板是**有意决策**: 改该模块的 `maven.compiler.release`, 并同步更新本节与两个 readme. `test` 与 `provided` 作用域被排除 —— 测试 JAR 永远不会到达用户手里, provided 的那些属于服务器或代理.
 
 ## 测试
 

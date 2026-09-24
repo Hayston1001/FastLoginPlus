@@ -84,9 +84,9 @@ public class PremiumCommand extends ToggleCommand {
         }
 
         plugin.getCore().getPendingConfirms().remove(id);
-        // 0.5.0/F011: database calls must not run on the main thread
+        // database calls must not run on the main thread
         plugin.getScheduler().runAsync(() -> {
-            // 0.5.0/F020+R3: serialize concurrent load-modify-save windows for the
+            // serialize concurrent load-modify-save windows for the
             // same player (two fast commands would otherwise double-save)
             plugin.getCore().getStorage().withNameLock(sender.getName(), () -> {
                 StoredProfile profile = plugin.getCore().getStorage().loadProfile(sender.getName());
@@ -128,9 +128,9 @@ public class PremiumCommand extends ToggleCommand {
             return;
         }
 
-        // 0.5.0/F011: database calls must not run on the main thread
+        // database calls must not run on the main thread
         plugin.getScheduler().runAsync(() -> {
-            // 0.5.0/F020+R3: see the self path above
+            // see the self path above
             plugin.getCore().getStorage().withNameLock(args[0], () -> {
                 StoredProfile profile = plugin.getCore().getStorage().loadProfile(args[0]);
                 if (profile == null) {

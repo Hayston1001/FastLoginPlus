@@ -99,7 +99,7 @@ public class CrazyLoginHook implements AuthPlugin<Player> {
         });
 
         try {
-            // 0.5.0/F017: bound the wait — a stuck main thread must not pile up
+            // bound the wait — a stuck main thread must not pile up
             // unbounded async login threads
             Optional<LoginPlayerData> result = future.get(5, TimeUnit.SECONDS)
                     .filter(LoginPlayerData::isLoggedIn);

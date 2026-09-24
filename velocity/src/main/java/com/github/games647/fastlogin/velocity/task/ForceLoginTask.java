@@ -90,7 +90,7 @@ public class ForceLoginTask
 
     @Override
     public FastLoginAutoLoginEvent callFastLoginAutoLoginEvent(LoginSession session, StoredProfile profile) {
-        // Unreachable on Velocity (0.5.0/F057): ForceLoginManagement only calls
+        // Unreachable on Velocity: ForceLoginManagement only calls
         // this when an auth plugin hook is set, which never happens on the proxy
         // side. Fire without blocking rather than .get() in case that changes;
         // handler cancellation is not awaited here.
@@ -115,7 +115,7 @@ public class ForceLoginTask
         core.getPlugin().getLog().info("Sending force {} for {} towards server {}", type, player.getUsername(), server);
 
         UUID proxyId = core.getPlugin().getProxyId();
-        // 0.7.0/F10: also hand over the Mojang UUID verified at GameProfileRequestEvent. The
+        // also hand over the Mojang UUID verified at GameProfileRequestEvent. The
         // backend needs it to stamp AuthMe's premium_uuid when premiumUuid:false, where the
         // forwarded connection UUID is deliberately the offline one and therefore carries no
         // premium signal at all. Null when this connection was not verified as premium.

@@ -40,26 +40,24 @@ import java.util.function.Predicate;
  * and points the player at {@code /flp} instead.
  *
  * <p>Forcing AuthMe's {@code enablePremium} also activates its two player commands (their
- * permission nodes are declared {@code default: true}), so after the takeover they are a second,
- * silently diverging entry point for the same feature:
- * {@code /premium} on an offline UUID queues a pending verification and kicks the player, but
- * FLP removed the packet listener that would ever finalise it — nothing happens and the player
- * was disconnected for it. {@code /freemium} clears AuthMe's {@code premium_uuid}, which FLP's
- * own profile does not know about, so the next login writes it straight back.
+ * permission nodes are declared {@code default: true}), which then diverge silently from FLP:
+ * {@code /premium} on an offline UUID queues a verification and kicks the player, but the packet
+ * listener that would finalise it is gone — nothing happens, and the player paid a disconnect for
+ * it. {@code /freemium} clears AuthMe's {@code premium_uuid}, which FLP's profile knows nothing
+ * about, so the next login writes it straight back.
  *
  * <p><b>The command is only intercepted, never forwarded.</b> Routing {@code /premium} into
- * {@code /flp premium} would mix two permission models (the AuthMe command acts on its sender,
- * {@code /flp} can target others) and change state on behalf of a player who never asked for
- * that spelling. A hint costs nothing and cannot drift; the player learns the command FLP wants
- * them to use.
+ * {@code /flp premium} would mix two permission models — the AuthMe command acts on its sender,
+ * {@code /flp} can target others — and change state for a player who never asked for that
+ * spelling. A hint costs nothing and cannot drift.
  *
  * <p>Gated on {@link FastLoginBukkit#isPremiumTakeoverActive()}: on AuthMe 5.x, when AuthMe is
  * absent, or when the takeover failed, {@code /premium} is still AuthMe's own working command
  * and must not be touched.
  *
- * <p>Teamed with the F7 startup warning that asks admins to deny {@code authme.player.premium}
- * and {@code authme.player.freemium} (the README note originally planned for F7 was dropped):
- * the warning manages the admin, this guard manages the player.
+ * <p>Teamed with the startup warning that asks admins to deny {@code authme.player.premium}
+ * and {@code authme.player.freemium}: the warning manages the admin, this guard manages the
+ * player.
  */
 public class AuthMeCommandGuard implements Listener {
 
@@ -98,7 +96,7 @@ public class AuthMeCommandGuard implements Listener {
 
         event.setCancelled(true);
         plugin.getCore().sendLocaleMessage(blockedMessageKey(label), player);
-        plugin.getLog().info("{} used AuthMe's /{} — blocked and redirected to /flp (ISS-12)",
+        plugin.getLog().info("{} used AuthMe's /{} — blocked and redirected to /flp",
                 player.getName(), label);
     }
 

@@ -50,7 +50,7 @@ public class AntiBotService {
     private final PerIpRateLimiter perIpLimiter;
     private final long banDurationMs;
     // atomic: onIncomingConnection runs on connection/Netty threads — a plain
-    // int would lose increments and skew the cleanup cadence (0.5.0/F041,F075)
+    // int would lose increments and skew the cleanup cadence
     private final AtomicInteger connectionCount = new AtomicInteger();
 
     // CHECKSTYLE.OFF: ParameterNumber — 8 params is intentional; enabled flag + all layers
@@ -97,7 +97,7 @@ public class AntiBotService {
             connectionCount.set(0);
             // same uptime clock as the limiters' internal Ticker — epoch
             // millis would make every entry look expired and wipe the
-            // per-IP state on every cleanup (0.5.0/F076)
+            // per-IP state on every cleanup
             long nowMs = ticker.read() / 1_000_000;
             perIpLimiter.cleanup(nowMs);
             ipBanManager.cleanup();

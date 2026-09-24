@@ -125,7 +125,7 @@ public class PluginMessageListener {
             }
             if (changeMessage.shouldEnable()) {
                 boolean premiumWarning = plugin.getCore().getConfig().getBoolean("premium-warning");
-                // atomic check-and-add (0.5.0/F025): add() returns false when the
+                // atomic check-and-add: add() returns false when the
                 // UUID is already pending, so two concurrent toggles for the same
                 // player cannot both pass this gate and double-prompt
                 if (isSourceInvoker && playerName.equals(sender.getUsername()) && premiumWarning
@@ -240,7 +240,7 @@ public class PluginMessageListener {
             }
             StoredProfile playerProfile = loginSession.getProfile();
             loginSession.setRegistered(true);
-            // 0.5.0/F020: persist under the name-level striped lock so this cannot
+            // persist under the name-level striped lock so this cannot
             // interleave with a concurrent toggle for the same player; the
             // already-saved check runs inside for the same reason
             plugin.getCore().getStorage().withNameLock(forPlayer.getUsername(), () -> {
@@ -254,7 +254,7 @@ public class PluginMessageListener {
     }
 
     /**
-     * 0.5.0/F054: backend -&gt; proxy messages echo the sending backend's proxy allowlist;
+     * backend -&gt; proxy messages echo the sending backend's proxy allowlist;
      * the message is only trusted when this proxy's own ID is part of that set.
      *
      * @param channel the plugin message channel (for the warning log)
@@ -277,7 +277,7 @@ public class PluginMessageListener {
     }
 
     /**
-     * Pure authentication decision for backend -&gt; proxy messages (0.5.0/F054).
+     * Pure authentication decision for backend -&gt; proxy messages.
      *
      * @param echoedProxyIds comma-joined proxy IDs echoed by the sending backend
      * @param ownProxyId this proxy's own ID

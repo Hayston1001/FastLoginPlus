@@ -91,7 +91,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     );
 
     // concurrent set: proxy-side plugin-message listeners run on Netty
-    // event-loop threads of different players (0.5.0/F025)
+    // event-loop threads of different players
     private final Collection<UUID> pendingConfirms = ConcurrentHashMap.newKeySet();
     private final T plugin;
 
@@ -150,7 +150,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
         // 2. Determine language file based on config
         String language = config.getString("language");
-        // 0.5.0/F049: the value is concatenated into a file path — reject
+        // the value is concatenated into a file path — reject
         // traversal/separator characters instead of writing outside the
         // plugin directory
         if (language == null || !language.matches("[a-zA-Z0-9_-]+")) {
@@ -200,7 +200,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             ? new ProxyAgnosticMojangResolver() : new MojangResolver();
 
         antiBot = createAntiBotService(config.getSection("anti-bot"));
-        // 0.5.0/F047: validate entries — a missing colon or non-numeric port
+        // validate entries — a missing colon or non-numeric port
         // would otherwise crash the whole plugin startup
         Set<Proxy> proxies = new HashSet<>();
         for (String proxyEntry : config.getStringList("proxies")) {
@@ -228,7 +228,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             }
         }
 
-        // 0.7.0/F-C6: the vendored craftapi honours this value now, so the old
+        // the vendored craftapi honours this value now, so the old
         // "library ignores it, always 600" warning is gone.  Values outside 0..600 are clamped, and
         // 0 (never query Mojang directly) needs at least one proxy: without one every uncached
         // lookup would fail as rate-limited, i.e. every new premium player would be taken for cracked.
@@ -260,7 +260,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Validate an anti-bot limit value (0.5.0/F039): values below 1 either
+     * Validate an anti-bot limit value: values below 1 either
      * dead-lock the check (limit 0 rejects everything) or are undefined —
      * fall back to the configured default instead.
      *
@@ -280,7 +280,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Validate an anti-bot duration value (0.5.0/F039): zero or negative
+     * Validate an anti-bot duration value: zero or negative
      * durations make the associated window/ban ineffective — fall back to the
      * configured default instead.
      *
@@ -416,7 +416,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         return localeMessages.get(key);
     }
 
-    // 0.5.0/F019 — floor for the HikariCP maxLifetime setting
+    // Floor for the HikariCP maxLifetime setting
     private static final long MIN_LIFETIME_MS = 300_000L;
 
     public boolean setupDatabase() {
@@ -427,7 +427,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
         databaseConfig.setConnectionTimeout(config.getInt("timeout") * 1_000L);
 
-        // 0.5.0/F019: HikariCP enforces a 30s minimum maxLifetime — values at
+        // HikariCP enforces a 30s minimum maxLifetime — values at
         // or near it retire every pooled connection almost immediately
         // (constant reconnect churn).  Clamp to a sane floor (0 = infinite,
         // which HikariCP supports and is left untouched).
@@ -467,7 +467,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             return true;
         } catch (Exception ex) {
             plugin.getLog().warn("Failed to setup database. Disabling plugin...", ex);
-            // 0.5.0/F021: the HikariDataSource was already constructed — close
+            // the HikariDataSource was already constructed — close
             // it here, because setEnabled(false) during onEnable suppresses
             // onDisable (and with it core.close()) on bukkit/folia
             if (storage != null) {

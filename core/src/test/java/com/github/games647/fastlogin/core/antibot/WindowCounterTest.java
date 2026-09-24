@@ -38,8 +38,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests for the WindowCounter expiry semantics (0.5.0/F037) and the lazy
- * cleanup throttle (0.5.0/F038) — package-private access required.
+ * Tests for the WindowCounter expiry semantics and the lazy
+ * cleanup throttle — package-private access required.
  */
 class WindowCounterTest {
 
@@ -49,7 +49,7 @@ class WindowCounterTest {
 
     @Test
     void neverRecordedCounterMustNotBeExpired() {
-        // 0.5.0/F037: a brand-new counter (created by computeIfAbsent, before
+        // a brand-new counter (created by computeIfAbsent, before
         // tryRecord ran) must not be reported as expired by cleanup — removing
         // it would race the first tryRecord and lose the record
         WindowCounter counter = new WindowCounter();
@@ -71,7 +71,7 @@ class WindowCounterTest {
 
     @Test
     void lazyCleanupIsThrottledToOncePerSecond() throws UnknownHostException {
-        // 0.5.0/F038: with >64 entries the lazy cleanup must not scan the
+        // with >64 entries the lazy cleanup must not scan the
         // whole map on every acquire
         FakeTicker ticker = new FakeTicker(10_000_000_000L);
         PerIpRateLimiter limiter = new PerIpRateLimiter(ticker, 100, 10_000, 1000, 300_000);

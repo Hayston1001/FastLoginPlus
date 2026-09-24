@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
- * 0.7.0/F18: {@code PluginContainer#getInstance()} returns an {@link Optional}, so the lookup has
+ * {@code PluginContainer#getInstance()} returns an {@link Optional}, so the lookup has
  * to be flattened. Using {@code map} handed {@code AuthMeProxyPin} the {@code Optional} wrapper
  * itself, which made the reflective pin report {@code UNSUPPORTED} on every Velocity startup and
  * fall back to rewriting AuthMe's config file. These assertions pin the flattened form.

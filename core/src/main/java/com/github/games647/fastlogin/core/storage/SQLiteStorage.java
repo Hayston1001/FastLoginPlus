@@ -216,7 +216,7 @@ public class SQLiteStorage extends SQLStorage {
         }
     }
 
-    // 0.5.0/F020: mirror the MySQL upsert semantics - a concurrent first-time
+    // mirror the MySQL upsert semantics - a concurrent first-time
     // save for the same name must not fail on the UNIQUE(Name) constraint and
     // lose the profile.  The hex() comparison is byte-exact, so a case-variant
     // duplicate (e.g. "Steve" vs "steve") conflicts on the NOCASE unique key

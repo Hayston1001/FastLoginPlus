@@ -41,7 +41,7 @@ class WindowCounter {
 
     // timestamp of the last record attempt (or -1 before the first attempt) —
     // drives expiry so a brand-new counter is never instantly "expired" and
-    // removed between computeIfAbsent and tryRecord (0.5.0/F037)
+    // removed between computeIfAbsent and tryRecord
     private long lastRecordMs = -1;
 
     /**

@@ -141,7 +141,6 @@ public final class ConfigRefresher {
                     // treats this key as a section header (children follow), keep
                     // the template structure instead: replacing the header with a
                     // scalar would orphan the child keys and produce invalid YAML
-                    // (0.5.0/F029).
                     output.add(line.substring(0, line.indexOf(':') + 1)
                             + " " + toScalarYaml(userVal));
                 } else {
@@ -205,7 +204,7 @@ public final class ConfigRefresher {
             sb.append(line).append('\n');
         }
         byte[] bytes = sb.toString().getBytes(StandardCharsets.UTF_8);
-        // Atomic rewrite (0.5.0/F026): a crash mid-write must never truncate
+        // Atomic rewrite: a crash mid-write must never truncate
         // the user's config — write to a temp file in the same directory and
         // move it over the target (falls back to a non-atomic replace on
         // filesystems without atomic move support).
@@ -335,7 +334,7 @@ public final class ConfigRefresher {
         if (s.charAt(0) == ' ' || s.charAt(s.length() - 1) == ' ') {
             return true;
         }
-        // line breaks / tabs would break the single-line scalar (0.5.0/F030)
+        // line breaks / tabs would break the single-line scalar
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             if (c == '\n' || c == '\r' || c == '\t') {
@@ -343,7 +342,7 @@ public final class ConfigRefresher {
             }
         }
         // YAML 1.1 resolver ambiguity: values that would parse as boolean,
-        // null or number must be quoted to keep their string type (0.5.0/F030)
+        // null or number must be quoted to keep their string type
         if (isAmbiguousScalar(s)) {
             return true;
         }

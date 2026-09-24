@@ -58,7 +58,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * <p><b>Two generations, two sources.</b> The 2024 artifact this module compiles against is a real
  * old-shape build ({@code net.md_5.bungee.protocol.Property}), so that one is checked on every run
  * and needs no extra file. The new shape lives in builds released after BungeeCord #3855
- * (2025-07-14) - which, contrary to the assumption in the bungeecord assessment, includes
+ * (2025-07-14) - which, contrary to what the old-shape compile baseline suggests, includes
  * <em>current</em> Waterfall: it merges upstream, and its 1.21-615 build (2026-06-16) already ships
  * {@code net.md_5.bungee.protocol.data.Property} and no trace of the old class. Because that
  * artifact is 27 MB and cannot be committed, the check is opt-in:</p>

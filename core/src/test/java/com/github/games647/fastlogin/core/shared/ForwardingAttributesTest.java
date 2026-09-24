@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 0.7.0/F17 — the two property names exist for a mechanical reason, so the reason itself is
+ * — the two property names exist for a mechanical reason, so the reason itself is
  * pinned here instead of living only in a comment.
  *
  * <p>Paper rebuilds the player profile from BungeeCord's legacy handshake and discards every

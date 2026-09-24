@@ -38,7 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * 0.7.0/F10 — the proxy-verified UUID is an <em>optional trailing field</em>, which makes the
+ * — the proxy-verified UUID is an <em>optional trailing field</em>, which makes the
  * compatibility matrix asymmetric and worth pinning down:
  *
  * <ul>

@@ -35,7 +35,7 @@ import org.bukkit.event.server.ServerCommandEvent;
 
 /**
  * Re-asserts FLP's AuthMe premium-listener takeover after the events that can bring AuthMe's own
- * listener back (ISS-32).
+ * listener back.
  *
  * <p>AuthMe creates and recreates its PacketEvents premium listener from
  * {@code PacketEventsService.setup()}, which runs again on every {@code /authme reload} and again

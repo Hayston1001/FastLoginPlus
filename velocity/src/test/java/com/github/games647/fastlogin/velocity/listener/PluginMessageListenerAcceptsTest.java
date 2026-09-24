@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 0.5.0/F054: authentication decision for backend -> proxy plugin messages.
+ * authentication decision for backend -> proxy plugin messages.
  * The message is trusted only when this proxy's own ID is part of the echoed
  * proxy allowlist; everything else fails closed.
  */
@@ -60,7 +60,7 @@ class PluginMessageListenerAcceptsTest {
 
     @Test
     void rejectsEmptyEchoedSet() {
-        // empty set = backend has no trusted proxy (0.5.0/F015 semantics)
+        // empty set = backend has no trusted proxy
         assertFalse(PluginMessageListener.accepts("", ownId));
     }
 

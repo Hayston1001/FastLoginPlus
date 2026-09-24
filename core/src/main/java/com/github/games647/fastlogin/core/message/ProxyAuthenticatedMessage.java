@@ -27,12 +27,12 @@ package com.github.games647.fastlogin.core.message;
 
 /**
  * A backend -> proxy channel message that echoes the backend's proxy allowlist for source
- * authentication (0.5.0/F054).
+ * authentication.
  *
  * <p>The backend knows its trusted proxy set (allowed-proxies.txt). When sending one of these
  * messages it appends that set as a trailing optional field: exactly one trusted ID -> the ID
- * itself; multiple -> comma-joined; empty set -> empty string (proxy support is effectively
- * dead then, same semantics as 0.5.0/F015).</p>
+ * itself; multiple -> comma-joined; empty set -> empty string (proxy support is
+ * effectively dead then).</p>
  *
  * <p>The proxy accepts the message only when its own proxy ID is part of the echoed set. This
  * is equivalent to a configuration-shared secret for single-proxy networks. In multi-proxy

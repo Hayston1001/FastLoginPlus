@@ -83,7 +83,7 @@ public class BungeeManager {
         if (player != null) {
             ByteArrayDataOutput dataOutput = ByteStreams.newDataOutput();
 
-            // 0.5.0/F054: stamp backend -> proxy messages with the echoed proxy
+            // stamp backend -> proxy messages with the echoed proxy
             // allowlist so the proxy can authenticate the source
             if (message instanceof ProxyAuthenticatedMessage) {
                 ((ProxyAuthenticatedMessage) message).setSourceProxyId(stampFor(proxyIds));
@@ -100,8 +100,8 @@ public class BungeeManager {
      * Build the echoed proxy allowlist stamped onto backend -&gt; proxy plugin messages.
      *
      * <p>Exactly one trusted proxy -&gt; its ID; multiple -&gt; comma-joined; empty set (or
-     * unknown state) -&gt; empty string, matching the 0.5.0/F015 semantics that an empty
-     * allowlist makes proxy support effectively dead.</p>
+     * unknown state) -&gt; empty string, which the receiving side reads as "no trusted
+     * proxy" and therefore as proxy support being effectively dead.</p>
      *
      * @param proxyIds the trusted proxy IDs configured on this backend
      * @return the echoed allowlist for the {@link ProxyAuthenticatedMessage} trailing field
@@ -126,7 +126,7 @@ public class BungeeManager {
         if (enabled) {
             proxyIds = loadBungeeCordIds();
             if (proxyIds.isEmpty()) {
-                // 0.5.0/F015: an empty or unparsable allowed-proxies.txt makes
+                // an empty or unparsable allowed-proxies.txt makes
                 // every incoming proxy ID untrusted — surface this at ERROR
                 // level because proxy support is effectively dead
                 plugin.getLog().error("allowed-proxies.txt contains no valid proxy IDs"

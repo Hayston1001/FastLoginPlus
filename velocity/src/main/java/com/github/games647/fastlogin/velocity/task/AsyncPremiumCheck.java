@@ -69,7 +69,7 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
                                                              StoredProfile profile) {
         VelocityFastLoginPreLoginEvent event = new VelocityFastLoginPreLoginEvent(username, source, profile);
         try {
-            // bounded wait (0.5.0/F034): this runs on a shared scheduler thread
+            // bounded wait: this runs on a shared scheduler thread
             // — an unbounded .get() can starve the pool; a continuation is not
             // possible mid-flow inside JoinManagement.onLogin
             return plugin.getProxy().getEventManager().fire(event).get(5, TimeUnit.SECONDS);

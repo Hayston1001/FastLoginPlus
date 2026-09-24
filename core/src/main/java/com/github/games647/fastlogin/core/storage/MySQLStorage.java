@@ -36,13 +36,13 @@ public class MySQLStorage extends SQLStorage {
     private static final String MYSQL_DRIVER = "com.mysql.cj.jdbc.Driver";
     private static final String MARIADB_DRIVER = "fastlogin.mariadb.jdbc.Driver";
 
-    // 0.5.0/F020: concurrent first-time saves for the same name race the
+    // concurrent first-time saves for the same name race the
     // UNIQUE(Name) constraint — upsert instead of letting the second insert
     // fail (the failure was swallowed by save(), silently losing the profile).
     // The HEX() comparison is byte-exact, so a case-variant duplicate (e.g.
     // "Steve" vs "steve") still conflicts on the case-insensitive unique key
     // but is NOT written — preserving the anti name-stealing semantics.
-    // package-private for the dialect assertion test (0.5.0/F020)
+    // package-private for the dialect assertion test
     static final String INSERT_PROFILE_UPSERT = "INSERT INTO `" + PREMIUM_TABLE
             + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`) VALUES (?, ?, ?, ?, ?) "
             + "ON DUPLICATE KEY UPDATE "

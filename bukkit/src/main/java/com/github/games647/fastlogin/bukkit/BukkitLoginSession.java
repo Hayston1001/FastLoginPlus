@@ -50,7 +50,7 @@ public class BukkitLoginSession extends LoginSession {
     private boolean verified;
     private SkinProperty skinProperty;
 
-    // 0.5.0/F001: one-shot guard for the encryption verification — a malicious
+    // one-shot guard for the encryption verification — a malicious
     // client can send duplicate ENCRYPTION_BEGIN packets; without this guard
     // each duplicate schedules another VerifyResponseTask that double-enables
     // encryption and double-injects the fake START

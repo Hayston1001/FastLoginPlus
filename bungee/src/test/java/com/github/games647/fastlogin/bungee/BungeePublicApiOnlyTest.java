@@ -49,7 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p><b>Why this is a test and not a convention.</b> This module compiles against a 2024
  * BungeeCord artifact, while the proxy's non-API half (everything outside {@code api},
  * {@code event} and {@code config}) is reorganised freely upstream — it moved packages once
- * already (BungeeCord #3855, 2025-07-14, which is what 0.7.0/F17 fixed). A compile-time
+ * already (BungeeCord #3855, 2025-07-14). A compile-time
  * reference to such a class cannot be caught here: the compiler checks it against the old
  * artifact, succeeds, and the failure only appears on a user's newer proxy — where it takes the
  * whole plugin down at startup. Scanning the compiled classes closes that gap locally, and

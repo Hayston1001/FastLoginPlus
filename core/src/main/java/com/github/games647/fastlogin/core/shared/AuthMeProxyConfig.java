@@ -42,8 +42,8 @@ import java.util.regex.Pattern;
  * {@code premium.keepOfflineUuidCompatibility=true} mode performs its own
  * login-phase handshake on the same connection, which installs a second
  * encryption layer on top of the one FastLoginPlus already established. The
- * two handshakes corrupt the connection (tracked as ISS-03 in the AuthMe 6.0.1
- * impact assessment), so FastLoginPlus pins the flag to {@code false}.
+ * two handshakes corrupt the connection, so FastLoginPlus pins the flag to
+ * {@code false}.
  *
  * <p>The file is edited with a single-line textual substitution rather than a
  * YAML round-trip: AuthMe generates a heavily commented configuration and a

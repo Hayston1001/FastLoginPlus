@@ -126,7 +126,7 @@ class ConfigRefresherTest {
 
     @Test
     void sectionHeaderWithScalarUserValueKeepsTemplateStructure() throws IOException {
-        // 0.5.0/F029: a user value that turns a template section header into a
+        // a user value that turns a template section header into a
         // scalar (e.g. a broken manual edit "anti-bot: false") must not
         // produce invalid YAML — the template structure wins.
         Path config = copyResource(FULL_TEMPLATE);
@@ -145,7 +145,7 @@ class ConfigRefresherTest {
 
     @Test
     void ambiguousScalarUserValuesStayQuotedStrings() throws IOException {
-        // 0.5.0/F030: strings that YAML 1.1 would resolve as boolean/number/null
+        // strings that YAML 1.1 would resolve as boolean/number/null
         // must be written quoted so they keep their string type across the
         // refresh cycle.
         Path config = copyResource(FULL_TEMPLATE);
@@ -165,7 +165,7 @@ class ConfigRefresherTest {
 
     @Test
     void refreshRewritesConfigAtomicallyWithoutLeftoverTempFiles() throws IOException {
-        // 0.5.0/F026: the rewrite must go through a temp file + move so a crash
+        // the rewrite must go through a temp file + move so a crash
         // mid-write can never truncate the user's config.
         Path config = copyResource(FULL_TEMPLATE);
         Configuration userConfig = load(config);

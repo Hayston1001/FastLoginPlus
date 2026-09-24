@@ -41,7 +41,7 @@ import java.util.function.Consumer;
  * shape therefore fails to link on every proxy build released since — and, because the old
  * reference sat in a field initialiser, the failure was not limited to the feature that used
  * it: constructing the listener threw {@code NoClassDefFoundError} and took the whole plugin
- * down (0.7.0/F17). Both shapes are still in the wild (Waterfall and pre-2025 BungeeCord
+ * down. Both shapes are still in the wild (Waterfall and pre-2025 BungeeCord
  * builds have the old one), so neither a typed old call nor a typed new call is correct.</p>
  *
  * <p>Everything here goes through the {@code properties} field: its declared type tells us

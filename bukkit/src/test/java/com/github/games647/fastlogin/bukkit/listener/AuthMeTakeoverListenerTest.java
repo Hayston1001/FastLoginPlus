@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests the AuthMe reload matcher that drives the premium-takeover re-assert (ISS-32).
+ * Tests the AuthMe reload matcher that drives the premium-takeover re-assert.
  *
  * <p>The matcher has to recognise every spelling the server accepts — the console form without a
  * leading slash, the {@code authme:authme} namespace form CraftBukkit registers for every plugin

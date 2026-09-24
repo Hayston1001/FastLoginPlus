@@ -42,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 /**
- * Regression test for 0.5.0/F025: pendingConfirms must be a concurrent set —
+ * Regression test: pendingConfirms must be a concurrent set —
  * proxy-side plugin-message listeners run on Netty event-loop threads of
  * different players, and the premium-warning gate relies on the atomic
  * single-winner semantics of add().
@@ -83,7 +83,7 @@ class FastLoginCoreTest {
 
     @Test
     void antibotConfigValidationFallsBackToDefaults() {
-        // 0.5.0/F039: zero/negative anti-bot limits and durations would
+        // zero/negative anti-bot limits and durations would
         // dead-lock or silently disable the checks — fall back to defaults
         org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(FastLoginCoreTest.class);
         assertEquals(600, FastLoginCore.validatedLimit(logger, "connections", 0, 600));

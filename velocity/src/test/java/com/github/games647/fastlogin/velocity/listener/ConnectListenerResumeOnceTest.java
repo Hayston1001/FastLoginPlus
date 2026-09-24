@@ -47,7 +47,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doReturn;
 
 /**
- * 0.5.0/R2: the EventTask continuation must be resumed exactly once on every
+ * the EventTask continuation must be resumed exactly once on every
  * path — including when the anti-bot decision application throws (previously
  * the login hung until the read timeout).
  */

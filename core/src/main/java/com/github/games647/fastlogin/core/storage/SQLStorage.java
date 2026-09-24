@@ -68,7 +68,7 @@ public abstract class SQLStorage implements AuthStorage {
             + "` WHERE `UUID`=? LIMIT 1";
     protected static final String INSERT_PROFILE = "INSERT INTO `" + PREMIUM_TABLE
             + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`) " + "VALUES (?, ?, ?, ?, ?) ";
-    // 0.5.0/F020: fallback row-id lookup for the upsert update branch, where
+    // fallback row-id lookup for the upsert update branch, where
     // getGeneratedKeys() behavior is driver-dependent and may return no row
     protected static final String SELECT_ID_BY_NAME = "SELECT `UserID` FROM `" + PREMIUM_TABLE
             + "` WHERE `Name`=?";
@@ -79,7 +79,7 @@ public abstract class SQLStorage implements AuthStorage {
     protected static final String DELETE_BY_NAME = "DELETE FROM `" + PREMIUM_TABLE
             + "` WHERE `Name`=?";
 
-    // 0.5.0/F020: name-level striped locks close the cross-thread
+    // name-level striped locks close the cross-thread
     // load-modify-save window that the per-profile saveLock cannot cover (it is
     // per StoredProfile instance, so two threads holding different instances of
     // the same row silently overwrite each other).  Callers that perform a
@@ -108,7 +108,7 @@ public abstract class SQLStorage implements AuthStorage {
 
     /**
      * Run the action while holding the striped lock bucket of the given player
-     * name (0.5.0/F020).  All load-modify-save windows for the same name
+     * name.  All load-modify-save windows for the same name
      * serialize on this lock, so no lost update can occur between concurrent
      * flows (login vs. admin command vs. plugin message task).
      *
@@ -236,7 +236,7 @@ public abstract class SQLStorage implements AuthStorage {
 
     /**
      * Save the profile, reporting SQL failures through the return value instead
-     * of silently swallowing them (0.5.0/F020).  New profiles are saved with an
+     * of silently swallowing them.  New profiles are saved with an
      * upsert so a concurrent first-time save of the same name can neither throw
      * on the UNIQUE(Name) constraint nor lose the profile.
      *
@@ -285,7 +285,7 @@ public abstract class SQLStorage implements AuthStorage {
     }
 
     /**
-     * Fill in the row id of a freshly upserted profile (0.5.0/F020).
+     * Fill in the row id of a freshly upserted profile.
      *
      * <p>When the upsert takes the update branch (the name already exists) the
      * behavior of {@code getGeneratedKeys()} is driver-dependent and may yield no
@@ -341,7 +341,7 @@ public abstract class SQLStorage implements AuthStorage {
      * Insert statement for a new profile.  Storage implementations override
      * this with an upsert so that two concurrent first-time saves for the same
      * name cannot race the UNIQUE(Name) constraint and silently lose the
-     * second profile (0.5.0/F020).
+     * second profile.
      *
      * @return an insert statement with five parameters
      *         (UUID, Name, Premium, Floodgate, LastIp)

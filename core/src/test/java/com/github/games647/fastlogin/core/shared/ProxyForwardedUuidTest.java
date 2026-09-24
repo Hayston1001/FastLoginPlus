@@ -34,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins {@link ProxyForwardedUuid} (0.7.0/F24): the pre-login pre-create on Spigot fires on a
+ * Pins {@link ProxyForwardedUuid}: the pre-login pre-create on Spigot fires on a
  * version-4 UUID, which is the only shape a proxy-forwarded Mojang UUID can have — offline
  * UUIDs are name-derived and therefore version 3.
  */

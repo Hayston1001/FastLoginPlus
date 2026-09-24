@@ -53,7 +53,7 @@ public class PerIpRateLimiter {
 
     // Minimum interval between lazy cleanups triggered from tryAcquire — the
     // full-map scan is O(n) and runs on connection threads, so scanning on
-    // every acquire under load is a self-inflicted DoS (0.5.0/F038)
+    // every acquire under load is a self-inflicted DoS
     private static final long LAZY_CLEANUP_MIN_INTERVAL_MS = 1_000;
 
     private volatile long lastLazyCleanupMs;

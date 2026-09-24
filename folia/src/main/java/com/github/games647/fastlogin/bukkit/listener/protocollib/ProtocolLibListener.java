@@ -101,7 +101,7 @@ public class ProtocolLibListener extends PacketAdapter {
                 .registerAsyncHandler(new ProtocolLibListener(plugin, antiBotService, verifyClientKeys))
                 .start();
 
-        // 0.5.0/F003: ENCRYPTION_BEGIN interception is known to silently fail on
+        // ENCRYPTION_BEGIN interception is known to silently fail on
         // some ProtocolLib/Minecraft combinations (e.g. Paper 1.21.11 + ProtocolLib
         // 5.5.0, where ServerboundKeyPacket is not registered). The runtime
         // getOverriddenType() fallback covers *some* of these — warn loudly when
@@ -181,7 +181,7 @@ public class ProtocolLibListener extends PacketAdapter {
         } catch (FieldAccessException fieldAccessEx) {
             plugin.getLog().error("Failed to parse packet {}", packetEvent.getPacketType(), fieldAccessEx);
         } catch (Exception unexpectedEx) {
-            // 0.5.0/F007: an unexpected reflective failure must not abort the
+            // an unexpected reflective failure must not abort the
             // remaining packet handling for this connection
             plugin.getLog().error("Unexpected error processing packet {}",
                     packetEvent.getPacketType(), unexpectedEx);
@@ -216,7 +216,7 @@ public class ProtocolLibListener extends PacketAdapter {
         } else {
             byte[] expectedVerifyToken = session.getVerifyToken();
             if (verifyNonce(sender, packetEvent.getPacket(), session.getClientPublicKey(), expectedVerifyToken)) {
-                // 0.5.0/F001: only one verification per session — duplicates are
+                // only one verification per session — duplicates are
                 // a replay/DoS attempt and get kicked
                 if (!session.startVerification()) {
                     plugin.getLog().warn("Duplicate encryption response from {} — ignoring",

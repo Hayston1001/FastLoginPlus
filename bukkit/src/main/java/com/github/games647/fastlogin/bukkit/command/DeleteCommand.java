@@ -67,7 +67,7 @@ public class DeleteCommand implements CommandExecutor {
             return true;
         }
 
-        // 0.5.0/F011: database calls must not run on the main thread — the
+        // database calls must not run on the main thread — the
         // whole load/validate/delete flow runs async, replies hop back to the
         // main thread
         plugin.getScheduler().runAsync(() -> {

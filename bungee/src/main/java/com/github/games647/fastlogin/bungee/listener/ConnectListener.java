@@ -75,7 +75,7 @@ public class ConnectListener implements Listener {
      * (BungeeCord #3855, 2025-07-14) — so it is named as a string and never referenced as a
      * compile-time type. A class that moved then costs one warning instead of the
      * {@code NoClassDefFoundError} that used to keep the whole plugin from starting on new proxy
-     * builds (0.7.0/F17).
+     * builds.
      */
     private static final String HANDLER_CLASS_NAME = "net.md_5.bungee.connection.InitialHandler";
 
@@ -232,7 +232,7 @@ public class ConnectListener implements Listener {
         PendingConnection connection = loginEvent.getConnection();
         if (connection.isOnlineMode()) {
             LoginSession session = plugin.getSession().get(connection);
-            // 0.5.0/F053: no FLP session exists for unknown players when the
+            // no FLP session exists for unknown players when the
             // proxy itself runs in online mode (or a third-party plugin enabled
             // it) — skip instead of NPE-ing on the event thread
             if (session == null) {
@@ -254,7 +254,7 @@ public class ConnectListener implements Listener {
                 // same array, so it has to run after this. The operation used to be a typed call
                 // on LoginResult#setProperties with a compile-time Property[] — that reference no
                 // longer links on proxy builds released after BungeeCord #3855 (2025-07), which
-                // took the whole listener down at construction time (0.7.0/F17). The connection
+                // took the whole listener down at construction time. The connection
                 // implementation itself is kept at arm's length for the same reason, see
                 // HANDLER_CLASS_NAME.
                 if (!(boolean) plugin.getCore().getConfig().get("forwardSkin")) {
@@ -269,9 +269,10 @@ public class ConnectListener implements Listener {
                         setOfflineId(connection, verifiedUsername);
                     }
 
-                    // 0.7.0/F17: hand the verified Mojang UUID to the backend over the legacy
+                    // hand the verified Mojang UUID to the backend over the legacy
                     // handshake, so it can pre-create the AuthMe record before the preJoin dialog
-                    // is shown — the same guarantee the Velocity side gets from F13.
+                    // is shown — the same guarantee Velocity gets from its modern-forwarding
+                    // property.
                     attachPremiumAttestation(connection, verifiedUsername, verifiedUUID);
                 }
             } else {
@@ -302,7 +303,8 @@ public class ConnectListener implements Listener {
      *
      * <p>BungeeCord serialises those properties into the handshake it sends to the backend when
      * IP forwarding is enabled, and the backend reads the value back in the configuration phase
-     * — before AuthMe can show its preJoin dialog (0.7.0/F13 on the Velocity side, F17 here).</p>
+     * — before AuthMe can show its preJoin dialog. Velocity achieves the same with its own
+     * modern-forwarding property.</p>
      *
      * <p>The name is not the one Velocity uses: Paper drops legacy-forwarded properties whose
      * name is not {@code \w{0,16}}, and that spelling contains hyphens
@@ -318,7 +320,7 @@ public class ConnectListener implements Listener {
                 ForwardingAttributes.PREMIUM_UUID_LEGACY, premiumUuid.toString(),
                 failure -> plugin.getLog().warn("Could not attach the verified premium UUID for {}"
                         + " to the login profile — AuthMe's first-login dialog is not skipped"
-                        + " (0.7.0/F17): {}", username, failure.toString()));
+                        + ": {}", username, failure.toString()));
         if (attached) {
             plugin.getLog().info("Attaching verified premium UUID {} to the forwarded profile",
                     premiumUuid);

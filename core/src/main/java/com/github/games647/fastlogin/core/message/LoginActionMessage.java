@@ -45,7 +45,7 @@ public class LoginActionMessage implements ChannelMessage {
      * {@code null} when the proxy has nothing to declare: the connection was not verified as
      * premium (cracked login, Floodgate, forced login), or the proxy predates this field.
      * <p>
-     * 0.7.0/F10. The backend used to have no way of learning the verified UUID when
+     * The backend used to have no way of learning the verified UUID when
      * {@code premiumUuid: false} — there the proxy deliberately rewrites the forwarded UUID to
      * the offline one, so the regular connection UUID carries no premium signal and AuthMe would
      * never get a {@code premium_uuid} written. The proxy has always known this value (see
@@ -88,7 +88,7 @@ public class LoginActionMessage implements ChannelMessage {
 
     @Override
     public void readFrom(ByteArrayDataInput input) {
-        // 0.5.0/F027: validate the type byte — a malformed client plugin message
+        // validate the type byte — a malformed client plugin message
         // would otherwise throw an uncaught ArrayIndexOutOfBoundsException
         byte typeByte = input.readByte();
         if (typeByte < 0 || typeByte >= Type.values().length) {
@@ -103,7 +103,7 @@ public class LoginActionMessage implements ChannelMessage {
         long leastSignificantBits = input.readLong();
         this.proxyId = new UUID(mostSignificantBits, leastSignificantBits);
 
-        // 0.7.0/F10: optional trailing field. A proxy older than this field sends nothing here,
+        // optional trailing field. A proxy older than this field sends nothing here,
         // and Guava's ByteArrayDataInput surfaces the resulting EOF as an IllegalStateException
         // (its read methods wrap the checked EOFException). Absence is a supported state, not an
         // error — it means "this proxy has nothing to declare". The caller decides what to do
@@ -136,7 +136,7 @@ public class LoginActionMessage implements ChannelMessage {
         output.writeLong(proxyId.getMostSignificantBits());
         output.writeLong(proxyId.getLeastSignificantBits());
 
-        // 0.7.0/F10: proxy-verified Mojang UUID. Written unconditionally so the frame length is
+        // proxy-verified Mojang UUID. Written unconditionally so the frame length is
         // deterministic; the zero UUID means "nothing to declare" and is filtered out by
         // resolvePremiumUuid's version-4 check. Old backends stop reading after proxyId and
         // ignore the trailing bytes, so they are unaffected.

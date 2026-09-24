@@ -160,7 +160,7 @@ class AntiBotServiceTest {
                 service.onIncomingConnection(addr("1.2.3.4"), longName.toString()));
     }
 
-    // --- F076 regression: periodic cleanup must use the limiter's uptime clock ---
+    // --- regression: periodic cleanup must use the limiter's uptime clock ---
     @Test
     void perIpEntriesShouldSurvivePeriodicCleanup() {
         FakeTicker ticker = new FakeTicker(0);

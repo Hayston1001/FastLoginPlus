@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 0.5.0/F054: the backend stamps outgoing proxy-bound messages with its echoed
+ * the backend stamps outgoing proxy-bound messages with its echoed
  * proxy allowlist (single ID / comma-joined set / empty set).
  */
 class BungeeManagerStampTest {

@@ -32,7 +32,7 @@ public class SuccessMessage implements ProxyAuthenticatedMessage {
 
     public static final String SUCCESS_CHANNEL = "succ";
 
-    // 0.5.0/F054: echoed proxy allowlist of the sending backend, appended as a
+    // echoed proxy allowlist of the sending backend, appended as a
     // trailing optional wire field (empty string when unset/untrusted)
     private String sourceProxyId = "";
 
@@ -53,7 +53,7 @@ public class SuccessMessage implements ProxyAuthenticatedMessage {
 
     @Override
     public void readFrom(ByteArrayDataInput input) {
-        // 0.5.0/F054: optional trailing authentication field; legacy payloads
+        // optional trailing authentication field; legacy payloads
         // (older backend) are empty and surface as RuntimeException on EOF
         try {
             sourceProxyId = input.readUTF();

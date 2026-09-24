@@ -228,7 +228,7 @@ flowchart TD
         P6 -->|正版| P7["enableOnlinemode()<br/>代理与客户端执行 Mojang 握手"]
         P6 -->|离线| P8[创建离线 session]
         P7 --> P9{"LoginEvent:<br/>Mojang 验证通过"}
-        P9 --> P10["记录正版 UUID<br/>premiumUuid=false → 用离线 UUID 覆盖<br/>并附加正版证明属性(0.7.0/F13)<br/>forwardSkin=false → 剥离皮肤属性"]
+        P9 --> P10["记录正版 UUID<br/>premiumUuid=false → 用离线 UUID 覆盖<br/>并附加正版证明属性<br/>forwardSkin=false → 剥离皮肤属性"]
         P10 --> P11
         P8 --> P11{"ServerConnectedEvent<br/>进入子服"}
         P11 --> P12["ForceLoginTask<br/>(代理端通常没有登录插件)"]
@@ -253,13 +253,13 @@ flowchart TD
 要点:
 
 - `LoginActionMessage` 走插件消息通道 `fastloginplus:force`; `proxyId` 是代理端首次启动时生成的 UUID(Velocity 存在 `proxyId.txt`, BungeeCord 使用其自身 `config.yml` 的 `stats` 值, 该文件由 BungeeCord 首次启动时生成); 后端用 `allowed-proxies.txt` 校验它以防伪造
-- 该消息现在还携带代理端 `LoginEvent` 中验证过的 Mojang UUID(`LoginActionMessage.verifiedPremiumUuid`, 0.7.0/F10), 因此即使 `premiumUuid: false` 让连接 UUID 变成了离线 UUID, 后端仍能给 AuthMe 盖上 `premium_uuid`
+- 该消息现在还携带代理端 `LoginEvent` 中验证过的 Mojang UUID(`LoginActionMessage.verifiedPremiumUuid`), 因此即使 `premiumUuid: false` 让连接 UUID 变成了离线 UUID, 后端仍能给 AuthMe 盖上 `premium_uuid`
 - REGISTER 消息只在后端确认玩家未注册后才执行; LOGIN 消息直接执行登录
 - 后端会拒绝未知 proxyId 以及被标记为 block 的玩家(防止暴力猜 BungeeCord ID)
 - 代理模式下, `/flp premium|cracked|delete` 请求由后端转发到代理端(见下一节)
 - 后端不必等消息才知道连接已通过验证: 自 0.7.0 起代理会把验证结果证明附在转发的 profile 上, Paper 后端在配置阶段就能读到(见下文*正版证明*)
 
-### 正版证明(0.7.0/F13 + F17)
+### 正版证明
 
 上面的插件消息中继是*兜底方案*. 代理端还会把已验证的 Mojang UUID 附加到它转发的 profile 上, 这样后端可以在 AuthMe 的 `HIGHEST` 优先级处理器运行、弹出阻塞式 preJoin 对话框**之前**就建好 AuthMe 记录:
 
@@ -273,7 +273,7 @@ flowchart TD
 - **Paper(含 Folia)**: `AsyncPlayerConnectionConfigureEvent` 处理器(`readForwardedPremiumUuid` → `resolveAttestedUuid` → `applyPremiumAtConfigure`)同步标记记录并关闭两个 preJoin 对话框; 没有证明时回落到异步 Mojang 查询
 - **Spigot 与较老的 Paper**: 不存在配置阶段, 因此 `PreLoginPremiumListener` 在 `AsyncPlayerPreLoginEvent` 时调用 `applyPremiumAtPreLogin` —— 足以在加入之前预先建好记录
 
-防护栏: 只有当同一次登录在 pre-login profile 上已经携带该证明时才生效(profile 缓存重放会被记录并忽略, 0.7.0/F19), 且管理员的 `/flp cracked` 优先于仍在途中的标记(F20).
+防护栏: 只有当同一次登录在 pre-login profile 上已经携带该证明时才生效(profile 缓存重放会被记录并忽略), 且管理员的 `/flp cracked` 优先于仍在途中的标记.
 
 ## 命令(/flp premium|cracked|delete)
 
@@ -282,7 +282,7 @@ flowchart TD
 - **单端模式**: 直接改数据库(正版 ⇄ 离线 / 删除记录)并踢出玩家, 使改动在重连时生效; `/flp premium` 由 `premium-warning` 二次确认保护
 - **代理模式**: 后端先做登录插件侧的清理(AuthMe 在后端), 再通过插件消息把切换请求转发给代理端(由代理更新数据库并踢出玩家); 后端自身从不碰数据库
   - 如果目标玩家离线、又没有在线玩家可以充当消息载体, 请求会进入持久化队列 `pending-relay.json`, 等该玩家(或任意玩家)加入时重发; 代理端用 `ToggleFeedbackMessage` 回复, 后端把结果打到控制台
-  - 同一队列还承载第三类条目: AuthMe 自身的 `premium.set` / `premium.unset` 通知(`premiumNotices`, 0.7.0/F9)在没有载体在线时入队、稍后中继, 因为它们更新的是 AuthMe *代理侧*的正版缓存 —— 也就是决定 `forceOnlineMode()` 的东西 —— 而不是 FLP 自己的 profile
+  - 同一队列还承载第三类条目: AuthMe 自身的 `premium.set` / `premium.unset` 通知(`premiumNotices`)在没有载体在线时入队、稍后中继, 因为它们更新的是 AuthMe *代理侧*的正版缓存 —— 也就是决定 `forceOnlineMode()` 的东西 —— 而不是 FLP 自己的 profile
 - 命令始终以 `/flp` 注册(plugin.yml), 从不别名到 `/premium`. AuthMe 6.0 自带的 `/premium` 与 `/freemium` 保持注册, 但在 FLP 接管正版处理时会被 `AuthMeCommandGuard` 拦截(提示玩家改用 `/flp`): 否则它们会在 FLP 背后改动 AuthMe 的正版状态. 门控接管的那套 AuthMe 6.0 检测同样门控这个守卫, 所以在 AuthMe 5.x 上两条命令照常工作
 - 裸 `/flp` 打印版本与用法, 仅限服务器 OP; `prem`、`del`、`unpremium` 可作为子命令别名
 

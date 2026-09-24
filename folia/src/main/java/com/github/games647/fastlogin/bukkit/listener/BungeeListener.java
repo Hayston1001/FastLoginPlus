@@ -115,7 +115,7 @@ public class BungeeListener implements PluginMessageListener {
 
     private void onLoginMessage(Player player, String playerName, UUID verifiedPremiumUuid) {
         BukkitLoginSession playerSession = new BukkitLoginSession(playerName, true);
-        // 0.7.0/F10: adopt the Mojang UUID the proxy verified. Without it the session carries no
+        // adopt the Mojang UUID the proxy verified. Without it the session carries no
         // UUID at all, and with premiumUuid:false the fallback in ForceLoginTask (the connection
         // UUID) is the offline one — so AuthMe would never get a premium_uuid written and the
         // player would be asked for a password on every single login. Null stays null: the proxy

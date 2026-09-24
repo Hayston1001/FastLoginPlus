@@ -76,7 +76,7 @@
 
 ### Bug Fixes
 
-**0.5.0 Audit Fixes**
+**Fixes for issues found in v0.5.0**
 
 - **AuthMe integration**: premium-record cleanup during cracked sessions is now fail-closed —
   a premium-flagged AuthMe record without a matching FastLogin profile row (database reset or
@@ -155,7 +155,7 @@
 - **Bukkit**: configure 阶段 premium 分支在载体玩家缺失时补上防御性中继调度(与 Folia 分支对齐)—— 空服期间排队的正版切换不再要等重启才能投递
 - **插件消息加固**: 登录动作消息的类型字节在读取时校验 —— 格式错误的客户端插件消息现在快速失败为监听器可捕获的异常, 不再抛出未捕获的 `ArrayIndexOutOfBoundsException`
 
-**Pending relay audit fixes**
+**Fixes for queued commands (pending relay)**
 
 - Fixed a race where two conflicting console toggles (`/flp premium X` then `/flp cracked X`) could relay the stale captured value: the relay task now atomically removes the queue entry and sends the CURRENT queued value (`PendingRelayStore.removeToggle`), so the last command always wins (bukkit, folia and the Paper configure-phase self-relay path).
 - A pending cracked toggle for a player who joins while nobody else is online is no longer silently dropped by the Paper configure listener (autoRegister skip): the entry stays queued and is relayed to the proxy once any player reaches the PLAY phase, so the proxy database is actually flipped to cracked.
@@ -189,10 +189,10 @@
 
 **ProtocolLib async design record**
 
-- The decision to keep the ProtocolLib login listener registered as an async handler is now documented in `PROTOCOLLIB-ASYNC-DESIGN.md` at the repository root: rationale, compensating controls, residual risk with operator guidance for the startup self-check warning, and re-evaluation triggers
+- The decision to keep the ProtocolLib login listener registered as an async handler is now documented in [`docs/en/PROTOCOLLIB-ASYNC-DESIGN.md`](docs/en/PROTOCOLLIB-ASYNC-DESIGN.md): why it is async, what compensates for that, what risk remains, what operators should do about the startup self-check warning, and what would make us revisit the decision
 - A misleading comment in the ProtocolLib kick source was corrected (bukkit + folia)
 
-- 保持 ProtocolLib 登录监听器以 async 方式注册的决策已记录到仓库根目录的 `PROTOCOLLIB-ASYNC-DESIGN.md`: 决策理由, 补偿措施, 残余风险与启动自检告警的处置指引, 重新评估触发条件
+- 保持 ProtocolLib 登录监听器以 async 方式注册的决策已记录到 [`docs/en/PROTOCOLLIB-ASYNC-DESIGN.md`](docs/en/PROTOCOLLIB-ASYNC-DESIGN.md): 为何采用 async、靠什么补偿、还剩什么风险、启动自检告警时管理员该怎么做、以及什么情况下会重新评估这个决策
 - 修正 ProtocolLib 踢出源码中的一处误导性注释(bukkit + folia)
 
 ### Reminder
@@ -370,12 +370,12 @@ The recommended value for `lifetime` is **1800** seconds. Values below 300 are n
 
 ### Bug Fixes(Major)
 
-- Anti-bot module audit — 6 bug fixes: clock jump back no longer throws in TickingRateLimiter, batch expire stale records, compareTo uses correct expireTime, global rate limit checked before per-IP, periodic cleanup every 100 connections, sanitize usernames in log messages
+- Anti-bot — 6 bug fixes: clock jump back no longer throws in TickingRateLimiter, batch expire stale records, compareTo uses correct expireTime, global rate limit checked before per-IP, periodic cleanup every 100 connections, sanitize usernames in log messages
 - Fix `forwardSkin: false` not working on Paper — PaperCacheListener now checks config before setting skin
 - Fix SkinsRestorer skin overwritten by Paper filledProfileCache — set empty placeholder textures to prevent `complete(true)` pulling stale skin
 - Guard against null `floodgate_data_handler` in ProtocolLib pipeline — prevent NPE if Floodgate renames/removes the handler
 
-- 反机器人模块审计 — 6 个 bug 修复: TickingRateLimiter 时钟回退不再抛异常, 批量过期陈旧记录, compareTo 使用正确的 expireTime, 全局限制在每 IP 限制之前检查, 每 100 连接定期清理, 日志中用户名消毒
+- 反机器人模块 — 6 处修复: TickingRateLimiter 时钟回退不再抛异常, 批量过期陈旧记录, compareTo 使用正确的 expireTime, 全局限制在每 IP 限制之前检查, 每 100 连接定期清理, 日志中用户名消毒
 - 修复 Paper 上 `forwardSkin: false` 无效 — PaperCacheListener 现在在设置皮肤前检查配置
 - 修复 SkinsRestorer 皮肤被 Paper filledProfileCache 覆盖 — 设置空占位纹理防止 `complete(true)` 拉取旧皮肤
 - 防止 ProtocolLib pipeline 中 `floodgate_data_handler` 为 null — 避免 Floodgate 重命名/移除 handler 时 NPE

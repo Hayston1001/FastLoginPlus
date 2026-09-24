@@ -31,7 +31,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 0.5.0/F020: the MySQL insert must stay an upsert so concurrent first-time
+ * the MySQL insert must stay an upsert so concurrent first-time
  * saves for the same name cannot lose the profile.  The live-database round
  * trip is a manual integration test.
  */

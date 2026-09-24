@@ -83,7 +83,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     onForceActionSuccess(session);
 
                     if (playerProfile != null) {
-                        // 0.5.0/F020: persist under the name-level striped lock
+                        // persist under the name-level striped lock
                         storage.withNameLock(getName(player), () -> {
                             playerProfile.setId(session.getUuid());
                             playerProfile.setOnlinemodePreferred(true);
@@ -106,7 +106,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     if (success) {
                         //update only on success to prevent corrupt data
                         if (playerProfile != null) {
-                            // 0.5.0/F020: persist under the name-level striped lock
+                            // persist under the name-level striped lock
                             storage.withNameLock(getName(player), () -> {
                                 playerProfile.setId(session.getUuid());
                                 playerProfile.setOnlinemodePreferred(true);
@@ -126,7 +126,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                         // startCrackedSession (direct mode; proxy-mode backends keep
                         // profile=null, so nothing is saved there).
                         if (playerProfile != null) {
-                            // 0.5.0/F020: persist under the name-level striped lock
+                            // persist under the name-level striped lock
                             storage.withNameLock(getName(player), () -> {
                                 playerProfile.setId(session.getUuid());
                                 playerProfile.setOnlinemodePreferred(true);
@@ -144,7 +144,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 }
             } else if (playerProfile != null) {
                 //cracked player
-                // 0.5.0/F020: persist under the name-level striped lock
+                // persist under the name-level striped lock
                 storage.withNameLock(getName(player), () -> {
                     playerProfile.setId(null);
                     playerProfile.setOnlinemodePreferred(false);
@@ -165,7 +165,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
         AuthPlugin<P> authPlugin = core.getAuthPluginHook();
         boolean success = authPlugin.forceRegister(player, generatedPassword);
 
-        // 0.7.0/F25: only announce the generated password when the auth plugin really stored it.
+        // only announce the generated password when the auth plugin really stored it.
         // AuthMe 6.0's takeover pre-creates the record with an empty password hash, so in that
         // configuration the message would hand out a password the database does not have.
         String message = authPlugin.notifyGeneratedPassword() ? core.getMessage("auto-register") : null;

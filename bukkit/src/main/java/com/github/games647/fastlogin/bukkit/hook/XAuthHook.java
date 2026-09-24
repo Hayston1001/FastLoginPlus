@@ -77,7 +77,7 @@ public class XAuthHook implements AuthPlugin<Player> {
         });
 
         try {
-            // 0.5.0/F017: bound the wait — a stuck main thread must not pile up
+            // bound the wait — a stuck main thread must not pile up
             // unbounded async login threads
             return future.get(5, TimeUnit.SECONDS);
         } catch (InterruptedException | ExecutionException | TimeoutException ex) {
@@ -107,7 +107,7 @@ public class XAuthHook implements AuthPlugin<Player> {
 
         try {
             //login in the player after registration
-            // 0.5.0/F017: bound the wait (see forceLogin)
+            // bound the wait (see forceLogin)
             return future.get(5, TimeUnit.SECONDS) && forceLogin(player);
         } catch (InterruptedException | ExecutionException | TimeoutException ex) {
             plugin.getLog().error("Failed to forceRegister player: {}", player, ex);

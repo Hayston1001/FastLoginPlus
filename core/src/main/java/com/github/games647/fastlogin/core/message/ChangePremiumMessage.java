@@ -36,7 +36,7 @@ public class ChangePremiumMessage implements ProxyAuthenticatedMessage {
     private boolean willEnable;
     private boolean isSourceInvoker;
 
-    // 0.5.0/F054: echoed proxy allowlist of the sending backend, appended as a
+    // echoed proxy allowlist of the sending backend, appended as a
     // trailing optional wire field (empty string when unset/untrusted)
     private String sourceProxyId = "";
 
@@ -83,7 +83,7 @@ public class ChangePremiumMessage implements ProxyAuthenticatedMessage {
         playerName = input.readUTF();
         isSourceInvoker = input.readBoolean();
 
-        // 0.5.0/F054: optional trailing authentication field; legacy payloads
+        // optional trailing authentication field; legacy payloads
         // (older backend) end here and surface as RuntimeException on EOF
         try {
             sourceProxyId = input.readUTF();

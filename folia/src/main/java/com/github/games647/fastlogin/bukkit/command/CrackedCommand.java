@@ -87,9 +87,9 @@ public class CrackedCommand extends ToggleCommand {
         }
 
         // Local path (no proxy): load profile from local DB
-        // 0.5.0/F011: database calls must not run on the main thread
+        // database calls must not run on the main thread
         plugin.getScheduler().runAsync(() -> {
-            // 0.5.0/F020+R3: serialize concurrent load-modify-save windows for the
+            // serialize concurrent load-modify-save windows for the
             // same player (two fast commands would otherwise double-save)
             plugin.getCore().getStorage().withNameLock(playerName, () -> {
                 StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
@@ -119,9 +119,9 @@ public class CrackedCommand extends ToggleCommand {
                     if (plugin.getCore().getConfig().getBoolean("kick-toggle")) {
                         player.kickPlayer(plugin.getCore().getMessage("remove-premium"));
                     } else {
-                        // 0.5.0/F012: this is the *cracked* self path — the message
+                        // this is the *cracked* self path — the message
                         // was misleadingly the add-premium key
-                        // 0.5.0/R4: single feedback message — the pre-save duplicate
+                        // single feedback message — the pre-save duplicate
                         // was removed
                         plugin.getCore().sendLocaleMessage("remove-premium", sender);
                     }
@@ -154,9 +154,9 @@ public class CrackedCommand extends ToggleCommand {
         }
 
         // Local path (no proxy): load profile from local DB
-        // 0.5.0/F011: database calls must not run on the main thread
+        // database calls must not run on the main thread
         plugin.getScheduler().runAsync(() -> {
-            // 0.5.0/F020+R3: see the self path above
+            // see the self path above
             plugin.getCore().getStorage().withNameLock(playerName, () -> {
                 StoredProfile profile = plugin.getCore().getStorage().loadProfile(playerName);
                 if (profile == null) {

@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 0.7.0/F17 — the helper exists because BungeeCord moved the property class upstream while this
+ * — the helper exists because BungeeCord moved the property class upstream while this
  * module compiles against the pre-move artifact. Both shapes therefore have to work, and the
  * stand-ins below reproduce them without touching BungeeCord: each profile carries a
  * {@code properties} field whose component type differs, which is exactly the difference the

@@ -78,9 +78,9 @@ class ForceLoginManagementTest {
         when(plugin.getLog()).thenReturn(logger);
         // mock FastLoginCore never initializes localeMessages → stub to no-op
         doNothing().when(core).sendLocaleMessage(anyString(), any());
-        // plugins that store the generated password keep the interface default (0.7.0/F25)
+        // plugins that store the generated password keep the interface default
         when(authPlugin.notifyGeneratedPassword()).thenReturn(true);
-        // 0.5.0/F020: the production save windows run inside withNameLock - the
+        // the production save windows run inside withNameLock - the
         // mock must execute the passed runnable so the wrapped saves still happen
         doAnswer(inv -> {
             ((Runnable) inv.getArgument(1)).run();
@@ -191,7 +191,7 @@ class ForceLoginManagementTest {
         verify(storage).save(profile);
     }
 
-    // ---- generated password message (0.7.0/F25) ----
+    // ---- generated password message ----
 
     @Test
     void generatedPasswordIsAnnouncedWhenTheAuthPluginStoredIt() throws Exception {

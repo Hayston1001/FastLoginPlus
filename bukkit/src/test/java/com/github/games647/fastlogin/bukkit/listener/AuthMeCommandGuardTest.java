@@ -43,7 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Tests the AuthMe premium command guard (ISS-12).
+ * Tests the AuthMe premium command guard.
  *
  * <p>Two properties decide whether the guard helps or hurts. It must catch every spelling the
  * server accepts — including the {@code authme:} namespace form CraftBukkit registers for every

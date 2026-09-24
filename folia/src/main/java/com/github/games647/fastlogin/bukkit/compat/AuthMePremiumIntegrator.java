@@ -66,7 +66,7 @@ public final class AuthMePremiumIntegrator {
 
     /**
      * AuthMe's proxy message receiver — one of the two components that cache
-     * {@code enablePremium} in a field (ISS-11).
+     * {@code enablePremium} in a field.
      *
      * <p>Package-private for the test suite, which pins that this name still resolves to an
      * AuthMe component implementing {@code SettingsDependent}: a rename upstream would turn the
@@ -206,9 +206,9 @@ public final class AuthMePremiumIntegrator {
             return false;
         }
         if (!isStampablePremiumUuid(mojangUuid)) {
-            // ISS-04: callers can arrive here with null. 0.7.0/F10 narrowed the sources —
-            // the proxy now sends its verified Mojang UUID in the force message and
-            // BungeeListener adopts it — so null means "the proxy verified nothing": a
+            // callers can arrive here with null. The proxy sends its verified Mojang UUID
+            // in the force message and BungeeListener adopts it, so null means "the proxy
+            // verified nothing": a
             // cracked login, Floodgate, a pre-0.7.0 proxy, or the ProtocolSupport path.
             // AuthMe derives isPremium() from premiumUuid != null, so writing null
             // would CLEAR the flag on an existing record rather than set it — and on
@@ -246,7 +246,7 @@ public final class AuthMePremiumIntegrator {
                 // runs BEFORE PlayerJoinEvent where forceRegister would normally
                 // create the record). Without this, AuthMe shows a blocking
                 // register dialog that the player must cancel before FLP can act.
-                // 0.5.0/F060: propagate the failure — marking the session
+                // propagate the failure — marking the session
                 // registered on a record that was never created would make
                 // ForceLoginTask forceLogin a non-existent AuthMe record and
                 // leave the player unauthenticated
@@ -263,12 +263,12 @@ public final class AuthMePremiumIntegrator {
             boolean success = (boolean) updatePremium.invoke(dataSource, auth);
 
             if (success) {
-                // ISS-04: the UUID is logged because a success line reporting a null
+                // the UUID is logged because a success line reporting a null
                 // write was exactly how this went unnoticed before — seeing the real
                 // UUID here makes a regression visible in production logs.
                 plugin.getLog().info(
                     "Marked {} as premium in AuthMe database (uuid={})", playerName, mojangUuid);
-                // ISS-02 (reverse direction): keep the proxy's premium set in sync so
+                // Reverse direction: keep the proxy's premium set in sync so
                 // AuthMe's own premium path agrees with the database. Gated on a real
                 // UUID — never advertise premium for a record we failed to stamp.
                 if (mojangUuid != null) {
@@ -307,7 +307,7 @@ public final class AuthMePremiumIntegrator {
 
         String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
 
-        // 0.7.0/F20: let this administrative switch win over a premium marking that is still in
+        // let this administrative switch win over a premium marking that is still in
         // flight for the same player — that task would otherwise re-create the record below.
         plugin.markCrackedOverride(lowerName);
 
@@ -389,7 +389,7 @@ public final class AuthMePremiumIntegrator {
             }
 
             // b) Remove from AuthMe's in-memory player cache (synchronous)
-            // 0.5.0/F064: independent try-block — a DB failure must not skip the
+            // independent try-block — a DB failure must not skip the
             // cache cleanup (each step is independent, as the comment promises)
             try {
                 Object pc = getPlayerCache();
@@ -409,7 +409,7 @@ public final class AuthMePremiumIntegrator {
                     playerName, e);
             }
 
-            // ISS-02: the proxy keeps its own premium cache — the DB writes above bypass it.
+            // the proxy keeps its own premium cache — the DB writes above bypass it.
             notifyProxyPremiumUnset(playerName);
         } else {
             clearPlayerPremiumLegacy5x(lowerName, playerName);
@@ -575,7 +575,7 @@ public final class AuthMePremiumIntegrator {
      * and on the first-login branch it would create an AuthMe account with a null UUID
      * and an empty password hash. Only a UUID verified against Mojang may be persisted.</p>
      *
-     * <p><b>Version, not just nullness (ISS-25).</b> A non-null UUID is not sufficient: AuthMe
+     * <p><b>Version, not just nullness.</b> A non-null UUID is not sufficient: AuthMe
      * itself reads v3 as "name-derived, therefore unverified" and only treats v4 as
      * Mojang-issued. Stamping a v3 value makes
      * {@code AsynchronousJoin.canBypassWithPremium}'s v4 comparison miss permanently, so the
@@ -591,36 +591,20 @@ public final class AuthMePremiumIntegrator {
     }
 
     /**
-     * Picks the UUID to stamp into AuthMe when the login session carries none.
-     * Extracted as a pure function for testability (mirrors
-     * {@link #isStampablePremiumUuid(UUID)}).
+     * Picks the UUID to stamp into AuthMe when the login session carries none. Pure so it can be
+     * tested directly, like {@link #isStampablePremiumUuid(UUID)}.
      *
-     * <p>Historically the proxy LOGIN/REGISTER paths built their session without a UUID, so
-     * {@code ForceLoginTask} had nothing to hand to
-     * {@link #markPlayerAsPremium(String, UUID)}. On Paper that was masked by the
-     * configuration phase, which stamps the record before the join; a Spigot backend has no
-     * configuration phase and the proxy disables the ProtocolLib path, so nothing ever
-     * marked the record — AuthMe kept treating a verified premium player as a plain offline
-     * account, and FLP silently became a hard dependency: the player's AuthMe password was
-     * generated at random by FLP, so losing FLP would lock them out.</p>
-     *
-     * <p>0.7.0/F10 closed the proxy half of that gap by carrying the verified UUID in the
-     * force message, so this fallback fires less often. It still covers the sources F10
-     * cannot reach: an older proxy, and the ProtocolSupport path (see ISS-29).</p>
-     *
-     * <p>The backend's own player UUID is the one the proxy forwarded, and its version
-     * separates the two cases: <b>v4</b> is Mojang-issued (the proxy forwarded the verified
-     * UUID), <b>v3</b> is name-derived and therefore offline — {@code premiumUuid:false}, a
-     * cracked player, or a Floodgate account. AuthMe draws the same distinction in its own
+     * <p>The version decides: <b>v4</b> is Mojang-issued (the proxy forwarded the verified UUID),
+     * <b>v3</b> is name-derived and therefore offline — {@code premiumUuid:false}, a cracked
+     * player, or a Floodgate account. AuthMe draws the same distinction in
      * {@code canBypassWithPremium}, so this is not a heuristic invented here.</p>
      *
-     * <p><b>The session UUID gets the same treatment (ISS-25).</b> It used to be returned
-     * unchecked, on the assumption that only direct verification and the Paper
-     * configuration phase ever populate it. That assumption is what ISS-07 breaks: AuthMe's
-     * Velocity premium handler rewrites {@code GameProfileRequestEvent}'s profile to the
-     * offline UUID, and FLP's listener read that rewritten value — so a v3 session UUID is
-     * reachable in production. Both sources now clear the same bar, which also removes this
-     * method's dependence on which listener happens to run first.</p>
+     * <p>Neither source is trusted for free. The verified UUID travels in the proxy's force
+     * message, so the connection-UUID fallback is only needed for an older proxy and the
+     * ProtocolSupport path; and the session UUID is no proof on its own, because AuthMe's Velocity
+     * premium handler rewrites {@code GameProfileRequestEvent}'s profile to the offline UUID before
+     * FLP's listener reads it. Without this gate a verified premium player would be stamped as an
+     * offline account, whose only way in is the AuthMe password FLP generated at random.</p>
      *
      * @param sessionUuid    the UUID carried by the login session, null on the proxy paths
      * @param connectionUuid the joining player's UUID on this backend, null if unavailable
@@ -810,7 +794,7 @@ public final class AuthMePremiumIntegrator {
         })) {
             plugin.getLog().info(
                 "Pre-created premium AuthMe record for {} (uuid={})", playerName, mojangUuid);
-            // ISS-02 (reverse direction): the record is premium — tell the proxy so its
+            // Reverse direction: the record is premium — tell the proxy so its
             // premium set matches the database instead of waiting for the next resync.
             // Only after a confirmed stamp: advertising premium for a row we failed to
             // stamp is exactly the drift this class exists to prevent.
@@ -847,40 +831,24 @@ public final class AuthMePremiumIntegrator {
     }
 
     /**
-     * Persists the premium UUID of a freshly pre-created AuthMe record, retrying once
-     * (ISS-18).
+     * Persists the premium UUID of a freshly pre-created AuthMe record, retrying once.
      *
-     * <p>AuthMe reports a failed {@code updatePremiumUuid} by returning false — the
-     * underlying {@code AuthMeColumnsHandler} catches the {@code SQLException} and only
-     * logs it — so discarding that return value leaves the caller believing it created a
-     * premium record while the row holds no premium UUID. AuthMe reads that null as "not
-     * premium", so the player faces a login dialog for an account whose password hash is
-     * empty, which nobody can satisfy.</p>
+     * <p>AuthMe reports a failed {@code updatePremiumUuid} by returning false — its
+     * {@code AuthMeColumnsHandler} swallows the {@code SQLException} — so ignoring that value
+     * leaves the caller believing in a premium record while the row carries no premium UUID.
+     * AuthMe reads that null as "not premium", so the player faces a login dialog for an account
+     * whose password hash is empty, which nobody can satisfy. One retry covers the transient
+     * failures this guards against (SQLite busy, a dropped MySQL connection); the write is
+     * idempotent.</p>
      *
-     * <p>One retry is attempted, because the failures this guards against (SQLite busy, a
-     * dropped MySQL connection) are transient and the write is idempotent — the UUID
-     * already sits on the in-memory {@code PlayerAuth}.</p>
-     *
-     * <p><b>The record is deliberately not rolled back when the write fails.</b> Three
-     * things rule the deletion out; the second is what decided it:</p>
-     * <ul>
-     *   <li>{@code DataSource.removeAuth} reports success for any DELETE that runs without
-     *       raising, matched row or not — AuthMe's SQLite, MySQL and PostgreSQL
-     *       implementations all discard the update count ({@code pst.executeUpdate();
-     *       return true;}) — so "the row is gone" cannot be established without a read-back
-     *       this path does not perform.</li>
-     *   <li>Callers take this method's {@code true} to mean "an AuthMe record now exists".
-     *       {@code FastLoginBukkit.applyPremiumAtConfigure} discards the result and
-     *       hard-codes {@code registered=true}, so a rollback would send it into
-     *       {@code forceLogin} against a row that is gone: AuthMe then does nothing and the
-     *       player is left unauthenticated while the proxy is told the action succeeded.</li>
-     *   <li>Deleting is irreversible and buys little — both alternative end states (a row
-     *       with an empty password hash, a fresh registration whose password FLP generated
-     *       and never told the player) are equally unusable for a password login.</li>
-     * </ul>
-     *
-     * <p>Leaving the row in place also keeps this method's return value meaning exactly what
-     * it meant before the fix, so no caller has to change.</p>
+     * <p><b>The row is deliberately not rolled back when the write fails.</b> The decisive reason
+     * is that callers read this method's {@code true} as "an AuthMe record now exists":
+     * {@code FastLoginBukkit.applyPremiumAtConfigure} passes {@code registered=true} on anyway, so
+     * a rollback would send it into {@code forceLogin} against a row that is gone — AuthMe does
+     * nothing, the player stays unauthenticated and the proxy is told the action succeeded.
+     * Deletion is also unverifiable ({@code DataSource.removeAuth} reports success for any DELETE
+     * that runs, matched row or not) and buys little: both end states are equally unusable for a
+     * password login.</p>
      *
      * @param ops the write, injected so the retry can be tested without a datasource
      * @return true when AuthMe reports the premium UUID as persisted
@@ -1181,7 +1149,7 @@ public final class AuthMePremiumIntegrator {
         try {
             Object injector = getAuthMeInjector();
             if (injector == null) {
-                // 0.5.0/F061: a silent failure here leaves the whole 6.0
+                // a silent failure here leaves the whole 6.0
                 // integration dead without any signal — warn loudly
                 plugin.getLog().warn("AuthMe injector not found — cannot enforce"
                         + " FastLogin premium control (is the AuthMe version supported?)");
@@ -1244,7 +1212,7 @@ public final class AuthMePremiumIntegrator {
      * {@code ENABLE_PREMIUM} reference; the other seven read it on each use):
      * {@code PacketEventsService} and {@code BungeeReceiver}. A stale {@code BungeeReceiver} answers
      * the next {@code proxy.started} with an empty premium list, which wipes the proxy's cache of
-     * verified premium players (ISS-11).
+     * verified premium players.
      *
      * <p>Deliberately not a full {@code SettingsDependent} refresh (what AuthMe's own
      * {@code /authme reload} performs): that would call {@code reload()} on twelve further
@@ -1258,11 +1226,11 @@ public final class AuthMePremiumIntegrator {
         // unchanged from before this fix: a failure here still fails the whole force
         reloadPacketEventsService(injector, settings);
 
-        // ISS-11: this one must only warn on failure — see refreshCachedEnablePremium
+        // this one must only warn on failure — see refreshCachedEnablePremium
         refreshCachedEnablePremium(BUNGEE_RECEIVER_CLASS, AUTHME_SETTINGS_CLASS, injector, settings,
             failure -> plugin.getLog().warn("Could not refresh AuthMe's BungeeReceiver after forcing"
                 + " enablePremium — the proxy's premium list may be wiped on the next"
-                + " proxy.started message (ISS-11): {}", failure));
+                + " proxy.started message: {}", failure));
     }
 
     /**
@@ -1314,35 +1282,26 @@ public final class AuthMePremiumIntegrator {
      * the sole packet-level Mojang verification — and leaves AuthMe itself believing the listener
      * is still registered, so it does not put it back.
      *
-     * <p>When {@code enablePremium=true}, AuthMe registers its own PacketEvents listener that
-     * intercepts START/ENCRYPTION_RESPONSE packets. This conflicts with FLP's ProtocolLib listener
-     * which does the same thing. FLP does the actual verification and injects results into AuthMe's
-     * internal state (PendingPremiumCache, PremiumLoginVerifier), so AuthMe's own listener is
-     * redundant and must be removed.
+     * <p>With {@code enablePremium=true} AuthMe registers its own PacketEvents listener for
+     * START/ENCRYPTION_RESPONSE. It is redundant — FLP verifies and injects the result into
+     * AuthMe's own state (PendingPremiumCache, PremiumLoginVerifier) — and it conflicts with FLP's
+     * listener.</p>
      *
-     * <p><b>Why the flag is left at {@code true} (ISS-32).</b> AuthMe decides whether to
-     * (re-)register that listener in {@code PacketEventsService.setup()}: when premium packet
-     * verification is needed it registers only {@code if (!premiumVerificationRegistered)}. That
-     * method runs again on every {@code /authme reload} (through {@code reload(settings)}) and
-     * again whenever the {@code packetevents} plugin is enabled. Writing {@code false} after
-     * removing the listener therefore invites AuthMe to re-register it on the next reload, which
-     * silently restores the double interception this method exists to remove — and leaves the
-     * admin's "configuration reloaded" looking trustworthy while it is not. Leaving the flag
-     * {@code true} makes {@code setup()} skip the registration instead, so the takeover survives
-     * a reload. Across AuthMe 6.0.0 and 6.0.1 (byte-identical file) the field appears solely in
-     * {@code setup()} and {@code disable()}, never in a business rule, so this only affects the
-     * register/skip decision.
+     * <p><b>Why the flag is left at {@code true}:</b> {@code PacketEventsService.setup()} registers
+     * only {@code if (!premiumVerificationRegistered)}, and it runs again on every {@code /authme
+     * reload} and whenever the {@code packetevents} plugin is enabled. Writing {@code false} would
+     * invite AuthMe to re-register the listener and silently restore the double interception, so
+     * leaving it {@code true} makes {@code setup()} skip instead. In AuthMe 6.0.0/6.0.1 the field
+     * appears only in {@code setup()} and {@code disable()}, never in a business rule, so it drives
+     * nothing else.</p>
      *
-     * <p>Two upstream paths still reset the flag — {@code disable()} when {@code packetevents} is
-     * unloaded, and {@code setup()}'s else-branch when {@code enablePremium} turns false — so this
-     * method stays idempotent and cheap to call again: it is the re-assert primitive used by the
-     * event hooks in {@code AuthMeTakeoverListener} and by the login-time fallback.
+     * <p>Two upstream paths do reset it ({@code disable()}, and {@code setup()}'s else-branch when
+     * {@code enablePremium} turns false), so calling this again is safe and cheap — it is the
+     * re-assert primitive behind {@code AuthMeTakeoverListener} and the login-time fallback.</p>
      *
-     * <p>Uses AuthMe's public {@code PacketInterceptionAdapter.unregisterPremiumVerification()}
-     * method — the same method AuthMe itself uses to clean up the listener — whose implementation
-     * null-guards the listener, so calling it without a registered listener is a no-op rather than
-     * an error. Deliberately silent: the callers decide what the event they reacted to deserves to
-     * be logged, because this method can no longer tell "removed one" from "nothing to remove".
+     * <p>Uses AuthMe's own {@code PacketInterceptionAdapter.unregisterPremiumVerification()}, which
+     * null-guards the listener, so calling it with nothing registered is a no-op. Silently: only
+     * the caller knows what its triggering event deserves to log.</p>
      *
      * @return true when AuthMe's object graph was driven successfully; false when the listener
      *         could not be removed (it may still be registered)
@@ -1373,7 +1332,7 @@ public final class AuthMePremiumIntegrator {
             Method unregister = adapterClass.getMethod("unregisterPremiumVerification");
             unregister.invoke(adapter);
 
-            // ISS-32: leave AuthMe's flag at "registered" so its own reload path
+            // leave AuthMe's flag at "registered" so its own reload path
             // (PacketEventsService.setup()) skips re-registration — see the javadoc
             Class<?> pesClass = Class.forName(
                 "fr.xephi.authme.listener.packetevents.PacketEventsService");
@@ -1408,7 +1367,7 @@ public final class AuthMePremiumIntegrator {
         boolean forced = forceEnablePremium();
         boolean unregistered = unregisterPremiumPacketListener();
         if (forced && !unregistered) {
-            // 0.5.0/F061: half-applied state — enablePremium was persisted but
+            // half-applied state — enablePremium was persisted but
             // AuthMe's packet listener may still be registered, which would
             // double-intercept START/ENCRYPTION_RESPONSE
             plugin.getLog().warn("enablePremium was set but AuthMe's premium packet"
@@ -1520,31 +1479,13 @@ public final class AuthMePremiumIntegrator {
     /**
      * Completes the pending preJoin dialog future registered for the given connection.
      *
-     * <p>AuthMe 6.0.1 changed the key type of {@code pendingLoginResponses} and
-     * {@code pendingRegisterResponses} from the player {@link UUID} to a {@code Long}
-     * session id.  The session id lives in the separate {@code connectionSessions}
-     * map, which is keyed by the connection object.  Java erases generics at runtime,
-     * so the previous {@code Map<UUID, ...>} lookup still compiled and still ran — it
-     * merely always returned null, leaving the dialog open until AuthMe's own timeout
-     * fired, with no exception and no log line to show for it.
-     *
-     * <p>Both key shapes are tried instead of branching on a version number: a version
-     * check needs a reliable way to read AuthMe's version and would silently break
-     * again on the next refactor, whereas a lookup miss is harmless —
-     * {@code ConcurrentHashMap.get} returns null for a key of an unrelated type.
-     * When neither key matches, nothing happens, which is the pre-fix behaviour.
-     *
-     * <p>The register dialog cannot go through AuthMe's own
-     * {@code approvePreJoinForceLogin}: {@code handleBlockingRegisterDialog} never
-     * registers its future with {@code PreJoinDialogService}, only the login dialog
-     * does, so that method cannot reach it.
-     *
      * @param dialogListener AuthMe's {@code PaperDialogFlowListener} singleton
      * @param fieldName      {@code pendingRegisterResponses} or {@code pendingLoginResponses}
      * @param connection     the Paper connection object, or null
      * @param playerId       the player's connection UUID
      * @return true when a pending future was found and completed
      * @throws Exception when the response map cannot be read reflectively
+     * @see #completePendingDialog(Class, Object, String, Object, UUID)
      */
     private boolean completePreJoinDialog(Object dialogListener, String fieldName,
             Object connection, UUID playerId) throws Exception {
@@ -1562,24 +1503,20 @@ public final class AuthMePremiumIntegrator {
     /**
      * Completes the pending preJoin dialog future registered for the given connection.
      *
-     * <p>AuthMe 6.0.1 changed the key type of {@code pendingLoginResponses} and
-     * {@code pendingRegisterResponses} from the player {@link UUID} to a {@code Long}
-     * session id.  The session id lives in the separate {@code connectionSessions}
-     * map, which is keyed by the connection object.  Java erases generics at runtime,
-     * so the previous {@code Map<UUID, ...>} lookup still compiled and still ran — it
-     * merely always returned null, leaving the dialog open until AuthMe's own timeout
-     * fired, with no exception and no log line to show for it.
+     * <p>AuthMe 6.0.1 re-keyed {@code pendingLoginResponses} and {@code pendingRegisterResponses}
+     * from the player {@link UUID} to a {@code Long} session id, which lives in the separate,
+     * connection-keyed {@code connectionSessions} map. Generics are erased at runtime, so the old
+     * {@code Map<UUID, ...>} lookup still compiled and still ran — it always returned null and the
+     * dialog stayed open until AuthMe's own timeout, with no exception and no log line.</p>
      *
-     * <p>Both key shapes are tried instead of branching on a version number: a version
-     * check needs a reliable way to read AuthMe's version and would silently break
-     * again on the next refactor, whereas a lookup miss is harmless —
-     * {@code ConcurrentHashMap.get} returns null for a key of an unrelated type.
-     * When neither key matches, nothing happens, which is the pre-fix behaviour.
+     * <p>Both key shapes are tried rather than branching on a version number: a version check
+     * needs a reliable way to read AuthMe's version and would break again at the next refactor,
+     * whereas a lookup miss is harmless — {@code ConcurrentHashMap.get} returns null for a key of
+     * an unrelated type. When neither key matches, nothing happens, as before.</p>
      *
-     * <p>The register dialog cannot go through AuthMe's own
-     * {@code approvePreJoinForceLogin}: {@code handleBlockingRegisterDialog} never
-     * registers its future with {@code PreJoinDialogService}, only the login dialog
-     * does, so that method cannot reach it.
+     * <p>The register dialog cannot go through AuthMe's own {@code approvePreJoinForceLogin}:
+     * {@code handleBlockingRegisterDialog} never registers its future with
+     * {@code PreJoinDialogService}, only the login dialog does.</p>
      *
      * @param listenerClass AuthMe's {@code PaperDialogFlowListener} class
      * @param listener      the listener singleton holding the pending response maps

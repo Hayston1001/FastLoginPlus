@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FastLoginBukkitTest {
 
     /**
-     * 0.7.0/F7 (ISS-31). The warning exists for one situation only: a direct connection whose
+     * The warning exists for one situation only: a direct connection whose
      * AuthMe verification is off <em>because</em> PacketEvents is missing. Proxy backends were
      * added as an explicit exclusion on 2026-09-15 — there AuthMe's listener never registers,
      * upstream prints no misleading warning, and the command layer is already covered by
@@ -78,7 +78,7 @@ class FastLoginBukkitTest {
     }
 
     /**
-     * 0.7.0/F19. Paper caches the fully filled profile — injected properties included — and indexes
+     * Paper caches the fully filled profile — injected properties included — and indexes
      * it by name <em>and</em> UUID. Because {@code premiumUuid: false} rewrites a premium login to
      * the name-derived offline UUID, a cracked login with the same name carries the identical UUID
      * and could be served that cached profile; the backend would then treat it as proxy-attested
@@ -105,7 +105,7 @@ class FastLoginBukkitTest {
     }
 
     /**
-     * 0.7.0/F26. With {@code premiumUuid: true} the proxy keeps the Mojang UUID and attaches no
+     * With {@code premiumUuid: true} the proxy keeps the Mojang UUID and attaches no
      * attestation property, so the configuration phase has to recognise the forwarded UUID itself
      * instead of falling back to the asynchronous Mojang lookup - that lookup is what let AuthMe's
      * preJoin dialog appear before the record existed.
@@ -130,7 +130,7 @@ class FastLoginBukkitTest {
     }
 
     /**
-     * 0.7.0/F20. A login that is already in flight keeps a premium marking running on an async task,
+     * A login that is already in flight keeps a premium marking running on an async task,
      * which can reach the configure-phase marking <em>after</em> {@code /flp cracked} deleted the
      * record — and would then re-create it with the Mojang UUID and no password, leaving the player
      * able to neither log in nor register. The administrative switch therefore wins for a window.

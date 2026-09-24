@@ -76,7 +76,7 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
             com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
                 plugin.getAuthMePremiumIntegrator();
             if (integrator != null && integrator.isAuthMePremiumEnabled()) {
-                // ISS-04 + 0.7.0/F10: the session UUID is the Mojang UUID the proxy verified
+                // the session UUID is the Mojang UUID the proxy verified
                 // and now sends along with the force message; it is null only when the proxy
                 // verified nothing. Fall back to the connection UUID otherwise. Handing null
                 // to AuthMe would CLEAR premium_uuid instead of setting it, so the v4 check
@@ -86,7 +86,7 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
                 UUID premiumUuid = com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator
                     .resolvePremiumUuid(session.getUuid(), player.getUniqueId());
                 if (premiumUuid != null && integrator.markPlayerAsPremium(player.getName(), premiumUuid)) {
-                    // 0.7.0/F24 (N14): the record was created *here*, i.e. after the join - so on a
+                    // the record was created *here*, i.e. after the join - so on a
                     // platform without a configuration phase (Spigot) AuthMe has already shown its
                     // blocking post-join register dialog, and only a completed login closes it
                     // (AuthMe clears the dialog state in its synchronous login completion). The
@@ -111,7 +111,7 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
 
         plugin.getPremiumPlayers().put(player.getUniqueId(), status);
 
-        // 0.5.0/F008: super.run() supports a null session — the tail must too
+        // super.run() supports a null session — the tail must too
         StoredProfile profile = session == null ? null : session.getProfile();
         if (profile != null) {
             FloodgateState floodgate = profile.getFloodgate();

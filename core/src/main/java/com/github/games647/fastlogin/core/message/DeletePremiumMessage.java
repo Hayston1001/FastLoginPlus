@@ -35,7 +35,7 @@ public class DeletePremiumMessage implements ProxyAuthenticatedMessage {
     private String playerName;
     private boolean isSourceInvoker;
 
-    // 0.5.0/F054: echoed proxy allowlist of the sending backend, appended as a
+    // echoed proxy allowlist of the sending backend, appended as a
     // trailing optional wire field (empty string when unset/untrusted)
     private String sourceProxyId = "";
 
@@ -86,7 +86,7 @@ public class DeletePremiumMessage implements ProxyAuthenticatedMessage {
             return;
         }
 
-        // 0.5.0/F054: optional trailing authentication field; payloads of the
+        // optional trailing authentication field; payloads of the
         // intermediate format (no sourceProxyId yet) surface as RuntimeException
         try {
             sourceProxyId = input.readUTF();

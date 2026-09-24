@@ -108,10 +108,10 @@ public class ConnectListener {
         if (action != Action.Continue) {
             VelocityFastLoginAntiBotEvent antiBotEvent =
                     new VelocityFastLoginAntiBotEvent(address, checkedUsername, action);
-            // Non-blocking (0.5.0/F034): pause the event, fire the anti-bot
+            // Non-blocking: pause the event, fire the anti-bot
             // event asynchronously and resume from the completion callback —
             // the Netty event loop must never block on a synchronous .get().
-            // 0.5.0/R2: per-event guard so the continuation is resumed exactly
+            // per-event guard so the continuation is resumed exactly
             // once even when the callback or the decision applying throws
             AtomicBoolean resumed = new AtomicBoolean(false);
             return EventTask.withContinuation(continuation -> {
@@ -132,10 +132,10 @@ public class ConnectListener {
         }
 
         // no anti-bot action — continue with the premium check
-        // 0.5.0/F056: run it on the plugin scheduler instead of the shared
+        // run it on the plugin scheduler instead of the shared
         // async event executor, so blocking Mojang lookups (with retry sleeps)
         // cannot starve the event executor for all other handlers
-        // 0.5.0/R2: per-event guard so the continuation is resumed exactly once
+        // per-event guard so the continuation is resumed exactly once
         AtomicBoolean resumed = new AtomicBoolean(false);
         return EventTask.withContinuation(continuation ->
                 applyDecisionSafely(preLoginEvent, connection, checkedUsername, action, continuation,
@@ -152,7 +152,7 @@ public class ConnectListener {
      * @param action        the effective anti-bot action (third-party handlers
      *                      may have cancelled the original one)
      * @param continuation  the event continuation to resume
-     * @param resumed       per-event exactly-once resume guard (0.5.0/R2)
+     * @param resumed       per-event exactly-once resume guard
      */
     private void applyAntiBotDecision(PreLoginEvent preLoginEvent, InboundConnection connection,
                                       String username, Action action, Continuation continuation,
@@ -179,7 +179,7 @@ public class ConnectListener {
                     } catch (Exception runEx) {
                         plugin.getLog().error("Error during premium check", runEx);
                     } finally {
-                        // same guard as the outer paths: at most one resume (0.5.0/R2)
+                        // same guard as the outer paths: at most one resume
                         resumeOnce(continuation, resumed);
                     }
                 });
@@ -188,7 +188,7 @@ public class ConnectListener {
     }
 
     /**
-     * 0.5.0/R2: apply the decision and guarantee that the continuation is
+     * apply the decision and guarantee that the continuation is
      * resumed even when applying it throws — otherwise the login hangs until
      * the read timeout instead of degrading to a normal login.
      *
@@ -211,7 +211,7 @@ public class ConnectListener {
     }
 
     /**
-     * 0.5.0/R2: resume the continuation at most once per event.
+     * resume the continuation at most once per event.
      *
      * @param continuation the event continuation
      * @param resumed      CAS guard; flipped to true on the first call
@@ -231,7 +231,7 @@ public class ConnectListener {
                 return;
             }
 
-            // ISS-07: read the immutable original profile, not the mutable one. AuthMe's
+            // read the immutable original profile, not the mutable one. AuthMe's
             // Velocity premium handler (keepOfflineUuidCompatibility=true) caches the real
             // Mojang UUID and then rewrites the event's profile to the name-derived offline
             // UUID. Both handlers subscribe at the default priority, so registration order
@@ -249,12 +249,12 @@ public class ConnectListener {
             playerProfile.setId(verifiedUUID);
             if (!(boolean) plugin.getCore().getConfig().get("premiumUuid")) {
                 UUID offlineUUID = UUIDAdapter.generateOfflineId(event.getUsername());
-                // 0.7.0/F13: hand the verified Mojang UUID to the backend as a GameProfile
+                // hand the verified Mojang UUID to the backend as a GameProfile
                 // property. It rides the modern player-info forwarding payload, which the
                 // backend decodes in the login phase — before AuthMe's preJoin dialog — so
                 // the backend can pre-create the record and close the dialog on the very
-                // first login. A separate plugin message cannot get there that early (see
-                // the F10 experiment). The forwarding HMAC protects the payload in transit,
+                // first login. A separate plugin message cannot get there that early.
+                // The forwarding HMAC protects the payload in transit,
                 // but authorship is the proxy process as a whole, not this plugin: any
                 // proxy-side code could inject the same property. Written BEFORE withId so the
                 // rewrite below cannot discard it.

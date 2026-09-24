@@ -36,7 +36,7 @@ public class NamespaceKey {
 
     public NamespaceKey(String namespace, String key) {
         // Locale.ROOT: the default locale must not rewrite channel names
-        // (e.g. Turkish 'I' -> 'ı' would break plugin messaging) (0.5.0/F032)
+        // (e.g. Turkish 'I' -> 'ı' would break plugin messaging)
         this.namespace = namespace.toLowerCase(java.util.Locale.ROOT);
         this.key = key.toLowerCase(java.util.Locale.ROOT);
 

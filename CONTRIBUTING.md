@@ -204,7 +204,7 @@ and verify before pushing:
    `maven.compiler.release` (core/bukkit 8, bungee/velocity 17, folia 21).
    Without it a dependency bump can raise the module's runtime requirement with
    no build-time signal at all. Raising a floor is a deliberate decision:
-   change that module's `maven.compiler.release` and update `AGENTS.md` plus
+   change that module's `maven.compiler.release`, and update this section and
    both readmes together. `test` and `provided` scopes are excluded — test jars
    never reach a user, and provided ones belong to the server or proxy.
 

@@ -3,7 +3,7 @@
 [English→](../en/PROTOCOLLIB-ASYNC-DESIGN.md)
 
 FastLoginPlus 用 ProtocolLib 拦截 Minecraft 登录流程的数据包(`START`、`ENCRYPTION_BEGIN`).
-本文档记录**为什么把该监听器注册为异步处理器**, 哪些补偿措施让这件事是安全的, 还剩下什么风险, 以及何时应当重新评估这个决策(0.5.0/F003).
+本文档记录**为什么把该监听器注册为异步处理器**, 哪些补偿措施让这件事是安全的, 还剩下什么风险, 以及何时应当重新评估这个决策.
 
 ## 决策
 
@@ -19,7 +19,7 @@ FastLoginPlus 用 ProtocolLib 拦截 Minecraft 登录流程的数据包(`START`�
 1. **伪造 START / enableEncryption 窗口在事件循环上串行化.**
    把连接切换到在线模式验证的那个响应, 是在持有该数据包事件处理锁的情况下发出的(与上游一致的 `synchronized (packetEvent.getAsyncMarker().getProcessingLock())`), 因此原版状态机不可能观察到"只切换了一半"的状态.
 2. **30 分钟异步标记超时.** ProtocolLib 的异步标记清理是有上限的, 卡住的标记不会永久堵住一个连接.
-3. **取消 + 信号纪律.** 数据包事件的取消与 session 记账按固定顺序进行; session 以连接的远端地址(Velocity)或地址(Bukkit)为键, 并用原子 check-and-add 保护(0.5.0/F001).
+3. **取消 + 信号纪律.** 数据包事件的取消与 session 记账按固定顺序进行; session 以连接的远端地址(Velocity)或地址(Bukkit)为键, 并用原子 check-and-add 保护.
 4. **ENCRYPTION_BEGIN 可解析性的启动自检.** 注册时插件会检查 ProtocolLib 是否仍能静态解析 `PacketType.Login.Client.ENCRYPTION_BEGIN`. 当该映射缺失时(较新 ProtocolLib/MC 组合上的已知失效模式, 例如 Paper 1.21.11 + ProtocolLib 5.5.0 未注册 `ServerboundKeyPacket`), 会输出一条醒目的启动告警.
 
 ## 残余风险

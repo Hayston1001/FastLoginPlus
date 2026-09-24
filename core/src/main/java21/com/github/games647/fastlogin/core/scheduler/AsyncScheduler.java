@@ -44,7 +44,7 @@ public class AsyncScheduler extends AbstractAsyncScheduler {
     public AsyncScheduler(Logger logger, Executor processingPool) {
         super(logger, Executors.newVirtualThreadPerTaskExecutor());
 
-        // 0.5.0/F046: this variant deliberately replaces the injected platform
+        // this variant deliberately replaces the injected platform
         // pool with virtual threads (green threads).  The platform executor is
         // NOT used, so platform-side cancellation cannot reach these tasks —
         // shutdown() is the only cancellation path (called on plugin disable).

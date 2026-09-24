@@ -129,19 +129,19 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private BungeeManager bungeeManager;
     private final FoliaScheduler scheduler;
 
-    // 0.5.0/F073: the pending-relay retry chains are self-re-chaining virtual
+    // the pending-relay retry chains are self-re-chaining virtual
     // threads the platform scheduler cannot cancel — they must stop themselves
     // when the plugin disables (a reload would otherwise accumulate chains of
     // dead plugin instances)
     private final AtomicBoolean relayChainsRunning = new AtomicBoolean(true);
 
-    // 0.7.0/F16: true once FLP forced AuthMe's enablePremium and removed AuthMe's own
+    // true once FLP forced AuthMe's enablePremium and removed AuthMe's own
     // premium packet listener. AuthMe's /premium and /freemium stay executable in that
     // state but no longer converge with FLP's profile, so AuthMeCommandGuard intercepts
     // them for players who could actually run them.
     private boolean premiumTakeoverActive;
 
-    // 0.5.0/F014: give up relaying after ~5 minutes (1s interval) and keep the
+    // give up relaying after ~5 minutes (1s interval) and keep the
     // entry queued instead of retrying forever
     private static final int MAX_RELAY_ATTEMPTS = 300;
     private FastLoginCore<Player, CommandSender, FastLoginBukkit> core;
@@ -182,7 +182,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // (persisted to AuthMe's config.yml) and unregister AuthMe's
                 // redundant PremiumVerificationPacketListener so FLP's ProtocolLib
                 // listener is the sole Mojang verification source.
-                // 0.5.0/F061: surface partial failures — AuthMe's packet listener may
+                // surface partial failures — AuthMe's packet listener may
                 // still be registered, causing a double-interception conflict
                 premiumTakeoverActive = authMePremiumIntegrator.enforceFlpPremiumControl();
                 if (!premiumTakeoverActive) {
@@ -204,7 +204,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         if (!initializeFloodgate()) {
             setEnabled(false);
-            // 0.5.0/F009: setEnabled(false) invokes onDisable synchronously —
+            // setEnabled(false) invokes onDisable synchronously —
             // without this return the rest of onEnable would keep initializing
             // listeners/commands on a plugin Bukkit considers disabled
             return;
@@ -213,7 +213,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         bungeeManager = new BungeeManager(this);
         bungeeManager.initialize();
 
-        // 0.7.0/F7 (ISS-31): AuthMe's own verification is off while its command layer stays
+        // AuthMe's own verification is off while its command layer stays
         // registered. Direct connections only — see the method's javadoc. Proxy mode is part of
         // that decision, so this has to run after the manager above is initialized.
         warnOnAuthMeCommandLayerWithoutVerification();
@@ -277,18 +277,18 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         pluginManager.registerEvents(
                 new com.github.games647.fastlogin.bukkit.listener.PaperCacheListener(this), this);
 
-        // 0.7.0/F24 (N14) intentionally not mirrored from the bukkit module: that change adds a
+        // intentionally not mirrored from the bukkit module: that change adds a
         // pre-login pre-create fallback for platforms WITHOUT a configuration phase (Spigot).
         // Folia is Paper-based and therefore always has the configuration phase, where
         // applyPremiumAtConfigure() already pre-creates the AuthMe record before AuthMe's join
         // handler can open its dialog - the fallback would be dead code here.
 
-        // 0.7.0/F16: while the takeover is active, AuthMe's own /premium and /freemium
-        // are a second entry point that silently diverges from FLP (ISS-12) — intercept
+        // while the takeover is active, AuthMe's own /premium and /freemium
+        // are a second entry point that silently diverges from FLP — intercept
         // them and point the player at /flp. Inert on AuthMe 5.x and without AuthMe.
         pluginManager.registerEvents(new AuthMeCommandGuard(this), this);
 
-        // 0.7.0/F15 (ISS-32): keep the takeover asserted across the events that can start
+        // keep the takeover asserted across the events that can start
         // AuthMe's own premium listener again — see AuthMeTakeoverListener
         registerAuthMeTakeoverListener();
 
@@ -323,7 +323,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        // 0.5.0/F069: hours -> seconds (this API takes a TimeUnit, unlike the
+        // hours -> seconds (this API takes a TimeUnit, unlike the
         // bukkit tick-based one)
         long intervalSeconds = core.getUpdateCheckInterval() * 60L * 60L;
 
@@ -354,7 +354,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     /**
      * Registers the hooks that keep FLP's AuthMe premium takeover asserted after the events that
-     * can start AuthMe's own premium listener again (ISS-32).
+     * can start AuthMe's own premium listener again.
      *
      * <p>The reload case is normally prevented at the source: FLP leaves AuthMe's "listener
      * registered" flag set, so {@code PacketEventsService.setup()} skips re-registration on
@@ -384,7 +384,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     /**
      * Re-asserts FLP's AuthMe premium takeover one tick after an event that may have started
-     * AuthMe's own packet listener (ISS-32).
+     * AuthMe's own packet listener.
      *
      * <p>The delay is the point: both event hooks fire <em>before</em> the work they announce —
      * the command has not executed yet, and AuthMe's own plugin-enable handler runs at HIGHEST
@@ -412,7 +412,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     /**
      * Warns when AuthMe's own premium verification is inactive while its command layer is
-     * still registered (ISS-31): FLP forced {@code enablePremium=true}, but PacketEvents is
+     * still registered: FLP forced {@code enablePremium=true}, but PacketEvents is
      * absent, so AuthMe's {@code setup()} gave up without resetting the setting and its
      * {@code /premium} and {@code /freemium} commands stay usable. FastLoginPlus verifies
      * premium logins itself and {@link AuthMeCommandGuard} redirects those commands to
@@ -451,7 +451,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     /**
-     * Whether the ISS-31 warning applies on this server.
+     * Whether the PacketEvents warning applies on this server.
      *
      * <p>Extracted as a pure function for the same reason as this codebase's other decision
      * helpers: the test setup cannot mock {@code FastLoginBukkit} (ByteBuddy cannot instrument
@@ -470,7 +470,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     private boolean initializeFloodgate() {
-        // 0.5.0/F010: a plugin being present is not the same as being enabled —
+        // a plugin being present is not the same as being enabled —
         // a disabled (or not yet initialized) Geyser/floodgate leaves
         // getInstance() null and would NPE here, taking the whole plugin down.
         // Check the enabled state and degrade gracefully instead.
@@ -507,9 +507,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         premiumPlayers.clear();
         playerFloodgateState.clear();
 
-        // 0.5.0/F046: stop scheduling before closing shared resources
+        // stop scheduling before closing shared resources
         scheduler.shutdown();
-        // 0.5.0/F073: stop the self-chaining relay retry tasks
+        // stop the self-chaining relay retry tasks
         relayChainsRunning.set(false);
 
         if (core != null) {
@@ -682,7 +682,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // Retained for AuthMe 6.0.1's dialog session lookup — its pending responses
         // are keyed by a session id resolved from the connection object itself.
         final Object connection;
-        // 0.7.0/F13: the proxy's verified Mojang UUID, forwarded as a GameProfile property.
+        // the proxy's verified Mojang UUID, forwarded as a GameProfile property.
         // Null when absent — cracked login, Floodgate, BungeeCord (no injection point) or an
         // older proxy.
         UUID forwardedPremiumUuid = null;
@@ -694,7 +694,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             address = (java.net.InetSocketAddress) connection.getClass()
                 .getMethod("getClientAddress").invoke(connection);
             forwardedPremiumUuid = readForwardedPremiumUuid(profile);
-            // 0.7.0/F19: an attestation only counts when this very login already carried it,
+            // an attestation only counts when this very login already carried it,
             // before Paper's profile cache could have supplied a stale profile.
             UUID configureAttestation = forwardedPremiumUuid;
             UUID preLoginAttestation = preLoginAttestations.remove(playerName);
@@ -726,7 +726,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        // 0.7.0/F13 fast path. The proxy attested this connection as premium and forwarded
+        // fast path. The proxy attested this connection as premium and forwarded
         // the Mojang UUID on the GameProfile, which the backend decoded in the login phase.
         // Run the whole auto-register synchronously: no Mojang lookup to wait for, so AuthMe's
         // HIGHEST handler cannot show a dialog first. The UUID-equality guard below does not
@@ -740,7 +740,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        // 0.7.0/F26: with premiumUuid: true the proxy keeps the Mojang UUID and therefore attaches
+        // with premiumUuid: true the proxy keeps the Mojang UUID and therefore attaches
         // no attestation property (see the Velocity ConnectListener), so the attestation is the
         // UUID itself — an offline UUID is always version 3, so a version-4 connection UUID can
         // only have come from the proxy. Mark the record synchronously here, exactly like the
@@ -774,10 +774,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // player as premium behind the proxy's back.
                 if (!premiumUuid.equals(connectionUuid)) {
                     if (!isPendingPremium) {
-                        // 0.7.0/F7: say why this is normal. The mismatch is expected whenever
+                        // say why this is normal. The mismatch is expected whenever
                         // the proxy hands out the offline UUID — a cracked player, or a premium
                         // player under premiumUuid:false on a fallback path (Bungee, or a proxy
-                        // too old for the F13 profile attribute); it is not a failure.
+                        // too old for the profile attestation); it is not a failure.
                         logger.info(
                             "Skipping autoRegister for {}: connection UUID {} != premium UUID {}"
                                 + " (expected when the proxy assigns the offline UUID — a cracked"
@@ -803,7 +803,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     /**
      * Reads the proxy-attested Mojang UUID off the forwarded GameProfile.
      *
-     * <p>0.7.0/F13. Read reflectively: this module compiles against spigot-api, while the
+     * <p>Read reflectively: this module compiles against spigot-api, while the
      * profile and its properties are Paper types. Returns null unless the property is present
      * and holds a version-4 UUID — a malformed or non-v4 value is treated as "not attested",
      * falling back to the Mojang-lookup path, exactly as if the property were absent.</p>
@@ -811,7 +811,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * <p>Both proxy transports use this carrier but spell the name differently: Velocity's
      * modern forwarding keeps {@link ForwardingAttributes#PREMIUM_UUID}, while BungeeCord's
      * legacy handshake needs {@link ForwardingAttributes#PREMIUM_UUID_LEGACY} because Paper
-     * filters legacy property names. Either one counts as an attestation (0.7.0/F17).</p>
+     * filters legacy property names. Either one counts as an attestation.</p>
      *
      * @param profile the Paper player profile from the configure event
      * @return the attested premium UUID, or null if the proxy attested nothing
@@ -838,7 +838,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     /**
      * Whether the configuration phase can mark the player as premium from the UUID the connection
-     * carries, without the asynchronous Mojang lookup (0.7.0/F26).
+     * carries, without the asynchronous Mojang lookup.
      * <p>
      * This is the configuration-phase counterpart of the pre-login path used on platforms without
      * a configuration phase: the property the proxy attaches is only present when it rewrote the
@@ -859,7 +859,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     /**
      * Marks the player as premium in AuthMe and seeds the login session, all inside the
      * configuration phase so AuthMe's preJoin dialogs are closed before they are created.
-     * Shared by the F13 fast path (proxy-attested UUID) and the async Mojang-lookup path.
+     * Shared by the profile-attestation fast path and the async Mojang-lookup path.
      *
      * @param playerName the connecting player's name
      * @param premiumUuid the verified Mojang UUID to stamp
@@ -872,7 +872,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                                          java.util.UUID connectionUuid, Object connection,
                                          java.net.InetSocketAddress address,
                                          boolean isPendingPremium) {
-        // 0.7.0/F20: an administrator's /flp cracked wins over a premium marking that is still in
+        // an administrator's /flp cracked wins over a premium marking that is still in
         // flight. Skipping here is what stops the async task from re-creating the record the
         // command just deleted.
         if (isCrackedOverrideActive(System.currentTimeMillis(), crackedOverrides.get(playerName),
@@ -984,7 +984,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     /**
      * Accepts a configuration-phase attestation only when the same UUID was already present on the
-     * profile at the pre-login stage (0.7.0/F19).
+     * profile at the pre-login stage.
      *
      * @param configurePhase UUID read from the configure-phase profile, may be {@code null}
      * @param preLogin       UUID recorded at {@code AsyncPlayerPreLoginEvent}, may be {@code null}
@@ -1168,7 +1168,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // delivered by the other call site (or by an admin toggle)
                 return;
             }
-            // 0.5.0/F014: stop after ~5 minutes of an empty server — the
+            // stop after ~5 minutes of an empty server — the
             // entry stays queued and is retried after a restart
             if (attempt + 1 >= MAX_RELAY_ATTEMPTS) {
                 logger.warn("Gave up relaying the pending AuthMe premium notice for {} after {}"

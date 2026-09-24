@@ -68,7 +68,7 @@ public class UltraAuthHook implements AuthPlugin<Player> {
         });
 
         try {
-            // 0.5.0/F017: bound the wait — a stuck main thread must not pile up
+            // bound the wait — a stuck main thread must not pile up
             // unbounded async login threads
             return future.get(5, TimeUnit.SECONDS);
         } catch (InterruptedException | ExecutionException | TimeoutException ex) {

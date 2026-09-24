@@ -228,7 +228,7 @@ flowchart TD
         P6 -->|Premium| P7["enableOnlinemode()<br/>proxy performs the Mojang handshake with the client"]
         P6 -->|Offline| P8[Create an offline session]
         P7 --> P9{"LoginEvent:<br/>Mojang verification passed"}
-        P9 --> P10["Record the premium UUID<br/>premiumUuid=false → override with the offline UUID<br/>and attach the premium attestation property (0.7.0/F13)<br/>forwardSkin=false → strip the skin properties"]
+        P9 --> P10["Record the premium UUID<br/>premiumUuid=false → override with the offline UUID<br/>and attach the premium attestation property<br/>forwardSkin=false → strip the skin properties"]
         P10 --> P11
         P8 --> P11{"ServerConnectedEvent<br/>entering the sub-server"}
         P11 --> P12["ForceLoginTask<br/>(the proxy usually has no auth plugin)"]
@@ -253,13 +253,13 @@ flowchart TD
 Key points:
 
 - `LoginActionMessage` travels on the plugin message channel `fastloginplus:force`; the `proxyId` is a UUID generated on the proxy's first start (Velocity stores it in `proxyId.txt`, BungeeCord uses the `stats` value of its own `config.yml`, which BungeeCord generates on first start); the backend validates it against `allowed-proxies.txt` to prevent forgery
-- The message now also carries the Mojang UUID verified at the proxy's `LoginEvent` (`LoginActionMessage.verifiedPremiumUuid`, 0.7.0/F10), so the backend can stamp AuthMe's `premium_uuid` even when `premiumUuid: false` made the connection UUID the offline one
+- The message now also carries the Mojang UUID verified at the proxy's `LoginEvent` (`LoginActionMessage.verifiedPremiumUuid`), so the backend can stamp AuthMe's `premium_uuid` even when `premiumUuid: false` made the connection UUID the offline one
 - A REGISTER message is only executed after the backend confirms the player is unregistered; a LOGIN message runs the login directly
 - The backend rejects unknown proxyIds and players marked as blocked (anti BungeeCord-ID brute force)
 - In proxy mode, `/flp premium|cracked|delete` requests are forwarded from the backend to the proxy (see next section)
 - The backend does not have to wait for the message to learn that the connection was verified: since 0.7.0 the proxy attests it on the forwarded profile, which a Paper backend reads in the configuration phase (see *Premium attestation* below)
 
-### Premium attestation (0.7.0/F13 + F17)
+### Premium attestation
 
 The plugin-message relay above is the *fallback*. The proxy also attaches the verified Mojang UUID to the profile it forwards, so the backend can create the AuthMe record **before** AuthMe's `HIGHEST`-priority handler runs and shows the blocking preJoin dialog:
 
@@ -273,7 +273,7 @@ Consumers on the backend:
 - **Paper (Folia included)**: the `AsyncPlayerConnectionConfigureEvent` handler (`readForwardedPremiumUuid` → `resolveAttestedUuid` → `applyPremiumAtConfigure`) marks the record synchronously and closes both preJoin dialogs; when no attestation is present it falls back to the asynchronous Mojang lookup
 - **Spigot and older Paper**: no configuration phase exists, so `PreLoginPremiumListener` calls `applyPremiumAtPreLogin` at `AsyncPlayerPreLoginEvent` — enough to pre-create the record before the join
 
-Guard rails: an attestation only counts when the very same login already carried it on the pre-login profile (a profile-cache replay is logged and ignored, 0.7.0/F19), and an administrator's `/flp cracked` wins over a marking that is still in flight (F20).
+Guard rails: an attestation only counts when the very same login already carried it on the pre-login profile (a profile-cache replay is logged and ignored), and an administrator's `/flp cracked` wins over a marking that is still in flight.
 
 ## Commands (/flp premium|cracked|delete)
 
@@ -282,7 +282,7 @@ On bukkit/folia: `/flp premium [player]`, `/flp cracked [player]`, `/flp delete 
 - **Standalone mode**: modifies the DB directly (premium ⇄ cracked / delete the record) and kicks the player so the change takes effect on reconnect; `/flp premium` is protected by the `premium-warning` confirmation
 - **Proxy mode**: the backend performs the auth-plugin cleanup first (AuthMe lives on the backend), then forwards the toggle request to the proxy via a plugin message (which updates the proxy DB and kicks the player); the backend itself never touches the DB
   - If the target is offline and no online player can carry the message, the request goes into the persistent `pending-relay.json` queue and is re-sent when that player (or anyone) joins; the proxy replies with `ToggleFeedbackMessage` and the backend logs the result to the console
-  - The same queue holds a third kind of entry: AuthMe's own `premium.set` / `premium.unset` notices (`premiumNotices`, 0.7.0/F9) are queued when no carrier is online and relayed later, because they update AuthMe's *proxy-side* premium cache — the thing that decides `forceOnlineMode()` — and not FLP's own profile
+  - The same queue holds a third kind of entry: AuthMe's own `premium.set` / `premium.unset` notices (`premiumNotices`) are queued when no carrier is online and relayed later, because they update AuthMe's *proxy-side* premium cache — the thing that decides `forceOnlineMode()` — and not FLP's own profile
 - The command is always registered as `/flp` (plugin.yml) and is never aliased to `/premium`. AuthMe 6.0's own `/premium` and `/freemium` stay registered and are intercepted by `AuthMeCommandGuard` while FLP owns premium handling (the player is told to use `/flp`): they would otherwise change AuthMe's premium state behind FLP's back. The same AuthMe 6.0 detection that gates the takeover also gates that guard, so on AuthMe 5.x both commands still work normally
 - A bare `/flp` prints the version and usage and is restricted to server operators; `prem`, `del` and `unpremium` are accepted as subcommand aliases
 

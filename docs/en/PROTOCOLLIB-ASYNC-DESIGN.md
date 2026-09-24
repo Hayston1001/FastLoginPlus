@@ -5,7 +5,7 @@
 FastLoginPlus intercepts the Minecraft login packets (`START`, `ENCRYPTION_BEGIN`)
 with ProtocolLib. This document records **why the listener is registered as an
 async handler**, which compensations keep that safe, what risk remains, and when
-the decision should be re-evaluated (0.5.0/F003).
+the decision should be re-evaluated.
 
 ## Decision
 
@@ -38,7 +38,7 @@ Reasons:
 3. **Cancel + signal discipline.** Cancellation of the packet event and the
    session bookkeeping happen in a fixed order; sessions are keyed by the
    connection's remote address (Velocity) or address (Bukkit) and guarded by
-   atomic check-and-add (0.5.0/F001).
+   atomic check-and-add.
 4. **Startup self-check for ENCRYPTION_BEGIN resolvability.** On registration
    the plugin checks whether ProtocolLib still statically resolves
    `PacketType.Login.Client.ENCRYPTION_BEGIN`. When the mapping is missing
