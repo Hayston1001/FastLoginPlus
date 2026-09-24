@@ -30,13 +30,13 @@ configurations { sqliteFloor }
 
 dependencies {
     api project(':craftapi')
-    api('com.zaxxer:HikariCP:4.0.3') { exclude group: 'org.slf4j', module: 'slf4j-api' }
-    api 'org.slf4j:slf4j-jdk14:2.0.19'
-    api 'net.md-5:bungeecord-config:1.20-R0.2'
-    api 'org.yaml:snakeyaml:2.7'
-    compileOnly "org.xerial:sqlite-jdbc:${rootProject.versions.sqlite}"
-    testImplementation "org.xerial:sqlite-jdbc:${rootProject.versions.sqlite}"
-    sqliteFloor "org.xerial:sqlite-jdbc:${rootProject.versions.sqliteFloor}"
+    api(libs.hikari) { exclude group: 'org.slf4j', module: 'slf4j-api' }
+    api libs.slf4j.jdk14
+    api libs.bungeecord.config
+    api libs.snakeyaml
+    compileOnly libs.sqlite.driver
+    testImplementation libs.sqlite.driver
+    sqliteFloor libs.sqlite.floor
 }
 
 tasks.named('jar') {
@@ -69,7 +69,7 @@ tasks.register('sqliteFloorTest', Test) {
         configurations.sqliteFloor
     useJUnitPlatform()
     include '**/SQLiteStorageTest.class', '**/SQLStorageUpsertLockTest.class'
-    systemProperty 'expected.sqlite.driver.version', rootProject.versions.sqliteFloor
+    systemProperty 'expected.sqlite.driver.version', libs.versions.sqliteFloor.get()
     shouldRunAfter tasks.named('test')
 }
 tasks.named('check') { dependsOn tasks.named('sqliteFloorTest') }

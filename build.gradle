@@ -26,27 +26,21 @@
 
 plugins {
     id 'base'
-    id 'com.gradleup.shadow' version '9.6.1' apply false
+    alias(libs.plugins.shadow) apply false
 }
 
 group = 'com.github.games647'
 version = '0.7.0'
-
-ext.versions = [
-    floodgate: '2.2.5-SNAPSHOT', geyser: '2.10.1-SNAPSHOT', geyserBaseApi: '1.0.3',
-    fastutil: '8.5.16', cumulus: '1.1.2', protocolLib: '5.3.0',
-    protocolSupport: 'master-66b494a8dd-1', datafixerupper: '7.1.15', netty: '4.1.103.Final',
-    placeholderApi: '2.11.6', authme: '5.6.0', loginSecurity: '3.3.0',
-    skinsRestorer: '15.11.0', bouncyCastle: '1.86', logit: '9e3581db27',
-    passky: 'v3.0.0', xauth: '2.6', sqlite: '3.53.4.0', sqliteFloor: '3.36.0',
-    mariadb: '3.5.10'
-]
 
 def commit = providers.exec {
     commandLine 'git', 'rev-parse', '--short=7', 'HEAD'
     ignoreExitValue = true
 }.standardOutput.asText.map { it.trim() ?: 'unknown' }
 ext.gitCommit = commit
+def junitJupiter = libs.junit.jupiter
+def junitLauncher = libs.junit.launcher
+def mockitoCore = libs.mockito
+def checkstyleCore = libs.checkstyle
 
 def licensedSources = fileTree(rootDir) {
     include '**/*.java', '**/*.xml', '**/*.gradle'
@@ -66,35 +60,33 @@ tasks.register('checkLicenseHeaders') {
 }
 tasks.named('check') { dependsOn tasks.named('checkLicenseHeaders') }
 
-tasks.register('checkMavenVersionAlignment') {
+tasks.register('verifyReleaseTag') {
     group = 'verification'
-    inputs.file('pom.xml')
-    inputs.property('gradleVersion', version.toString())
-    inputs.property('sharedVersions', versions.toString())
+    def ref = providers.environmentVariable('GITHUB_REF').orElse('')
+    inputs.property('gitRef', ref)
     doLast {
-        def pom = file('pom.xml').getText('UTF-8')
-        def propertyNames = [
-            floodgate: 'floodgate.version', geyser: 'geyser.version',
-            geyserBaseApi: 'geyser-base-api.version', fastutil: 'fastutil.version',
-            cumulus: 'cumulus.version', protocolLib: 'protocollib.version',
-            protocolSupport: 'protocolsupport.version', datafixerupper: 'datafixerupper.version',
-            netty: 'netty.version', placeholderApi: 'placeholderapi.version',
-            authme: 'authme.version', loginSecurity: 'loginsecurity.version',
-            skinsRestorer: 'skinsrestorer.version', bouncyCastle: 'bouncycastle.version',
-            logit: 'logit.version', passky: 'passky.version', xauth: 'xauth.version',
-            sqlite: 'sqlite.version', sqliteFloor: 'sqlite.floor.version', mariadb: 'mariadb.version'
-        ]
-        def expected = [revision: version.toString()]
-        propertyNames.each { key, pomName -> expected[pomName] = versions[key] }
-        expected.each { name, value ->
-            def tag = java.util.regex.Pattern.quote(name)
-            def match = pom =~ /<${tag}>\s*([^<]+?)\s*<\/${tag}>/
-            if (!match.find() || match.group(1) != value) throw new GradleException(
-                "Gradle ${name}=${value} differs from root pom.xml")
+        if (ref.get().startsWith('refs/tags/v') && ref.get().substring('refs/tags/v'.length()) !=
+            project.version.toString()) {
+            throw new GradleException("Release tag ${ref.get()} does not match Gradle version ${project.version}")
         }
     }
 }
-tasks.named('check') { dependsOn tasks.named('checkMavenVersionAlignment') }
+
+tasks.register('stageRelease', Sync) {
+    group = 'distribution'
+    description = 'Collect the four installable plugin jars for release.'
+    dependsOn tasks.named('verifyReleaseTag')
+    from(['bukkit', 'folia', 'bungee', 'velocity'].collect { module ->
+        project(":${module}").tasks.named('shadowJar')
+    })
+    into layout.buildDirectory.dir('release')
+    doLast {
+        def jars = destinationDir.listFiles().findAll { it.name.endsWith('.jar') }
+        if (jars.size() != 4 || jars.any { it.name.endsWith('-plain.jar') }) {
+            throw new GradleException("Expected four installable plugin jars in ${destinationDir}")
+        }
+    }
+}
 
 subprojects {
     apply plugin: 'java-library'
@@ -102,37 +94,9 @@ subprojects {
     group = rootProject.group
     version = rootProject.version
 
-    repositories {
-        mavenCentral()
-        maven { url = uri('https://repo.opencollab.dev/main/') }
-        maven { url = uri('https://repo.papermc.io/repository/maven-public/') }
-        maven { url = uri('https://repo.codemc.io/repository/maven-public/') }
-        maven { url = uri('https://repo.dmulloy2.net/repository/public/') }
-        maven { url = uri('https://repo.extendedclip.com/content/repositories/placeholderapi') }
-        // JitPack's ProtocolSupport POM declares master-SNAPSHOT although
-        // the immutable requested coordinate is master-66b494a8dd-1.
-        maven {
-            url = uri('https://jitpack.io')
-            content { excludeGroup 'com.github.ProtocolSupport' }
-        }
-        exclusiveContent {
-            forRepository {
-                maven {
-                    url = uri('https://jitpack.io')
-                    metadataSources { artifact() }
-                }
-            }
-            filter { includeGroup 'com.github.ProtocolSupport' }
-        }
-        if (providers.gradleProperty('mavenRepoLocal').isPresent()) {
-            maven { url = uri(providers.gradleProperty('mavenRepoLocal').get()) }
-        }
-    }
-
     def javaFloor = project.name == 'folia' ? 21 : (project.name in ['bungee', 'velocity'] ? 17 : 8)
-    // Gradle's target-JVM variant selection would reject provided plugin APIs
-    // compiled for newer JVMs and JUnit 6 for Java 8 modules. Maven compiles
-    // against these on build JDK 21; only the packaged runtime is floor-checked.
+    // Compile-only server APIs and test libraries may target the build JDK.
+    // The packaged runtime classpath is checked against each module's floor.
     configurations.matching { it.name in ['compileClasspath', 'testCompileClasspath', 'testRuntimeClasspath'] }
         .configureEach {
             attributes.attribute(org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 21)
@@ -149,42 +113,32 @@ subprojects {
         systemProperty 'file.encoding', 'UTF-8'
     }
     checkstyle {
-        toolVersion = '14.1.0'
         configFile = rootProject.file('checkstyle.xml')
         maxWarnings = 0
     }
-    // Maven's check goal scans main sources; legacy test fixtures intentionally
-    // have existing violations and are outside that gate.
+    // Legacy test fixtures have existing violations and are outside this gate.
     tasks.named('checkstyleTest') { enabled = false }
-    tasks.named('checkstyleMain') { source = fileTree('src/main/java') { include '**/*.java' } }
+    tasks.named('checkstyleMain') {
+        source = files(fileTree('src/main/java') { include '**/*.java' },
+            fileTree('src/main/java21') { include '**/*.java' })
+    }
     dependencies {
-        testImplementation 'org.junit.jupiter:junit-jupiter:6.1.3'
-        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-        testImplementation 'org.mockito:mockito-core:5.23.0'
+        testImplementation junitJupiter
+        testRuntimeOnly junitLauncher
+        testImplementation mockitoCore
+        checkstyle checkstyleCore
     }
     configurations.testImplementation.extendsFrom(configurations.compileOnly)
 
-    def gitProperties = tasks.register('generateGitProperties') {
-        def outputFile = layout.buildDirectory.file('generated/git-properties/git.properties')
-        outputs.file(outputFile)
-        inputs.property('commit', rootProject.gitCommit)
-        doLast {
-            def file = outputFile.get().asFile
-            file.parentFile.mkdirs()
-            file.text = "git.commit.id.abbrev=${rootProject.gitCommit.get()}\n"
-        }
-    }
-    sourceSets.main.resources.srcDir(layout.buildDirectory.dir('generated/git-properties'))
     tasks.named('processResources') {
-        dependsOn gitProperties
         def replacements = [
-            '${revision}': project.version.toString(),
-            '${git.commit.id.abbrev}': rootProject.gitCommit.get(),
-            '${project.artifactId}': "fastloginplus.${project.name}"
+            projectVersion: project.version.toString(),
+            commitHash: rootProject.gitCommit.get(),
+            permissionPrefix: "fastloginplus.${project.name}"
         ]
         inputs.properties(replacements)
         filesMatching(['plugin.yml', 'bungee.yml', 'velocity-plugin.json']) {
-            filter { line -> replacements.inject(line) { value, entry -> value.replace(entry.key, entry.value) } }
+            expand(replacements)
         }
     }
     tasks.named('jar') {
@@ -219,7 +173,7 @@ subprojects {
             doLast {
                 new java.util.zip.ZipFile(jarFile.get().asFile).withCloseable { zip ->
                     def names = zip.entries().collect { it.name }.toSet()
-                    def required = ['git.properties',
+                    def required = [
                         'META-INF/versions/21/com/github/games647/fastlogin/core/scheduler/AsyncScheduler.class']
                     required += moduleName in ['bukkit', 'folia'] ? ['plugin.yml'] :
                         (moduleName == 'bungee' ? ['bungee.yml', 'org/sqlite/JDBC.class'] :
@@ -235,7 +189,7 @@ subprojects {
                     def descriptor = moduleName in ['bukkit', 'folia'] ? 'plugin.yml' :
                         (moduleName == 'bungee' ? 'bungee.yml' : 'velocity-plugin.json')
                     def descriptorText = zip.getInputStream(zip.getEntry(descriptor)).getText('UTF-8')
-                    if (['${revision}', '${git.commit.id.abbrev}', '${project.artifactId}'].any {
+                    if (['${projectVersion}', '${commitHash}', '${permissionPrefix}'].any {
                         descriptorText.contains(it)
                     } || !descriptorText.contains(moduleVersion)) {
                         throw new GradleException("${modulePath}: unfiltered ${descriptor}")
@@ -269,8 +223,8 @@ subprojects {
         tasks.named('check') { dependsOn verifyPluginJar }
     }
 
-    // Inspect every class in a dependency that can enter a platform jar. The
-    // module descriptor is exempt, as in Maven's enforceBytecodeVersion rule.
+    // Inspect every class in a dependency that can enter a platform jar.
+    // Module descriptors are exempt because their version does not set the floor.
     def checkRuntimeBytecode = tasks.register('checkRuntimeBytecode') {
         dependsOn configurations.runtimeClasspath
         def runtime = configurations.runtimeClasspath

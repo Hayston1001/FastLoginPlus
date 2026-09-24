@@ -29,7 +29,7 @@ apply from: rootProject.file('gradle/platform-common.gradle')
 
 dependencies {
     implementation project(':core')
-    compileOnly('dev.folia:folia-api:1.21.4-R0.1-SNAPSHOT') {
+    compileOnly(libs.folia.api) {
         exclude group: 'org.slf4j', module: 'slf4j-api'
         exclude group: 'com.google.guava'
         exclude group: 'com.google.code.gson'

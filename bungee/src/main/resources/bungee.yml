@@ -2,10 +2,10 @@
 # This file will be prioritised over plugin.yml which can be also used for Bungee
 # This make it easy to combine BungeeCord and Bukkit support in one plugin
 name: FastLoginPlus
-# ${-} will be automatically replaced by Maven
+# Gradle expands the build version and commit hash.
 main: com.github.games647.fastlogin.bungee.FastLoginBungee
 
-version: ${revision}-${git.commit.id.abbrev}
+version: ${projectVersion}-${commitHash}
 author: Hayston, games647
 
 softDepends:

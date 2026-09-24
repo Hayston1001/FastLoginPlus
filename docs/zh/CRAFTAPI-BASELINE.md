@@ -4,7 +4,7 @@
 
 这个模块**不是 FastLoginPlus 自己的代码**. 它是上游 [CraftAPI](https://github.com/games647/CraftAPI) 库的内化副本, 该库掌管 FLP 与 Mojang 之间的全部 HTTP 交互: 名字→UUID 查询、会话验证(`hasJoined`)、离线 UUID 算法以及 UUID 存储格式. FLP 自身不实现任何 Mojang 请求.
 
-Maven 坐标是 `com.github.games647:fastloginplus.craftapi:${revision}`(`maven.deploy.skip=true`); Java **包名保持不变**(`com.github.games647.craftapi`), 因此 `core`、`bukkit`、`folia`、`bungee`、`velocity` 都不需要改源码. 该副本被 shade 进全部四个平台 JAR.
+Gradle 模块是 `:craftapi`, 通过项目依赖使用, 不单独发布; Java **包名保持不变**(`com.github.games647.craftapi`), 因此 `core`、`bukkit`、`folia`、`bungee`、`velocity` 都不需要改源码. 该副本被 shade 进全部四个平台 JAR.
 
 ## 为什么要内化
 
@@ -22,7 +22,7 @@ Maven 坐标是 `com.github.games647:fastloginplus.craftapi:${revision}`(`maven.
 |---|---|
 | 仓库 | `https://github.com/games647/CraftAPI` |
 | 提交 | `6f0ded9f`(2024-05-05)—— 我们发布的 `craftapi-0.8.1.jar` 就是由这棵树构建的 |
-| Java | `release 8`, 字节码 `v52`(由根 POM 的 `enforceBytecodeVersion` 规则断言) |
+| Java | `release 8`, 字节码 `v52`(由 Gradle 的 `checkRuntimeBytecode` 断言) |
 | 源码规模 | 28 个主源码文件, 10 个测试文件, 一个二进制测试资源(`yggdrasil_session_pubkey.der`) |
 | 许可证 | [Unlicense](../../craftapi/src/main/resources/META-INF/LICENSE-CraftAPI-Unlicense.txt)(库本体, 公有领域)与 [MIT](../../craftapi/src/main/resources/META-INF/LICENSE-FastUUID-MIT.txt)(FastUUID, © 2018 Jon Chambers). 两者都会打进每个平台 JAR. |
 
@@ -48,15 +48,15 @@ Maven 坐标是 `com.github.games647:fastloginplus.craftapi:${revision}`(`maven.
 ## 什么不许静默改变
 
 - `UUIDAdapter.generateOfflineId`、`toMojangId`、`parseId` —— 离线 UUID 就是玩家的身份, 而无连字符小写形式就是数据库格式. `UUIDAdapterGoldenTest` 用此前发布的 `craftapi-0.8.1.jar` 产生的值把这两件事钉死.
-- 依赖版本(`gson 2.10.1`、`guava 32.1.2-jre`): `bukkit`/`folia` 会把两者 shade 并 relocate, `bungee`/`velocity` 则有意排除两者(代理自带一份). 升级它们会改变每个平台 JAR 的内容.
+- 依赖版本(版本目录中目前是 `gson 2.14.0`、`guava 33.7.1-jre`): `bukkit`/`folia` 会把两者 shade 并 relocate, `bungee`/`velocity` 则有意排除两者(代理自带一份). 升级它们会改变每个平台 JAR 的内容.
 
 ## 升级流程
 
-上游*有响应但已停滞*: 2024-05 之后没有 release, 只有一个分支(`main`), 而 `main` 就是 Java 11 那条线. 从上游引入任何东西之前: 重新核对渠道/tag 漂移、Java 下限与被丢弃的 `ip-addresses` 入口(三者都在上文描述过), 重新套用改动清单, 然后跑 `mvn test -pl craftapi` 以及下面的产物一致性检查.
+上游*有响应但已停滞*: 2024-05 之后没有 release, 只有一个分支(`main`), 而 `main` 就是 Java 11 那条线. 从上游引入任何东西之前: 重新核对渠道/tag 漂移、Java 下限与被丢弃的 `ip-addresses` 入口(三者都在上文描述过), 重新套用改动清单, 然后跑 `./gradlew :craftapi:test` 以及下面的产物一致性检查.
 
 ## 验证
 
-- `mvn test -pl craftapi` —— 78 个测试, 不需要网络(上游测试套件, 加上离线 `HttpServer` / 原始 socket 套件与黄金向量).
+- `./gradlew :craftapi:test` —— 78 个测试, 不需要网络(上游测试套件, 加上离线 `HttpServer` / 原始 socket 套件与黄金向量).
 - 与已发布 `craftapi-0.8.1.jar` 的类一致性: 同样的 32 个类名; 签名差异只有上面那些有意为之的改动, 加上编译器生成的枚举/lambda 命名.
 - 每个平台 JAR 都恰好包含这 32 个类的一份副本, 全为 `v52`, 外加两个许可证文件.
-- `mvn dependency:tree` 不再解析 `com.github.games647:craftapi`.
+- `./gradlew :core:dependencies --configuration compileClasspath` 显示本地 `:craftapi` 项目依赖.

@@ -77,7 +77,7 @@ import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 @Plugin(id = "fastloginplus", name = "FastLoginPlus", description = "Login plugin for premium players", url = "",
-        version = PomData.VERSION, authors = {"Hayston", "games647"})
+        version = BuildInfo.VERSION, authors = {"Hayston", "games647"})
 public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
 
     private final ProxyServer server;

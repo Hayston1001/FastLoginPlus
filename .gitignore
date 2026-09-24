@@ -22,7 +22,7 @@ nb-configuration.xml
 # VSCode
 .vscode/
 
-# Maven
+# Legacy build output left by earlier checkouts
 target/
 .flattened-pom.xml
 pom.xml.versionsBackup

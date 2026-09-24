@@ -25,13 +25,13 @@
  */
 package com.github.games647.fastlogin.velocity;
 
-public class PomData {
-    private PomData() {
+public class BuildInfo {
+    private BuildInfo() {
     }
 
-    public static final String DISPLAY_NAME = "${project.name}";
-    public static final String NAME = "${project.parent.artifactId}";
-    public static final String VERSION = "${project.version}";
-    public static final String DESCRIPTION = "${project.parent.description}";
-    public static final String URL = "${project.parent.url}";
+    public static final String DISPLAY_NAME = "${displayName}";
+    public static final String NAME = "${pluginId}";
+    public static final String VERSION = "${projectVersion}";
+    public static final String DESCRIPTION = "${description}";
+    public static final String URL = "${projectUrl}";
 }

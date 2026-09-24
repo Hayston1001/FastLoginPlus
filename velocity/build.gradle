@@ -33,14 +33,14 @@ dependencies {
         exclude group: 'org.slf4j'
         exclude group: 'com.google.code.gson', module: 'gson'
     }
-    compileOnly('com.velocitypowered:velocity-api:3.3.0-SNAPSHOT') {
+    compileOnly(libs.velocity.api) {
         exclude group: 'com.moandjiezana.toml'
         exclude group: 'org.spongepowered'
     }
-    implementation("org.mariadb.jdbc:mariadb-java-client:${rootProject.versions.mariadb}") {
+    implementation(libs.mariadb) {
         exclude group: 'com.github.waffle', module: 'waffle-jna'
     }
-    implementation "org.xerial:sqlite-jdbc:${rootProject.versions.sqlite}"
+    implementation libs.sqlite.driver
 }
 configurations.testImplementation.extendsFrom(configurations.compileOnly)
 configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
@@ -48,21 +48,23 @@ configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClassp
         'org.slf4j:slf4j-api:2.0.12'
 }
 
-def generatePomData = tasks.register('generatePomData', Copy) {
+def generateBuildInfo = tasks.register('generateBuildInfo', Copy) {
     from 'src/main/java-templates'
-    into layout.buildDirectory.dir('generated/sources/pomData/java')
-    inputs.property 'version', project.version
-    filter { line ->
-        line.replace('${project.name}', 'FastLoginPlusVelocity')
-            .replace('${project.parent.artifactId}', 'fastloginplus')
-            .replace('${project.version}', project.version.toString())
-            .replace('${project.parent.description}',
-                'Actively maintained fork of FastLogin with updates and feature enhancements')
-            .replace('${project.parent.url}', 'https://github.com/Hayston1001/FastLoginPlus')
+    into layout.buildDirectory.dir('generated/sources/buildInfo/java')
+    def values = [
+        displayName: 'FastLoginPlusVelocity',
+        pluginId: 'fastloginplus',
+        projectVersion: project.version.toString(),
+        description: 'Actively maintained fork of FastLogin with updates and feature enhancements',
+        projectUrl: 'https://github.com/Hayston1001/FastLoginPlus'
+    ]
+    inputs.properties(values)
+    filesMatching('**/BuildInfo.java') {
+        expand(values)
     }
 }
-sourceSets.main.java.srcDir(layout.buildDirectory.dir('generated/sources/pomData/java'))
-tasks.named('compileJava') { dependsOn generatePomData }
+sourceSets.main.java.srcDir(layout.buildDirectory.dir('generated/sources/buildInfo/java'))
+tasks.named('compileJava') { dependsOn generateBuildInfo }
 
 tasks.named('shadowJar') {
     filesMatching('META-INF/services/**') { duplicatesStrategy = DuplicatesStrategy.INCLUDE }

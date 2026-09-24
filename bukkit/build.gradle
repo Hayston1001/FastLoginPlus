@@ -29,7 +29,7 @@ apply from: rootProject.file('gradle/platform-common.gradle')
 
 dependencies {
     implementation project(':core')
-    compileOnly('io.papermc.paper:paper-api:1.20.6-R0.1-SNAPSHOT') {
+    compileOnly(libs.paper.api) {
         exclude group: 'org.slf4j', module: 'slf4j-api'
         exclude group: 'com.google.guava'
         exclude group: 'com.google.code.gson'
@@ -37,8 +37,8 @@ dependencies {
     }
 }
 
-// Maven's nearest-first mediation picks Paper/BungeeCord's older versions for
-// this jar. Gradle otherwise upgrades them through vendored CraftAPI.
+// Keep the server API baseline versions used for this jar; the vendored
+// CraftAPI module resolves newer versions for its own tests.
 configurations.matching {
     it.name in ['compileClasspath', 'runtimeClasspath', 'testCompileClasspath', 'testRuntimeClasspath']
 }.configureEach {

@@ -27,20 +27,20 @@
 apply from: rootProject.file('gradle/bedrock.gradle')
 
 dependencies {
-    compileOnly("com.mojang:datafixerupper:${rootProject.versions.datafixerupper}") { transitive = false }
-    compileOnly("com.comphenix.protocol:ProtocolLib:${rootProject.versions.protocolLib}") { transitive = false }
-    compileOnly("com.github.ProtocolSupport:ProtocolSupport:${rootProject.versions.protocolSupport}") { transitive = false }
-    compileOnly "io.netty:netty-handler:${rootProject.versions.netty}"
-    compileOnly("me.clip:placeholderapi:${rootProject.versions.placeholderApi}") { transitive = false }
-    compileOnly("fr.xephi:authme:${rootProject.versions.authme}") { transitive = false }
-    compileOnly("com.lenis0012.bukkit:loginsecurity:${rootProject.versions.loginSecurity}") { transitive = false }
-    compileOnly("com.github.games647:LogIt:${rootProject.versions.logit}") { transitive = false }
-    compileOnly("de.luricos.bukkit:xAuth:${rootProject.versions.xauth}") { transitive = false }
-    compileOnly("com.github.zigazajc007:Passky:${rootProject.versions.passky}") { transitive = false }
-    compileOnly("net.skinsrestorer:skinsrestorer-api:${rootProject.versions.skinsRestorer}") { transitive = false }
+    compileOnly(libs.datafixerupper) { transitive = false }
+    compileOnly(libs.protocol.lib) { transitive = false }
+    compileOnly(libs.protocol.support) { transitive = false }
+    compileOnly libs.netty.handler
+    compileOnly(libs.placeholder.api) { transitive = false }
+    compileOnly(libs.authme) { transitive = false }
+    compileOnly(libs.login.security) { transitive = false }
+    compileOnly(libs.logit) { transitive = false }
+    compileOnly(libs.xauth) { transitive = false }
+    compileOnly(libs.passky) { transitive = false }
+    compileOnly(libs.skins.restorer) { transitive = false }
     compileOnly files('lib/CrazyCore v10.7.7.jar', 'lib/CrazyLogin v7.23.2.jar',
         'lib/UltraAuth v2.1.2.jar')
-    testImplementation 'org.bouncycastle:bcprov-jdk18on:1.86'
+    testImplementation libs.bouncy.castle
 }
 
 configurations.testImplementation.extendsFrom(configurations.compileOnly)
@@ -60,7 +60,7 @@ tasks.named('shadowJar') {
     mergeServiceFiles()
     minimize {
         // Gson adapters and Guava helpers are created reflectively. Shadow's
-        // reachability analysis otherwise drops classes Maven Shade retained.
+        // reachability analysis otherwise drops classes needed at runtime.
         exclude(dependency('com.google.code.gson:gson:.*'))
         exclude(dependency('com.google.guava:guava:.*'))
         exclude(dependency('org.slf4j:.*:.*'))

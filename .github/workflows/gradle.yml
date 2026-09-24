@@ -2,8 +2,7 @@ name: Gradle Build
 
 on:
   push:
-    branches-ignore:
-      - 'dependabot/**'
+    branches: ['**']
   pull_request:
     branches: [main]
 

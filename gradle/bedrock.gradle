@@ -27,15 +27,15 @@
 // These APIs are supplied by the server or another plugin. Keep their
 // transitive implementation trees off the compile and packaged classpaths.
 dependencies {
-    compileOnly("org.geysermc.floodgate:api:${rootProject.versions.floodgate}") { transitive = false }
-    compileOnly("org.geysermc.geyser:core:${rootProject.versions.geyser}") { transitive = false }
-    compileOnly("org.geysermc.geyser:api:${rootProject.versions.geyser}") { transitive = false }
-    compileOnly "org.geysermc.api:base-api:${rootProject.versions.geyserBaseApi}"
-    compileOnly("org.geysermc.geyser:common:${rootProject.versions.geyser}") {
+    compileOnly(libs.floodgate.api) { transitive = false }
+    compileOnly(libs.geyser.core) { transitive = false }
+    compileOnly(libs.geyser.api) { transitive = false }
+    compileOnly libs.geyser.base.api
+    compileOnly(libs.geyser.common) {
         exclude group: 'com.google.code.gson', module: 'gson'
     }
-    compileOnly "it.unimi.dsi:fastutil-core:${rootProject.versions.fastutil}"
-    compileOnly("org.geysermc.cumulus:cumulus:${rootProject.versions.cumulus}") {
+    compileOnly libs.fastutil.core
+    compileOnly(libs.cumulus) {
         exclude group: 'com.google.code.gson', module: 'gson'
     }
 }

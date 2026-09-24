@@ -34,21 +34,25 @@ dependencies {
         exclude group: 'com.google.guava', module: 'guava'
         exclude group: 'org.yaml', module: 'snakeyaml'
     }
-    compileOnly('net.md-5:bungeecord-api:1.20-R0.2') {
+    compileOnly(libs.bungeecord.api) {
         exclude group: 'net.md-5', module: 'bungeecord-protocol'
         exclude group: 'io.netty'
         exclude group: 'org.yaml', module: 'snakeyaml'
     }
-    compileOnly 'net.md-5:bungeecord-event:1.20-R0.2'
+    compileOnly libs.bungeecord.event
     compileOnly files('lib/BungeeAuth-1.4.jar')
     testImplementation files('lib/bungeecord-proxy-1.20-R0.2-20240119.213723-10.jar')
-    testImplementation('net.md-5:bungeecord-protocol:1.20-R0.2') { exclude group: 'io.netty' }
-    testImplementation 'net.md-5:bungeecord-log:1.20-R0.2'
-    testImplementation 'org.yaml:snakeyaml:2.7'
-    testImplementation "io.netty:netty-handler:${rootProject.versions.netty}"
-    implementation "org.xerial:sqlite-jdbc:${rootProject.versions.sqlite}"
+    testImplementation(libs.bungeecord.protocol) { exclude group: 'io.netty' }
+    testImplementation libs.bungeecord.log
+    testImplementation libs.snakeyaml
+    testImplementation libs.netty.handler
+    implementation libs.sqlite.driver
 }
 configurations.testImplementation.extendsFrom(configurations.compileOnly)
+tasks.named('test') {
+    def proxyJar = providers.gradleProperty('flp.proxy.jar')
+    if (proxyJar.isPresent()) systemProperty 'flp.proxy.jar', proxyJar.get()
+}
 configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
     resolutionStrategy.force 'com.google.guava:guava:32.1.2-jre', 'com.google.code.gson:gson:2.10.1'
 }

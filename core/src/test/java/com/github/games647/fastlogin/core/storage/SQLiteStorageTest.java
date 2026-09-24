@@ -80,8 +80,8 @@ class SQLiteStorageTest {
     }
 
     /**
-     * Guards the classpath swap of the {@code sqlite-floor-test} execution (see core/pom.xml):
-     * that execution re-runs the storage tests against {@code sqlite.floor.version}, the oldest
+     * Guards the classpath swap of the Gradle {@code sqliteFloorTest} task (see core/build.gradle):
+     * that task re-runs the storage tests against {@code sqliteFloor}, the oldest
      * server-provided driver we promise to support. If the exclusion of the newest driver ever
      * silently matched nothing, the floor run would just re-test the newest driver and prove
      * nothing - so whenever the expectation is passed in as a system property, verify which jar

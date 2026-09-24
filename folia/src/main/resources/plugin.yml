@@ -25,9 +25,9 @@
 #
 
 # project data for Folia in order to register our plugin with all it's components
-# ${-} are variables from Maven (pom.xml) which will be replaced after the build
+# Gradle expands the build version, commit hash and permission prefix.
 name: FastLoginPlus
-version: ${revision}-${git.commit.id.abbrev}
+version: ${projectVersion}-${commitHash}
 main: com.github.games647.fastlogin.bukkit.FastLoginBukkit
 folia-supported: 'true'
 
@@ -67,24 +67,24 @@ commands:
         usage: '/<command> premium|cracked|delete [player]'
 
 permissions:
-    ${project.artifactId}.command.premium:
+    ${permissionPrefix}.command.premium:
         description: 'Label themselves as premium'
         default: true
 
-    ${project.artifactId}.command.premium.other:
+    ${permissionPrefix}.command.premium.other:
         description: 'Label others as premium'
         children:
-            ${project.artifactId}.command.premium: true
+            ${permissionPrefix}.command.premium: true
 
-    ${project.artifactId}.command.cracked:
+    ${permissionPrefix}.command.cracked:
         description: 'Label themselves as cracked'
         default: op
 
-    ${project.artifactId}.command.cracked.other:
+    ${permissionPrefix}.command.cracked.other:
         description: 'Label others as cracked'
         children:
-            ${project.artifactId}.command.cracked: true
+            ${permissionPrefix}.command.cracked: true
 
-    ${project.artifactId}.command.delete:
+    ${permissionPrefix}.command.delete:
         description: 'Delete a player record from the FastLogin database'
         default: op

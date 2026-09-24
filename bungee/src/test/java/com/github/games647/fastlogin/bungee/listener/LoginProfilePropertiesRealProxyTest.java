@@ -63,7 +63,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * {@code net.md_5.bungee.protocol.data.Property} and no trace of the old class. Because that
  * artifact is 27 MB and cannot be committed, the check is opt-in:</p>
  *
- * <pre>{@code mvn test -pl bungee -Dflp.proxy.jar=/path/to/waterfall-1.21-615.jar}</pre>
+ * <pre>{@code ./gradlew :bungee:test -Pflp.proxy.jar=/path/to/waterfall-1.21-615.jar}</pre>
  *
  * <p>It is skipped, not failed, when the property is missing, so the default build stays offline.
  * Everything is driven reflectively: the test class itself is compiled against the old shape and
@@ -91,7 +91,7 @@ class LoginProfilePropertiesRealProxyTest {
         String configured = System.getProperty("flp.proxy.jar", "");
         Path proxyJar = Paths.get(configured);
         assumeTrue(!configured.isEmpty() && Files.exists(proxyJar),
-                "pass -Dflp.proxy.jar=<current proxy jar> to verify the post-#3855 shape");
+                "pass -Pflp.proxy.jar=<current proxy jar> to verify the post-#3855 shape");
 
         try (URLClassLoader loader = childFirstLoader(proxyJar)) {
             assertProfileIsUpdated(loader, "net.md_5.bungee.protocol.data.Property");
