@@ -1,8 +1,12 @@
 name: Gradle Build
 
 on:
+  # Dependabot branches are already covered by the pull_request event below; skipping
+  # the push run keeps a dependency bump from being built twice (same as the Maven
+  # workflow did).
   push:
-    branches: ['**']
+    branches-ignore:
+      - 'dependabot/**'
   pull_request:
     branches: [main]
 
@@ -23,4 +27,4 @@ jobs:
           cache: 'gradle'
 
       - name: Build and test
-        run: bash ./gradlew build --no-daemon --console=plain
+        run: bash ./gradlew build --parallel --no-daemon --console=plain

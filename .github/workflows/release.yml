@@ -23,7 +23,7 @@ jobs:
           cache: 'gradle'
 
       - name: Build
-        run: bash ./gradlew build stageRelease --no-daemon --console=plain
+        run: bash ./gradlew build stageRelease --parallel --no-daemon --console=plain
 
       - name: Extract changelog for this version
         run: |
