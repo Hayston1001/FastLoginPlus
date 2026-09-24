@@ -99,9 +99,12 @@ conformance (`OperatorWrap` line breaks, braces, javadoc `@param`). The only API
 - `UUIDAdapter.generateOfflineId`, `toMojangId`, `parseId` — the offline UUID is the player's identity and
   the undashed lowercase form is the database format. `UUIDAdapterGoldenTest` pins both against values
   produced by the previously shipped `craftapi-0.8.1.jar`.
-- The dependency versions (currently `gson 2.14.0`, `guava 33.7.1-jre` in the version catalog): `bukkit`/`folia` shade and relocate both,
-  `bungee`/`velocity` exclude both on purpose (the proxy ships its own copy). Bumping them changes what
-  every platform jar contains.
+- The dependency versions: this module compiles against `gson 2.14.0` and `guava 33.7.1-jre` (the
+  version catalog), and `bungee`/`velocity` exclude both on purpose (the proxy ships its own copy).
+  `bukkit`/`folia` shade and relocate both, but pinned to the server-API baseline those jars run on
+  (`gson 2.10.1` + `guava 32.1.2-jre`, see `gradle/platform-common.gradle`). Without that pin Gradle
+  would package this module's newer versions instead, because the server API is `compileOnly` and so
+  does not resolve the packaged classpath. Bumping these versions changes what every platform jar contains.
 
 ## Updating
 

@@ -48,7 +48,7 @@ Gradle 模块是 `:craftapi`, 通过项目依赖使用, 不单独发布; Java **
 ## 什么不许静默改变
 
 - `UUIDAdapter.generateOfflineId`、`toMojangId`、`parseId` —— 离线 UUID 就是玩家的身份, 而无连字符小写形式就是数据库格式. `UUIDAdapterGoldenTest` 用此前发布的 `craftapi-0.8.1.jar` 产生的值把这两件事钉死.
-- 依赖版本(版本目录中目前是 `gson 2.14.0`、`guava 33.7.1-jre`): `bukkit`/`folia` 会把两者 shade 并 relocate, `bungee`/`velocity` 则有意排除两者(代理自带一份). 升级它们会改变每个平台 JAR 的内容.
+- 依赖版本: 本模块针对版本目录中的 `gson 2.14.0`、`guava 33.7.1-jre` 编译; `bungee`/`velocity` 则有意排除两者(代理自带一份). `bukkit`/`folia` 会把两者 shade 并 relocate, 但在 `gradle/platform-common.gradle` 里钉到这两个 JAR 所运行的服务器 API 基线(`gson 2.10.1` + `guava 32.1.2-jre`); 没有这个 pin, Gradle 会改用本模块声明的新版本 —— 因为服务器 API 是 `compileOnly`, 不参与打包 classpath 的解析. 升级这些版本会改变每个平台 JAR 的内容.
 
 ## 升级流程
 

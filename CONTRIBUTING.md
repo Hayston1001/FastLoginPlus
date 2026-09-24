@@ -120,7 +120,8 @@ listeners, or the proxy relay path.
 | `bungee`  | 17           | BungeeCord proxy plugin                                            |
 | `velocity`| 17           | Velocity proxy plugin                                              |
 
-The `Java floor` column is the module's `options.release` in `build.gradle`. An artifact's
+The `Java floor` column is `ext.javaFloor` at the top of that module's `build.gradle`.
+An artifact's
 **runtime floor** — the lowest JRE that can *load* it — is the higher of that value
 and the highest bytecode among the dependencies that get shaded into it, so a
 dependency bump can raise a floor without touching this column. `META-INF/versions/N`
@@ -128,12 +129,27 @@ multi-release branches are add-ons for newer JREs and never count towards the fl
 Floors are unrelated to the build JDK below: the build runs on JDK 21 even though
 `bungee`/`velocity` refuse to load on anything below 17.
 
+### Adding a module
+
+A module is three declarations: `include '<name>'` in `settings.gradle`, a
+`build.gradle` in the new directory, and `ext.javaFloor` at the top of that file.
+The build fails at configuration time when the floor is missing, so nothing is added
+"for free" — and a floor that is too low fails `checkRuntimeBytecode` /
+`verifyPluginJar` instead of shipping. Shared dependency versions belong in
+`gradle/libs.versions.toml`, and a shaded or build-time dependency also needs an
+entry in the Dependabot allow list (`.github/dependabot.yml`).
+
+The `web` module (Javalin + Jackson, floor 17) is carried on its own branch and is not
+part of the Gradle build yet — porting it means exactly those four steps.
+
 Build requirements:
 
-- **JDK 21** (the version pinned in `.java-version` and used by CI) — this is a *build*
+- **JDK 21** (the version pinned in `.java-version`, used by CI, and pinned as the Gradle
+  toolchain) — this is a *build*
   requirement and says nothing about what the built artifacts need at runtime (see the
   `Java floor` column). The
-  per-module `options.release` settings above make javac reject APIs
+  per-module `ext.javaFloor` values above are handed to javac as `--release`, which
+  rejects APIs
   newer than each module's target, so a single modern JDK is all you need —
   but do not use Java-9+ APIs in `core`/`bukkit` or Java-18+ APIs in
   `bungee`/`velocity`. Note that `--release` only guards the APIs *you* compile
@@ -146,7 +162,10 @@ Build requirements:
   (52 = Java 8, 55 = 11, 61 = 17, 65 = 21), for the dependency JAR and for the
   built artifact.
 - **Gradle 9.6.1** is supplied by the wrapper; no separate Gradle installation is
-  needed. A git clone is expected: the build embeds the commit hash in the final
+  needed. The build's toolchain needs a JDK 21: one that is installed is used
+  automatically, and otherwise Gradle downloads one (the Foojay resolver declared in
+  `settings.gradle`), so a bare clone builds without installing anything by hand. CI
+  provides the JDK itself. A git clone is expected: the build embeds the commit hash in the final
   JAR name and manifest.
 
 Some auth-plugin APIs (CrazyLogin, UltraAuth, BungeeAuth) are provided as
@@ -208,12 +227,19 @@ and verify before pushing:
 4. **Per-module runtime bytecode floor** (`checkRuntimeBytecode` and
    `verifyPluginJar`, run by `check`) — every dependency shaded into a module must
    not be compiled for a newer Java version than that module's own
-   `options.release` (core/bukkit 8, bungee/velocity 17, folia 21).
+   `ext.javaFloor` (core/bukkit 8, bungee/velocity 17, folia 21).
    Without it a dependency bump can raise the module's runtime requirement with
    no build-time signal at all. Raising a floor is a deliberate decision:
-   change that module's Java floor in `build.gradle`, and update this section and
+   change `ext.javaFloor` in that module's `build.gradle`, and update this section and
    both readmes together. Test and `compileOnly` dependencies are excluded — test
    jars never reach a user, and provided APIs belong to the server or proxy.
+5. **SQLite driver floor** (`:core:sqliteFloorTest`) — the storage tests are re-run against
+   the oldest driver a user's server may ship, which is the only guard on that promise
+   (bukkit/folia load the server's own driver). The floor exists twice on purpose:
+   `sqliteFloor` in the version catalog says which jar the run swaps in, `PROMISED_FLOOR` in
+   `SQLiteStorageTest` says what we promise — the test fails when they disagree, so raising
+   the floor takes both edits (plus a note in the user-facing docs when it changes what users
+   may run).
 
 ## Testing
 
@@ -260,7 +286,7 @@ and verify before pushing:
   also provides SnakeYAML. `sqlite-jdbc`/`mariadb` are
   `compileOnly` in `core`/`bukkit` (the server ships them) but bundled in
   `bungee`/`velocity`. Keep this in mind
-  when adding dependencies — prefer `provided` scope for anything a modern
+  when adding dependencies — prefer a `compileOnly` dependency for anything a modern
   server already provides.
 - **Dependency updates** — versions live in `gradle/libs.versions.toml` and
   `.github/dependabot.yml` is an *allow* list: only the

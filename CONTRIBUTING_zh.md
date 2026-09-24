@@ -110,16 +110,26 @@ graph TB
 | `bungee`  | 17           | BungeeCord 代理插件                                                |
 | `velocity`| 17           | Velocity 代理插件                                                  |
 
-`Java floor` 这一列就是该模块在 `build.gradle` 中的 `options.release`. 而产物的**运行时 floor**
+`Java floor` 这一列就是该模块 `build.gradle` 顶部的 `ext.javaFloor`. 而产物的**运行时 floor**
 —— 能*加载*它的最低 JRE —— 取"这个值"与"被 shade 进来的依赖中最高的字节码"两者中更高的那个,
 所以依赖升级可以在不动这一列的情况下抬高 floor. `META-INF/versions/N` 多版本分支是给更高 JRE 的
 附加实现, 永远不计入 floor. floor 与下面的构建 JDK 无关: 构建跑在 JDK 21 上, 而
 `bungee`/`velocity` 的产物在 17 以下的 JRE 上根本加载不了.
 
+### 新增模块
+
+一个模块就是三处声明: `settings.gradle` 里的 `include '<name>'`、新目录下的 `build.gradle`、
+以及该文件顶部的 `ext.javaFloor`. 缺少 floor 时构建会在配置阶段直接失败, 所以不会有“白送”的模块;
+而 floor 填得太低会由 `checkRuntimeBytecode` / `verifyPluginJar` 拦住, 不会发出去. 共享依赖版本放
+`gradle/libs.versions.toml`; 被 shade 进 JAR 的依赖或构建期依赖还要在 Dependabot 白名单
+(`.github/dependabot.yml`)里加一条.
+
+`web` 模块(Javalin + Jackson, floor 17)目前在独立分支上, 尚未纳入 Gradle 构建 —— 移植它就是上面这四步.
+
 构建要求:
 
-- **JDK 21**(写在 `.java-version` 里、CI 使用的版本) —— 这是**构建**要求, 与产物运行时需要什么无关(见上表 `Java floor`). 各模块的 `options.release` 会让 javac 拒绝比该模块目标更新的 API, 所以你只需要一个现代 JDK —— 但不要在 `core`/`bukkit` 里用 Java 9+ 的 API, 也不要在 `bungee`/`velocity` 里用 Java 18+ 的 API. 注意 `--release` 只约束*你自己*编译时用到的 API: 它无法阻止更新的依赖悄悄抬高模块的*运行时*要求, 下面的字节码地板检查就是为此存在的. 该检查豁免 `module-info.class`(Guava 33+ 带有 class 53 的 module-info, 而真正的类仍是 Java 8) —— floor 结论要用字节码验证: 取 `META-INF/versions/` **之外**最高的 class 文件主版本号(52 = Java 8, 55 = 11, 61 = 17, 65 = 21), 依赖 JAR 与最终产物都要看.
-- **Gradle 9.6.1** 由 wrapper 提供, 无需单独安装. 需要是 git clone: 构建会把 commit hash 写进最终 JAR 的文件名与 manifest.
+- **JDK 21**(写在 `.java-version` 里、CI 使用的版本, 也是构建钉住的 Gradle toolchain) —— 这是**构建**要求, 与产物运行时需要什么无关(见上表 `Java floor`). 各模块顶部的 `ext.javaFloor` 会被当作 javac 的 `--release`, 从而拒绝比该模块目标更新的 API, 所以你只需要一个现代 JDK —— 但不要在 `core`/`bukkit` 里用 Java 9+ 的 API, 也不要在 `bungee`/`velocity` 里用 Java 18+ 的 API. 注意 `--release` 只约束*你自己*编译时用到的 API: 它无法阻止更新的依赖悄悄抬高模块的*运行时*要求, 下面的字节码地板检查就是为此存在的. 该检查豁免 `module-info.class`(Guava 33+ 带有 class 53 的 module-info, 而真正的类仍是 Java 8) —— floor 结论要用字节码验证: 取 `META-INF/versions/` **之外**最高的 class 文件主版本号(52 = Java 8, 55 = 11, 61 = 17, 65 = 21), 依赖 JAR 与最终产物都要看.
+- **Gradle 9.6.1** 由 wrapper 提供, 无需单独安装. 构建的 toolchain 需要一个 JDK 21: 机器上装了就直接用, 没装则由 Gradle 自行下载(`settings.gradle` 里声明的 Foojay resolver), 所以裸克隆即可构建, 不用手动准备任何东西. CI 由自己提供 JDK. 需要是 git clone: 构建会把 commit hash 写进最终 JAR 的文件名与 manifest.
 
 部分登录插件的 API(CrazyLogin、UltraAuth、BungeeAuth)以本地 JAR 放在各模块的 `lib/` 目录里 —— 不需要手动安装.
 
@@ -164,7 +174,8 @@ Windows 下把 `./gradlew` 换成 `gradlew.bat`. 可安装的插件 JAR 位于�
    - `DesignForExtension`、`FinalClass`、`HideUtilityClassConstructor` —— 面向继承的设计规则; 工具类标记 `final` 并写私有构造器; 除非有意允许继承, 否则类要 `final`
    - Javadoc: 被文档化的方法必须有 `@param`/`@return`/`@throws`; 包级 javadoc(`JavadocPackage`)也会检查
 3. **换行符与文件末尾换行** —— `.gitattributes` 把所有文本文件规范为 LF, 且每个文件必须以换行结尾(`NewlineAtEndOfFile`). 在 Windows 上交给 git 转换; 不要提交 CRLF.
-4. **每模块的运行时字节码地板**(`checkRuntimeBytecode` 与 `verifyPluginJar`, 由 `check` 执行) —— 任何被 shade 进某模块的依赖, 其编译目标都不得高于该模块自身的 `options.release`(core/bukkit 8, bungee/velocity 17, folia 21). 没有它, 一次依赖升级就可能在毫无构建期信号的情况下抬高模块的运行时要求. 抬高地板是**有意决策**: 改 `build.gradle` 中该模块的 Java floor, 并同步更新本节与两个 readme. 测试依赖与 `compileOnly` 被排除 —— 测试 JAR 不发布, 由服务器或代理提供的 API 也不打包.
+4. **每模块的运行时字节码地板**(`checkRuntimeBytecode` 与 `verifyPluginJar`, 由 `check` 执行) —— 任何被 shade 进某模块的依赖, 其编译目标都不得高于该模块自身的 `ext.javaFloor`(core/bukkit 8, bungee/velocity 17, folia 21). 没有它, 一次依赖升级就可能在毫无构建期信号的情况下抬高模块的运行时要求. 抬高地板是**有意决策**: 改该模块 `build.gradle` 里的 `ext.javaFloor`, 并同步更新本节与两个 readme. 测试依赖与 `compileOnly` 被排除 —— 测试 JAR 不发布, 由服务器或代理提供的 API 也不打包.
+5. **SQLite 驱动下限**(`:core:sqliteFloorTest`) —— 用用户服务器上可能自带的最老驱动重跑存储测试, 这是该承诺唯一的守卫(bukkit/folia 加载的就是服务器自带的那份驱动). 这个下限故意存在两处: 版本目录里的 `sqliteFloor` 决定这次跑用哪个 jar, 测试里的 `PROMISED_FLOOR` 决定我们承诺的是什么 —— 两者不一致则测试失败, 所以抬高下限必须同时改两处(若影响到用户能跑什么, 还要更新面向用户的文档).
 
 ## 测试
 
