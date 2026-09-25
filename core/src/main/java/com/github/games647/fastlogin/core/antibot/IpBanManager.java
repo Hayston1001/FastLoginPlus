@@ -42,6 +42,10 @@ public class IpBanManager {
     private final Ticker ticker;
     private final ConcurrentHashMap<InetAddress, Long> bans;
 
+    // 0.6.0/F009: hard ceiling on active bans — AntiBotService auto-bans
+    // on top of the admin endpoint, so a table flood must be bounded
+    public static final int MAX_BANS = 10_000;
+
     public IpBanManager(Ticker ticker) {
         this.ticker = ticker;
         this.bans = new ConcurrentHashMap<>();
@@ -55,6 +59,15 @@ public class IpBanManager {
      */
     public void ban(InetAddress address, long durationMs) {
         long nowMs = ticker.read() / 1_000_000;
+        if (bans.size() >= MAX_BANS && !bans.containsKey(address)) {
+            // 0.6.0/F009: try to free expired entries first; if the table is
+            // still full, drop the new ban — bounded memory wins over
+            // remembering every attacker IP forever
+            cleanup();
+            if (bans.size() >= MAX_BANS) {
+                return;
+            }
+        }
         bans.put(address, nowMs + durationMs);
     }
 
@@ -102,5 +115,40 @@ public class IpBanManager {
      */
     public int banCount() {
         return bans.size();
+    }
+
+    /**
+     * Remove a ban for the specified IP address.
+     *
+     * @param address the IP to unban
+     * @return true if the IP was banned and has been removed
+     */
+    public boolean unban(InetAddress address) {
+        return bans.remove(address) != null;
+    }
+
+    /**
+     * Get a list of currently banned IP addresses and how long each ban
+     * is still going to last (0.6.0/F021: aligned with the implementation
+     * and the WebUI, which consumes {@code remainingMs}).
+     *
+     * <p>Expired entries are cleaned up lazily during this call.</p>
+     *
+     * @return a list of maps containing "ip" and "remainingMs" keys
+     */
+    public java.util.List<java.util.Map<String, Object>> getBannedIps() {
+        cleanup(); // Clean up expired entries first
+
+        java.util.List<java.util.Map<String, Object>> result = new java.util.ArrayList<>();
+        long nowMs = ticker.read() / 1_000_000;
+
+        for (java.util.Map.Entry<InetAddress, Long> entry : bans.entrySet()) {
+            java.util.Map<String, Object> banInfo = new java.util.HashMap<>();
+            banInfo.put("ip", entry.getKey().getHostAddress());
+            banInfo.put("remainingMs", entry.getValue() - nowMs);
+            result.add(banInfo);
+        }
+
+        return result;
     }
 }

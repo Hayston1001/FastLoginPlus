@@ -33,6 +33,11 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import static java.sql.Statement.RETURN_GENERATED_KEYS;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
@@ -89,6 +94,20 @@ public abstract class SQLStorage implements AuthStorage {
     private static final int NAME_LOCK_STRIPES = 64;
     private final ReentrantLock[] nameLocks = new ReentrantLock[NAME_LOCK_STRIPES];
 
+    // Web UI queries - pagination and search
+    protected static final String LOAD_ALL_PAGED = "SELECT * FROM `" + PREMIUM_TABLE
+            + "` ORDER BY `LastLogin` DESC LIMIT ? OFFSET ?";
+    // No LIMIT/OFFSET: searchProfiles() merges an offline-UUID scan on top of this
+    // result, so pagination is applied in memory after the merge
+    protected static final String SEARCH_BY_NAME_OR_UUID = "SELECT * FROM `" + PREMIUM_TABLE
+            + "` WHERE LOWER(`Name`) LIKE LOWER(?) OR LOWER(`UUID`) LIKE LOWER(?)"
+            + " ORDER BY `LastLogin` DESC";
+    protected static final String COUNT_ALL = "SELECT COUNT(*) FROM `" + PREMIUM_TABLE
+            + "`";
+    // Cracked players have no stored UUID; their panel UUID is computed from the name.
+    // This scan feeds the offline-UUID search pass in searchProfiles().
+    protected static final String SELECT_UUID_LESS = "SELECT * FROM `" + PREMIUM_TABLE
+            + "` WHERE `UUID` IS NULL";
     protected final Logger log;
     protected final HikariDataSource dataSource;
 
@@ -169,6 +188,36 @@ public abstract class SQLStorage implements AuthStorage {
         }
     }
 
+    /**
+     * Look up a profile by name with strict "not found" semantics (0.6.0/F046).
+     *
+     * <p>{@link #loadProfile(String)} must keep returning a placeholder for
+     * unknown names — the login flow relies on it. The WebUI (and any code
+     * that must distinguish "unknown" from "known") uses this method
+     * instead, so its 404 branches stay live and no rows are inserted for
+     * unknown toggles.</p>
+     *
+     * @param name the player name to look up
+     * @return the stored profile, or {@code null} when the name is unknown
+     *         or the query failed
+     */
+    @Override
+    public StoredProfile findProfileByName(String name) {
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement loadStmt = con.prepareStatement(LOAD_BY_NAME)
+        ) {
+            loadStmt.setString(1, name);
+
+            try (ResultSet resultSet = loadStmt.executeQuery()) {
+                return parseResult(resultSet).orElse(null);
+            }
+        } catch (SQLException sqlEx) {
+            log.error("Failed to query profile: {}", name, sqlEx);
+        }
+
+        return null;
+    }
+
     @Override
     public StoredProfile loadProfile(String name) {
         try (Connection con = dataSource.getConnection();
@@ -205,28 +254,41 @@ public abstract class SQLStorage implements AuthStorage {
 
     private Optional<StoredProfile> parseResult(ResultSet resultSet) throws SQLException {
         if (resultSet.next()) {
-            long userId = resultSet.getInt("UserID");
-
-            UUID uuid = Optional.ofNullable(resultSet.getString("UUID")).map(UUIDAdapter::parseId).orElse(null);
-
-            String name = resultSet.getString("Name");
-            boolean premium = resultSet.getBoolean("Premium");
-            int floodgateNum = resultSet.getInt("Floodgate");
-            FloodgateState floodgate;
-
-            // if the player wasn't migrated to the new database format
-            if (resultSet.wasNull()) {
-                floodgate = FloodgateState.NOT_MIGRATED;
-            } else {
-                floodgate = FloodgateState.fromInt(floodgateNum);
-            }
-
-            String lastIp = resultSet.getString("LastIp");
-            Instant lastLogin = resultSet.getTimestamp("LastLogin").toInstant();
-            return Optional.of(new StoredProfile(userId, uuid, name, premium, floodgate, lastIp, lastLogin));
+            return Optional.of(readCurrentRow(resultSet));
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * Read a StoredProfile from the current row without advancing the cursor.
+     * Used by loadAllProfiles/searchProfiles where the caller already called rs.next().
+     *
+     * @param resultSet the ResultSet positioned at the current row
+     * @return the StoredProfile read from the current row
+     * @throws SQLException if a database access error occurs
+     */
+    private StoredProfile readCurrentRow(ResultSet resultSet) throws SQLException {
+        long userId = resultSet.getInt("UserID");
+
+        UUID uuid = Optional.ofNullable(resultSet.getString("UUID")).map(UUIDAdapter::parseId).orElse(null);
+
+        String name = resultSet.getString("Name");
+        boolean premium = resultSet.getBoolean("Premium");
+        int floodgateNum = resultSet.getInt("Floodgate");
+        FloodgateState floodgate;
+
+        // if the player wasn't migrated to the new database format
+        if (resultSet.wasNull()) {
+            floodgate = FloodgateState.NOT_MIGRATED;
+        } else {
+            floodgate = FloodgateState.fromInt(floodgateNum);
+        }
+
+        String lastIp = resultSet.getString("LastIp");
+        java.sql.Timestamp ts = resultSet.getTimestamp("LastLogin");
+        Instant lastLogin = (ts != null) ? ts.toInstant() : java.time.Instant.EPOCH;
+        return new StoredProfile(userId, uuid, name, premium, floodgate, lastIp, lastLogin);
     }
 
     @Override
@@ -327,6 +389,212 @@ public abstract class SQLStorage implements AuthStorage {
             log.error("Failed to delete profile: {}", name, ex);
         }
         return false;
+    }
+
+    /**
+     * Load profiles with pagination.
+     *
+     * @param offset the offset (0-based)
+     * @param limit  the maximum number of results
+     * @return a list of stored profiles
+     */
+    public java.util.List<StoredProfile> loadAllProfiles(int offset, int limit) {
+        java.util.List<StoredProfile> profiles = new java.util.ArrayList<>();
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement stmt = con.prepareStatement(LOAD_ALL_PAGED)) {
+            stmt.setInt(1, limit);
+            stmt.setInt(2, offset);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    profiles.add(readCurrentRow(rs));
+                }
+            }
+        } catch (Exception ex) {
+            log.error("Failed to load profiles", ex);
+            // 0.6.0/F010: an empty list reads as "no players" downstream —
+            // surface the outage instead of swallowing it
+            throw new StorageUnavailableException("Failed to load profiles", ex);
+        }
+        return profiles;
+    }
+
+    /**
+     * Combined search result: one page of matches plus the total match count.
+     *
+     * <p>Search and count come from a single pass because the result set is not
+     * purely the SQL LIKE match — offline display UUIDs are computed (never stored),
+     * so a supplementary in-memory scan can contribute rows. Counting them in a
+     * separate query would desynchronize pagination.</p>
+     */
+    public static final class ProfileSearchResult {
+
+        private final java.util.List<StoredProfile> profiles;
+        private final int total;
+
+        private ProfileSearchResult(java.util.List<StoredProfile> profiles, int total) {
+            this.profiles = profiles;
+            this.total = total;
+        }
+
+        /**
+         * @return the profiles on the requested page
+         */
+        public java.util.List<StoredProfile> getProfiles() {
+            return profiles;
+        }
+
+        /**
+         * @return the total number of matching profiles across all pages
+         */
+        public int getTotal() {
+            return total;
+        }
+    }
+
+    /**
+     * Search profiles by name or UUID (full or fragment) with pagination.
+     *
+     * <p>UUID matching is dash-insensitive: the database stores UUIDs in Mojang
+     * trimmed form (no dashes — {@code UUIDAdapter.toMojangId}), while users paste
+     * the dashed form. Cracked players additionally have no stored UUID at all —
+     * the panel shows a computed offline UUID ({@code OfflinePlayer:<name>}, see
+     * {@link StoredProfile#getDisplayUuid()}) — so when the query looks like a UUID
+     * fragment, those computed UUIDs are matched in a supplementary in-memory scan
+     * of the UUID-less rows.</p>
+     *
+     * @param query  the search query (substring match on Name, stored UUID or offline display UUID)
+     * @param offset the offset (0-based)
+     * @param limit  the maximum number of results per page
+     * @return the matching page and the total match count
+     */
+    public ProfileSearchResult searchProfiles(String query, int offset, int limit) {
+        String namePattern = "%" + query.toLowerCase(Locale.ROOT) + "%";
+        // Normalize to the stored (trimmed, lowercase) UUID form so dashed full UUIDs
+        // and dashed fragments both match the `UUID` column
+        String uuidQuery = query.replace("-", "").replace(" ", "").toLowerCase(Locale.ROOT);
+        String uuidPattern = "%" + uuidQuery + "%";
+
+        // Name-keyed merge map: Name is UNIQUE, and the SQL pass and the offline-UUID
+        // pass can both match the same row
+        Map<String, StoredProfile> matches = new LinkedHashMap<>();
+
+        // SQL pass over Name and the stored UUID column — no LIMIT/OFFSET here because
+        // the offline-UUID pass below may contribute more rows; pagination is applied
+        // after merging
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement stmt = con.prepareStatement(SEARCH_BY_NAME_OR_UUID)) {
+            stmt.setString(1, namePattern);
+            stmt.setString(2, uuidPattern);
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    StoredProfile profile = readCurrentRow(rs);
+                    matches.put(profile.getName().toLowerCase(Locale.ROOT), profile);
+                }
+            }
+        } catch (Exception ex) {
+            log.error("Failed to search profiles", ex);
+            // 0.6.0/F010: surface the outage instead of swallowing it
+            throw new StorageUnavailableException("Failed to search profiles", ex);
+        }
+
+        if (isUuidFragment(uuidQuery)) {
+            matches.putAll(findByOfflineUuid(uuidQuery));
+        }
+
+        java.util.List<StoredProfile> all = new ArrayList<>(matches.values());
+        // Mirror the SQL ORDER BY LastLogin DESC for the merged result
+        all.sort(Comparator.comparing(StoredProfile::getLastLogin,
+                Comparator.nullsFirst(Comparator.naturalOrder())).reversed());
+
+        int total = all.size();
+        int from = Math.min(offset, total);
+        int to = Math.min(from + limit, total);
+        return new ProfileSearchResult(all.subList(from, to), total);
+    }
+
+    /**
+     * Check whether a normalized query looks like a UUID fragment (hex digits only).
+     *
+     * @param normalizedQuery dash/space-stripped, lowercased query
+     * @return true if it is long enough to be meaningful and contains only hex digits
+     */
+    private static boolean isUuidFragment(String normalizedQuery) {
+        return normalizedQuery.length() >= 4 && normalizedQuery.matches("[0-9a-f]+");
+    }
+
+    /**
+     * Match the query against computed offline UUIDs of players without a stored UUID.
+     *
+     * <p>Cracked (and not-yet-migrated Floodgate) players have {@code UUID = NULL};
+     * the panel displays a deterministic offline UUID computed from the name, which
+     * exists nowhere in the database — a plain LIKE search can therefore never find
+     * them by UUID.</p>
+     *
+     * @param uuidQuery dash-stripped, lowercased UUID query
+     * @return matching profiles keyed by lowercase name
+     */
+    private Map<String, StoredProfile> findByOfflineUuid(String uuidQuery) {
+        Map<String, StoredProfile> found = new LinkedHashMap<>();
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement stmt = con.prepareStatement(SELECT_UUID_LESS);
+             ResultSet rs = stmt.executeQuery()) {
+            while (rs.next()) {
+                StoredProfile profile = readCurrentRow(rs);
+                String displayUuid = profile.getDisplayUuid().replace("-", "");
+                if (displayUuid.contains(uuidQuery)) {
+                    found.put(profile.getName().toLowerCase(Locale.ROOT), profile);
+                }
+            }
+        } catch (Exception ex) {
+            // Best-effort supplement to the SQL pass — a failure here must not lose
+            // the rows the SQL pass already found
+            log.error("Failed to scan offline UUIDs", ex);
+        }
+        return found;
+    }
+
+    /**
+     * Count total profiles or profiles matching a search query.
+     *
+     * <p>With a query this delegates to {@link #searchProfiles(String, int, int)} so
+     * the count includes exactly the same matches (including offline display UUIDs)
+     * as the list endpoint.</p>
+     *
+     * @param query the search query, or null to count all
+     * @return the count
+     */
+    public int countProfiles(String query) {
+        if (query != null && !query.isEmpty()) {
+            return searchProfiles(query, 0, 0).getTotal();
+        }
+
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement stmt = con.prepareStatement(COUNT_ALL);
+             ResultSet rs = stmt.executeQuery()) {
+            if (rs.next()) {
+                return rs.getInt(1);
+            }
+        } catch (SQLException ex) {
+            log.error("Failed to count profiles", ex);
+            // 0.6.0/F010: surface the outage instead of reporting 0 players
+            throw new StorageUnavailableException("Failed to count profiles", ex);
+        }
+        return 0;
+    }
+
+    /**
+     * Get the database type (e.g., "sqlite", "mysql").
+     *
+     * @return the database type string
+     */
+    public String getDatabaseType() {
+        String jdbcUrl = dataSource.getJdbcUrl();
+        if (jdbcUrl == null) {
+            return "Unknown";
+        }
+        return jdbcUrl.contains("sqlite") ? "SQLite" : "MySQL";
     }
 
     /**

@@ -1,0 +1,294 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2026 Hayston1001
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+package com.github.hayston1001.fastlogin.web;
+
+import static com.github.hayston1001.fastlogin.web.JsonUtil.of;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.github.games647.fastlogin.core.storage.SQLStorage;
+import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.core.storage.StorageUnavailableException;
+
+import io.javalin.http.Context;
+
+/**
+ * Handler for the player database CRUD API endpoints.
+ */
+public class PlayerApiHandler {
+
+    private final SQLStorage storage;
+    private final PremiumToggleListener toggleListener;
+
+    public PlayerApiHandler(SQLStorage storage) {
+        this.storage = storage;
+        this.toggleListener = null;
+    }
+
+    /**
+     * Creates a handler with a premium toggle listener for kick-on-toggle support.
+     *
+     * @param storage        the storage backend
+     * @param toggleListener callback invoked after premium status is toggled via the WebUI
+     */
+    public PlayerApiHandler(SQLStorage storage, PremiumToggleListener toggleListener) {
+        this.storage = storage;
+        this.toggleListener = toggleListener;
+    }
+
+    /**
+     * Handle GET /api/players request (list with optional search and pagination).
+     *
+     * @param ctx the Javalin context
+     */
+    public void handleList(Context ctx) {
+        try {
+            handleListInner(ctx);
+        } catch (StorageUnavailableException e) {
+            // A storage outage must surface as an error status, not as a 200
+            // with an empty (misleading) list
+            ctx.status(503).json(of("error", "storage unavailable"));
+        }
+    }
+
+    private void handleListInner(Context ctx) {
+        String query = ctx.queryParam("q");
+        int page = parseIntParam(ctx, "page", 1);
+        int size = parseIntParam(ctx, "size", 20);
+
+        // Clamp values
+        if (page < 1) {
+            page = 1;
+        }
+        if (size < 1) {
+            size = 1;
+        }
+        if (size > 100) {
+            size = 100;
+        }
+
+        int offset = (page - 1) * size;
+
+        List<StoredProfile> profiles;
+        int total;
+
+        if (query != null && !query.isEmpty()) {
+            // Combined search+count: total includes the offline-UUID scan matches,
+            // keeping pagination in sync with the list
+            SQLStorage.ProfileSearchResult result = storage.searchProfiles(query, offset, size);
+            profiles = result.getProfiles();
+            total = result.getTotal();
+        } else {
+            profiles = storage.loadAllProfiles(offset, size);
+            total = storage.countProfiles(null);
+        }
+
+        // Convert to explicit DTOs so displayUuid is guaranteed in JSON output
+        List<PlayerEntry> players = new java.util.ArrayList<>();
+        for (StoredProfile p : profiles) {
+            players.add(new PlayerEntry(p));
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("players", players);
+        response.put("total", total);
+        response.put("page", page);
+        response.put("size", size);
+        response.put("totalPages", (total + size - 1) / size);
+
+        ctx.json(response);
+    }
+
+    /**
+     * Handle GET /api/players/:name request.
+     *
+     * @param ctx the Javalin context
+     */
+    public void handleGet(Context ctx) {
+        String name = ctx.pathParam("name");
+        if (storage == null) {
+            ctx.status(503).json(of("error", "No storage backend configured"));
+            return;
+        }
+        // Strict lookup - unknown names reach the 404 branch (loadProfile()
+        // would hand back a fake profile)
+        StoredProfile profile = storage.findProfileByName(name);
+
+        if (profile == null) {
+            ctx.status(404).json(of("error", "Player not found"));
+            return;
+        }
+
+        // Serialize through the PlayerEntry DTO so internal StoredProfile
+        // state (saveLock/rowId/optId) never leaks into JSON
+        ctx.json(new PlayerEntry(profile));
+    }
+
+    /**
+     * Handle PUT /api/players/:name/premium or /api/players/:name/cracked request.
+     *
+     * <p>When a platform toggle listener is registered, the platform performs
+     * the complete toggle operation — the same flow used by the
+     * {@code /premium} and {@code /cracked} commands: relay to the proxy
+     * (with offline queueing when no player can relay the message) or local
+     * database update, toggle event and kick. The WebUI never writes the
+     * database directly in that mode.</p>
+     *
+     * @param ctx     the Javalin context
+     * @param premium true to set as premium, false to set as cracked
+     */
+    public void handleSetPremium(Context ctx, boolean premium) {
+        String name = ctx.pathParam("name");
+
+        // In proxy setups the backend may have no local database (storage is
+        // null there); the existence check is skipped and the platform
+        // listener — which relays to the proxy — is the authority.
+        StoredProfile profile = null;
+        boolean accepted = false;
+        if (storage != null) {
+            // Strict lookup so unknown players get a 404 and the fallback
+            // path below can never INSERT a fresh row for them
+            profile = storage.findProfileByName(name);
+            if (profile == null) {
+                ctx.status(404).json(of("error", "Player not found"));
+                return;
+            }
+        }
+
+        if (toggleListener != null) {
+            // Platform performs the full toggle exactly like the commands
+            toggleListener.onPremiumToggle(name, premium);
+            // The toggle runs asynchronously on the platform side and its
+            // persistence result never reaches the WebUI
+            accepted = true;
+        } else if (profile != null) {
+            // Fallback for embedders without a platform listener: direct DB write.
+            // Run the whole load-modify-save window under the name-level
+            // striped lock, same as every other toggle path.
+            Boolean saved = storage.withNameLock(name, () -> {
+                StoredProfile lockedProfile = storage.findProfileByName(name);
+                if (lockedProfile == null) {
+                    // deleted while waiting for the lock
+                    return null;
+                }
+                lockedProfile.setOnlinemodePreferred(premium);
+
+                // When switching to cracked (offline mode), clear the premium UUID
+                // so the player uses offline-mode UUID on next login
+                if (!premium) {
+                    lockedProfile.setId(null);
+                }
+
+                // saveQuietly reports SQL failures through its return value
+                // instead of swallowing them
+                return storage.saveQuietly(lockedProfile);
+            });
+
+            if (saved == null) {
+                ctx.status(404).json(of("error", "Player not found"));
+                return;
+            }
+            if (!saved) {
+                // Never answer success:true for a failed save
+                ctx.status(500).json(of("error", "Failed to update player"));
+                return;
+            }
+        } else {
+            ctx.status(500).json(of("error", "No storage backend configured"));
+            return;
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("name", name);
+        response.put("premium", premium);
+        if (accepted) {
+            response.put("async", true);
+        }
+
+        // Listener path is fire-and-forget -> 202 Accepted
+        ctx.status(accepted ? 202 : 200).json(response);
+    }
+
+    /**
+     * Handle DELETE /api/players/:name request.
+     *
+     * <p>Only allows deletion of non-premium (cracked) players.</p>
+     *
+     * @param ctx the Javalin context
+     */
+    public void handleDelete(Context ctx) {
+        String name = ctx.pathParam("name");
+        if (storage == null) {
+            ctx.status(503).json(of("error", "No storage backend configured"));
+            return;
+        }
+
+        // Run the premium-check and the delete under the same name-level
+        // striped lock so a concurrent premium toggle cannot flip the row
+        // between the check and the delete (TOCTOU).
+        final String[] error = new String[1];
+        boolean deleted = storage.withNameLock(name, () -> {
+            // Strict lookup - unknown names reach the 404 branch
+            StoredProfile profile = storage.findProfileByName(name);
+
+            if (profile == null) {
+                error[0] = "Player not found";
+                return false;
+            }
+
+            // Only allow deleting cracked players
+            if (profile.isOnlinemodePreferred()) {
+                error[0] = "Cannot delete premium players";
+                return false;
+            }
+
+            return storage.deleteProfile(name);
+        });
+
+        if (error[0] != null) {
+            ctx.status(error[0].equals("Player not found") ? 404 : 400).json(of("error", error[0]));
+        } else if (deleted) {
+            ctx.json(of("success", true, "name", name));
+        } else {
+            ctx.status(500).json(of("error", "Failed to delete player"));
+        }
+    }
+
+    private int parseIntParam(Context ctx, String param, int defaultValue) {
+        String value = ctx.queryParam(param);
+        if (value == null || value.isEmpty()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+}

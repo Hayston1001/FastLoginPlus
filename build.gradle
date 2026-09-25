@@ -212,6 +212,11 @@ subprojects {
                         (moduleName == 'bungee' ? ['bungee.yml', 'org/sqlite/JDBC.class'] :
                             ['velocity-plugin.json', 'org/sqlite/JDBC.class',
                                 'fastlogin/mariadb/jdbc/Driver.class'])
+                    if (moduleName in ['bukkit', 'bungee', 'velocity']) {
+                        required += ['com/github/hayston1001/fastlogin/web/WebServer.class',
+                            'io/javalin/Javalin.class', 'web/index.html', 'web/dashboard.html',
+                            'webui_en.json', 'webui_zh.json']
+                    }
                     required.each { name ->
                         if (!names.contains(name)) throw new GradleException("${modulePath}: missing ${name}")
                     }
@@ -252,8 +257,15 @@ subprojects {
                             byte[] header = new byte[8]
                             if (stream.read(header) == 8) {
                                 int major = ((header[6] & 255) << 8) | (header[7] & 255)
-                                if (major > javaFloor.get() + 44) throw new GradleException(
-                                    "${modulePath}: ${entry.name} exceeds Java ${javaFloor.get()} " +
+                                // Bukkit remains Java 8 for its platform code. The isolated
+                                // panel stack is gated at Java 17 before it is touched.
+                                def webOnly = moduleName == 'bukkit' && [
+                                    'com/github/hayston1001/fastlogin/web/', 'io/javalin/',
+                                    'org/eclipse/jetty/', 'jakarta/'
+                                ].any { entry.name.startsWith(it) }
+                                int allowedFloor = webOnly ? 17 : javaFloor.get()
+                                if (major > allowedFloor + 44) throw new GradleException(
+                                    "${modulePath}: ${entry.name} exceeds Java ${allowedFloor} " +
                                         "(class ${major})")
                             }
                         }

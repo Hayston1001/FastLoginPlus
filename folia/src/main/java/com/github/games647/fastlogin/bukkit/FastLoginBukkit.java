@@ -302,6 +302,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         skinsRestorerCompat = new SkinsRestorerCompat(this);
 
         scheduleUpdateCheck();
+
+        // The Folia module does not package or start the web panel. The premium
+        // toggle listeners it needs (local DB toggle / proxy relay) are not
+        // region-thread safe. Do not stay silent though: tell admins the
+        // web.* config keys have no effect on Folia.
+        if (core != null && core.getConfig() != null
+                && core.getConfig().get("web.enabled", false)) {
+            logger.warn("web.enabled=true has no effect on Folia - the web "
+                    + "management panel is not available on this platform yet");
+        }
     }
 
     private void registerCommands() {

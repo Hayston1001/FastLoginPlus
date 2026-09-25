@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.bukkit;
 
 import com.github.games647.fastlogin.core.message.ChangePremiumMessage;
+import com.github.games647.fastlogin.core.message.ChannelMessage;
 import com.github.games647.fastlogin.core.message.DeletePremiumMessage;
 import com.github.games647.fastlogin.core.shared.PendingRelayStore;
 import com.github.games647.fastlogin.core.shared.ProxyForwardedUuid;
@@ -33,6 +34,8 @@ import com.github.games647.fastlogin.core.shared.ProxyForwardedUuid;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -54,6 +57,7 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator;
 import com.github.games647.fastlogin.bukkit.compat.AuthMeVersionDetector;
 import com.github.games647.fastlogin.bukkit.command.FlpCommand;
+import com.github.games647.fastlogin.bukkit.event.BukkitFastLoginPremiumToggleEvent;
 import com.github.games647.fastlogin.bukkit.listener.AuthMeCommandGuard;
 import com.github.games647.fastlogin.bukkit.listener.AuthMeTakeoverListener;
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
@@ -72,9 +76,13 @@ import com.github.games647.fastlogin.core.hooks.bedrock.BedrockService;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.hooks.bedrock.GeyserService;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
+import com.github.games647.fastlogin.core.shared.JavaVersions;
 import com.github.games647.fastlogin.core.shared.FloodgateState;
 import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
+import com.github.games647.fastlogin.core.shared.event.FastLoginPremiumToggleEvent.PremiumToggleReason;
+import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.hayston1001.fastlogin.web.WebServer;
 
 /**
  * This plugin checks if a player has a paid account and if so tries to skip offline mode authentication.
@@ -140,6 +148,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private FloodgateService floodgateService;
     private GeyserService geyserService;
 
+    // 0.6.0/F003: kept as an instance field so onDisable() can stop the web
+    // panel (releasing the port and threads). Declared without an initializer
+    // on purpose — the WebServer class must only load behind the Java 17+
+    // version gate inside startWebPanel() (0.6.0/F057).
+    private WebServer webServer;
     private PremiumPlaceholder premiumPlaceholder;
     private SkinsRestorerCompat skinsRestorerCompat;
 
@@ -152,6 +165,89 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     public PendingRelayStore getPendingRelayStore() {
         return pendingRelayStore;
+    }
+
+    /**
+     * Relays a premium toggle to the proxy through any online player, or
+     * queues it for later delivery when no player is online to relay the
+     * plugin message.
+     *
+     * <p>This is the single relay path shared by the console
+     * {@code /premium}/{@code /cracked} commands and the WebUI, so all
+     * premium toggles use the identical proxy flow: proxy-side database
+     * update, Mojang UUID resolution, premium toggle event and kick.</p>
+     *
+     * @param target   the player name to toggle
+     * @param activate {@code true} for premium, {@code false} for cracked
+     */
+    public void relayToggleToProxy(String target, boolean activate) {
+        Optional<? extends Player> optPlayer = Bukkit.getServer().getOnlinePlayers().stream().findFirst();
+        if (!optPlayer.isPresent()) {
+            logger.info("No player online to relay message — queuing pending toggle for {}", target);
+            if (pendingRelayStore.queueToggle(target, activate)) {
+                // schedule a retry only for a newly queued entry — an entry
+                // already waiting has a live retry task, which picks up the
+                // latest queued value at send time (0.5.0/P1,P6)
+                scheduleToggleRelay(target);
+            }
+            return;
+        }
+
+        ChannelMessage message = new ChangePremiumMessage(target, activate, false);
+        bungeeManager.sendPluginMessage(optPlayer.get(), message);
+    }
+
+    /**
+     * Performs a premium toggle against the local database, mirroring the
+     * standalone (no proxy) command path: profile update, premium toggle
+     * event and kick when {@code kick-toggle} is enabled.
+     *
+     * <p>Used by the WebUI when this server is not behind a proxy. When the
+     * player is unknown or already in the requested state, this is a no-op.</p>
+     *
+     * @param playerName the player name to toggle
+     * @param premium    {@code true} to set premium, {@code false} for cracked
+     */
+    public void performLocalPremiumToggle(String playerName, boolean premium) {
+        // 0.6.0/F008: run the whole load-modify-save window under the
+        // name-level striped lock, exactly like the /premium and /cracked
+        // command paths, so a concurrent login flow cannot interleave
+        core.getStorage().withNameLock(playerName, () -> {
+            // 0.6.0/F046: strict lookup - unknown players stay unknown, the
+            // WebUI never inserts a fresh row for a typo'd name
+            StoredProfile profile = core.getStorage().findProfileByName(playerName);
+            if (profile == null) {
+                return;
+            }
+
+            if (profile.isExistingPlayer() && profile.isOnlinemodePreferred() == premium) {
+                // Already in the requested state
+                return;
+            }
+
+            profile.setOnlinemodePreferred(premium);
+            if (!premium) {
+                // Clear the premium UUID so the player uses the offline-mode
+                // UUID on their next login
+                profile.setId(null);
+            }
+
+            getScheduler().runAsync(() -> {
+                core.getStorage().save(profile);
+                getServer().getPluginManager().callEvent(new BukkitFastLoginPremiumToggleEvent(
+                        Bukkit.getConsoleSender(), profile, PremiumToggleReason.COMMAND_OTHER));
+
+                getScheduler().getSyncExecutor().execute(() -> {
+                    if (core.getConfig().getBoolean("kick-toggle")) {
+                        Player target = Bukkit.getPlayerExact(playerName);
+                        if (target != null) {
+                            target.kickPlayer(
+                                core.getMessage(premium ? "add-premium" : "remove-premium"));
+                        }
+                    }
+                });
+            });
+        });
     }
 
     public FastLoginBukkit() {
@@ -312,6 +408,117 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         skinsRestorerCompat = new SkinsRestorerCompat(this);
 
         scheduleUpdateCheck();
+
+        // Start web management panel if enabled
+        startWebPanel();
+    }
+
+    private void startWebPanel() {
+        // 0.6.0/F003: guard against a double enable — restart the panel
+        // instead of leaking the previous instance
+        if (webServer != null) {
+            stopWebPanel();
+        }
+
+        try {
+            // Read web config from core config
+            net.md_5.bungee.config.Configuration config = core.getConfig();
+            if (config == null) {
+                return;
+            }
+
+            boolean enabled = config.get("web.enabled", false);
+            if (!enabled) {
+                return;
+            }
+
+            // 0.6.0/F057: the web stack (Javalin 7 / Jetty 12) is Java 17
+            // bytecode. On an older JVM loading it would throw
+            // UnsupportedClassVersionError (an Error the catch below cannot
+            // cover) and disable the whole plugin - skip the panel instead.
+            if (!JavaVersions.isAtLeast(JavaVersions.MINIMUM_WEB_JAVA)) {
+                logger.warn("Web management panel requires Java {}+ (found {}). "
+                        + "Panel skipped; other features unaffected.",
+                        JavaVersions.MINIMUM_WEB_JAVA, System.getProperty("java.version"));
+                return;
+            }
+
+            String host = config.get("web.host", "127.0.0.1");
+            int port = config.get("web.port", 8080);
+            String token = config.get("web.token", "");
+
+            if (token.length() < 16) {
+                logger.warn("Web panel token is too short (minimum 16 characters). Disabling web panel.");
+                return;
+            }
+
+            String version = getClass().getPackage().getImplementationVersion();
+            if (version == null) {
+                version = "unknown";
+            }
+
+            webServer = new WebServer(logger,
+                    core.getStorage(), core.getAntiBotService(),
+                    version, getPluginFolder());
+            // `web.lang` is the panel's default language (browser choice still wins)
+            webServer.setPanelLang(config.get("web.lang", "en"));
+            // 0.6.0/F067: copy the live player view into a snapshot first —
+            // streaming the view directly on a Jetty thread races with joins
+            ///quits (index shifts cause random 500s)
+            webServer.setOnlinePlayersSupplier(() -> {
+                List<Player> snapshot = new ArrayList<>(Bukkit.getOnlinePlayers());
+                return snapshot.stream()
+                    .map(Player::getName)
+                    .collect(java.util.stream.Collectors.toList());
+            });
+
+            // Premium toggle listener: perform the full toggle exactly like
+            // the /premium and /cracked commands — relay to the proxy (with
+            // offline queueing) or local database update + event + kick.
+            webServer.setPremiumToggleListener((playerName, premium) -> {
+                if (bungeeManager.isEnabled()) {
+                    relayToggleToProxy(playerName, premium);
+                } else {
+                    performLocalPremiumToggle(playerName, premium);
+                }
+            });
+
+            // Set TCCL to the plugin classloader so Javalin's ServiceLoader
+            // can discover SLF4J's SPI provider inside the shaded JAR.
+            // Bukkit's TCCL is the server classloader, which cannot see
+            // META-INF/services files bundled in plugin JARs.
+            ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
+            try {
+                webServer.start(host, port, token, config.getStringList("web.corsAllowedOrigins"));
+            } finally {
+                Thread.currentThread().setContextClassLoader(originalTccl);
+            }
+        } catch (LinkageError | Exception e) {
+            // 0.6.0/F057: LinkageError covers UnsupportedClassVersionError and
+            // NoClassDefFoundError so a broken web stack cannot disable the
+            // whole plugin
+            logger.error("Failed to start web management panel", e);
+            webServer = null;
+        }
+    }
+
+    /**
+     * Stop the web management panel, if one is running (0.6.0/F003).
+     *
+     * <p>Releases the HTTP port and the Jetty threads so a following
+     * re-enable (e.g. after /reload) can bind the same port again.</p>
+     */
+    private void stopWebPanel() {
+        if (webServer != null) {
+            try {
+                webServer.stop();
+            } catch (Exception e) {
+                logger.error("Failed to stop web management panel", e);
+            } finally {
+                webServer = null;
+            }
+        }
     }
 
     private void registerCommands() {
@@ -510,6 +717,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     @Override
     public void onDisable() {
+        // 0.6.0/F003: stop the web panel first so it cannot serve requests
+        // against the closing storage/scheduler and releases its port before
+        // a potential re-enable
+        stopWebPanel();
         loginSession.clear();
         premiumPlayers.clear();
         playerFloodgateState.clear();

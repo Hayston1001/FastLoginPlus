@@ -48,6 +48,8 @@ updates:
       - dependency-name: "com.google.guava:guava"
       - dependency-name: "org.xerial:sqlite-jdbc"
       - dependency-name: "org.mariadb.jdbc:mariadb-java-client"
+      - dependency-name: "io.javalin:javalin"
+      - dependency-name: "com.fasterxml.jackson.*:*"
 
       # Build tooling.
       - dependency-name: "com.gradleup.shadow"
@@ -96,6 +98,8 @@ updates:
           - "com.google.guava:guava"
           - "org.xerial:sqlite-jdbc"
           - "org.mariadb.jdbc:mariadb-java-client"
+          - "io.javalin:javalin"
+          - "com.fasterxml.jackson.*:*"
         update-types:
           - "minor"
           - "patch"

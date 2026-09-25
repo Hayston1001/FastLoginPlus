@@ -54,10 +54,31 @@ public class AsyncToggleMessage implements Runnable {
                               Player sender, String playerName, boolean toPremium, boolean playerSender) {
         this.core = core;
         this.sender = sender;
+        this.senderName = sender.getUsername();
         this.targetPlayer = playerName;
         this.toPremium = toPremium;
         this.isPlayerSender = playerSender;
-        this.senderName = sender.getUsername();
+    }
+
+
+    /**
+     * Creates a toggle task without an in-game sender (e.g. triggered by the
+     * WebUI). Feedback messages are sent to the proxy console.
+     *
+     * @param core         the FastLogin core
+     * @param senderName   the name to attribute the toggle to
+     * @param playerName   the player whose premium status is toggled
+     * @param toPremium    {@code true} to enable premium, {@code false} to disable
+     * @param playerSender {@code true} if the toggle was invoked by the target player
+     */
+    public AsyncToggleMessage(FastLoginCore<Player, CommandSource, FastLoginVelocity> core,
+                              String senderName, String playerName, boolean toPremium, boolean playerSender) {
+        this.core = core;
+        this.sender = null;
+        this.senderName = senderName;
+        this.targetPlayer = playerName;
+        this.toPremium = toPremium;
+        this.isPlayerSender = playerSender;
     }
 
     @Override
@@ -205,7 +226,7 @@ public class AsyncToggleMessage implements Runnable {
 
     private void sendMessage(String localeId) {
         String message = core.getMessage(localeId);
-        if (isPlayerSender) {
+        if (isPlayerSender && sender != null) {
             sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
         } else {
             ConsoleCommandSource console = core.getPlugin().getProxy().getConsoleCommandSource();
@@ -227,6 +248,13 @@ public class AsyncToggleMessage implements Runnable {
      * @param localeId the locale key of the result message
      */
     private void sendFeedbackToBackend(String localeId) {
+        // 0.6.0/F004: WebUI toggles run with a null sender (result goes to the
+        // proxy console only) - dereferencing it here killed the whole toggle
+        // task with an NPE and made the kick step unreachable
+        if (sender == null) {
+            return;
+        }
+
         Optional<ServerConnection> server = sender.getCurrentServer();
         if (!server.isPresent()) {
             // carrier has no backend connection (yet/anymore) — result stays

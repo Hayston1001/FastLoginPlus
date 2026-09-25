@@ -70,4 +70,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = 'FastLoginPlus'
-include 'craftapi', 'core', 'bukkit', 'folia', 'bungee', 'velocity'
+include 'craftapi', 'core', 'web', 'bukkit', 'folia', 'bungee', 'velocity'

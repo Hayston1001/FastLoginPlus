@@ -299,3 +299,26 @@ ServerRSAPublicKeyFile:
 # proxies:
 #   - 'xyz.com:1337'
 proxies:
+
+# ========================================
+# Web Management Panel
+# ========================================
+# Embedded web UI for player management and anti-bot stats.
+# Requires Java 17+ on the host runtime (the panel is skipped on older JVMs).
+# EFFECT  S=full   P=none           enable the panel in the proxy's config instead
+web:
+  enabled: false
+  # Bind address: '::' = all interfaces (IPv4+IPv6), '0.0.0.0' = IPv4 only,
+  # '127.0.0.1' = local access only (default)
+  host: '127.0.0.1'
+  port: 8080
+  # Admin token (min 16 chars; auto-generated on first start if empty).
+  # It grants full panel access — clear this value and restart to rotate it
+  token: ''
+  # Default panel language. Built-in: "en" (English), "zh" (中文); a custom value
+  # loads webui_<lang>.json from the plugin folder. Per-browser language
+  # switching inside the panel overrides this default
+  lang: 'en'
+  # Browser origins (besides the panel's own) allowed to call the panel API
+  # cross-origin. Leave empty — the panel is a same-origin single-admin UI
+  corsAllowedOrigins: []

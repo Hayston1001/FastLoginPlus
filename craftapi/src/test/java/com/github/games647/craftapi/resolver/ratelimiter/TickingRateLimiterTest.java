@@ -77,7 +77,7 @@ class TickingRateLimiterTest {
 
         assertFalse(rateLimiter.tryAcquire(), "Should be full and no entry should be expired");
     }
-    
+
     /**
      * Blocked attempts shouldn't replace existing ones.
      */

@@ -40,17 +40,17 @@
 
 ### 代理配置
 
-使用代理 (BungeeCord 或 Velocity) 时，代理必须正确配置玩家信息转发，FLP 才能把登录指令送达后端. 
+使用代理 (BungeeCord 或 Velocity) 时，代理必须正确配置玩家信息转发，FLP 才能把登录指令送达后端.
 
 <details>
 <summary>代理 ID 配置(点击展开)</summary>
 
-后端只接受来自受信任代理的登录指令. 每个代理有一个唯一 UUID, 需要加入后端的白名单: 
+后端只接受来自受信任代理的登录指令. 每个代理有一个唯一 UUID, 需要加入后端的白名单:
 
-- **Velocity** — FLP 首次启动时自动生成 UUID 到 `plugins/fastloginplus/proxyId.txt`. 从该文件复制 UUID. 
-- **BungeeCord** — 使用 BungeeCord 自身的实例 UUID, 即 BungeeCord `config.yml` 中的 `stats` 值(BungeeCord 首次启动时会写入并一直复用; 删掉该行会导致它重新生成, 所有后端白名单随之失效). 
+- **Velocity** — FLP 首次启动时自动生成 UUID 到 `plugins/fastloginplus/proxyId.txt`. 从该文件复制 UUID.
+- **BungeeCord** — 使用 BungeeCord 自身的实例 UUID, 即 BungeeCord `config.yml` 中的 `stats` 值(BungeeCord 首次启动时会写入并一直复用; 删掉该行会导致它重新生成, 所有后端白名单随之失效).
 
-将 UUID 粘贴到每个后端服务器的 `plugins/fastloginplus/allowed-proxies.txt` 中, 每行一个 UUID. 添加后重启后端. 
+将 UUID 粘贴到每个后端服务器的 `plugins/fastloginplus/allowed-proxies.txt` 中, 每行一个 UUID. 添加后重启后端.
 
 </details>
 
@@ -75,18 +75,18 @@
 
 **单端模式**(无代理): 数据库(默认为 `FastLogin.db`)存储在每个后端服务器的 `plugins/fastloginplus/` 目录下.
 
-**代理模式**(BungeeCord/Velocity): 数据库**仅存储在代理端**. 后端服务器不会创建数据库文件——后端只负责接收代理通过插件消息发来的登录/注册指令并执行. 后端的 `/flp premium` 和 `/flp cracked` 命令会转发到代理, 由代理处理所有数据库读写操作. 
+**代理模式**(BungeeCord/Velocity): 数据库**仅存储在代理端**. 后端服务器不会创建数据库文件——后端只负责接收代理通过插件消息发来的登录/注册指令并执行. 后端的 `/flp premium` 和 `/flp cracked` 命令会转发到代理, 由代理处理所有数据库读写操作.
 
 ### 配置模板
 
-FLP 内置**两套配置模板**；每个平台根据自身角色生成 `config.yml`: 
+FLP 内置**两套配置模板**；每个平台根据自身角色生成 `config.yml`:
 
 | 模板 | 适用平台 | 内容 |
 |------|---------|------|
 | `config.yml`(后端) | Bukkit、Folia | 全部配置项. 注释标明哪些项在**代理子服模式**下不生效(或仅部分生效)——例如 `database`、`anti-bot`、Floodgate 相关配置在代理子服上无效, 因为这些功能由代理端负责.  |
 | `config-proxy.yml`(代理端) | BungeeCord、Velocity | 仅代理端相关配置项. 不含后端专属键(`verifyClientKeys`、`respectIpLimit`), 注释描述代理端的职责(决策方: Mojang API 查询、数据库、转发强制登录指令).  |
 
-磁盘上的文件名始终是 `config.yml`. 在代理端与后端之间拷贝配置文件是安全的: 每次启动时各平台会按自己的模板重建文件结构并保留你修改过的值, 新模板中不存在的键会被直接移除(它们在该平台本就无效). 
+磁盘上的文件名始终是 `config.yml`. 在代理端与后端之间拷贝配置文件是安全的: 每次启动时各平台会按自己的模板重建文件结构并保留你修改过的值, 新模板中不存在的键会被直接移除(它们在该平台本就无效).
 
 ## 环境要求
 
@@ -134,7 +134,7 @@ FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入
 - 不带子命令的 `/flp` 会打印版本与用法, 且仅限服务器管理员(OP)使用.
 - Folia 上的权限前缀是 `fastloginplus.folia.command.*`, 而非 `fastloginplus.bukkit.command.*`.
 
-> 当玩家执行指令 `/flp cracked` 从正版验证模式切换至离线模式时, FLP 会自动清除该玩家在 AuthMeReloaded 内的账号数据, 保证玩家重新加入服务器后可通过自行设置的密码正常登录. 若未执行该数据清理操作, 玩家再次进入服务器时 AuthMeReloaded 会强制要求登录; 但该玩家此前为正版账号时, FLP 已自动使用随机密码完成注册, 玩家本身并不知晓该密码.  
+> 当玩家执行指令 `/flp cracked` 从正版验证模式切换至离线模式时, FLP 会自动清除该玩家在 AuthMeReloaded 内的账号数据, 保证玩家重新加入服务器后可通过自行设置的密码正常登录. 若未执行该数据清理操作, 玩家再次进入服务器时 AuthMeReloaded 会强制要求登录; 但该玩家此前为正版账号时, FLP 已自动使用随机密码完成注册, 玩家本身并不知晓该密码.
 > 对于非 Authme 登录插件, FLP 暂时没有类似处理, 需要手动解决.
 
 ## PlaceholderAPI
@@ -144,6 +144,43 @@ FastLoginPlus 通过 [Geyser](https://geysermc.org/) 支持基岩版玩家加入
 | `%fastloginplus_status%` | `Premium`、`Cracked`、`Unknown` | 认证状态 |
 | `%fastloginplus_is_premium%` | `true`、`false` | 是否通过正版验证 |
 | `%fastloginplus_floodgate%` | `Java`、`Bedrock`、`Linked`、`Unknown` | 连接平台(Java 版或通过 Geyser/Floodgate 的基岩版) |
+
+## Web 管理面板
+
+FastLoginPlus 内置可选的 Web 管理面板（玩家管理、反机器人统计），默认关闭。
+面板需要 Java 17+；在 Java 8 上，Bukkit 插件仍可加载，但会跳过面板。Folia 不提供面板。
+
+### 启用
+
+```yaml
+web:
+  enabled: true
+  host: '127.0.0.1'   # 监听地址
+  port: 8080
+  token: ''           # 首次启动自动生成（最少 16 位）
+```
+
+打开 `http://<host>:<port>`，输入 `config.yml` 中的 token 即可登录。
+代理端（BungeeCord/Velocity）请只在代理上启用，不要在后端服务器启用。
+
+### 安全模型
+
+- token 即面板的全部管理权限。受保护的 `/api/*` 端点均需要 token；无有效 token 时 API 只会返回 401/429，不含任何数据。
+- 浏览器会把 token 存在 `localStorage`（跨浏览器重启仍有效）。因此能在面板页面执行脚本的代码就能取走 token（即面板原始 origin 上的 XSS 等价于面板被接管）。面板按 **单管理员** 模型设计，不存在多用户/会话过期概念（“退出登录”只清除本地副本 — 真正失效需要下面的轮换流程）。
+- 面板无需对外网可见时，请把 `host` 绑定到 `127.0.0.1`（或内网网卡）；空地址也会回退到 `127.0.0.1`。
+- 反向代理场景下，面板 origin 请独立部署，不要与不受信任的应用共享 cookie/JS origin。
+- 跨域访问默认关闭；确需时用 `web.corsAllowedOrigins` 白名单显式放行。
+
+### 轮换 token
+
+1. 停服。
+2. 清空 `config.yml` 中的 `web.token`。
+3. 启动 — 会自动生成新 token 并写回 `config.yml`（在配置文件中查看，不会打进日志）。
+4. 旧浏览器会话在下一次轮询收到 401 并自动弹回登录页。
+
+### API
+
+所有端点位于 `/api/*` 下，JSON 格式，需要 `Authorization: Bearer <token>` 头。语言端点 (`/api/lang` 和 `/api/lang/{code}`) 免鉴权。
 
 ## 许可证
 

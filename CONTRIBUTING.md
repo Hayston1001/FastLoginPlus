@@ -115,16 +115,18 @@ listeners, or the proxy relay path.
 | Module    | Java floor | Description                                                        |
 |-----------|--------------|--------------------------------------------------------------------|
 | `core`    | 8            | Shared library: login flow, storage, anti-bot, messaging, events   |
+| `web`     | 17           | Optional embedded panel (Javalin, Jetty, Jackson)                   |
 | `bukkit`  | 8            | Spigot/Paper plugin (ProtocolLib packet handling, auth-plugin hooks) |
 | `folia`   | 21           | Folia plugin — **manual, hand-maintained copy of `bukkit`** adapted to regionized scheduling |
 | `bungee`  | 17           | BungeeCord proxy plugin                                            |
 | `velocity`| 17           | Velocity proxy plugin                                              |
 
 The `Java floor` column is `ext.javaFloor` at the top of that module's `build.gradle`.
-An artifact's
-**runtime floor** — the lowest JRE that can *load* it — is the higher of that value
-and the highest bytecode among the dependencies that get shaded into it, so a
-dependency bump can raise a floor without touching this column. `META-INF/versions/N`
+An artifact's **runtime floor** is normally the higher of that value and the
+highest bytecode among the dependencies that get shaded into it. Bukkit is the
+deliberate exception: it embeds the isolated Java 17 web stack, but its Java 8
+entry point checks the running JVM before loading the panel. The panel remains
+off on Java 8; Folia does not bundle it. `META-INF/versions/N`
 multi-release branches are add-ons for newer JREs and never count towards the floor.
 Floors are unrelated to the build JDK below: the build runs on JDK 21 even though
 `bungee`/`velocity` refuse to load on anything below 17.
@@ -141,8 +143,9 @@ entry in the Dependabot allow list (`.github/dependabot.yml`). A version that mi
 what the user's proxy or server ships belongs in the `gradle/*.gradle` file that holds it
 instead — Dependabot cannot rewrite those.
 
-The `web` module (Javalin + Jackson, floor 17) is carried on its own branch and is not
-part of the Gradle build yet — porting it means exactly those four steps.
+The `web` module is part of this Gradle build. Bukkit keeps its panel dependencies
+on a separate `webRuntime` configuration so the Java 8 runtime check stays strict;
+the other two panel hosts (BungeeCord and Velocity) already target Java 17.
 
 Build requirements:
 
@@ -230,7 +233,9 @@ and verify before pushing:
 4. **Per-module runtime bytecode floor** (`checkRuntimeBytecode` and
    `verifyPluginJar`, run by `check`) — every dependency shaded into a module must
    not be compiled for a newer Java version than that module's own
-   `ext.javaFloor` (core/bukkit 8, bungee/velocity 17, folia 21).
+   `ext.javaFloor` (core/bukkit 8, web/bungee/velocity 17, folia 21). Bukkit's
+   isolated panel classes are checked against Java 17 in the final JAR; its
+   other classes and normal runtime dependencies remain checked against Java 8.
    Without it a dependency bump can raise the module's runtime requirement with
    no build-time signal at all. Raising a floor is a deliberate decision:
    change `ext.javaFloor` in that module's `build.gradle`, and update this section and

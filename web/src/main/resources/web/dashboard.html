@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastLoginPlus</title>
+    <link rel="stylesheet" href="style.css?v=16">
+</head>
+<body class="page-dashboard">
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <header>
+        <button class="hamburger" id="menu-toggle" data-i18n-aria="aria.openMenu">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <path d="M3 5h14M3 10h14M3 15h14"/>
+            </svg>
+        </button>
+        <div class="header-left">
+            <div class="header-brand">
+                <a class="brand-name" href="https://github.com/Hayston1001/FastLoginPlus" target="_blank" rel="noopener noreferrer">FastLoginPlus</a>
+            </div>
+            <div id="status-info" class="status-badge"></div>
+        </div>
+        <nav class="header-tabs" role="tablist">
+            <button class="tab active" data-tab="online" role="tab" aria-selected="true" data-i18n="tab.online"></button>
+            <button class="tab" data-tab="players" role="tab" aria-selected="false" data-i18n="tab.players"></button>
+            <button class="tab" data-tab="antibot" role="tab" aria-selected="false" data-i18n="tab.antibot"></button>
+        </nav>
+        <div class="header-right">
+            <div class="lang-selector">
+                <select id="lang-select" data-i18n-aria="aria.languageSelector">
+                    <option value="en">English</option>
+                    <option value="zh">中文</option>
+                </select>
+            </div>
+            <button class="theme-toggle" id="theme-toggle" data-i18n-aria="aria.toggleTheme">
+                <svg class="icon-sun" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <circle cx="10" cy="10" r="4"/>
+                    <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.93 4.93l1.41 1.41M13.66 13.66l1.41 1.41M4.93 15.07l1.41-1.41M13.66 6.34l1.41-1.41"/>
+                </svg>
+                <svg class="icon-moon" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+                </svg>
+            </button>
+            <button id="logout-btn" class="btn-ghost" data-i18n="header.logout"></button>
+        </div>
+    </header>
+
+    <!-- Mobile sidebar -->
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="header-brand">
+                <svg width="24" height="24" viewBox="0 0 48 48" fill="none">
+                    <rect x="8" y="8" width="32" height="32" rx="4" stroke="currentColor" stroke-width="2.5"/>
+                    <rect x="20" y="20" width="8" height="8" rx="1" fill="currentColor"/>
+                </svg>
+                <a class="brand-name" href="https://github.com/Hayston1001/FastLoginPlus" target="_blank" rel="noopener noreferrer">FastLoginPlus</a>
+            </div>
+            <button class="sidebar-close" id="sidebar-close" data-i18n-aria="aria.closeMenu">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                    <path d="M5 5l10 10M15 5l-10 10"/>
+                </svg>
+            </button>
+        </div>
+        <nav class="sidebar-tabs" role="tablist">
+            <button class="tab active" data-tab="online" role="tab" aria-selected="true" data-i18n="tab.online"></button>
+            <button class="tab" data-tab="players" role="tab" aria-selected="false" data-i18n="tab.players"></button>
+            <button class="tab" data-tab="antibot" role="tab" aria-selected="false" data-i18n="tab.antibot"></button>
+        </nav>
+    </aside>
+
+    <main>
+        <!-- Online Players Tab -->
+        <div id="tab-online" class="tab-content active" role="tabpanel">
+            <div class="page-heading"><h1 data-i18n="tab.online"></h1><p data-i18n="intro.online"></p></div>
+            <div class="toolbar">
+                <button id="refresh-online-btn" class="btn-secondary">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                        <path d="M1.5 8a6.5 6.5 0 0 1 11.1-4.6M14.5 8a6.5 6.5 0 0 1-11.1 4.6"/>
+                        <path d="M12.6 1v3.4h-3.4M3.4 15v-3.4h3.4"/>
+                    </svg>
+                    <span data-i18n="online.refresh"></span>
+                </button>
+                <span id="online-count" class="count-label"></span>
+            </div>
+            <div class="table-container">
+                <table id="online-table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="online.col.name"></th>
+                            <th data-i18n="online.col.uuid"></th>
+                            <th data-i18n="online.col.mode"></th>
+                            <th data-i18n="online.col.client"></th>
+                            <th data-i18n="online.col.ip"></th>
+                            <th data-i18n="online.col.actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="online-tbody">
+                    </tbody>
+                </table>
+                <div id="online-empty" class="empty-state">
+                    <div class="empty-icon">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+                            <circle cx="24" cy="20" r="8"/>
+                            <path d="M10 42c0-7.7 6.3-14 14-14s14 6.3 14 14"/>
+                        </svg>
+                    </div>
+                    <p data-i18n="online.empty"></p>
+                    <p class="empty-hint" data-i18n="online.emptyHint"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Player Database Tab -->
+        <div id="tab-players" class="tab-content" role="tabpanel">
+            <div class="page-heading"><h1 data-i18n="tab.players"></h1><p data-i18n="intro.players"></p></div>
+            <div class="toolbar">
+                <div class="search-bar">
+                    <input type="text" id="search-input" data-i18n-placeholder="players.search.placeholder" data-i18n-aria="aria.searchPlayers">
+                    <button id="search-btn" class="btn-primary" data-i18n="players.search.btn"></button>
+                    <button id="reset-search-btn" class="btn-ghost" data-i18n="players.search.reset"></button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table id="players-table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="players.col.name"></th>
+                            <th data-i18n="players.col.uuid"></th>
+                            <th data-i18n="players.col.mode"></th>
+                            <th data-i18n="players.col.floodgate"></th>
+                            <th data-i18n="players.col.ip"></th>
+                            <th data-i18n="players.col.lastLogin"></th>
+                            <th data-i18n="players.col.actions"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="players-tbody">
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <button id="prev-page-btn" disabled data-i18n="players.page.prev"></button>
+                <span id="page-info"></span>
+                <button id="next-page-btn" disabled data-i18n="players.page.next"></button>
+            </div>
+        </div>
+
+        <!-- Anti-bot Tab -->
+        <div id="tab-antibot" class="tab-content" role="tabpanel">
+            <div class="page-heading"><h1 data-i18n="tab.antibot"></h1><p data-i18n="intro.antibot"></p></div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label" data-i18n="antibot.stat.bans"></div>
+                    <div id="ban-count" class="stat-value">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label" data-i18n="antibot.stat.action"></div>
+                    <div id="limit-action" class="stat-value">-</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 data-i18n="antibot.ban.title"></h3>
+                </div>
+                <div class="ban-form">
+                    <input type="text" id="ban-ip-input" data-i18n-placeholder="antibot.ban.ipPlaceholder" data-i18n-aria="aria.ipAddress">
+                    <input type="number" id="ban-duration-input" data-i18n-placeholder="antibot.ban.durationPlaceholder" data-i18n-aria="aria.banDuration">
+                    <button id="ban-btn" class="btn-danger" data-i18n="antibot.ban.btn"></button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3 data-i18n="antibot.bans.title"></h3>
+                    <button id="refresh-bans-btn" class="btn-secondary btn-sm" data-i18n="antibot.bans.refresh"></button>
+                </div>
+                <div class="table-container">
+                    <table id="bans-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="antibot.bans.col.ip"></th>
+                                <th data-i18n="antibot.bans.col.remaining"></th>
+                                <th data-i18n="antibot.bans.col.actions"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="bans-tbody">
+                        </tbody>
+                    </table>
+                    <div id="bans-empty" class="empty-state">
+                        <p data-i18n="antibot.bans.empty"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-message">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <p id="confirm-message"></p>
+            <div class="modal-buttons">
+                <button id="confirm-no" class="btn-ghost" data-i18n="modal.cancel"></button>
+                <button id="confirm-yes" class="btn-danger" data-i18n="modal.confirm"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Server Disconnection Overlay -->
+    <div id="disconnect-overlay" class="disconnect-overlay" style="display: none;">
+        <div class="disconnect-content">
+            <div class="disconnect-icon">
+                <svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="32" cy="32" r="24" stroke-dasharray="8 4"/>
+                    <path d="M22 22l20 20M42 22l-20 20"/>
+                </svg>
+            </div>
+            <h2 data-i18n="disconnect.title"></h2>
+            <p data-i18n="disconnect.message"></p>
+            <button id="reconnect-btn" class="btn-primary" data-i18n="disconnect.reconnect"></button>
+        </div>
+    </div>
+
+    <script src="i18n.js?v=12"></script>
+    <script src="theme.js?v=11"></script>
+    <script src="dashboard.js?v=15"></script>
+</body>
+</html>

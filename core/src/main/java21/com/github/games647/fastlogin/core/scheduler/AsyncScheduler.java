@@ -41,53 +41,81 @@ import java.util.concurrent.Executors;
  */
 public class AsyncScheduler extends AbstractAsyncScheduler {
 
+    // 0.6.0/F065: keep a reference to the virtual-thread executor so
+    // shutdown() can close it instead of leaking the thread pool forever
+    private final java.util.concurrent.ExecutorService virtualThreads;
+
     public AsyncScheduler(Logger logger, Executor processingPool) {
         super(logger, Executors.newVirtualThreadPerTaskExecutor());
-
-        // this variant deliberately replaces the injected platform
-        // pool with virtual threads (green threads).  The platform executor is
-        // NOT used, so platform-side cancellation cannot reach these tasks —
-        // shutdown() is the only cancellation path (called on plugin disable).
+        // 0.6.0/F065: remember the internally created virtual-thread executor
+        // so shutdown() can close it (the injected platform pool stays
+        // deliberately unused - 0.5.0/F046)
+        this.virtualThreads = (java.util.concurrent.ExecutorService) this.processingPool;
         logger.info("Using optimized green threads with Java 21");
     }
 
     @Override
+    public void shutdown() {
+        try {
+            super.shutdown();
+        } finally {
+            // 0.6.0/F065: ExecutorService.close() blocks until the submitted
+            // tasks finished - shutdown()'s drain already ran in super
+            virtualThreads.close();
+        }
+    }
+
+    @Override
     public CompletableFuture<Void> runAsync(Runnable task) {
-        if (isShutdown()) {
+        // 0.6.0/F062: atomic accept (vs shutdown) + tracked completion
+        if (!tryAcceptTask()) {
             return CompletableFuture.completedFuture(null);
         }
-        return CompletableFuture
-                .runAsync(() -> process(task), processingPool)
-                .exceptionally(error -> {
-                    logger.warn("Error occurred on thread pool", error);
-                    return null;
-                });
+        try {
+            return CompletableFuture
+                    .runAsync(() -> process(task), processingPool)
+                    .whenComplete((unused, error) -> releaseTask())
+                    .exceptionally(error -> {
+                        logger.warn("Error occurred on thread pool", error);
+                        return null;
+                    });
+        } catch (RuntimeException rejectEx) {
+            releaseTask();
+            throw rejectEx;
+        }
     }
 
     @Override
     public CompletableFuture<Void> runAsyncDelayed(Runnable task, Duration delay) {
-        if (isShutdown()) {
+        // 0.6.0/F062: atomic accept (vs shutdown) + tracked completion
+        if (!tryAcceptTask()) {
             return CompletableFuture.completedFuture(null);
         }
-        return CompletableFuture.runAsync(() -> {
-            currentlyRunning.incrementAndGet();
-            try {
-                Thread.sleep(delay);
-                // the plugin may have disabled during the delay — platform
-                // schedulers cannot cancel this virtual thread, so check here
-                if (isShutdown()) {
-                    return;
+        try {
+            return CompletableFuture.runAsync(() -> {
+                currentlyRunning.incrementAndGet();
+                try {
+                    Thread.sleep(delay);
+                    // the plugin may have disabled during the delay — platform
+                    // schedulers cannot cancel this virtual thread, so check here
+                    if (isShutdown()) {
+                        return;
+                    }
+                    process(task);
+                } catch (InterruptedException interruptedException) {
+                    // restore interrupt flag
+                    Thread.currentThread().interrupt();
+                } finally {
+                    currentlyRunning.getAndDecrement();
                 }
-                process(task);
-            } catch (InterruptedException interruptedException) {
-                // restore interrupt flag
-                Thread.currentThread().interrupt();
-            } finally {
-                currentlyRunning.getAndDecrement();
-            }
-        }, processingPool).exceptionally(error -> {
-            logger.warn("Error occurred on thread pool", error);
-            return null;
-        });
+            }, processingPool).whenComplete((unused, error) -> releaseTask())
+              .exceptionally(error -> {
+                logger.warn("Error occurred on thread pool", error);
+                return null;
+            });
+        } catch (RuntimeException rejectEx) {
+            releaseTask();
+            throw rejectEx;
+        }
     }
 }

@@ -32,6 +32,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.time.Duration;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -154,4 +155,44 @@ class PerIpRateLimiterTest {
         assertFalse(limiter.tryAcquire(addr), "Conn limit hit");
     }
 
+
+    @Test
+    void perIpTableIsCapped() throws UnknownHostException {
+        FakeTicker ticker = new FakeTicker(0);
+        PerIpRateLimiter limiter = new PerIpRateLimiter(ticker, 5, 10_000, 20, 300_000);
+
+        // fill the table to capacity with distinct IPs
+        for (int i = 0; i < PerIpRateLimiter.MAX_TRACKED_IPS; i++) {
+            limiter.tryAcquire(InetAddress.getByName(
+                    "10." + ((i / 65536) % 256) + "." + ((i / 256) % 256) + "." + (i % 256)));
+        }
+
+        // a brand-new IP must be denied once the table is at capacity (F009)
+        assertFalse(limiter.tryAcquire(InetAddress.getByName("10.200.200.200")),
+                "new IP must be denied when the table is at capacity");
+        assertTrue(limiter.trackedIpCount() <= PerIpRateLimiter.MAX_TRACKED_IPS,
+                "the tracked table must never exceed its capacity");
+    }
+
+    @Test
+    void cleanupIsIncrementalButEventuallyComplete() throws UnknownHostException {
+        FakeTicker ticker = new FakeTicker(0);
+        PerIpRateLimiter limiter = new PerIpRateLimiter(ticker, 5, 10_000, 20, 300_000);
+
+        for (int i = 0; i < 3000; i++) {
+            limiter.tryAcquire(InetAddress.getByName(
+                    "10." + ((i / 65536) % 256) + "." + ((i / 256) % 256) + "." + (i % 256)));
+        }
+        assertEquals(3000, limiter.trackedIpCount());
+
+        // let every window expire and sweep repeatedly (each sweep visits at
+        // most CLEANUP_SCAN_BUDGET entries) - the table must drain fully
+        ticker.add(Duration.ofMinutes(6));
+        for (int sweep = 0; sweep < 5 && limiter.trackedIpCount() > 0; sweep++) {
+            limiter.cleanup(ticker.read() / 1_000_000);
+        }
+
+        assertEquals(0, limiter.trackedIpCount(),
+                "expired entries must be removable via incremental sweeps (F009)");
+    }
 }

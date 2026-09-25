@@ -105,14 +105,16 @@ graph TB
 | 模块      | Java floor | 说明                                                              |
 |-----------|--------------|-------------------------------------------------------------------|
 | `core`    | 8            | 共享库: 登录流程、存储、反机器人、消息、事件                        |
+| `web`     | 17           | 可选的内置面板(Javalin、Jetty、Jackson)                             |
 | `bukkit`  | 8            | Spigot/Paper 插件(ProtocolLib 数据包处理、登录插件钩子)             |
 | `folia`   | 21           | Folia 插件 —— **`bukkit` 的手工维护副本**, 适配区域化调度           |
 | `bungee`  | 17           | BungeeCord 代理插件                                                |
 | `velocity`| 17           | Velocity 代理插件                                                  |
 
 `Java floor` 这一列就是该模块 `build.gradle` 顶部的 `ext.javaFloor`. 而产物的**运行时 floor**
-—— 能*加载*它的最低 JRE —— 取"这个值"与"被 shade 进来的依赖中最高的字节码"两者中更高的那个,
-所以依赖升级可以在不动这一列的情况下抬高 floor. `META-INF/versions/N` 多版本分支是给更高 JRE 的
+通常取"这个值"与"被 shade 进来的依赖中最高的字节码"两者中更高的那个. Bukkit 是有意设置的例外:
+它把 Java 17 的 Web 依赖隔离打包, Java 8 入口在加载面板前检查运行环境; Java 8 上面板不会启动.
+Folia 不打包面板. `META-INF/versions/N` 多版本分支是给更高 JRE 的
 附加实现, 永远不计入 floor. floor 与下面的构建 JDK 无关: 构建跑在 JDK 21 上, 而
 `bungee`/`velocity` 的产物在 17 以下的 JRE 上根本加载不了.
 
@@ -122,10 +124,10 @@ graph TB
 以及该文件顶部的 `ext.javaFloor`. 缺少 floor 时构建会在配置阶段直接失败, 所以不会有“白送”的模块;
 而 floor 填得太低会由 `checkRuntimeBytecode` / `verifyPluginJar` 拦住, 不会发出去. 共享依赖版本放
 `gradle/libs.versions.toml`; 被 shade 进 JAR 的依赖或构建期依赖还要在 Dependabot 白名单
-(`.github/dependabot.yml`)里加一条. 需要镜像用户代理/服务器自带版本的钉住值则属于 `gradle/*.gradle`
-文件 —— Dependabot 不读这些文件, 改不了它们.
+(`.github/dependabot.yml`)里加一条.
 
-`web` 模块(Javalin + Jackson, floor 17)目前在独立分支上, 尚未纳入 Gradle 构建 —— 移植它就是上面这四步.
+`web` 模块已纳入 Gradle 构建. Bukkit 用独立的 `webRuntime` 配置隔离面板依赖;
+BungeeCord 与 Velocity 本来就以 Java 17 为运行下限.
 
 构建要求:
 
@@ -159,8 +161,7 @@ graph TB
 Windows 下把 `./gradlew` 换成 `gradlew.bat`. 可安装的插件 JAR 位于各平台模块的
 `build/libs/`, 命名形如 `FastLoginPlusBukkit-<version>-<commit>.jar`. 带 `-plain.jar`
 的文件未包含依赖; `stageRelease` 只将可安装的 JAR 收集到 `build/release/`.
-项目版本在 `build.gradle` 中, 依赖版本在 `gradle/libs.versions.toml` 中(有意钉住的那些例外
-在 `gradle/*.gradle` 里, 见下文).
+项目版本在 `build.gradle` 中, 依赖版本在 `gradle/libs.versions.toml` 中.
 
 ## 强制检查 —— 不满足则构建失败
 
@@ -176,7 +177,7 @@ Windows 下把 `./gradlew` 换成 `gradlew.bat`. 可安装的插件 JAR 位于�
    - `DesignForExtension`、`FinalClass`、`HideUtilityClassConstructor` —— 面向继承的设计规则; 工具类标记 `final` 并写私有构造器; 除非有意允许继承, 否则类要 `final`
    - Javadoc: 被文档化的方法必须有 `@param`/`@return`/`@throws`; 包级 javadoc(`JavadocPackage`)也会检查
 3. **换行符与文件末尾换行** —— `.gitattributes` 把所有文本文件规范为 LF, 且每个文件必须以换行结尾(`NewlineAtEndOfFile`). 在 Windows 上交给 git 转换; 不要提交 CRLF.
-4. **每模块的运行时字节码地板**(`checkRuntimeBytecode` 与 `verifyPluginJar`, 由 `check` 执行) —— 任何被 shade 进某模块的依赖, 其编译目标都不得高于该模块自身的 `ext.javaFloor`(core/bukkit 8, bungee/velocity 17, folia 21). 没有它, 一次依赖升级就可能在毫无构建期信号的情况下抬高模块的运行时要求. 抬高地板是**有意决策**: 改该模块 `build.gradle` 里的 `ext.javaFloor`, 并同步更新本节与两个 readme. 测试依赖与 `compileOnly` 被排除 —— 测试 JAR 不发布, 由服务器或代理提供的 API 也不打包.
+4. **每模块的运行时字节码地板**(`checkRuntimeBytecode` 与 `verifyPluginJar`, 由 `check` 执行) —— 普通运行依赖不得超过模块的 `ext.javaFloor`(core/bukkit 8, web/bungee/velocity 17, folia 21). Bukkit 的面板类在成品 JAR 中按 Java 17 校验, 其他类与普通运行依赖仍按 Java 8 校验. 没有它, 一次依赖升级就可能在毫无构建期信号的情况下抬高模块的运行时要求. 抬高地板是**有意决策**: 改该模块 `build.gradle` 里的 `ext.javaFloor`, 并同步更新本节与两个 readme. 测试依赖与 `compileOnly` 被排除 —— 测试 JAR 不发布, 由服务器或代理提供的 API 也不打包.
 5. **SQLite 驱动下限**(`:core:sqliteFloorTest`) —— 用用户服务器上可能自带的最老驱动重跑存储测试, 这是该承诺唯一的守卫(bukkit/folia 加载的就是服务器自带的那份驱动). 这个下限故意存在两处: `gradle/sqlite-floor.gradle` 决定这次跑用哪个 jar, 测试里的 `PROMISED_FLOOR` 决定我们承诺的是什么 —— 两者不一致则测试失败, 所以抬高下限必须同时改两处(若影响到用户能跑什么, 还要更新面向用户的文档). 版本写在 `gradle/*.gradle` 而不是版本目录里, 因为目录正是 Dependabot 会改写的地方.
 
 ## 测试
@@ -196,7 +197,7 @@ Windows 下把 `./gradlew` 换成 `gradlew.bat`. 可安装的插件 JAR 位于�
   (BungeeCord/Velocity, 裁掉了后端专属键)两者并存是有意为之.
   新增配置项时, 先决定它属于哪个(哪些)模板, 再按需更新这两个文件. 展示给用户的默认值来自这些模板, 而不是代码.
 - **被 shade 的依赖** —— HikariCP、SLF4J、SnakeYAML、Gson、Guava、PaperLib 以及 BungeeCord 的 config shim 都会被 relocate 进最终 JAR, 但每个模块的集合不同(见 Shadow 配置): `bukkit` 全部 relocate, `folia` = `bukkit` 减去 PaperLib, `bungee` 只 relocate HikariCP + SLF4J, `velocity` relocate HikariCP + config shim + SnakeYAML + 内置的 MariaDB 驱动. 两种代理都使用自身提供的 Gson; BungeeCord 还提供 SnakeYAML. `sqlite-jdbc`/`mariadb` 在 `core`/`bukkit` 里是 `compileOnly`(服务器自带), 在 `bungee`/`velocity` 里则被内置. 加依赖时请记住这些 —— 现代服务器已经提供的东西优先用 `compileOnly`.
-- **依赖更新** —— 依赖版本集中在 `gradle/libs.versions.toml`; `.github/dependabot.yml` 是**白名单**: 只有里面列出的依赖会被自动跟进(被 shade 的库、构建工具、测试依赖). 平台 API(`paper-api`、`folia-api`、`velocity-api`、`bungeecord-*`)、其他插件的 hook API(ProtocolLib、AuthMe、SkinsRestorer、PlaceholderAPI、Geyser/Floodgate 等)、`*/lib` 里检入的 JAR、以及共享的 Netty 版本都是有意钉住的 —— 运行期真正生效的是用户的服务器/插件版本, 不是我们的. 因此新增会被 shade 进 JAR 的库或构建插件时, 请同时把条目加进该文件的 `allow`, 否则它会永远不被更新. 白名单按整个 artifact 匹配, 表达不了“升级被 shade 的那份、别动镜像用户代理的那份”: `guava`/`gson`/`slf4j-api` 和 `sqlite-jdbc` 被钉住的那个值放在 `gradle/proxy-baseline.gradle` 与 `gradle/sqlite-floor.gradle`. 把这类版本挪回目录或模块 `build.gradle`, Dependabot 就会重新提 PR 想抬高它; 旁边的测试无论哪种情况都会在版本不一致时报错.
+- **依赖更新** —— 依赖版本集中在 `gradle/libs.versions.toml`; `.github/dependabot.yml` 是**白名单**: 只有里面列出的依赖会被自动跟进(被 shade 的库、构建工具、测试依赖). 平台 API(`paper-api`、`folia-api`、`velocity-api`、`bungeecord-*`)、其他插件的 hook API(ProtocolLib、AuthMe、SkinsRestorer、PlaceholderAPI、Geyser/Floodgate 等)、`*/lib` 里检入的 JAR、以及共享的 Netty 版本都是有意钉住的 —— 运行期真正生效的是用户的服务器/插件版本, 不是我们的. 因此新增会被 shade 进 JAR 的库或构建插件时, 请同时把条目加进该文件的 `allow`, 否则它会永远不被更新.
 
 ## 提交信息
 

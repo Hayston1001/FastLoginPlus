@@ -128,4 +128,17 @@ class IpBanManagerTest {
         ticker.add(Duration.ofSeconds(31));
         assertFalse(manager.isBanned(ip), "Should be unbanned after extended duration");
     }
+
+    @Test
+    void banTableIsCapped() throws UnknownHostException {
+        FakeTicker ticker = new FakeTicker(0);
+        IpBanManager manager = new IpBanManager(ticker);
+
+        for (int i = 0; i <= IpBanManager.MAX_BANS + 10; i++) {
+            manager.ban(InetAddress.getByName("10." + (i / 256) + "." + (i % 256) + ".1"), 60_000);
+        }
+
+        assertTrue(manager.banCount() <= IpBanManager.MAX_BANS,
+                "the ban table must not grow beyond its capacity (F009)");
+    }
 }

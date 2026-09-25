@@ -115,6 +115,49 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         this.plugin = plugin;
     }
 
+    /**
+     * Auto-generate the web panel token when the panel is enabled but the
+     * token is still empty.
+     *
+     * @param config the configuration to inspect and update
+     * @return the generated token, or {@code null} when no token was generated
+     */
+    private String maybeGenerateWebToken(Configuration config) {
+        if (!config.getBoolean("web.enabled")) {
+            return null;
+        }
+
+        String token = config.getString("web.token");
+        if (token != null && !token.isEmpty()) {
+            return null;
+        }
+
+        token = generateRandomToken();
+        config.set("web.token", token);
+        // 0.6.0/F022: the token is deliberately not logged at INFO;
+        // admins read it from config.yml
+        plugin.getLog().debug("Web panel token auto-generated");
+        return token;
+    }
+
+    /**
+     * Report whether the generated token survived the configuration refresh.
+     *
+     * @param generatedWebToken the generated token, or null if none was generated
+     */
+    private void checkGeneratedWebToken(String generatedWebToken) {
+        // 0.6.0/F005: only claim the token was saved when it actually survived
+        // the template refresh (a proxy template without a web section used to
+        // drop it silently)
+        if (generatedWebToken != null) {
+            if (generatedWebToken.equals(config.getString("web.token"))) {
+                plugin.getLog().info("Token has been saved to config.yml");
+            } else {
+                plugin.getLog().warn("Generated web panel token could not be written to config.yml");
+            }
+        }
+    }
+
     public void load() {
         // 1. Load config first to determine language setting
         saveDefaultFile("config.yml", configTemplate);
@@ -125,6 +168,9 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             plugin.getLog().error("Failed to load config.yml", ioEx);
             return;
         }
+
+        // Auto-generate web panel token if empty (before ConfigRefresher so it gets persisted)
+        String generatedWebToken = maybeGenerateWebToken(config);
 
         // Restore canonical comments and key order from the bundled template,
         // while preserving all user-modified values.
@@ -148,6 +194,8 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             return;
         }
 
+        checkGeneratedWebToken(generatedWebToken);
+
         // 2. Determine language file based on config
         String language = config.getString("language");
         // the value is concatenated into a file path — reject
@@ -165,6 +213,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
         // Save all built-in language files so users can see what's available
         saveDefaultFile("messages_zh.yml");
+
+        // Save built-in webui language files
+        saveDefaultFile("webui_en.json");
+        saveDefaultFile("webui_zh.json");
 
         // Save the selected language file (falls back to English if not bundled)
         if (!language.equals("en") && !language.equals("zh")) {
@@ -679,6 +731,17 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         }
 
         return config;
+    }
+
+    private static String generateRandomToken() {
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        byte[] bytes = new byte[16];
+        random.nextBytes(bytes);
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
     public void close() {

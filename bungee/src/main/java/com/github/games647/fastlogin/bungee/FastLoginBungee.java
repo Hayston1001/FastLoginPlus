@@ -40,6 +40,7 @@ import org.slf4j.Logger;
 import com.github.games647.fastlogin.bungee.hook.BungeeAuthHook;
 import com.github.games647.fastlogin.bungee.listener.ConnectListener;
 import com.github.games647.fastlogin.bungee.listener.PluginMessageListener;
+import com.github.games647.fastlogin.bungee.task.AsyncToggleMessage;
 import com.github.games647.fastlogin.core.CommonUtil;
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
 import com.github.games647.fastlogin.core.hooks.bedrock.BedrockService;
@@ -55,7 +56,9 @@ import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
 import com.github.games647.fastlogin.core.shared.AuthMeProxyConfig;
 import com.github.games647.fastlogin.core.shared.AuthMeProxyPin;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
+import com.github.games647.fastlogin.core.shared.JavaVersions;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
+import com.github.hayston1001.fastlogin.web.WebServer;
 import com.google.common.collect.MapMaker;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
@@ -90,6 +93,12 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
 
     private FastLoginCore<ProxiedPlayer, CommandSender, FastLoginBungee> core;
     private AsyncScheduler scheduler;
+
+    // 0.6.0/F003: kept as an instance field so onDisable() can stop the web
+    // panel (releasing the port and threads). Declared without an initializer
+    // on purpose — the WebServer class must only load behind the Java 17+
+    // version gate inside startWebPanel() (0.6.0/F057).
+    private WebServer webServer;
     private FloodgateService floodgateService;
     private GeyserService geyserService;
     private Logger logger;
@@ -131,11 +140,119 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
 
         registerHook();
         scheduleUpdateCheck();
+
+        // Start web management panel if enabled
+        startWebPanel();
+    }
+
+    private void startWebPanel() {
+        // 0.6.0/F003: guard against a double enable — restart the panel
+        // instead of leaking the previous instance
+        if (webServer != null) {
+            stopWebPanel();
+        }
+
+        try {
+            // Read web config from core config
+            net.md_5.bungee.config.Configuration config = core.getConfig();
+            if (config == null) {
+                return;
+            }
+
+            boolean enabled = config.get("web.enabled", false);
+            if (!enabled) {
+                return;
+            }
+
+            // 0.6.0/F057: the web stack (Javalin 7 / Jetty 12) is Java 17
+            // bytecode. On an older JVM loading it would throw
+            // UnsupportedClassVersionError (an Error the catch below cannot
+            // cover) and disable the whole plugin - skip the panel instead.
+            if (!JavaVersions.isAtLeast(JavaVersions.MINIMUM_WEB_JAVA)) {
+                logger.warn("Web management panel requires Java {}+ (found {}). "
+                        + "Panel skipped; other features unaffected.",
+                        JavaVersions.MINIMUM_WEB_JAVA, System.getProperty("java.version"));
+                return;
+            }
+
+            String host = config.get("web.host", "127.0.0.1");
+            int port = config.get("web.port", 8080);
+            String token = config.get("web.token", "");
+
+            if (token.length() < 16) {
+                logger.warn("Web panel token is too short (minimum 16 characters). Disabling web panel.");
+                return;
+            }
+
+            String version = getClass().getPackage().getImplementationVersion();
+            if (version == null) {
+                version = "unknown";
+            }
+
+            webServer = new WebServer(logger,
+                    core.getStorage(), core.getAntiBotService(),
+                    version, getPluginFolder());
+            // `web.lang` is the panel's default language (browser choice still wins)
+            webServer.setPanelLang(config.get("web.lang", "en"));
+            webServer.setOnlinePlayersSupplier(() ->
+                getProxy().getPlayers().stream()
+                    .map(ProxiedPlayer::getName)
+                    .collect(java.util.stream.Collectors.toList()));
+
+            // Premium toggle listener: perform the full toggle exactly like
+            // the /premium and /cracked command flow — database update,
+            // Mojang UUID resolution, toggle event and kick. Feedback goes
+            // to the proxy console.
+            webServer.setPremiumToggleListener((playerName, premium) -> {
+                Runnable task = new AsyncToggleMessage(core, "console", playerName, premium, false);
+                getScheduler().runAsync(task);
+            });
+
+            // 0.6.0/F020: set the TCCL to the plugin classloader so
+            // Javalin's ServiceLoader can discover SLF4J's SPI provider
+            // inside the shaded JAR (same as the bukkit platform)
+            ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(getClass().getClassLoader());
+            try {
+                webServer.start(host, port, token,
+                        config.getStringList("web.corsAllowedOrigins"));
+            } finally {
+                Thread.currentThread().setContextClassLoader(originalTccl);
+            }
+        } catch (LinkageError | Exception e) {
+            // 0.6.0/F057: LinkageError covers UnsupportedClassVersionError and
+            // NoClassDefFoundError so a broken web stack cannot disable the
+            // whole plugin
+            logger.error("Failed to start web management panel", e);
+            webServer = null;
+        }
+    }
+
+    /**
+     * Stop the web management panel, if one is running (0.6.0/F003).
+     *
+     * <p>Releases the HTTP port and the Jetty threads so a following
+     * re-enable (e.g. after /reload) can bind the same port again.</p>
+     */
+    private void stopWebPanel() {
+        if (webServer != null) {
+            try {
+                webServer.stop();
+            } catch (Exception e) {
+                logger.error("Failed to stop web management panel", e);
+            } finally {
+                webServer = null;
+            }
+        }
     }
 
     @Override
     public void onDisable() {
-        // stop scheduling before closing shared resources
+        // 0.6.0/F003: stop the web panel first so it cannot serve requests
+        // against the closing storage/scheduler and releases its port before
+        // a potential re-enable
+        stopWebPanel();
+        // 0.5.0/F046: stop scheduling before closing shared resources
         scheduler.shutdown();
         // release the global channel registrations so a reload
         // does not leak them

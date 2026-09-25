@@ -28,6 +28,20 @@ package com.github.games647.fastlogin.core.storage;
 import java.util.UUID;
 
 public interface AuthStorage {
+
+    /**
+     * Loads a profile with strict "not found" semantics (0.6.0/F046).
+     *
+     * <p>Unlike {@link #loadProfile(String)}, which keeps returning a
+     * placeholder profile for unknown names (a legacy login-flow contract),
+     * this method returns {@code null} for unknown names — WebUI 404
+     * branches must never be fed a fake profile.</p>
+     *
+     * @param name the player name to look up
+     * @return the stored profile, or {@code null} when unknown or on a SQL error
+     */
+    StoredProfile findProfileByName(String name);
+
     StoredProfile loadProfile(String name);
 
     StoredProfile loadProfile(UUID uuid);

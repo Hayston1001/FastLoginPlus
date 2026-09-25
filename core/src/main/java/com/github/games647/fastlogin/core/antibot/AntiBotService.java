@@ -166,4 +166,56 @@ public class AntiBotService {
 
         Continue
     }
+
+    /**
+     * Whether the anti-bot protection is enabled by configuration (0.6.0/F024).
+     *
+     * <p>Previously only {@code enabled=true} was reported (hardcoded),
+     * desynchronizing the WebUI from the actual protection state.</p>
+     *
+     * @return true when the anti-bot layers are active
+     */
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public IpBanManager getIpBanManager() {
+        return ipBanManager;
+    }
+
+    /**
+     * Get the per-IP rate limiter.
+     *
+     * @return the per-IP rate limiter
+     */
+    public PerIpRateLimiter getPerIpLimiter() {
+        return perIpLimiter;
+    }
+
+    /**
+     * Get the global rate limiter.
+     *
+     * @return the global rate limiter
+     */
+    public RateLimiter getGlobalLimiter() {
+        return globalLimiter;
+    }
+
+    /**
+     * Get the action to take when rate limits are exceeded.
+     *
+     * @return the limit reached action
+     */
+    public Action getLimitReachedAction() {
+        return limitReachedAction;
+    }
+
+    /**
+     * Get the ban duration in milliseconds.
+     *
+     * @return the ban duration
+     */
+    public long getBanDurationMs() {
+        return banDurationMs;
+    }
 }

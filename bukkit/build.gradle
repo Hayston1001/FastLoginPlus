@@ -28,9 +28,19 @@ plugins { id 'com.gradleup.shadow' }
 // Lowest JRE that can load this artifact - keep in sync with the module table in CONTRIBUTING.md.
 ext.javaFloor = 8
 apply from: rootProject.file('gradle/platform-common.gradle')
+apply from: rootProject.file('gradle/web-shadow.gradle')
+
+// The panel is loaded only after the Java 17 gate in FastLoginBukkit. Keep its
+// dependencies separate from Bukkit's Java 8 runtime classpath and floor check.
+configurations { webRuntime }
 
 dependencies {
     implementation project(':core')
+    compileOnly project(':web')
+    webRuntime(project(':web')) {
+        // core is already present on runtimeClasspath at the versions pinned above.
+        exclude group: 'com.github.games647', module: 'core'
+    }
     compileOnly(libs.paper.api) {
         exclude group: 'org.slf4j', module: 'slf4j-api'
         exclude group: 'com.google.guava'
@@ -40,5 +50,6 @@ dependencies {
 }
 
 tasks.named('shadowJar') {
+    configurations = [project.configurations.runtimeClasspath, project.configurations.webRuntime]
     relocate 'io.papermc.lib', 'fastlogin.paperlib'
 }
