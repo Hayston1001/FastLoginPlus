@@ -1,0 +1,85 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2015-2026 games647, Hayston and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+plugins { id 'com.gradleup.shadow' }
+// Lowest JRE that can load this artifact - keep in sync with the module table in CONTRIBUTING.md.
+ext.javaFloor = 17
+apply from: rootProject.file('gradle/bedrock.gradle')
+
+dependencies {
+    implementation(project(':core')) {
+        exclude group: 'com.google.guava', module: 'guava'
+        exclude group: 'org.slf4j'
+        exclude group: 'com.google.code.gson', module: 'gson'
+    }
+    compileOnly(libs.velocity.api) {
+        exclude group: 'com.moandjiezana.toml'
+        exclude group: 'org.spongepowered'
+    }
+    implementation(libs.mariadb) {
+        exclude group: 'com.github.waffle', module: 'waffle-jna'
+    }
+    implementation libs.sqlite.driver
+}
+configurations.testImplementation.extendsFrom(configurations.compileOnly)
+configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
+    resolutionStrategy.force 'com.google.guava:guava:25.1-jre', 'com.google.code.gson:gson:2.10.1',
+        'org.slf4j:slf4j-api:2.0.12'
+}
+
+def generateBuildInfo = tasks.register('generateBuildInfo', Copy) {
+    from 'src/main/java-templates'
+    into layout.buildDirectory.dir('generated/sources/buildInfo/java')
+    def values = [
+        displayName: 'FastLoginPlusVelocity',
+        pluginId: 'fastloginplus',
+        projectVersion: project.version.toString(),
+        description: 'Actively maintained fork of FastLogin with updates and feature enhancements',
+        projectUrl: 'https://github.com/Hayston1001/FastLoginPlus'
+    ]
+    inputs.properties(values)
+    filesMatching('**/BuildInfo.java') {
+        expand(values)
+    }
+}
+sourceSets.main.java.srcDir(layout.buildDirectory.dir('generated/sources/buildInfo/java'))
+tasks.named('compileJava') { dependsOn generateBuildInfo }
+
+tasks.named('shadowJar') {
+    filesMatching('META-INF/services/**') { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
+    relocate 'com.zaxxer.hikari', 'fastlogin.hikari'
+    relocate 'net.md_5.bungee.config', 'fastlogin.config'
+    relocate 'org.mariadb', 'fastlogin.mariadb'
+    relocate 'org.yaml.snakeyaml', 'fastlogin.yaml'
+    mergeServiceFiles()
+    minimize {
+        // Both JDBC drivers are bundled as-is, like the Maven build did: it exempted them
+        // from minimization with <includes>**</includes> filters. Everything else (HikariCP,
+        // SnakeYAML, our own classes) is minimized as before.
+        exclude(dependency('org.xerial:sqlite-jdbc:.*'))
+        exclude(dependency('org.mariadb.jdbc:mariadb-java-client:.*'))
+    }
+}

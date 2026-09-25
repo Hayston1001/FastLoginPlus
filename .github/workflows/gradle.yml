@@ -1,6 +1,9 @@
-name: Build
+name: Gradle Build
 
 on:
+  # Dependabot branches are already covered by the pull_request event below; skipping
+  # the push run keeps a dependency bump from being built twice (same as the Maven
+  # workflow did).
   push:
     branches-ignore:
       - 'dependabot/**'
@@ -21,10 +24,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version-file: '.java-version'
-          cache: 'maven'
+          cache: 'gradle'
 
       - name: Build and test
-        # Geyser and Floodgate publish SNAPSHOT coordinates only, so no --no-snapshot-updates: the
-        # default daily snapshot policy keeps a cached runner at most a day behind, instead of
-        # serving whatever stale build happened to be in the cache.
-        run: mvn package --batch-mode --threads 2.0C --strict-checksums
+        run: bash ./gradlew build --parallel --no-daemon --console=plain

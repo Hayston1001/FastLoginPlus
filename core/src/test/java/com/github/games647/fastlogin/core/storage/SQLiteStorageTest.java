@@ -53,6 +53,14 @@ import static org.mockito.Mockito.when;
 
 class SQLiteStorageTest {
 
+    /**
+     * The oldest server-provided SQLite driver this plugin promises to work with. It is asserted
+     * against the catalog value that {@code sqliteFloorTest} swaps in, so the two have to be
+     * changed together: raising the floor is a deliberate decision, and anything that raises it
+     * (a dependency bot included) fails the build instead of silently dropping the promise.
+     */
+    private static final String PROMISED_FLOOR = "3.36.0";
+
     @TempDir
     Path tempDir;
 
@@ -80,12 +88,13 @@ class SQLiteStorageTest {
     }
 
     /**
-     * Guards the classpath swap of the {@code sqlite-floor-test} execution (see core/pom.xml):
-     * that execution re-runs the storage tests against {@code sqlite.floor.version}, the oldest
-     * server-provided driver we promise to support. If the exclusion of the newest driver ever
-     * silently matched nothing, the floor run would just re-test the newest driver and prove
-     * nothing - so whenever the expectation is passed in as a system property, verify which jar
-     * the driver classes actually came from.
+     * Guards the classpath swap of the Gradle {@code sqliteFloorTest} task (see core/build.gradle):
+     * that task re-runs the storage tests against {@code sqliteFloor}, the oldest
+     * server-provided driver we promise to support. Two things can go wrong silently otherwise:
+     * the exclusion of the newest driver could match nothing (the floor run would then re-test the
+     * newest driver and prove nothing), and the catalog value could be raised - by a dependency bot
+     * or by accident - to something that is not the promised floor at all. Both are checked here,
+     * and the second one against a constant of its own so it cannot agree with itself.
      *
      * @throws Exception if the SQLite driver is not on the test classpath
      */
@@ -95,6 +104,8 @@ class SQLiteStorageTest {
 
         String expected = System.getProperty("expected.sqlite.driver.version");
         if (expected != null) {
+            assertEquals(PROMISED_FLOOR, expected, () -> "The SQLite floor moved: the test classpath was swapped to "
+                    + expected + ", but the floor we promise to support is " + PROMISED_FLOOR);
             assertTrue(location.toString().contains(expected),
                     "Expected sqlite-jdbc " + expected + " on the test classpath, but the driver was loaded from "
                             + location);

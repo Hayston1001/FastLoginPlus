@@ -120,7 +120,8 @@ listeners, or the proxy relay path.
 | `bungee`  | 17           | BungeeCord proxy plugin                                            |
 | `velocity`| 17           | Velocity proxy plugin                                              |
 
-The `Java floor` column is the module's `maven.compiler.release`. An artifact's
+The `Java floor` column is `ext.javaFloor` at the top of that module's `build.gradle`.
+An artifact's
 **runtime floor** — the lowest JRE that can *load* it — is the higher of that value
 and the highest bytecode among the dependencies that get shaded into it, so a
 dependency bump can raise a floor without touching this column. `META-INF/versions/N`
@@ -128,62 +129,87 @@ multi-release branches are add-ons for newer JREs and never count towards the fl
 Floors are unrelated to the build JDK below: the build runs on JDK 21 even though
 `bungee`/`velocity` refuse to load on anything below 17.
 
+### Adding a module
+
+A module is three declarations: `include '<name>'` in `settings.gradle`, a
+`build.gradle` in the new directory, and `ext.javaFloor` at the top of that file.
+The build fails at configuration time when the floor is missing, so nothing is added
+"for free" — and a floor that is too low fails `checkRuntimeBytecode` /
+`verifyPluginJar` instead of shipping. Shared dependency versions belong in
+`gradle/libs.versions.toml`, and a shaded or build-time dependency also needs an
+entry in the Dependabot allow list (`.github/dependabot.yml`).
+
+The `web` module (Javalin + Jackson, floor 17) is carried on its own branch and is not
+part of the Gradle build yet — porting it means exactly those four steps.
+
 Build requirements:
 
-- **JDK 21** (the version pinned in `.java-version` and used by CI) — this is a *build*
+- **JDK 21** (the version pinned in `.java-version`, used by CI, and pinned as the Gradle
+  toolchain) — this is a *build*
   requirement and says nothing about what the built artifacts need at runtime (see the
   `Java floor` column). The
-  per-module `maven.compiler.release` settings above make javac reject APIs
+  per-module `ext.javaFloor` values above are handed to javac as `--release`, which
+  rejects APIs
   newer than each module's target, so a single modern JDK is all you need —
   but do not use Java-9+ APIs in `core`/`bukkit` or Java-18+ APIs in
   `bungee`/`velocity`. Note that `--release` only guards the APIs *you* compile
   against: it does not stop a newer dependency from silently raising the
   module's *runtime* requirement, which is what the bytecode-floor check below
-  is for. That check is not enough on its own — `enforceBytecodeVersion` exempts
+  is for. That check exempts
   `module-info.class` (Guava 33+ ships exactly that at class-file 53 while every
   real class in it is still Java 8) — so a floor claim is verified by reading the
   bytecode: the highest class-file major version outside `META-INF/versions/`
   (52 = Java 8, 55 = 11, 61 = 17, 65 = 21), for the dependency JAR and for the
   built artifact.
-- **Maven 3.9.0+** (required since `git-commit-id-maven-plugin` 10 dropped Maven
-  3.6.3 when it went EOL; 3.9.x is used for
-  development). A git clone is expected — the build embeds the commit hash
-  into the final JAR name and manifest.
+- **Gradle 9.6.1** is supplied by the wrapper; no separate Gradle installation is
+  needed. The build's toolchain needs a JDK 21: one that is installed is used
+  automatically, and otherwise Gradle downloads one (the Foojay resolver declared in
+  `settings.gradle`), so a bare clone builds without installing anything by hand. CI
+  provides the JDK itself. A git clone is expected: the build embeds the commit hash in the final
+  JAR name and manifest.
 
 Some auth-plugin APIs (CrazyLogin, UltraAuth, BungeeAuth) are provided as
-system-scoped JARs in the `lib/` directory of each module — no manual
+local JARs in the `lib/` directory of each module — no manual
 installation is required.
 
 ## Building
 
 ```bash
-# Build all modules, skipping tests
-mvn package --batch-mode -DskipTests
+# Build all modules, run tests and checks
+./gradlew build
 
-# Build and run the test suite (what CI does)
-mvn package --batch-mode
+# Build all plugin JARs without tests
+./gradlew assemble
 
 # Run tests only
-mvn test --batch-mode
+./gradlew test
 
-# Build a single module (with its dependencies, here: core)
-mvn package -pl bukkit -am --batch-mode -DskipTests
-mvn package -pl folia -am --batch-mode -DskipTests
+# Build selected modules and their dependencies
+./gradlew :bukkit:build :folia:build
+
+# Collect four installable plugin JARs for release
+./gradlew stageRelease
+
+# Re-test against the oldest supported server SQLite driver
+./gradlew :core:sqliteFloorTest
 ```
 
-Finished JARs land in each module's `target/` directory, named like
-`FastLoginPlusBukkit-<version>-<commit>` (module name + revision + commit hash).
+On Windows use `gradlew.bat` in place of `./gradlew`. Installable plugin JARs
+land in each platform module's `build/libs/`, named like
+`FastLoginPlusBukkit-<version>-<commit>.jar`. Files ending in `-plain.jar` are
+unshaded intermediates; `stageRelease` collects only installable JARs in
+`build/release/`. The project version lives in `build.gradle`; dependency versions
+live in `gradle/libs.versions.toml`.
 
 ## Enforced checks — the build fails without these
 
-These run on **every** build (locally and in CI). Save yourself a round-trip
+These run with **`./gradlew build`** (locally and in CI). Save yourself a round-trip
 and verify before pushing:
 
-1. **MIT license header** — every Java and XML file must carry the project
-   license header (`license-maven-plugin`, checked against the root `LICENSE`
-   file; resources and `.java-version` are excluded). When creating a new
-   file, copy the header from an existing one.
-2. **Checkstyle** (`checkstyle.xml`, severity `error`, `failsOnError`).
+1. **MIT license header** — Java, XML and Gradle build files must carry the project
+   license header (`checkLicenseHeaders`; resources are excluded).
+   When creating a new file, copy the header from an existing one.
+2. **Checkstyle** (`checkstyle.xml`, severity `error`; checks main Java sources).
    Highlights beyond the usual naming/whitespace rules:
    - Line length ≤ **120** characters (Java files)
    - Methods ≤ **160** lines; `final` parameters; no star imports; no unused
@@ -198,23 +224,30 @@ and verify before pushing:
 3. **Line endings and final newline** — `.gitattributes` normalizes all text
    files to LF and every file must end with a newline (`NewlineAtEndOfFile`).
    On Windows, let git handle conversion; do not commit CRLF.
-4. **Per-module runtime bytecode floor** (`enforceBytecodeVersion`, root
-   `pom.xml`, runs at `validate`) — every dependency shaded into a module must
+4. **Per-module runtime bytecode floor** (`checkRuntimeBytecode` and
+   `verifyPluginJar`, run by `check`) — every dependency shaded into a module must
    not be compiled for a newer Java version than that module's own
-   `maven.compiler.release` (core/bukkit 8, bungee/velocity 17, folia 21).
+   `ext.javaFloor` (core/bukkit 8, bungee/velocity 17, folia 21).
    Without it a dependency bump can raise the module's runtime requirement with
    no build-time signal at all. Raising a floor is a deliberate decision:
-   change that module's `maven.compiler.release`, and update this section and
-   both readmes together. `test` and `provided` scopes are excluded — test jars
-   never reach a user, and provided ones belong to the server or proxy.
+   change `ext.javaFloor` in that module's `build.gradle`, and update this section and
+   both readmes together. Test and `compileOnly` dependencies are excluded — test
+   jars never reach a user, and provided APIs belong to the server or proxy.
+5. **SQLite driver floor** (`:core:sqliteFloorTest`) — the storage tests are re-run against
+   the oldest driver a user's server may ship, which is the only guard on that promise
+   (bukkit/folia load the server's own driver). The floor exists twice on purpose:
+   `sqliteFloor` in the version catalog says which jar the run swaps in, `PROMISED_FLOOR` in
+   `SQLiteStorageTest` says what we promise — the test fails when they disagree, so raising
+   the floor takes both edits (plus a note in the user-facing docs when it changes what users
+   may run).
 
 ## Testing
 
 - Tests use **JUnit 6** and **Mockito (inline mock maker — required for static
-  mocks)**; both are declared in the root POM. JUnit 6 raises the floor for
+  mocks)**; both are declared in the root Gradle build. JUnit 6 raises the floor for
   *running* tests to **JDK 17+** — the pinned build JDK 21 already satisfies
-  this, but `mvn test` will not start on anything older. Tests are `test`
-  scope and never ship, so no module's runtime floor changes with it.
+  this, but `./gradlew test` will not start on anything older. Tests never ship,
+  so no module's runtime floor changes with it.
 - Unit tests live in each module's `src/test/java`; `bukkit` additionally has
   an `integration` test package.
 - Add tests for bug fixes (a failing-test-first commit for non-trivial bugs is
@@ -234,7 +267,7 @@ and verify before pushing:
   two schedulers' different APIs.
 - **Permissions** follow `fastloginplus.bukkit.command.*` (bukkit) and
   `fastloginplus.folia.command.*` (folia); they are resolved at build time
-  from `${project.artifactId}` in `plugin.yml`.
+  from `${permissionPrefix}` in `plugin.yml`.
 - **Language files** — user-facing messages live in
   `core/src/main/resources/messages_en.yml` and `messages_zh.yml`. New keys
   must be added to both; English is the fallback that auto-fills missing keys.
@@ -246,21 +279,22 @@ and verify before pushing:
   templates, not from code.
 - **Shaded dependencies** — HikariCP, SLF4J, SnakeYAML, Gson, Guava, PaperLib
   and the BungeeCord config shim are relocated into the final JARs, but the set
-  differs per module (see the shade-plugin configs): `bukkit` relocates all of
+  differs per module (see the Shadow configuration): `bukkit` relocates all of
   them, `folia` is `bukkit` minus PaperLib, `bungee` relocates only HikariCP +
   SLF4J, and `velocity` relocates HikariCP + the config shim + SnakeYAML +
   the bundled MariaDB driver. Both proxies use their own Gson; BungeeCord
   also provides SnakeYAML. `sqlite-jdbc`/`mariadb` are
-  `provided` in `core`/`bukkit` (the server ships them) but bundled in
+  `compileOnly` in `core`/`bukkit` (the server ships them) but bundled in
   `bungee`/`velocity`. Keep this in mind
-  when adding dependencies — prefer `provided` scope for anything a modern
+  when adding dependencies — prefer a `compileOnly` dependency for anything a modern
   server already provides.
-- **Dependency updates** — `.github/dependabot.yml` is an *allow* list: only the
+- **Dependency updates** — versions live in `gradle/libs.versions.toml` and
+  `.github/dependabot.yml` is an *allow* list: only the
   dependencies named there are followed automatically (the shaded libraries, the
   build tooling and the test dependencies). Platform APIs (`paper-api`,
   `folia-api`, `velocity-api`, `bungeecord-*`), other plugins' hook APIs
   (ProtocolLib, AuthMe, SkinsRestorer, PlaceholderAPI, Geyser/Floodgate, ...),
-  the JARs checked into `*/lib` and the shared `netty.version` are pinned on
+  the JARs checked into `*/lib` and the shared Netty version are pinned on
   purpose — the version that decides at runtime is the user's server or plugin,
   not ours. So when you add a library that gets shaded into a JAR, or a build
   plugin, add it to `allow` in that file too, otherwise it will never be updated.
@@ -281,7 +315,7 @@ or areas (`storage`, `proxy-msg`, `config`, `changelog`).
 ## Pull requests
 
 1. Fork the repository and create a feature branch off `main`.
-2. Run `mvn package --batch-mode` locally — all checks above must pass.
+2. Run `./gradlew build` locally — all checks above must pass.
 3. Open the PR against `main` using the provided
    [PR template](.github/pull_request_template.md): a clear summary of the
    change and a reference to the related issue (`Fixes #123`).

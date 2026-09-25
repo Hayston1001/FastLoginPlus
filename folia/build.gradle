@@ -23,15 +23,18 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package com.github.games647.fastlogin.velocity;
 
-public class PomData {
-    private PomData() {
+plugins { id 'com.gradleup.shadow' }
+// Lowest JRE that can load this artifact: folia-api 1.21.x is Java 21 bytecode.
+ext.javaFloor = 21
+apply from: rootProject.file('gradle/platform-common.gradle')
+
+dependencies {
+    implementation project(':core')
+    compileOnly(libs.folia.api) {
+        exclude group: 'org.slf4j', module: 'slf4j-api'
+        exclude group: 'com.google.guava'
+        exclude group: 'com.google.code.gson'
+        exclude group: 'io.netty'
     }
-
-    public static final String DISPLAY_NAME = "${project.name}";
-    public static final String NAME = "${project.parent.artifactId}";
-    public static final String VERSION = "${project.version}";
-    public static final String DESCRIPTION = "${project.parent.description}";
-    public static final String URL = "${project.parent.url}";
 }

@@ -1,0 +1,311 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2015-2026 games647, Hayston and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+plugins {
+    id 'base'
+    alias(libs.plugins.shadow) apply false
+}
+
+group = 'com.github.games647'
+version = '0.7.0'
+
+def commit = providers.exec {
+    commandLine 'git', 'rev-parse', '--short=7', 'HEAD'
+    ignoreExitValue = true
+}.standardOutput.asText.map { it.trim() ?: 'unknown' }
+ext.gitCommit = commit
+def junitJupiter = libs.junit.jupiter
+def junitLauncher = libs.junit.launcher
+def mockitoCore = libs.mockito
+def checkstyleCore = libs.checkstyle
+
+// Only files tracked by git are checked. A directory walk would also pick up
+// whatever a developer happens to have in the working tree - IDE project files,
+// local notes, a leftover .flattened-pom.xml - and fail the build for one machine
+// only. Source tarballs without a .git directory fall back to the walk.
+def licenseHeaderExcludes = ['**/build/**', '**/target/**', '**/.gradle/**', '**/.worktrees/**',
+    '**/src/main/resources/**', '**/src/test/resources/**', 'gradle/wrapper/**']
+def gitListing = providers.exec {
+    commandLine 'git', 'ls-files', '--', '*.java', '*.xml', '*.gradle'
+    ignoreExitValue = true
+}
+def gitTrackedExitCode = gitListing.result.get().exitValue
+def licensedSources = files(gitTrackedExitCode == 0
+    ? gitListing.standardOutput.asText.get().readLines().findAll { it }.collect { file(it) }
+    : fileTree(rootDir) {
+        include '**/*.java', '**/*.xml', '**/*.gradle'
+        exclude licenseHeaderExcludes
+    })
+if (gitTrackedExitCode != 0) {
+    logger.lifecycle('checkLicenseHeaders: no git checkout, scanning the working tree instead')
+}
+tasks.register('checkLicenseHeaders') {
+    group = 'verification'
+    inputs.files(licensedSources)
+    doLast {
+        def missing = licensedSources.files.findAll { file ->
+            !file.getText('UTF-8').take(1500).contains('SPDX-License-Identifier: MIT')
+        }
+        if (missing) throw new GradleException('Missing MIT license header: ' +
+            missing.collect { rootDir.toPath().relativize(it.toPath()) }.join(', '))
+    }
+}
+tasks.named('check') { dependsOn tasks.named('checkLicenseHeaders') }
+
+tasks.register('verifyReleaseTag') {
+    group = 'verification'
+    def ref = providers.environmentVariable('GITHUB_REF').orElse('')
+    inputs.property('gitRef', ref)
+    doLast {
+        if (ref.get().startsWith('refs/tags/v') && ref.get().substring('refs/tags/v'.length()) !=
+            project.version.toString()) {
+            throw new GradleException("Release tag ${ref.get()} does not match Gradle version ${project.version}")
+        }
+    }
+}
+
+tasks.register('stageRelease', Sync) {
+    group = 'distribution'
+    description = 'Collect the four installable plugin jars for release.'
+    dependsOn tasks.named('verifyReleaseTag')
+    from(['bukkit', 'folia', 'bungee', 'velocity'].collect { module ->
+        project(":${module}").tasks.named('shadowJar')
+    })
+    into layout.buildDirectory.dir('release')
+    doLast {
+        def jars = destinationDir.listFiles().findAll { it.name.endsWith('.jar') }
+        if (jars.size() != 4 || jars.any { it.name.endsWith('-plain.jar') }) {
+            throw new GradleException("Expected four installable plugin jars in ${destinationDir}")
+        }
+    }
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'checkstyle'
+    group = rootProject.group
+    version = rootProject.version
+
+    // Every module declares its own runtime floor as `ext.javaFloor` at the top of its
+    // build.gradle - that replaces the old maven.compiler.release. Read lazily, so a
+    // module script can still set it after this block was configured, and fail in
+    // projectsEvaluated() when a module forgot to declare one.
+    def javaFloor = providers.provider { project.ext.javaFloor as Integer }
+    // Compile-only server APIs and test libraries may target the build JDK.
+    // The packaged runtime classpath is checked against each module's floor.
+    configurations.matching { it.name in ['compileClasspath', 'testCompileClasspath', 'testRuntimeClasspath'] }
+        .configureEach {
+            attributes.attribute(org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 21)
+        }
+    java {
+        toolchain { languageVersion = JavaLanguageVersion.of(21) }
+    }
+    tasks.withType(JavaCompile).configureEach {
+        options.release = javaFloor
+        options.encoding = 'UTF-8'
+    }
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+        systemProperty 'file.encoding', 'UTF-8'
+    }
+    checkstyle {
+        configFile = rootProject.file('checkstyle.xml')
+        maxWarnings = 0
+    }
+    // Legacy test fixtures have existing violations and are outside this gate.
+    tasks.named('checkstyleTest') { enabled = false }
+    tasks.named('checkstyleMain') {
+        source = files(fileTree('src/main/java') { include '**/*.java' },
+            fileTree('src/main/java21') { include '**/*.java' })
+    }
+    dependencies {
+        testImplementation junitJupiter
+        testRuntimeOnly junitLauncher
+        testImplementation mockitoCore
+        checkstyle checkstyleCore
+    }
+    configurations.testImplementation.extendsFrom(configurations.compileOnly)
+
+    tasks.named('processResources') {
+        def replacements = [
+            projectVersion: project.version.toString(),
+            commitHash: rootProject.gitCommit.get(),
+            permissionPrefix: "fastloginplus.${project.name}"
+        ]
+        inputs.properties(replacements)
+        filesMatching(['plugin.yml', 'bungee.yml', 'velocity-plugin.json']) {
+            expand(replacements)
+        }
+    }
+    tasks.named('jar') {
+        archiveBaseName = project.name == 'craftapi' ? 'FastLoginPlusCraftAPI' :
+            "FastLoginPlus${project.name.capitalize()}"
+        archiveVersion = "${project.version}-${rootProject.gitCommit.get()}"
+        manifest {
+            attributes('Multi-Release': 'true',
+                'Implementation-Version': "${project.version}-${rootProject.gitCommit.get()}",
+                'Implementation-Title': archiveBaseName.get())
+        }
+    }
+    plugins.withId('com.gradleup.shadow') {
+        def moduleName = project.name
+        def modulePath = project.path
+        def moduleVersion = project.version.toString()
+        // Names listed in a META-INF/services file: no bytecode references them, so a jar
+        // can look complete and still fail at runtime (the minimizer and the relocation
+        // both work behind the file's back).
+        def serviceProviders = { java.util.zip.ZipFile zip, String path ->
+            def entry = zip.getEntry(path)
+            if (entry == null) return []
+            zip.getInputStream(entry).getText('UTF-8').readLines()
+                .collect { it.contains('#') ? it.substring(0, it.indexOf('#')) : it }
+                .collect { it.trim() }
+                .findAll { !it.isEmpty() }
+        }
+        tasks.named('jar') { archiveClassifier = 'plain' }
+        tasks.named('shadowJar') {
+            archiveBaseName = tasks.named('jar').get().archiveBaseName.get()
+            archiveVersion = "${project.version}-${rootProject.gitCommit.get()}"
+            archiveClassifier = ''
+            manifest.attributes('Multi-Release': 'true',
+                'Implementation-Version': "${project.version}-${rootProject.gitCommit.get()}",
+                'Implementation-Title': archiveBaseName.get())
+        }
+        tasks.named('assemble') { dependsOn tasks.named('shadowJar') }
+        // `check` is enough for CI, but assemble is what produces the installable jar;
+        // verify there too so `./gradlew assemble` cannot emit a broken plugin jar.
+        tasks.named('assemble') { dependsOn verifyPluginJar }
+        def verifyPluginJar = tasks.register('verifyPluginJar') {
+            group = 'verification'
+            dependsOn tasks.named('shadowJar')
+            def jarFile = tasks.named('shadowJar').flatMap { it.archiveFile }
+            inputs.file(jarFile)
+            doLast {
+                new java.util.zip.ZipFile(jarFile.get().asFile).withCloseable { zip ->
+                    def names = zip.entries().collect { it.name }.toSet()
+                    def required = [
+                        'META-INF/versions/21/com/github/games647/fastlogin/core/scheduler/AsyncScheduler.class']
+                    required += moduleName in ['bukkit', 'folia'] ? ['plugin.yml'] :
+                        (moduleName == 'bungee' ? ['bungee.yml', 'org/sqlite/JDBC.class'] :
+                            ['velocity-plugin.json', 'org/sqlite/JDBC.class',
+                                'fastlogin/mariadb/jdbc/Driver.class'])
+                    required.each { name ->
+                        if (!names.contains(name)) throw new GradleException("${modulePath}: missing ${name}")
+                    }
+                    def manifest = new java.util.jar.Manifest(zip.getInputStream(zip.getEntry('META-INF/MANIFEST.MF')))
+                    if (manifest.mainAttributes.getValue('Multi-Release') != 'true') {
+                        throw new GradleException("${modulePath}: missing Multi-Release manifest flag")
+                    }
+                    def descriptor = moduleName in ['bukkit', 'folia'] ? 'plugin.yml' :
+                        (moduleName == 'bungee' ? 'bungee.yml' : 'velocity-plugin.json')
+                    def descriptorText = zip.getInputStream(zip.getEntry(descriptor)).getText('UTF-8')
+                    if (['${projectVersion}', '${commitHash}', '${permissionPrefix}'].any {
+                        descriptorText.contains(it)
+                    } || !descriptorText.contains(moduleVersion)) {
+                        throw new GradleException("${modulePath}: unfiltered ${descriptor}")
+                    }
+                    if (moduleName in ['bungee', 'velocity']) {
+                        def drivers = serviceProviders(zip, 'META-INF/services/java.sql.Driver')
+                        def expectedDrivers = moduleName == 'bungee' ? ['org.sqlite.JDBC'] :
+                            ['org.sqlite.JDBC', 'fastlogin.mariadb.jdbc.Driver']
+                        expectedDrivers.each { driver ->
+                            if (!drivers.contains(driver)) {
+                                throw new GradleException("${modulePath}: missing JDBC service provider ${driver}")
+                            }
+                        }
+                    }
+                    names.findAll { it.startsWith('META-INF/services/') }.each { serviceFile ->
+                        serviceProviders(zip, serviceFile).each { provider ->
+                            if (!names.contains(provider.replace('.', '/') + '.class')) {
+                                throw new GradleException("${modulePath}: ${serviceFile} names ${provider}, " +
+                                    'but that class is not in the jar')
+                            }
+                        }
+                    }
+                    zip.entries().each { entry ->
+                        if (!entry.name.endsWith('.class') || entry.name.startsWith('META-INF/versions/') ||
+                            entry.name.endsWith('/module-info.class') || entry.name == 'module-info.class') return
+                        zip.getInputStream(entry).withCloseable { stream ->
+                            byte[] header = new byte[8]
+                            if (stream.read(header) == 8) {
+                                int major = ((header[6] & 255) << 8) | (header[7] & 255)
+                                if (major > javaFloor.get() + 44) throw new GradleException(
+                                    "${modulePath}: ${entry.name} exceeds Java ${javaFloor.get()} " +
+                                        "(class ${major})")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        tasks.named('check') { dependsOn verifyPluginJar }
+    }
+
+    // Inspect every class in a dependency that can enter a platform jar.
+    // Module descriptors are exempt because their version does not set the floor.
+    def checkRuntimeBytecode = tasks.register('checkRuntimeBytecode') {
+        dependsOn configurations.runtimeClasspath
+        def runtime = configurations.runtimeClasspath
+        inputs.files(runtime)
+        doLast {
+            int maxMajor = javaFloor.get() + 44
+            runtime.resolvedConfiguration.resolvedArtifacts.each { artifact ->
+                def file = artifact.file
+                if (!file.name.endsWith('.jar')) return
+                new java.util.zip.ZipFile(file).withCloseable { zip ->
+                    zip.entries().each { entry ->
+                        if (!entry.name.endsWith('.class') || entry.name.endsWith('/module-info.class') ||
+                            entry.name == 'module-info.class' || entry.name.startsWith('META-INF/versions/')) return
+                        zip.getInputStream(entry).withCloseable { stream ->
+                            byte[] header = new byte[8]
+                            if (stream.read(header) == 8) {
+                                int major = ((header[6] & 255) << 8) | (header[7] & 255)
+                                if (major > maxMajor) throw new GradleException(
+                                    "${project.path}: ${artifact.moduleVersion.id} contains ${entry.name} " +
+                                    "(class version ${major}; Java floor ${javaFloor.get()})")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Maven ran this at `validate`, so it fired on every build; keep it on assemble too
+    // and a dependency bump cannot raise a module's floor without failing the build.
+    tasks.named('assemble') { dependsOn checkRuntimeBytecode }
+    tasks.named('check') { dependsOn checkRuntimeBytecode }
+}
+
+// A new module that does not declare a floor would silently be compiled for Java 8
+// (and only fail later, in checkRuntimeBytecode). Say so immediately instead.
+gradle.projectsEvaluated {
+    subprojects.each { sub ->
+        if (!sub.ext.has('javaFloor')) {
+            throw new GradleException("${sub.path} does not declare its Java floor: add " +
+                "`ext.javaFloor = <8|17|21>` to ${sub.name}/build.gradle")
+        }
+    }
+}

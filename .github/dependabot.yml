@@ -8,7 +8,7 @@ updates:
     schedule:
       interval: "monthly"
 
-  # The root POM owns the complete multi-module reactor.
+  # Gradle's version catalog owns shared dependency versions for all modules.
   #
   # This entry is an ALLOW list, not an ignore list: only the dependencies named
   # below are followed automatically.  Everything else is pinned on purpose,
@@ -24,8 +24,8 @@ updates:
   #     (provided for bukkit/folia, where the server supplies netty)
   #
   # When a library that gets shaded into a JAR, or a build plugin, is added to a
-  # POM, add it here as well -- otherwise it will never be updated.
-  - package-ecosystem: "maven"
+  # build, add it here as well -- otherwise it will never be updated.
+  - package-ecosystem: "gradle"
     directory: "/"
     schedule:
       interval: "monthly"
@@ -45,10 +45,8 @@ updates:
       - dependency-name: "org.mariadb.jdbc:mariadb-java-client"
 
       # Build tooling.
-      - dependency-name: "org.apache.maven.plugins:*"
-      - dependency-name: "org.codehaus.mojo:*"
-      - dependency-name: "com.mycila:license-maven-plugin"
-      - dependency-name: "io.github.git-commit-id:git-commit-id-maven-plugin"
+      - dependency-name: "com.gradleup.shadow"
+      - dependency-name: "org.gradle.toolchains.foojay-resolver-convention"
       - dependency-name: "com.puppycrawl.tools:checkstyle"
 
       # Tests.
@@ -58,18 +56,16 @@ updates:
 
     # The groups are pattern-based and mutually exclusive: Dependabot assigns a
     # dependency to the first group whose rules it matches, and which
-    # production/development bucket it puts a Maven plugin in is not something we
+    # production/development bucket it puts a Gradle plugin in is not something we
     # control -- so the split is spelled out here instead of relying on that
-    # classification.  Majors stay out of every group (update-types) and arrive
+    # classification. Majors stay out of every group (update-types) and arrive
     # as individual PRs for review.
     groups:
       build-tooling:
         applies-to: "version-updates"
         patterns:
-          - "org.apache.maven.plugins:*"
-          - "org.codehaus.mojo:*"
-          - "com.mycila:license-maven-plugin"
-          - "io.github.git-commit-id:git-commit-id-maven-plugin"
+          - "com.gradleup.shadow"
+          - "org.gradle.toolchains.foojay-resolver-convention"
           - "com.puppycrawl.tools:checkstyle"
         update-types:
           - "minor"

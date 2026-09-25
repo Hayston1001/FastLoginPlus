@@ -7,8 +7,8 @@ This module is **not FastLoginPlus code**. It is a vendored copy of the upstream
 Mojang: the name→UUID lookup, the session verification (`hasJoined`), the offline-UUID algorithm and the
 UUID storage format. FLP itself implements no Mojang request.
 
-The Maven coordinate is `com.github.games647:fastloginplus.craftapi:${revision}` (`maven.deploy.skip=true`);
-the Java **package names are unchanged** (`com.github.games647.craftapi`), so `core`, `bukkit`, `folia`,
+The Gradle module is `:craftapi`; it is consumed through a project dependency and is not published separately.
+The Java **package names are unchanged** (`com.github.games647.craftapi`), so `core`, `bukkit`, `folia`,
 `bungee` and `velocity` need no source changes. The copy is shaded into all four platform jars.
 
 ## Why it is vendored
@@ -36,7 +36,7 @@ unaffected: only `craftapi/src/main/resources` is packaged, so this file never r
 |---|---|
 | Repository | `https://github.com/games647/CraftAPI` |
 | Commit | `6f0ded9f` (2024-05-05) — the tree the shipped `craftapi-0.8.1.jar` was built from |
-| Java | `release 8`, bytecode `v52` (asserted by the root `enforceBytecodeVersion` rule) |
+| Java | `release 8`, bytecode `v52` (asserted by Gradle's `checkRuntimeBytecode`) |
 | Sources | 28 main files, 10 test files, one binary test resource (`yggdrasil_session_pubkey.der`) |
 | Licenses | [Unlicense](../../craftapi/src/main/resources/META-INF/LICENSE-CraftAPI-Unlicense.txt) (library, public domain) and [MIT](../../craftapi/src/main/resources/META-INF/LICENSE-FastUUID-MIT.txt) (FastUUID, © 2018 Jon Chambers). Both are packaged into every platform jar. |
 
@@ -99,22 +99,25 @@ conformance (`OperatorWrap` line breaks, braces, javadoc `@param`). The only API
 - `UUIDAdapter.generateOfflineId`, `toMojangId`, `parseId` — the offline UUID is the player's identity and
   the undashed lowercase form is the database format. `UUIDAdapterGoldenTest` pins both against values
   produced by the previously shipped `craftapi-0.8.1.jar`.
-- The dependency versions (`gson 2.10.1`, `guava 32.1.2-jre`): `bukkit`/`folia` shade and relocate both,
-  `bungee`/`velocity` exclude both on purpose (the proxy ships its own copy). Bumping them changes what
-  every platform jar contains.
+- The dependency versions: this module compiles against `gson 2.14.0` and `guava 33.7.1-jre` (the
+  version catalog), and `bungee`/`velocity` exclude both on purpose (the proxy ships its own copy).
+  `bukkit`/`folia` shade and relocate both, but pinned to the server-API baseline those jars run on
+  (`gson 2.10.1` + `guava 32.1.2-jre`, see `gradle/platform-common.gradle`). Without that pin Gradle
+  would package this module's newer versions instead, because the server API is `compileOnly` and so
+  does not resolve the packaged classpath. Bumping these versions changes what every platform jar contains.
 
 ## Updating
 
 Upstream is *responsive but idle*: no release since 2024-05, one branch (`main`), and `main` is the Java 11
 line. Before importing anything from upstream: re-check the channel/tag drift, the Java floor and the dropped
 `ip-addresses` entry point (all three are described above), re-apply the modification list, then run
-`mvn test -pl craftapi` and the parity/artifact checks below.
+`./gradlew :craftapi:test` and the parity/artifact checks below.
 
 ## Verification
 
-- `mvn test -pl craftapi` — 78 tests, no network access (upstream suite plus the offline `HttpServer` / raw-socket
+- `./gradlew :craftapi:test` — 78 tests, no network access (upstream suite plus the offline `HttpServer` / raw-socket
   suites and the golden vectors).
 - Class parity with the shipped `craftapi-0.8.1.jar`: the same 32 class names; the only signature changes are
   the intentional ones above plus compiler-generated enum/lambda naming.
 - Every platform jar contains exactly one copy of the 32 classes, all `v52`, plus the two license files.
-- `mvn dependency:tree` no longer resolves `com.github.games647:craftapi`.
+- `./gradlew :core:dependencies --configuration compileClasspath` shows the local `:craftapi` project dependency.

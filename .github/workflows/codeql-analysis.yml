@@ -1,10 +1,10 @@
 name: CodeQL
 
 on:
-  # Post-merge scan of main: the Build workflow runs first, so CodeQL only re-builds a commit that
+  # Post-merge scan of main: the Gradle Build workflow runs first, so CodeQL only re-builds a commit that
   # has already compiled and passed the tests.
   workflow_run:
-    workflows: ["Build"]
+    workflows: ["Gradle Build"]
     branches: [main]
     types: [completed]
   # Pre-merge scan: every PR targeting main, so findings land on the PR's "Code scanning results"
@@ -37,6 +37,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -48,10 +50,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version-file: '.java-version'
-          cache: 'maven'
+          cache: 'gradle'
 
-      - name: Build with Maven
-        run: mvn package --batch-mode -DskipTests -Dcheckstyle.skip=true -Dlicense.skip=true
+      - name: Build with Gradle
+        run: bash ./gradlew assemble --no-daemon --console=plain
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

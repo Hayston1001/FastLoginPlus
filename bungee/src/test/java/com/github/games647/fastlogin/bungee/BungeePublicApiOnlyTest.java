@@ -110,7 +110,7 @@ class BungeePublicApiOnlyTest {
     }
 
     /**
-     * Locates the directory surefire loaded the compiled main classes from.
+     * Locates the directory the test runner loaded the compiled main classes from.
      *
      * @return the main classes directory
      */

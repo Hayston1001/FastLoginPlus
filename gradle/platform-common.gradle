@@ -1,0 +1,81 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2015-2026 games647, Hayston and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+apply from: rootProject.file('gradle/bedrock.gradle')
+
+// bukkit and folia both shade Guava and Gson (relocated below), and both take their
+// version from the server API they run on, not from what craftapi declares for its own
+// tests. Without this pin Gradle resolves craftapi's newer versions instead: the server
+// API is compileOnly and so does not take part in resolving the packaged classpath.
+configurations.matching {
+    it.name in ['compileClasspath', 'runtimeClasspath', 'testCompileClasspath', 'testRuntimeClasspath']
+}.configureEach {
+    resolutionStrategy.force 'com.google.code.gson:gson:2.10.1', 'com.google.guava:guava:32.1.2-jre'
+}
+
+dependencies {
+    compileOnly(libs.datafixerupper) { transitive = false }
+    compileOnly(libs.protocol.lib) { transitive = false }
+    compileOnly(libs.protocol.support) { transitive = false }
+    compileOnly libs.netty.handler
+    compileOnly(libs.placeholder.api) { transitive = false }
+    compileOnly(libs.authme) { transitive = false }
+    compileOnly(libs.login.security) { transitive = false }
+    compileOnly(libs.logit) { transitive = false }
+    compileOnly(libs.xauth) { transitive = false }
+    compileOnly(libs.passky) { transitive = false }
+    compileOnly(libs.skins.restorer) { transitive = false }
+    compileOnly files('lib/CrazyCore v10.7.7.jar', 'lib/CrazyLogin v7.23.2.jar',
+        'lib/UltraAuth v2.1.2.jar')
+    testImplementation libs.bouncy.castle
+}
+
+configurations.testImplementation.extendsFrom(configurations.compileOnly)
+
+tasks.named('shadowJar') {
+    // Shadow rewrites multi-release entry paths during relocation. Preserve
+    // core's Java 21 scheduler and the relocated SnakeYAML Java 9 branch.
+    filesMatching('META-INF/services/**') { duplicatesStrategy = DuplicatesStrategy.INCLUDE }
+    relocate 'org.yaml.snakeyaml', 'fastlogin.yaml'
+    relocate 'com.zaxxer.hikari', 'fastlogin.hikari'
+    relocate 'org.slf4j', 'fastlogin.slf4j'
+    relocate 'net.md_5.bungee.config', 'fastlogin.config'
+    relocate 'com.google.gson', 'fastlogin.gson'
+    relocate('com.google.common', 'fastlogin.guava') {
+        exclude 'com.google.common.collect.Multimap'
+    }
+    mergeServiceFiles()
+    // Shrink the jar like the Maven build did (`minimizeJar=true`): only classes
+    // reachable from ours are kept. Gson, Guava and SnakeYAML are minimized too - not
+    // exempting them is what keeps these jars at the size of the 0.7.0 releases. SLF4J
+    // must stay exempt: its provider is named only in META-INF/services, which the
+    // minimizer cannot see, and losing that class makes SLF4J silently fall back to a
+    // no-op logger instead of failing.
+    minimize {
+        exclude(dependency('org.slf4j:.*:.*'))
+    }
+    exclude '**/module-info.class'
+}

@@ -20,10 +20,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version-file: '.java-version'
-          cache: 'maven'
+          cache: 'gradle'
 
       - name: Build
-        run: mvn package --batch-mode --no-snapshot-updates -DskipTests
+        run: bash ./gradlew build stageRelease --parallel --no-daemon --console=plain
 
       - name: Extract changelog for this version
         run: |
@@ -41,15 +41,10 @@ jobs:
             echo "For detailed changes, see commits." >> /tmp/release-notes.md
           fi
 
-      - name: Set version variable
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
           body_path: /tmp/release-notes.md
+          fail_on_unmatched_files: true
           files: |
-            bukkit/target/FastLoginPlusBukkit-${{ env.VERSION }}-*.jar
-            folia/target/FastLoginPlusFolia-${{ env.VERSION }}-*.jar
-            bungee/target/FastLoginPlusBungee-${{ env.VERSION }}-*.jar
-            velocity/target/FastLoginPlusVelocity-${{ env.VERSION }}-*.jar
+            build/release/*.jar

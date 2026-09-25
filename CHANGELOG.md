@@ -48,12 +48,14 @@
 - Preserve trailing newlines when rewriting `config.yml`
 - Corrected description for `mojang-request-limit` (this option is functional)
 - Build now enforces minimum Java version checks for each module; dependency upgrades will no longer silently raise the required Java version
+- Build, CI and release now use the Gradle wrapper; Maven project files have been removed
 - UUIDs verified by ProtocolSupport are no longer discarded
 
 - 代理后端上重复的代理消息不再输出警告日志
 - 重写 `config.yml` 时保留文件末尾的换行
 - 修正了 `mojang-request-limit` 的说明(该选项是生效的)
 - 构建现在会强制校验每个模块的 Java 版本下限, 依赖升级不会再悄悄抬高所需的 Java 版本
+- 构建、CI 和发布现已改用 Gradle wrapper; Maven 项目文件已移除
 - ProtocolSupport 验证过的 UUID 不再被丢弃
 
 ### Upgrade notes

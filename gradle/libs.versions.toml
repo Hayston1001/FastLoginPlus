@@ -1,0 +1,74 @@
+[versions]
+floodgate = "2.2.5-SNAPSHOT"
+geyser = "2.10.1-SNAPSHOT"
+geyserBaseApi = "1.0.3"
+fastutil = "8.5.16"
+cumulus = "1.1.2"
+protocolLib = "5.3.0"
+protocolSupport = "master-66b494a8dd-1"
+datafixerupper = "7.1.15"
+netty = "4.1.103.Final"
+placeholderApi = "2.11.6"
+authme = "5.6.0"
+loginSecurity = "3.3.0"
+skinsRestorer = "15.11.0"
+bouncyCastle = "1.86"
+logit = "9e3581db27"
+passky = "v3.0.0"
+xauth = "2.6"
+sqlite = "3.53.4.0"
+sqliteFloor = "3.36.0"
+mariadb = "3.5.10"
+gson = "2.14.0"
+guava = "33.7.1-jre"
+hikari = "4.0.3"
+slf4j = "2.0.19"
+snakeyaml = "2.7"
+junit = "6.1.3"
+mockito = "5.23.0"
+shadow = "9.6.1"
+checkstyle = "14.1.0"
+
+[libraries]
+floodgate-api = { module = "org.geysermc.floodgate:api", version.ref = "floodgate" }
+geyser-core = { module = "org.geysermc.geyser:core", version.ref = "geyser" }
+geyser-api = { module = "org.geysermc.geyser:api", version.ref = "geyser" }
+geyser-common = { module = "org.geysermc.geyser:common", version.ref = "geyser" }
+geyser-base-api = { module = "org.geysermc.api:base-api", version.ref = "geyserBaseApi" }
+fastutil-core = { module = "it.unimi.dsi:fastutil-core", version.ref = "fastutil" }
+cumulus = { module = "org.geysermc.cumulus:cumulus", version.ref = "cumulus" }
+protocol-lib = { module = "com.comphenix.protocol:ProtocolLib", version.ref = "protocolLib" }
+protocol-support = { module = "com.github.ProtocolSupport:ProtocolSupport", version.ref = "protocolSupport" }
+datafixerupper = { module = "com.mojang:datafixerupper", version.ref = "datafixerupper" }
+netty-handler = { module = "io.netty:netty-handler", version.ref = "netty" }
+placeholder-api = { module = "me.clip:placeholderapi", version.ref = "placeholderApi" }
+authme = { module = "fr.xephi:authme", version.ref = "authme" }
+login-security = { module = "com.lenis0012.bukkit:loginsecurity", version.ref = "loginSecurity" }
+skins-restorer = { module = "net.skinsrestorer:skinsrestorer-api", version.ref = "skinsRestorer" }
+logit = { module = "com.github.games647:LogIt", version.ref = "logit" }
+passky = { module = "com.github.zigazajc007:Passky", version.ref = "passky" }
+xauth = { module = "de.luricos.bukkit:xAuth", version.ref = "xauth" }
+sqlite-driver = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
+sqlite-floor = { module = "org.xerial:sqlite-jdbc", version.ref = "sqliteFloor" }
+mariadb = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
+hikari = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
+slf4j-jdk14 = { module = "org.slf4j:slf4j-jdk14", version.ref = "slf4j" }
+snakeyaml = { module = "org.yaml:snakeyaml", version.ref = "snakeyaml" }
+bungeecord-config = { module = "net.md-5:bungeecord-config", version = "1.20-R0.2" }
+bungeecord-api = { module = "net.md-5:bungeecord-api", version = "1.20-R0.2" }
+bungeecord-event = { module = "net.md-5:bungeecord-event", version = "1.20-R0.2" }
+bungeecord-protocol = { module = "net.md-5:bungeecord-protocol", version = "1.20-R0.2" }
+bungeecord-log = { module = "net.md-5:bungeecord-log", version = "1.20-R0.2" }
+paper-api = { module = "io.papermc.paper:paper-api", version = "1.20.6-R0.1-SNAPSHOT" }
+folia-api = { module = "dev.folia:folia-api", version = "1.21.4-R0.1-SNAPSHOT" }
+velocity-api = { module = "com.velocitypowered:velocity-api", version = "3.3.0-SNAPSHOT" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit" }
+mockito = { module = "org.mockito:mockito-core", version.ref = "mockito" }
+bouncy-castle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncyCastle" }
+checkstyle = { module = "com.puppycrawl.tools:checkstyle", version.ref = "checkstyle" }
+
+[plugins]
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
