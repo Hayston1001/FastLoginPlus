@@ -56,7 +56,7 @@ tasks.named('test') {
     systemProperty 'flp.proxy.jar', providers.gradleProperty('flp.proxy.jar').orElse('').get()
 }
 configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
-    resolutionStrategy.force 'com.google.guava:guava:32.1.2-jre', 'com.google.code.gson:gson:2.10.1'
+    resolutionStrategy.force 'com.google.guava:guava:33.7.1-jre', 'com.google.code.gson:gson:2.10.1'
 }
 
 tasks.named('shadowJar') {
