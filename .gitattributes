@@ -1,21 +1,14 @@
-# Auto detect text files and normalize line endings to LF
-* text=auto
+# Normalize every text file to LF, in the repository and in the working tree.
+# `auto` leaves binaries to git's own detection, `eol=lf` overrides
+# core.autocrlf — so extensionless files (gradlew, .gitignore) and any new
+# file type are covered without a list to maintain.
+* text=auto eol=lf
 
-# Java sources
-*.java text eol=lf
-*.yml text eol=lf
-*.yaml text eol=lf
-*.xml text eol=lf
-*.json text eol=lf
-*.md text eol=lf
-*.properties text eol=lf
-*.gradle text eol=lf
-*.cfg text eol=lf
+# Windows batch files: cmd.exe mis-parses LF-only labels/goto and if-blocks
+*.bat text eol=crlf
+*.cmd text eol=crlf
 
-# Shell scripts must use LF
-*.sh text eol=lf
-
-# Binary files
+# Binary files: kept explicit because `text=auto` detects these heuristically
 *.jar binary
 *.class binary
 *.der binary
