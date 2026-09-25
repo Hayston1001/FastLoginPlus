@@ -33,6 +33,8 @@ apply from: rootProject.file('gradle/bedrock.gradle')
 configurations.matching {
     it.name in ['compileClasspath', 'runtimeClasspath', 'testCompileClasspath', 'testRuntimeClasspath']
 }.configureEach {
+    // Pinned in a gradle/*.gradle file on purpose - Dependabot cannot rewrite it (see
+    // gradle/proxy-baseline.gradle).
     resolutionStrategy.force 'com.google.code.gson:gson:2.10.1', 'com.google.guava:guava:32.1.2-jre'
 }
 

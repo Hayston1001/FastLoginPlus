@@ -55,9 +55,10 @@ class SQLiteStorageTest {
 
     /**
      * The oldest server-provided SQLite driver this plugin promises to work with. It is asserted
-     * against the catalog value that {@code sqliteFloorTest} swaps in, so the two have to be
-     * changed together: raising the floor is a deliberate decision, and anything that raises it
-     * (a dependency bot included) fails the build instead of silently dropping the promise.
+     * against the value {@code sqliteFloorTest} swaps in (gradle/sqlite-floor.gradle), so the two
+     * have to be changed together: raising the floor is a deliberate decision, and anything that
+     * raises it (a dependency bot included) fails the build instead of silently dropping the
+     * promise.
      */
     private static final String PROMISED_FLOOR = "3.36.0";
 
@@ -88,13 +89,13 @@ class SQLiteStorageTest {
     }
 
     /**
-     * Guards the classpath swap of the Gradle {@code sqliteFloorTest} task (see core/build.gradle):
-     * that task re-runs the storage tests against {@code sqliteFloor}, the oldest
+     * Guards the classpath swap of the Gradle {@code sqliteFloorTest} task (see
+     * gradle/sqlite-floor.gradle): that task re-runs the storage tests against the oldest
      * server-provided driver we promise to support. Two things can go wrong silently otherwise:
      * the exclusion of the newest driver could match nothing (the floor run would then re-test the
-     * newest driver and prove nothing), and the catalog value could be raised - by a dependency bot
-     * or by accident - to something that is not the promised floor at all. Both are checked here,
-     * and the second one against a constant of its own so it cannot agree with itself.
+     * newest driver and prove nothing), and the configured value could be raised - by a dependency
+     * bot or by accident - to something that is not the promised floor at all. Both are checked
+     * here, and the second one against a constant of its own so it cannot agree with itself.
      *
      * @throws Exception if the SQLite driver is not on the test classpath
      */

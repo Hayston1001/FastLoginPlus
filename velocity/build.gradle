@@ -45,10 +45,8 @@ dependencies {
     implementation libs.sqlite.driver
 }
 configurations.testImplementation.extendsFrom(configurations.compileOnly)
-configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
-    resolutionStrategy.force 'com.google.guava:guava:25.1-jre', 'com.google.code.gson:gson:2.10.1',
-        'org.slf4j:slf4j-api:2.0.12'
-}
+// Proxy-bundled baseline versions for the test classpath: see gradle/proxy-baseline.gradle.
+apply from: rootProject.file('gradle/proxy-baseline.gradle')
 
 def generateBuildInfo = tasks.register('generateBuildInfo', Copy) {
     from 'src/main/java-templates'

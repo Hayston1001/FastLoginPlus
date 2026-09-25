@@ -137,7 +137,9 @@ The build fails at configuration time when the floor is missing, so nothing is a
 "for free" — and a floor that is too low fails `checkRuntimeBytecode` /
 `verifyPluginJar` instead of shipping. Shared dependency versions belong in
 `gradle/libs.versions.toml`, and a shaded or build-time dependency also needs an
-entry in the Dependabot allow list (`.github/dependabot.yml`).
+entry in the Dependabot allow list (`.github/dependabot.yml`). A version that mirrors
+what the user's proxy or server ships belongs in the `gradle/*.gradle` file that holds it
+instead — Dependabot cannot rewrite those.
 
 The `web` module (Javalin + Jackson, floor 17) is carried on its own branch and is not
 part of the Gradle build yet — porting it means exactly those four steps.
@@ -199,7 +201,8 @@ land in each platform module's `build/libs/`, named like
 `FastLoginPlusBukkit-<version>-<commit>.jar`. Files ending in `-plain.jar` are
 unshaded intermediates; `stageRelease` collects only installable JARs in
 `build/release/`. The project version lives in `build.gradle`; dependency versions
-live in `gradle/libs.versions.toml`.
+live in `gradle/libs.versions.toml`, except the deliberately pinned ones
+(`gradle/*.gradle`, see below).
 
 ## Enforced checks — the build fails without these
 
@@ -236,10 +239,11 @@ and verify before pushing:
 5. **SQLite driver floor** (`:core:sqliteFloorTest`) — the storage tests are re-run against
    the oldest driver a user's server may ship, which is the only guard on that promise
    (bukkit/folia load the server's own driver). The floor exists twice on purpose:
-   `sqliteFloor` in the version catalog says which jar the run swaps in, `PROMISED_FLOOR` in
+   `gradle/sqlite-floor.gradle` says which jar the run swaps in, `PROMISED_FLOOR` in
    `SQLiteStorageTest` says what we promise — the test fails when they disagree, so raising
    the floor takes both edits (plus a note in the user-facing docs when it changes what users
-   may run).
+   may run). The version sits in a `gradle/*.gradle` file, not the catalog, because the
+   catalog is what Dependabot rewrites.
 
 ## Testing
 
@@ -298,6 +302,11 @@ and verify before pushing:
   purpose — the version that decides at runtime is the user's server or plugin,
   not ours. So when you add a library that gets shaded into a JAR, or a build
   plugin, add it to `allow` in that file too, otherwise it will never be updated.
+  The allow list matches a whole artifact, so it cannot say "update the shaded copy, never
+  the copy that mirrors the user's proxy": the pinned side of `guava`/`gson`/`slf4j-api` and
+  `sqlite-jdbc` lives in `gradle/proxy-baseline.gradle` and `gradle/sqlite-floor.gradle`.
+  Moving such a version back into the catalog or a module `build.gradle` makes Dependabot
+  propose raising it again; the test beside it still fails on drift either way.
 
 ## Commit messages
 

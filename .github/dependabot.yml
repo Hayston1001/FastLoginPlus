@@ -23,6 +23,11 @@ updates:
   #   - the fixed JARs checked into */lib and the shared io.netty version
   #     (provided for bukkit/folia, where the server supplies netty)
   #
+  # Pinned values that a bot must never bump (the proxy-bundled guava/gson/slf4j baselines,
+  # the SQLite compatibility floor) live in gradle/*.gradle files instead of the catalog.
+  # Dependabot fetches only build.gradle, settings.gradle, gradle.properties and
+  # libs.versions.toml, so it cannot see or propose those versions. Keep it that way.
+  #
   # When a library that gets shaded into a JAR, or a build plugin, is added to a
   # build, add it here as well -- otherwise it will never be updated.
   - package-ecosystem: "gradle"

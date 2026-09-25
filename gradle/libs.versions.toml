@@ -17,7 +17,6 @@ logit = "9e3581db27"
 passky = "v3.0.0"
 xauth = "2.6"
 sqlite = "3.53.4.0"
-sqliteFloor = "3.36.0"
 mariadb = "3.5.10"
 gson = "2.14.0"
 guava = "33.7.1-jre"
@@ -49,7 +48,6 @@ logit = { module = "com.github.games647:LogIt", version.ref = "logit" }
 passky = { module = "com.github.zigazajc007:Passky", version.ref = "passky" }
 xauth = { module = "de.luricos.bukkit:xAuth", version.ref = "xauth" }
 sqlite-driver = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
-sqlite-floor = { module = "org.xerial:sqlite-jdbc", version.ref = "sqliteFloor" }
 mariadb = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 guava = { module = "com.google.guava:guava", version.ref = "guava" }

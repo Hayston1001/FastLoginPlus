@@ -1,0 +1,61 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2015-2026 games647, Hayston and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+// Applied by core, after compileJava21 is registered.
+//
+// The oldest server-provided SQLite driver we promise to keep working on (bukkit/folia run the
+// user's own copy): the sqliteFloorTest task below re-runs the storage tests against it, and
+// PROMISED_FLOOR in SQLiteStorageTest states the same promise - the test fails when the two
+// disagree. The version sits here rather than in the catalog because Dependabot rewrites the
+// catalog and used to propose raising the floor to the newest driver on every run: see
+// .github/dependabot.yml.
+
+def sqliteFloorVersion = '3.36.0'
+
+// Resolved by name: this script is applied to core, so an unqualified reference would fall
+// through to the task instance, which has no map().
+def compileJava21 = tasks.named('compileJava21', JavaCompile)
+
+configurations { sqliteFloor }
+
+dependencies {
+    sqliteFloor "org.xerial:sqlite-jdbc:${sqliteFloorVersion}"
+}
+
+tasks.register('sqliteFloorTest', Test) {
+    description = 'Run storage tests against the oldest supported server SQLite driver.'
+    group = 'verification'
+    dependsOn tasks.named('testClasses'), compileJava21
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = files(compileJava21.map { it.destinationDirectory }) +
+        sourceSets.test.runtimeClasspath.filter { !it.name.startsWith('sqlite-jdbc-') } +
+        configurations.sqliteFloor
+    useJUnitPlatform()
+    include '**/SQLiteStorageTest.class', '**/SQLStorageUpsertLockTest.class'
+    systemProperty 'expected.sqlite.driver.version', sqliteFloorVersion
+    shouldRunAfter tasks.named('test')
+}
+tasks.named('check') { dependsOn tasks.named('sqliteFloorTest') }

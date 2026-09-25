@@ -31,8 +31,6 @@ ext.javaFloor = 8
 
 apply from: rootProject.file('gradle/bedrock.gradle')
 
-configurations { sqliteFloor }
-
 dependencies {
     api project(':craftapi')
     api(libs.hikari) { exclude group: 'org.slf4j', module: 'slf4j-api' }
@@ -41,7 +39,6 @@ dependencies {
     api libs.snakeyaml
     compileOnly libs.sqlite.driver
     testImplementation libs.sqlite.driver
-    sqliteFloor libs.sqlite.floor
 }
 
 tasks.named('jar') {
@@ -64,17 +61,5 @@ tasks.named('test') {
     classpath = files(compileJava21.map { it.destinationDirectory }) + sourceSets.test.runtimeClasspath
 }
 
-tasks.register('sqliteFloorTest', Test) {
-    description = 'Run storage tests against the oldest supported server SQLite driver.'
-    group = 'verification'
-    dependsOn tasks.named('testClasses'), compileJava21
-    testClassesDirs = sourceSets.test.output.classesDirs
-    classpath = files(compileJava21.map { it.destinationDirectory }) +
-        sourceSets.test.runtimeClasspath.filter { !it.name.startsWith('sqlite-jdbc-') } +
-        configurations.sqliteFloor
-    useJUnitPlatform()
-    include '**/SQLiteStorageTest.class', '**/SQLStorageUpsertLockTest.class'
-    systemProperty 'expected.sqlite.driver.version', libs.versions.sqliteFloor.get()
-    shouldRunAfter tasks.named('test')
-}
-tasks.named('check') { dependsOn tasks.named('sqliteFloorTest') }
+// The SQLite floor test and its pinned driver version: see gradle/sqlite-floor.gradle.
+apply from: rootProject.file('gradle/sqlite-floor.gradle')

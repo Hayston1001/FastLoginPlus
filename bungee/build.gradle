@@ -55,9 +55,8 @@ tasks.named('test') {
     // Opt-in check against a real, current proxy jar: ./gradlew :bungee:test -Pflp.proxy.jar=<jar>
     systemProperty 'flp.proxy.jar', providers.gradleProperty('flp.proxy.jar').orElse('').get()
 }
-configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
-    resolutionStrategy.force 'com.google.guava:guava:32.1.2-jre', 'com.google.code.gson:gson:2.10.1'
-}
+// Proxy-bundled baseline versions for the test classpath: see gradle/proxy-baseline.gradle.
+apply from: rootProject.file('gradle/proxy-baseline.gradle')
 
 tasks.named('shadowJar') {
     filesMatching('META-INF/services/**') { duplicatesStrategy = DuplicatesStrategy.INCLUDE }

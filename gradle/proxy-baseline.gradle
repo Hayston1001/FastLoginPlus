@@ -1,0 +1,52 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2015-2026 games647, Hayston and contributors
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+// Applied by bungee and velocity: the guava/gson/slf4j versions the supported proxies bundle
+// (BungeeCord 1.20-R0.2: guava 32.1.2-jre, gson 2.10.1; Velocity 3.3.0-SNAPSHOT: guava
+// 25.1-jre, gson 2.10.1, slf4j-api 2.0.12). ProxyBaselineLinkageTest resolves exactly these
+// and checks our shipped classes against them, so raising one is a proxy-floor decision.
+// They live here, not in the modules' build.gradle, because Dependabot only fetches
+// build.gradle / settings.gradle / gradle.properties / libs.versions.toml and would propose
+// raising them: see .github/dependabot.yml. Change a value together with the mirrored test
+// constant.
+
+def proxyBaselines = [
+        bungee  : ['com.google.guava:guava:32.1.2-jre',
+                   'com.google.code.gson:gson:2.10.1'],
+        velocity: ['com.google.guava:guava:25.1-jre',
+                   'com.google.code.gson:gson:2.10.1',
+                   'org.slf4j:slf4j-api:2.0.12'],
+]
+
+def baseline = proxyBaselines[project.name]
+if (baseline == null) {
+    throw new GradleException('gradle/proxy-baseline.gradle is for bungee and velocity only, '
+            + "not for '${project.name}'")
+}
+
+configurations.matching { it.name in ['testCompileClasspath', 'testRuntimeClasspath'] }.configureEach {
+    resolutionStrategy.force(*baseline)
+}
