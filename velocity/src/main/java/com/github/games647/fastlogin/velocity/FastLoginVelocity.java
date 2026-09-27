@@ -73,6 +73,7 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.messages.ChannelMessageSink;
 import com.velocitypowered.api.proxy.messages.ChannelRegistrar;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
+import net.md_5.bungee.config.Configuration;
 
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
@@ -102,6 +103,16 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     private FloodgateService floodgateService;
     private GeyserService geyserService;
     private UUID proxyId;
+    private boolean fabricNativeAuthEnabled;
+
+    /**
+     * Whether the dedicated Velocity + Fabric identity protocol is enabled.
+     *
+     * @return true when Fabric native authentication is configured
+     */
+    public boolean isFabricNativeAuthEnabled() {
+        return fabricNativeAuthEnabled;
+    }
 
     @Inject
     public FastLoginVelocity(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
@@ -117,6 +128,16 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         // Proxies ship a trimmed config template without backend-only keys
         core.setConfigTemplate("config-proxy.yml");
         core.load();
+        Configuration fabricSection = core.getConfig().getSection("fabric-native-auth");
+        if (fabricSection != null && fabricSection.getBoolean("enabled")) {
+            if (!core.getConfig().getBoolean("premiumUuid")) {
+                throw new IllegalStateException("Fabric native authentication requires premiumUuid: true");
+            }
+            if (isPluginInstalled("floodgate") || isPluginInstalled("Geyser-Velocity")) {
+                throw new IllegalStateException("Fabric native authentication does not support Bedrock in v1");
+            }
+            fabricNativeAuthEnabled = true;
+        }
         loadOrGenerateProxyId();
         if (!core.setupDatabase() || proxyId == null) {
             return;

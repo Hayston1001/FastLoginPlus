@@ -34,6 +34,7 @@ import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.protocol.IdentityClaim;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
 import com.github.games647.fastlogin.velocity.VelocityLoginSession;
 import com.github.games647.fastlogin.velocity.task.AsyncPremiumCheck;
@@ -224,10 +225,15 @@ public class ConnectListener {
 
     @Subscribe
     public void onGameProfileRequest(GameProfileRequestEvent event) {
+        LoginSession claimSession = plugin.isFabricNativeAuthEnabled()
+                ? plugin.getSession().get(event.getConnection().getRemoteAddress()) : null;
         if (event.isOnlineMode()) {
             LoginSession session = plugin.getSession().get(event.getConnection().getRemoteAddress());
             if (session == null) {
                 plugin.getLog().error("No active login session found for onlinemode player {}", event.getUsername());
+                if (plugin.isFabricNativeAuthEnabled()) {
+                    attachIdentityClaim(event, null);
+                }
                 return;
             }
 
@@ -274,6 +280,40 @@ public class ConnectListener {
                 event.setGameProfile(event.getGameProfile().withProperties(newProp));
             }
         }
+        if (plugin.isFabricNativeAuthEnabled()) {
+            attachIdentityClaim(event, claimSession);
+        }
+    }
+
+    private void attachIdentityClaim(GameProfileRequestEvent event, LoginSession session) {
+        GameProfile profile = event.getGameProfile();
+        UUID forwardedUuid = profile.getId();
+        if (forwardedUuid == null) {
+            plugin.getLog().error("Cannot attach Fabric identity claim without a forwarded UUID for {}",
+                    event.getUsername());
+            return;
+        }
+
+        // Clear any profile property with our reserved name. Exactly one value may be
+        // forwarded; malformed or repeated values must never survive as an alternate claim.
+        List<Property> properties = new ArrayList<>(profile.getProperties().size());
+        for (Property property : profile.getProperties()) {
+            if (!ForwardingAttributes.IDENTITY.equals(property.getName())) {
+                properties.add(property);
+            }
+        }
+        IdentityClaim claim;
+        try {
+            boolean bedrock = plugin.getFloodgateService() != null
+                    && getFloodgateUsername(event.getConnection()) != null;
+            claim = IdentityDecisionPolicy.decide(session, event.isOnlineMode(), bedrock,
+                    profile.getName(), forwardedUuid);
+        } catch (IllegalArgumentException invalidProfile) {
+            plugin.getLog().error("Cannot attach Fabric identity claim for an invalid profile name");
+            return;
+        }
+        event.setGameProfile(profile.withProperties(properties).addProperty(
+                new Property(ForwardingAttributes.IDENTITY, claim.encode(), "")));
     }
 
     private List<GameProfile.Property> removeSkin(Collection<Property> oldProperties) {

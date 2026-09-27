@@ -25,6 +25,8 @@
  */
 package com.github.games647.fastlogin.core.shared;
 
+import com.github.games647.fastlogin.protocol.IdentityClaim;
+
 /**
  * Name of the custom GameProfile property the proxy uses to hand the verified Mojang UUID to
  * the backend.
@@ -51,6 +53,9 @@ package com.github.games647.fastlogin.core.shared;
  * running an older jar on one side) keeps working.</p>
  */
 public final class ForwardingAttributes {
+
+    /** Fabric backend identity claim, authenticated by the forwarding transport. */
+    public static final String IDENTITY = IdentityClaim.PROPERTY_NAME;
 
     /**
      * Carries the Mojang UUID the proxy verified for this connection, over Velocity's modern

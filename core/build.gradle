@@ -32,6 +32,7 @@ ext.javaFloor = 8
 apply from: rootProject.file('gradle/bedrock.gradle')
 
 dependencies {
+    api project(':protocol')
     api project(':craftapi')
     api(libs.hikari) { exclude group: 'org.slf4j', module: 'slf4j-api' }
     api libs.slf4j.jdk14

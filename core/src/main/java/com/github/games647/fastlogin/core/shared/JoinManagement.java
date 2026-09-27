@@ -122,12 +122,17 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                 }
 
                 //first login request failed so make a cracked session
-                startCrackedSession(source, profile, username);
+                if (shouldReserveUnknownPremiumNames()) {
+                    startUndecidedSession(source, profile, username);
+                } else {
+                    startCrackedSession(source, profile, username);
+                }
                 return;
             }
 
             Configuration config = core.getConfig();
             Optional<Profile> premiumUUID = Optional.empty();
+            boolean checkedPremium = false;
             if ((boolean) config.get("nameChangeCheck") || (boolean) config.get("autoRegister")
                     || (boolean) config.get("offline-whitelist")) {
                 int retryCount = Math.max(1,
@@ -138,6 +143,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                 for (int attempt = 1; attempt <= retryCount; attempt++) {
                     try {
                         premiumUUID = core.getResolver().findProfile(username);
+                        checkedPremium = true;
                         break;
                     } catch (RateLimitException rateLimitEx) {
                         core.getPlugin().getLog().error(
@@ -186,7 +192,11 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                     return;
                 }
 
-                startCrackedSession(source, profile, username);
+                if (shouldReserveUnknownPremiumNames() && !checkedPremium) {
+                    startUndecidedSession(source, profile, username);
+                } else {
+                    startCrackedSession(source, profile, username);
+                }
             }
         } catch (Exception ex) {
             core.getPlugin().getLog().error("Failed to check premium state of {}", username, ex);
@@ -219,6 +229,11 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     private boolean isUsernameAvailable(S source, String username, StoredProfile profile) throws Exception {
         if (core.isDebug()) {
             core.getPlugin().getLog().info("GameProfile {} uses a premium username", username);
+        }
+        // A Fabric account may already own this name. The Velocity proxy has no EasyAuth
+        // account hook, so it must never auto-enrol an unknown name as premium.
+        if (shouldReserveUnknownPremiumNames()) {
+            return false;
         }
         if ((boolean) core.getConfig().get("autoRegister") && (authHook == null || !authHook.isRegistered(username))) {
             requestPremiumLogin(source, profile, username, false);
@@ -269,4 +284,24 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     public abstract void requestPremiumLogin(S source, StoredProfile profile, String username, boolean registered);
 
     public abstract void startCrackedSession(S source, StoredProfile profile, String username);
+
+    /**
+     * The Fabric mode reserves new premium names until the backend account owner opts in.
+     *
+     * @return true when this login path enforces the reservation
+     */
+    protected boolean shouldReserveUnknownPremiumNames() {
+        return false;
+    }
+
+    /**
+     * Fallback for a decision without a completed Mojang lookup.
+     *
+     * @param source this connection
+     * @param profile the unresolved stored profile
+     * @param username the requested name
+     */
+    protected void startUndecidedSession(S source, StoredProfile profile, String username) {
+        startCrackedSession(source, profile, username);
+    }
 }

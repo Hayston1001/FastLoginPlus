@@ -98,6 +98,12 @@ anti-bot:
 # plugin.
 autoRegister: true
 
+# Dedicated Velocity + Fabric network only. Requires a backend that validates the
+# flp_identity property after Velocity modern forwarding; keep disabled elsewhere.
+# v1 requires premiumUuid: true and excludes Floodgate/Geyser connections.
+fabric-native-auth:
+  enabled: false
+
 # Enable auto-login for premium players
 # The proxy decides and forwards the force-login command to the backend,
 # which executes it through the auth plugin.

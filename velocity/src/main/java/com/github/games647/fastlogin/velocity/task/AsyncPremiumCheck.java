@@ -28,6 +28,7 @@ package com.github.games647.fastlogin.velocity.task;
 import com.github.games647.fastlogin.core.shared.JoinManagement;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.protocol.IdentityClaim.Decision;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
 import com.github.games647.fastlogin.velocity.VelocityLoginSession;
 import com.github.games647.fastlogin.velocity.VelocityLoginSource;
@@ -96,6 +97,18 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
     @Override
     public void startCrackedSession(VelocityLoginSource source, StoredProfile profile, String username) {
         VelocityLoginSession session = new VelocityLoginSession(username, false, profile);
+        session.setIdentityDecision(Decision.OFFLINE);
         plugin.getSession().put(source.getConnection().getRemoteAddress(), session);
+    }
+
+    @Override
+    protected void startUndecidedSession(VelocityLoginSource source, StoredProfile profile, String username) {
+        VelocityLoginSession session = new VelocityLoginSession(username, false, profile);
+        plugin.getSession().put(source.getConnection().getRemoteAddress(), session);
+    }
+
+    @Override
+    protected boolean shouldReserveUnknownPremiumNames() {
+        return plugin.isFabricNativeAuthEnabled();
     }
 }

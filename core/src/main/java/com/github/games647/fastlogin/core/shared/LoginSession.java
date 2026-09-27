@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.core.shared;
 
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.protocol.IdentityClaim.Decision;
 
 import java.util.StringJoiner;
 import java.util.UUID;
@@ -37,6 +38,7 @@ public abstract class LoginSession {
     private final String requestUsername;
     private String username;
     private UUID uuid;
+    private Decision identityDecision = Decision.UNDECIDED;
 
     protected boolean registered;
 
@@ -102,6 +104,14 @@ public abstract class LoginSession {
         this.uuid = uuid;
     }
 
+    public synchronized Decision getIdentityDecision() {
+        return identityDecision;
+    }
+
+    public synchronized void setIdentityDecision(Decision identityDecision) {
+        this.identityDecision = java.util.Objects.requireNonNull(identityDecision, "identityDecision");
+    }
+
     @Override
     public String toString() {
         return new StringJoiner(", ", LoginSession.class.getSimpleName() + '[', "]")
@@ -110,6 +120,7 @@ public abstract class LoginSession {
                 .add("username='" + username + '\'')
                 .add("uuid=" + uuid)
                 .add("registered=" + registered)
+                .add("identityDecision=" + identityDecision)
                 .toString();
     }
 }
