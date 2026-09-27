@@ -1,0 +1,167 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2026 Hayston1001
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.17.8'
+}
+
+ext.javaFloor = 25
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(25) }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 25
+}
+
+configurations.matching { it.name in ['compileClasspath', 'testCompileClasspath', 'testRuntimeClasspath'] }
+    .configureEach {
+        attributes.attribute(org.gradle.api.attributes.java.TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, 25)
+    }
+
+// A partial com.mojang artifact in Maven Local otherwise wins before Mojang's
+// repository and prevents Loom's Windows native variant from resolving.
+repositories {
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'MojangLibrariesForFabric'
+                url = uri('https://libraries.minecraft.net/')
+            }
+        }
+        filter { includeModule('com.mojang', 'jtracy') }
+    }
+}
+
+dependencies {
+    minecraft 'com.mojang:minecraft:26.2'
+    implementation 'net.fabricmc:fabric-loader:0.19.3'
+    implementation 'net.fabricmc.fabric-api:fabric-api:0.152.1+26.2'
+}
+
+// Compile the single shared wire codec in Fabric's own namespace. Velocity
+// still builds the original :protocol module; the wire format stays identical.
+def sharedClaimSource = project(':protocol').file(
+    'src/main/java/com/github/games647/fastlogin/protocol/IdentityClaim.java')
+def generatedProtocolSources = rootProject.layout.buildDirectory.dir('generated/sources/fabric26_2Protocol/java')
+def generateFabricProtocol = tasks.register('generateFabricProtocol') {
+    inputs.file(sharedClaimSource)
+    outputs.dir(generatedProtocolSources)
+    doLast {
+        def originalPackage = 'package com.github.games647.fastlogin.protocol;'
+        def source = sharedClaimSource.getText('UTF-8')
+        if (source.count(originalPackage) != 1) {
+            throw new GradleException('Shared identity claim package changed; update Fabric generation')
+        }
+        def target = generatedProtocolSources.get().file(
+            'com/github/hayston1001/fastloginplus/fabric/protocol/IdentityClaim.java').asFile
+        target.parentFile.mkdirs()
+        target.setText(source.replace(originalPackage,
+            'package com.github.hayston1001.fastloginplus.fabric.protocol;'), 'UTF-8')
+    }
+}
+sourceSets.main.java.srcDir(generatedProtocolSources)
+tasks.named('compileJava') { dependsOn generateFabricProtocol }
+
+tasks.named('jar') {
+    archiveBaseName = 'FastLoginPlusFabric-26.2'
+}
+
+// The shared runtime-classpath guard is for Shadow jars. Loom's classpath
+// includes Minecraft and native libraries that are not packaged in this mod.
+tasks.named('checkRuntimeBytecode') {
+    setDependsOn([])
+    enabled = false
+}
+
+def fabricJar = tasks.named('jar', Jar)
+def verifyFabricJar = tasks.register('verifyFabricJar') {
+    group = 'verification'
+    dependsOn fabricJar
+    inputs.file(fabricJar.flatMap { it.archiveFile })
+    doLast {
+        def jarFile = fabricJar.get().archiveFile.get().asFile
+        def checkClass = { String path, InputStream stream ->
+            byte[] classBytes = stream.readAllBytes()
+            if (classBytes.length < 8 || (classBytes[0] & 255) != 0xCA ||
+                (classBytes[1] & 255) != 0xFE || (classBytes[2] & 255) != 0xBA ||
+                (classBytes[3] & 255) != 0xBE) {
+                throw new GradleException("Invalid class in Fabric jar: ${path}")
+            }
+            int major = ((classBytes[6] & 255) << 8) | (classBytes[7] & 255)
+            if (major > 69) {
+                throw new GradleException("${path} exceeds the Java 25 class floor")
+            }
+            if (new String(classBytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+                .contains('com/github/games647/fastlogin')) {
+                throw new GradleException("Old package reference remains in Fabric class: ${path}")
+            }
+        }
+        new java.util.zip.ZipFile(jarFile).withCloseable { zip ->
+            def metadataEntry = zip.getEntry('fabric.mod.json')
+            if (metadataEntry == null) {
+                throw new GradleException('Fabric jar is missing fabric.mod.json')
+            }
+            def metadata
+            zip.getInputStream(metadataEntry).withCloseable { stream ->
+                metadata = new groovy.json.JsonSlurper().parse(stream)
+            }
+            def entrypoint = 'com.github.hayston1001.fastloginplus.fabric.FastLoginFabric'
+            if (metadata.entrypoints?.main != [entrypoint] ||
+                zip.getEntry(entrypoint.replace('.', '/') + '.class') == null) {
+                throw new GradleException('Fabric entrypoint does not match the packaged class')
+            }
+            def embeddedProtocol = zip.entries().findAll {
+                it.name.startsWith('META-INF/jars/') && it.name.endsWith('.jar')
+            }
+            if (!embeddedProtocol.isEmpty()) {
+                throw new GradleException('Fabric jar must not embed an unrelocated protocol jar')
+            }
+            if (zip.getEntry('com/github/hayston1001/fastloginplus/fabric/protocol/IdentityClaim.class') == null) {
+                throw new GradleException('Fabric jar is missing the relocated identity protocol')
+            }
+            zip.entries().each { entry ->
+                if (entry.name.startsWith('com/github/games647/')) {
+                    throw new GradleException("Old package remains in Fabric jar: ${entry.name}")
+                }
+                if (!entry.name.endsWith('.class') || entry.name.endsWith('/module-info.class') ||
+                    entry.name == 'module-info.class') return
+                zip.getInputStream(entry).withCloseable { stream ->
+                    checkClass(entry.name, stream)
+                }
+            }
+        }
+    }
+}
+tasks.named('assemble') { dependsOn verifyFabricJar }
+tasks.named('check') { dependsOn verifyFabricJar }
+
+tasks.named('processResources') {
+    filesMatching('fabric.mod.json') {
+        expand(projectVersion: project.version.toString())
+    }
+}

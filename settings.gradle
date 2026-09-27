@@ -26,8 +26,16 @@
 
 pluginManagement {
     repositories {
+        maven { url = uri('https://maven.fabricmc.net/') }
         gradlePluginPortal()
         mavenCentral()
+    }
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == 'net.fabricmc.fabric-loom') {
+                useModule("net.fabricmc:fabric-loom:${requested.version}")
+            }
+        }
     }
 }
 
@@ -43,9 +51,14 @@ plugins {
 }
 
 dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    // Loom injects its local remapped-mod repository. Keep the stricter default
+    // for the existing modules, and allow that repository in the opt-in build.
+    repositoriesMode.set(providers.gradleProperty('includeFabric').map { it.toBoolean() }
+        .orElse(false).get() ? RepositoriesMode.PREFER_PROJECT : RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
         mavenCentral()
+        maven { url = uri('https://maven.fabricmc.net/') }
+        maven { url = uri('https://libraries.minecraft.net/') }
         maven { url = uri('https://repo.opencollab.dev/main/') }
         maven { url = uri('https://repo.papermc.io/repository/maven-public/') }
         maven { url = uri('https://repo.codemc.io/repository/maven-public/') }
@@ -71,3 +84,13 @@ dependencyResolutionManagement {
 
 rootProject.name = 'FastLoginPlus'
 include 'protocol', 'craftapi', 'core', 'bukkit', 'folia', 'bungee', 'velocity'
+
+// Fabric's 26.2 Loom build needs a Java 25 Gradle JVM. The existing Java 21
+// build remains unchanged; the dedicated Fabric job opts in with -PincludeFabric.
+if (providers.gradleProperty('includeFabric').map { it.toBoolean() }.orElse(false).get()) {
+    if (!JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_25)) {
+        throw new GradleException('The Fabric 26.2 build requires Gradle to run on Java 25')
+    }
+    include 'fabric26_2'
+    project(':fabric26_2').projectDir = file('fabric/mc26_2')
+}

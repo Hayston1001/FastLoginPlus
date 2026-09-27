@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "fastloginplus_fabric",
+  "version": "${projectVersion}",
+  "name": "FastLoginPlus Fabric",
+  "description": "Velocity identity forwarding and EasyAuth bridge for Minecraft 26.2",
+  "license": "MIT",
+  "environment": "server",
+  "entrypoints": {
+    "main": ["com.github.hayston1001.fastloginplus.fabric.FastLoginFabric"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "26.2",
+    "java": ">=25",
+    "fabric-api": "*",
+    "fabricproxy-lite": "*",
+    "easyauth": "3.4.4"
+  },
+  "breaks": {
+    "fabricproxy": "*"
+  }
+}

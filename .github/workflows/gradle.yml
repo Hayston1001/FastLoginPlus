@@ -28,3 +28,23 @@ jobs:
 
       - name: Build and test
         run: bash ./gradlew build --parallel --no-daemon --console=plain
+
+  fabric-26-2:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up build JDKs
+        uses: actions/setup-java@v6
+        with:
+          distribution: 'temurin'
+          java-version: |
+            21
+            25
+          cache: 'gradle'
+
+      - name: Build Fabric 26.2 integration
+        run: bash ./gradlew -PincludeFabric=true :fabric26_2:build --no-daemon --console=plain

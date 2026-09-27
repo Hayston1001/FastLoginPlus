@@ -35,6 +35,7 @@ gradle-app.setting
 
 # Build artifacts
 build/
+fabric/**/run/
 bin/
 dist/
 manifest.mf

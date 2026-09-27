@@ -305,7 +305,7 @@ gradle.projectsEvaluated {
     subprojects.each { sub ->
         if (!sub.ext.has('javaFloor')) {
             throw new GradleException("${sub.path} does not declare its Java floor: add " +
-                "`ext.javaFloor = <8|17|21>` to ${sub.name}/build.gradle")
+                "`ext.javaFloor = <8|17|21|25>` to ${sub.name}/build.gradle")
         }
     }
 }
