@@ -79,6 +79,7 @@ final class EasyAuth344Bridge {
     private final Class<?> playersCache;
     private final ConcurrentHashMap<String, PendingBinding> pendingBindings = new ConcurrentHashMap<>();
     private static final long BIND_WINDOW_NANOS = TimeUnit.MINUTES.toNanos(10);
+    private static final long STORE_CONFIRM_TIMEOUT_SECONDS = 5;
     private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
 
     EasyAuth344Bridge() {
@@ -325,15 +326,32 @@ final class EasyAuth344Bridge {
                             || !player.connection.isAcceptingMessages()) {
                         return;
                     }
-                    BindingCookieProof.confirmStoredCookie(player, name, token, () ->
-                            server.execute(() -> {
-                                if (pendingBindings.get(name) == pending && pending.isLive()
-                                        && player.connection.isAcceptingMessages()) {
-                                    LOGGER.info("Transferring {} for verified premium binding", name);
-                                    player.connection.send(new ClientboundTransferPacket(transfer.host, transfer.port));
-                                }
-                            }));
+                    BindingCookieProof.StoreRequest request = BindingCookieProof.confirmStoredCookie(
+                            player, name, token, () ->
+                                    server.execute(() -> {
+                                        if (pendingBindings.get(name) == pending && pending.isLive()
+                                                && player.connection.isAcceptingMessages()) {
+                                            LOGGER.info("Transferring {} for verified premium binding", name);
+                                            player.connection.send(
+                                                    new ClientboundTransferPacket(transfer.host, transfer.port));
+                                        }
+                                    }), () -> server.execute(() ->
+                                            failStoredCookie(player, name, pending)));
+                    CompletableFuture.delayedExecutor(STORE_CONFIRM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                            .execute(() -> server.execute(() ->
+                                    BindingCookieProof.expireStoreRequest(player, request)));
                 }));
+    }
+
+    private void failStoredCookie(ServerPlayer player, String name, PendingBinding pending) {
+        if (pendingBindings.remove(name, pending)) {
+            LOGGER.warn("Client did not confirm the binding cookie for {}", name);
+            if (player.connection.isAcceptingMessages()) {
+                String message = "FastLoginPlus: client cookie confirmation failed or timed out. "
+                        + "Your password is unchanged; retry /flp premium.";
+                player.sendSystemMessage(Component.literal(message));
+            }
+        }
     }
 
     private TransferTarget transferTarget() {
@@ -377,11 +395,23 @@ final class EasyAuth344Bridge {
         if (!pending.passwordHash.equals(field(entryType, current, "password"))) {
             throw new IllegalStateException("EasyAuth password account changed during binding");
         }
-        writeBinding(db, entry, claim.getVerifiedMojangUuid());
+        try {
+            authenticatePremium(player, entry, claim.getVerifiedMojangUuid(), true);
+        } catch (RuntimeException failure) {
+            AccountStatusWire.Result saved = accountStatus(name);
+            if (saved.getStatus() == AccountStatusWire.Status.BOUND
+                    && claim.getVerifiedMojangUuid().equals(saved.getUuid())) {
+                pendingBindings.remove(name, pending);
+                LOGGER.error("Binding was saved for {}, but EasyAuth could not finish this login", name, failure);
+                player.connection.disconnect(Component.literal(
+                        "FastLoginPlus binding was saved. Reconnect for passwordless login."));
+                return;
+            }
+            throw failure;
+        }
         pendingBindings.remove(name, pending);
         LOGGER.info("Bound EasyAuth password account {} to verified Mojang UUID {}", name,
                 claim.getVerifiedMojangUuid());
-        authenticatePremium(player, entry, claim.getVerifiedMojangUuid());
     }
 
     void completeBinding(ServerPlayer player, IdentityClaim claim) {
@@ -463,7 +493,15 @@ final class EasyAuth344Bridge {
     }
 
     private void authenticatePremium(ServerPlayer player, Object entry, UUID verifiedUuid) {
-        checkPremiumEntry(entry, player.getGameProfile().name(), verifiedUuid);
+        authenticatePremium(player, entry, verifiedUuid, false);
+    }
+
+    private void authenticatePremium(ServerPlayer player, Object entry, UUID verifiedUuid, boolean binding) {
+        if (binding) {
+            checkBindingEntry(entry, player.getGameProfile().name());
+        } else {
+            checkPremiumEntry(entry, player.getGameProfile().name(), verifiedUuid);
+        }
         Object config = field(easyAuth, null, "config");
         ZonedDateTime lastKick = (ZonedDateTime) field(entryType, entry, "lastKickedDate");
         if (lastKick == null || lastKick.plusSeconds(number(config, "resetLoginAttemptsTimeout"))
@@ -476,6 +514,7 @@ final class EasyAuth344Bridge {
             throw new IllegalStateException("EasyAuth did not resolve a player IP");
         }
 
+        Object oldPassword = field(entryType, entry, "password");
         Object oldKind = field(entryType, entry, "onlineAccount");
         Object oldUuid = field(entryType, entry, "uuid");
         Object oldDate = field(entryType, entry, "lastAuthenticatedDate");
@@ -483,6 +522,9 @@ final class EasyAuth344Bridge {
         try {
             @SuppressWarnings({"rawtypes", "unchecked"})
             Object premium = Enum.valueOf((Class<Enum>) oldKind.getClass(), "TRUE");
+            if (binding) {
+                set(entryType, entry, "password", "");
+            }
             set(entryType, entry, "onlineAccount", premium);
             set(entryType, entry, "uuid", verifiedUuid);
             set(entryType, entry, "lastAuthenticatedDate", ZonedDateTime.now());
@@ -493,6 +535,7 @@ final class EasyAuth344Bridge {
                 throw new IllegalStateException("EasyAuth account update failed");
             }
         } catch (RuntimeException failure) {
+            set(entryType, entry, "password", oldPassword);
             set(entryType, entry, "onlineAccount", oldKind);
             set(entryType, entry, "uuid", oldUuid);
             set(entryType, entry, "lastAuthenticatedDate", oldDate);

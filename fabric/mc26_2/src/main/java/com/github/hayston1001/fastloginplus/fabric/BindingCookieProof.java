@@ -60,10 +60,30 @@ public final class BindingCookieProof {
         LOGGER.info("Requested binding cookie during verified reconnect for {}", name);
     }
 
-    static void confirmStoredCookie(ServerPlayer player, String name, byte[] expected, Runnable onVerified) {
+    static StoreRequest confirmStoredCookie(ServerPlayer player, String name, byte[] expected,
+                                            Runnable onVerified, Runnable onFailure) {
         Connection connection = ((ConnectionAccess) player.connection).bindingConnection();
-        STORE_REQUESTS.put(connection, new StoreRequest(name, expected.clone(), onVerified));
+        StoreRequest request = registerStoreRequest(connection, name, expected, onVerified, onFailure);
         player.connection.send(new ClientboundCookieRequestPacket(KEY));
+        return request;
+    }
+
+    static StoreRequest registerStoreRequest(Connection connection, String name, byte[] expected,
+                                             Runnable onVerified, Runnable onFailure) {
+        StoreRequest request = new StoreRequest(name, expected.clone(), onVerified, onFailure);
+        STORE_REQUESTS.put(connection, request);
+        return request;
+    }
+
+    static void expireStoreRequest(ServerPlayer player, StoreRequest request) {
+        Connection connection = ((ConnectionAccess) player.connection).bindingConnection();
+        expireStoreRequest(connection, request);
+    }
+
+    static void expireStoreRequest(Connection connection, StoreRequest request) {
+        if (STORE_REQUESTS.remove(connection, request)) {
+            request.onFailure.run();
+        }
     }
 
     /**
@@ -83,6 +103,8 @@ public final class BindingCookieProof {
             LOGGER.info("Client stored binding cookie for {}: {}", store.name, valid);
             if (valid) {
                 store.onVerified.run();
+            } else {
+                store.onFailure.run();
             }
             return true;
         }
@@ -108,12 +130,15 @@ public final class BindingCookieProof {
 
     static void drop(Object listener) {
         Connection connection = ((ConnectionAccess) listener).bindingConnection();
-        STORE_REQUESTS.remove(connection);
+        StoreRequest store = STORE_REQUESTS.remove(connection);
+        if (store != null) {
+            store.onFailure.run();
+        }
         REQUESTED.remove(connection);
         RESPONSES.remove(connection);
     }
 
-    private record StoreRequest(String name, byte[] expected, Runnable onVerified) {
+    record StoreRequest(String name, byte[] expected, Runnable onVerified, Runnable onFailure) {
     }
 
     private record Response(String name, byte[] payload) {
