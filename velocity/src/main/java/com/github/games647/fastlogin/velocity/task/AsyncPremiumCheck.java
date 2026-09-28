@@ -163,8 +163,15 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
         // A password-owned name remains behind EasyAuth's password lock even
         // when Mojang's name lookup is unavailable. Unclaimed or bound names
         // must keep the unresolved decision closed.
-        return plugin.isFabricNativeAuthEnabled() && (accountStatus == null
-                || accountStatus.getStatus() != AccountStatusWire.Status.PASSWORD);
+        if (!plugin.isFabricNativeAuthEnabled() || (accountStatus != null
+                && accountStatus.getStatus() == AccountStatusWire.Status.PASSWORD)) {
+            return false;
+        }
+        // With every lookup-triggering option disabled, no lookup was attempted.
+        // An unclaimed name must be able to reach EasyAuth's password registration.
+        return plugin.getCore().getConfig().getBoolean("autoRegister")
+                || plugin.getCore().getConfig().getBoolean("nameChangeCheck")
+                || plugin.getCore().getConfig().getBoolean("offline-whitelist");
     }
 
     @Override

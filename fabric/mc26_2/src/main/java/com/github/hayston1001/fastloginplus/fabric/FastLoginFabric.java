@@ -95,6 +95,7 @@ public final class FastLoginFabric implements ModInitializer {
                 LOGGER.info("Validated {} forwarding claim for {}; profile property names={}",
                         claim.getDecision(), profile.name(), profile.properties().keySet().size());
             } catch (IllegalArgumentException invalidClaim) {
+                LOGGER.warn("Invalid forwarding identity for {}: {}", profile.name(), invalidClaim.getMessage());
                 listener.disconnect(Component.literal("Invalid FastLoginPlus forwarding identity"));
             } catch (RuntimeException invalidEnvironment) {
                 LOGGER.error("EasyAuth policy rejected the connection", invalidEnvironment);
