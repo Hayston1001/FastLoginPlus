@@ -163,8 +163,9 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
             }
             Configuration antiBot = core.getConfig().getSection("anti-bot");
             if (antiBot != null && antiBot.getBoolean("enabled")
-                    && "ignore".equalsIgnoreCase(antiBot.getString("action"))) {
-                throw new IllegalStateException("Fabric native authentication requires anti-bot.action: block");
+                    && !"block".equals(antiBot.getString("action"))) {
+                throw new IllegalStateException(
+                        "Fabric native authentication requires anti-bot.action: block exactly");
             }
             if (isPluginInstalled("floodgate") || isPluginInstalled("Geyser-Velocity")) {
                 throw new IllegalStateException("Fabric native authentication does not support Bedrock in v1");
