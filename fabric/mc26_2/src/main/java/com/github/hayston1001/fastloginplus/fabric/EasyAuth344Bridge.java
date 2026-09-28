@@ -31,8 +31,10 @@ import com.github.hayston1001.fastloginplus.fabric.protocol.AccountStatusWire;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.common.ClientboundStoreCookiePacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,6 +47,7 @@ import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.ZonedDateTime;
 import java.util.HexFormat;
 import java.util.Objects;
@@ -73,6 +76,7 @@ final class EasyAuth344Bridge {
     private final Class<?> playersCache;
     private final ConcurrentHashMap<String, PendingBinding> pendingBindings = new ConcurrentHashMap<>();
     private static final long BIND_WINDOW_NANOS = TimeUnit.MINUTES.toNanos(10);
+    private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
 
     EasyAuth344Bridge() {
         var mod = FabricLoader.getInstance().getModContainer("easyauth")
@@ -161,6 +165,13 @@ final class EasyAuth344Bridge {
         }
     }
 
+    void requestBindingCookie(ServerConfigurationPacketListenerImpl listener, IdentityClaim claim) {
+        if (claim.getDecision() == Decision.PREMIUM_VERIFIED
+                && accountStatus(claim.getPlayerName()).getStatus() == AccountStatusWire.Status.BIND_PENDING) {
+            BindingCookieProof.request(listener, claim.getPlayerName());
+        }
+    }
+
     void verifyPolicy() {
         Object config = field(easyAuth, null, "config");
         Object extended = field(easyAuth, null, "extendedConfig");
@@ -213,7 +224,7 @@ final class EasyAuth344Bridge {
                 return AccountStatusWire.result(AccountStatusWire.Status.CONFLICT, null);
             }
             PendingBinding pending = pendingBindings.get(name);
-            if (pending != null && !pending.isLive()) {
+            if (pending != null && (!pending.isLive() || !pending.passwordHash.equals(password))) {
                 pendingBindings.remove(name, pending);
                 pending = null;
             }
@@ -270,10 +281,7 @@ final class EasyAuth344Bridge {
         verifyCurrentAccount(claim);
         if (accountStatus(claim.getPlayerName()).getStatus() == AccountStatusWire.Status.BIND_PENDING) {
             checkBindingEntry(entry, claim.getPlayerName());
-            player.sendSystemMessage(Component.literal(
-                    "FastLoginPlus: log in with /login <password>, then use /flp bind"));
-            LOGGER.info("Awaiting EasyAuth password verification for premium bind of {}",
-                    player.getGameProfile().name());
+            completeBindingFromCookie(player, claim, entry);
             return;
         }
         authenticatePremium(player, entry, claim.getVerifiedMojangUuid());
@@ -293,9 +301,43 @@ final class EasyAuth344Bridge {
             throw new IllegalStateException("A password account is required to start binding");
         }
         checkBindingEntry(entry, name);
-        pendingBindings.put(name, new PendingBinding(offlineUuid(name)));
+        Object db = field(easyAuth, null, "DB");
+        Object current = invoke(db, "getUserData", String.class, name);
+        checkBindingEntry(current, name);
+        String passwordHash = (String) field(entryType, entry, "password");
+        if (!passwordHash.equals(field(entryType, current, "password"))) {
+            throw new IllegalStateException("EasyAuth password account is still saving; retry /flp premium shortly");
+        }
+        byte[] token = new byte[32];
+        TOKEN_RANDOM.nextBytes(token);
+        pendingBindings.put(name, new PendingBinding(offlineUuid(name), passwordHash, token));
+        player.connection.send(new ClientboundStoreCookiePacket(BindingCookieProof.KEY, token.clone()));
         player.sendSystemMessage(Component.literal("FastLoginPlus: binding window open for 10 minutes. "
-                + "Reconnect with your official Minecraft account, /login again, then /flp bind."));
+                + "Reconnect with the same official Minecraft client to finish automatically."));
+    }
+
+    private void completeBindingFromCookie(ServerPlayer player, IdentityClaim claim, Object entry) {
+        String name = claim.getPlayerName();
+        PendingBinding pending = pendingBindings.get(name);
+        if (pending == null || !pending.isLive()
+                || !pending.passwordHash.equals(field(entryType, entry, "password"))
+                || !BindingCookieProof.consume(player.connection, name, pending.token)) {
+            player.sendSystemMessage(Component.literal("FastLoginPlus: client proof unavailable. "
+                    + "Your password is unchanged; use /login and /flp bind to finish."));
+            LOGGER.warn("Automatic binding proof was unavailable for {}", name);
+            return;
+        }
+        Object db = field(easyAuth, null, "DB");
+        Object current = invoke(db, "getUserData", String.class, name);
+        checkBindingEntry(current, name);
+        if (!pending.passwordHash.equals(field(entryType, current, "password"))) {
+            throw new IllegalStateException("EasyAuth password account changed during binding");
+        }
+        writeBinding(db, entry, claim.getVerifiedMojangUuid());
+        pendingBindings.remove(name, pending);
+        LOGGER.info("Bound EasyAuth password account {} to verified Mojang UUID {}", name,
+                claim.getVerifiedMojangUuid());
+        authenticatePremium(player, entry, claim.getVerifiedMojangUuid());
     }
 
     void completeBinding(ServerPlayer player, IdentityClaim claim) {
@@ -319,6 +361,15 @@ final class EasyAuth344Bridge {
                 field(entryType, entry, "password"))) {
             throw new IllegalStateException("EasyAuth password login is still saving; retry /flp bind shortly");
         }
+        writeBinding(db, entry, claim.getVerifiedMojangUuid());
+        pendingBindings.remove(name);
+        LOGGER.info("Bound EasyAuth password account {} to verified Mojang UUID {}", name,
+                claim.getVerifiedMojangUuid());
+        player.connection.disconnect(Component.literal(
+                "FastLoginPlus binding complete. Reconnect for passwordless login."));
+    }
+
+    private void writeBinding(Object db, Object entry, UUID verifiedUuid) {
         String oldPassword = (String) field(entryType, entry, "password");
         Object oldKind = field(entryType, entry, "onlineAccount");
         UUID oldUuid = (UUID) field(entryType, entry, "uuid");
@@ -327,7 +378,7 @@ final class EasyAuth344Bridge {
             Object premium = Enum.valueOf((Class<Enum>) oldKind.getClass(), "TRUE");
             set(entryType, entry, "password", "");
             set(entryType, entry, "onlineAccount", premium);
-            set(entryType, entry, "uuid", claim.getVerifiedMojangUuid());
+            set(entryType, entry, "uuid", verifiedUuid);
             if (!Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, entry))) {
                 throw new IllegalStateException("EasyAuth account update failed");
             }
@@ -337,11 +388,6 @@ final class EasyAuth344Bridge {
             set(entryType, entry, "uuid", oldUuid);
             throw failure;
         }
-        pendingBindings.remove(name);
-        LOGGER.info("Bound EasyAuth password account {} to verified Mojang UUID {}", name,
-                claim.getVerifiedMojangUuid());
-        player.connection.disconnect(Component.literal(
-                "FastLoginPlus binding complete. Reconnect for passwordless login."));
     }
 
     private void checkBindingEntry(Object entry, String name) {
@@ -357,10 +403,14 @@ final class EasyAuth344Bridge {
 
     private static final class PendingBinding {
         private final UUID offlineUuid;
+        private final String passwordHash;
+        private final byte[] token;
         private final long expiresAt = System.nanoTime() + BIND_WINDOW_NANOS;
 
-        private PendingBinding(UUID offlineUuid) {
+        private PendingBinding(UUID offlineUuid, String passwordHash, byte[] token) {
             this.offlineUuid = offlineUuid;
+            this.passwordHash = passwordHash;
+            this.token = token.clone();
         }
 
         private boolean isLive() {

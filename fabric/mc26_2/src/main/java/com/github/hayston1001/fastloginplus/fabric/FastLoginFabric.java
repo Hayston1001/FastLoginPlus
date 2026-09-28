@@ -92,6 +92,7 @@ public final class FastLoginFabric implements ModInitializer {
                 bridge.verifyPolicy();
                 IdentityClaim claim = parseClaim(profile);
                 bridge.beforeConfigure(server, claim);
+                bridge.requestBindingCookie(listener, claim);
                 LOGGER.info("Validated {} forwarding claim for {}; profile property names={}",
                         claim.getDecision(), profile.name(), profile.properties().keySet().size());
             } catch (IllegalArgumentException invalidClaim) {
@@ -112,6 +113,10 @@ public final class FastLoginFabric implements ModInitializer {
                 handler.disconnect(Component.literal("FastLoginPlus Fabric account check failed"));
             }
         });
+        ServerConfigurationConnectionEvents.DISCONNECT.register((listener, server) ->
+                BindingCookieProof.drop(listener));
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
+                BindingCookieProof.drop(handler));
     }
 
     private static IdentityClaim parseClaim(GameProfile profile) {
