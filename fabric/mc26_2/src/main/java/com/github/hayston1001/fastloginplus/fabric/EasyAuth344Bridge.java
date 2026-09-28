@@ -32,6 +32,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.common.ClientboundStoreCookiePacket;
+import net.minecraft.network.protocol.common.ClientboundTransferPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
@@ -45,6 +46,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.util.Properties;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -53,6 +55,7 @@ import java.util.HexFormat;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -287,7 +290,7 @@ final class EasyAuth344Bridge {
         authenticatePremium(player, entry, claim.getVerifiedMojangUuid());
     }
 
-    void beginBinding(ServerPlayer player, IdentityClaim claim) {
+    void beginBinding(MinecraftServer server, ServerPlayer player, IdentityClaim claim) {
         verifyPolicy();
         String name = player.getGameProfile().name();
         if (claim.getDecision() != Decision.OFFLINE || !Boolean.TRUE.equals(invoke(player,
@@ -301,6 +304,7 @@ final class EasyAuth344Bridge {
             throw new IllegalStateException("A password account is required to start binding");
         }
         checkBindingEntry(entry, name);
+        TransferTarget transfer = transferTarget();
         Object db = field(easyAuth, null, "DB");
         Object current = invoke(db, "getUserData", String.class, name);
         checkBindingEntry(current, name);
@@ -310,10 +314,50 @@ final class EasyAuth344Bridge {
         }
         byte[] token = new byte[32];
         TOKEN_RANDOM.nextBytes(token);
-        pendingBindings.put(name, new PendingBinding(offlineUuid(name), passwordHash, token));
+        PendingBinding pending = new PendingBinding(offlineUuid(name), passwordHash, token);
+        pendingBindings.put(name, pending);
         player.connection.send(new ClientboundStoreCookiePacket(BindingCookieProof.KEY, token.clone()));
-        player.sendSystemMessage(Component.literal("FastLoginPlus: binding window open for 10 minutes. "
-                + "Reconnect with the same official Minecraft client to finish automatically."));
+        player.sendSystemMessage(Component.literal("FastLoginPlus: verifying this client, then transferring "
+                + "for premium binding. Keep Minecraft open."));
+        CompletableFuture.delayedExecutor(300, TimeUnit.MILLISECONDS).execute(() ->
+                server.execute(() -> {
+                    if (pendingBindings.get(name) != pending || !pending.isLive()
+                            || !player.connection.isAcceptingMessages()) {
+                        return;
+                    }
+                    BindingCookieProof.confirmStoredCookie(player, name, token, () ->
+                            server.execute(() -> {
+                                if (pendingBindings.get(name) == pending && pending.isLive()
+                                        && player.connection.isAcceptingMessages()) {
+                                    LOGGER.info("Transferring {} for verified premium binding", name);
+                                    player.connection.send(new ClientboundTransferPacket(transfer.host, transfer.port));
+                                }
+                            }));
+                }));
+    }
+
+    private TransferTarget transferTarget() {
+        Path file = FabricLoader.getInstance().getConfigDir().resolve("fastloginplus-fabric.properties");
+        Properties config = new Properties();
+        try (InputStream input = Files.newInputStream(file)) {
+            config.load(input);
+        } catch (IOException error) {
+            throw new IllegalStateException("Configure binding-transfer-host and binding-transfer-port", error);
+        }
+        String host = config.getProperty("binding-transfer-host", "").trim();
+        int port;
+        try {
+            port = Integer.parseInt(config.getProperty("binding-transfer-port", ""));
+        } catch (NumberFormatException error) {
+            throw new IllegalStateException("Invalid binding-transfer-port", error);
+        }
+        if (host.isEmpty() || port < 1 || port > 65535) {
+            throw new IllegalStateException("Configure a public binding-transfer-host and port");
+        }
+        return new TransferTarget(host, port);
+    }
+
+    private record TransferTarget(String host, int port) {
     }
 
     private void completeBindingFromCookie(ServerPlayer player, IdentityClaim claim, Object entry) {

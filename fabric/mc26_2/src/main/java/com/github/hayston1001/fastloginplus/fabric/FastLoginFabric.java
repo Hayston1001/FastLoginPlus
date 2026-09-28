@@ -59,7 +59,8 @@ public final class FastLoginFabric implements ModInitializer {
                         .then(literal("premium").executes(context -> {
                             var player = context.getSource().getPlayerOrException();
                             try {
-                                bridge.beginBinding(player, parseClaim(player.getGameProfile()));
+                                bridge.beginBinding(context.getSource().getServer(), player,
+                                        parseClaim(player.getGameProfile()));
                                 return 1;
                             } catch (RuntimeException rejected) {
                                 player.sendSystemMessage(Component.literal("FastLoginPlus: " + rejected.getMessage()));

@@ -29,15 +29,20 @@ import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.cookie.ClientboundCookieRequestPacket;
 import net.minecraft.network.protocol.cookie.ServerboundCookieResponsePacket;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.security.MessageDigest;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Matches one Mojang-verified reconnect to the client that requested binding. */
+/** Matches one Mojang-verified transfer to the client that requested binding. */
 public final class BindingCookieProof {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger("fastloginplus_fabric");
     static final Identifier KEY = Identifier.fromNamespaceAndPath("fastloginplus", "bind");
+    private static final ConcurrentHashMap<Connection, StoreRequest> STORE_REQUESTS = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Connection, String> REQUESTED = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<Connection, Response> RESPONSES = new ConcurrentHashMap<>();
 
@@ -52,6 +57,13 @@ public final class BindingCookieProof {
         Connection connection = ((ConnectionAccess) listener).bindingConnection();
         REQUESTED.put(connection, name);
         listener.send(new ClientboundCookieRequestPacket(KEY));
+        LOGGER.info("Requested binding cookie during verified reconnect for {}", name);
+    }
+
+    static void confirmStoredCookie(ServerPlayer player, String name, byte[] expected, Runnable onVerified) {
+        Connection connection = ((ConnectionAccess) player.connection).bindingConnection();
+        STORE_REQUESTS.put(connection, new StoreRequest(name, expected.clone(), onVerified));
+        player.connection.send(new ClientboundCookieRequestPacket(KEY));
     }
 
     /**
@@ -65,12 +77,22 @@ public final class BindingCookieProof {
         if (!KEY.equals(packet.key())) {
             return false;
         }
+        StoreRequest store = STORE_REQUESTS.remove(connection);
+        if (store != null) {
+            boolean valid = packet.payload() != null && MessageDigest.isEqual(store.expected, packet.payload());
+            LOGGER.info("Client stored binding cookie for {}: {}", store.name, valid);
+            if (valid) {
+                store.onVerified.run();
+            }
+            return true;
+        }
         String name = REQUESTED.remove(connection);
         if (name == null) {
             return false;
         }
         byte[] payload = packet.payload();
         RESPONSES.put(connection, new Response(name, payload == null ? null : payload.clone()));
+        LOGGER.info("Received binding cookie on verified reconnect for {}: present={}", name, payload != null);
         return true;
     }
 
@@ -78,14 +100,20 @@ public final class BindingCookieProof {
         Connection connection = ((ConnectionAccess) listener).bindingConnection();
         REQUESTED.remove(connection);
         Response response = RESPONSES.remove(connection);
-        return response != null && name.equals(response.name) && response.payload != null
+        boolean valid = response != null && name.equals(response.name) && response.payload != null
                 && MessageDigest.isEqual(expected, response.payload);
+        LOGGER.info("Binding cookie matched for {}: {}", name, valid);
+        return valid;
     }
 
     static void drop(Object listener) {
         Connection connection = ((ConnectionAccess) listener).bindingConnection();
+        STORE_REQUESTS.remove(connection);
         REQUESTED.remove(connection);
         RESPONSES.remove(connection);
+    }
+
+    private record StoreRequest(String name, byte[] expected, Runnable onVerified) {
     }
 
     private record Response(String name, byte[] payload) {
