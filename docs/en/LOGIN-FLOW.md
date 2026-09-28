@@ -212,6 +212,8 @@ flowchart TD
 
 ## Proxy Mode (BungeeCord / Velocity)
 
+This section describes Bukkit/Folia backends. The opt-in [Velocity + Fabric 26.2 path](FABRIC.md) uses the same proxy decision tree, then checks EasyAuth account ownership before online mode and completes authentication in the Fabric mod.
+
 When `bungee: true` (spigot.yml) or Velocity forwarding is detected, FLP runs in a **proxy/backend split** architecture:
 
 - **Proxy** = decision maker: anti-bot, Mojang queries, premium table reads/writes, the online-mode handshake with the client
