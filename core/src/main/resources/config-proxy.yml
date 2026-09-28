@@ -95,7 +95,8 @@ anti-bot:
 # Auto-register new premium players on first join
 # Runs on the proxy: Mojang lookup, DB write and online-mode toggle happen
 # here; the backend only executes forceLogin/forceRegister through its auth
-# plugin.
+# plugin on Bukkit/Folia. Fabric checks account ownership first, then binds an
+# unclaimed EasyAuth account after a verified online login.
 autoRegister: true
 
 # Dedicated Velocity + Fabric network only. Requires a backend that validates the
@@ -103,6 +104,11 @@ autoRegister: true
 # v1 requires premiumUuid: true and excludes Floodgate/Geyser connections.
 fabric-native-auth:
   enabled: false
+  # Account ownership is read from the Fabric backend before Velocity chooses
+  # online mode. Copy config/fastloginplus-account.key from Fabric to this
+  # proxy's plugins/fastloginplus/ directory; keep the key private.
+  account-status-host: 127.0.0.1
+  account-status-port: 25578
 
 # Enable auto-login for premium players
 # The proxy decides and forwards the force-login command to the backend,

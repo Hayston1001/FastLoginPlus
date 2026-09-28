@@ -29,6 +29,7 @@ import com.github.games647.fastlogin.core.shared.JoinManagement;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.github.games647.fastlogin.protocol.IdentityClaim.Decision;
+import com.github.games647.fastlogin.protocol.AccountStatusWire;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
 import com.github.games647.fastlogin.velocity.VelocityLoginSession;
 import com.github.games647.fastlogin.velocity.VelocityLoginSource;
@@ -39,6 +40,8 @@ import com.velocitypowered.api.proxy.InboundConnection;
 import com.velocitypowered.api.proxy.Player;
 
 import java.util.concurrent.ExecutionException;
+import java.io.IOException;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -49,6 +52,7 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
     private final String username;
     private final PreLoginEvent preLoginEvent;
     private final InboundConnection connection;
+    private AccountStatusWire.Result accountStatus;
 
     public AsyncPremiumCheck(FastLoginVelocity plugin, InboundConnection connection, String username,
                              PreLoginEvent preLoginEvent) {
@@ -62,7 +66,22 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
     @Override
     public void run() {
         plugin.getSession().remove(connection.getRemoteAddress());
-        super.onLogin(username, new VelocityLoginSource(connection, preLoginEvent));
+        VelocityLoginSource source = new VelocityLoginSource(connection, preLoginEvent);
+        if (plugin.isFabricNativeAuthEnabled()) {
+            try {
+                accountStatus = plugin.getAccountStatusClient().query(username);
+            } catch (IOException | IllegalArgumentException unavailable) {
+                plugin.getLog().warn("Could not verify Fabric account ownership for {}: {}",
+                        username, unavailable.getMessage());
+                source.kick("FastLoginPlus: Fabric account status is unavailable");
+                return;
+            }
+            if (accountStatus.getStatus() == AccountStatusWire.Status.CONFLICT) {
+                source.kick("FastLoginPlus: Fabric account ownership conflict");
+                return;
+            }
+        }
+        super.onLogin(username, source);
     }
 
     @Override
@@ -109,6 +128,27 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
 
     @Override
     protected boolean shouldReserveUnknownPremiumNames() {
-        return plugin.isFabricNativeAuthEnabled();
+        // A password-owned name remains behind EasyAuth's password lock even
+        // when Mojang's name lookup is unavailable. Unclaimed or bound names
+        // must keep the unresolved decision closed.
+        return plugin.isFabricNativeAuthEnabled() && (accountStatus == null
+                || accountStatus.getStatus() != AccountStatusWire.Status.PASSWORD);
+    }
+
+    @Override
+    protected boolean canUsePremiumAccount(String playerName, UUID mojangUuid) {
+        if (!plugin.isFabricNativeAuthEnabled()) {
+            return true;
+        }
+        return accountStatus != null && (accountStatus.getStatus() == AccountStatusWire.Status.OPEN
+                || (accountStatus.getStatus() == AccountStatusWire.Status.BOUND
+                && mojangUuid != null && mojangUuid.equals(accountStatus.getUuid())));
+    }
+
+    @Override
+    protected boolean isPreRegisteredPremiumAccount(String playerName, UUID mojangUuid) {
+        return plugin.isFabricNativeAuthEnabled() && accountStatus != null
+                && accountStatus.getStatus() == AccountStatusWire.Status.BOUND
+                && mojangUuid != null && mojangUuid.equals(accountStatus.getUuid());
     }
 }

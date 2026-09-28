@@ -96,7 +96,11 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                         core.getPlugin().getLog()
                             .info("Requesting premium login for registered player: {}", username);
                     }
-                    requestPremiumLogin(source, profile, username, true);
+                    if (canUsePremiumAccount(username, profile.getId())) {
+                        requestPremiumLogin(source, profile, username, true);
+                    } else {
+                        source.kick("FastLoginPlus: account ownership conflict");
+                    }
                 } else {
                     if (isValidUsername(source, profile)) {
                         startCrackedSession(source, profile, username);
@@ -185,7 +189,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
 
             if (!premiumUUID.isPresent()
                     || (!isNameChanged(source, username, premiumUUID.get())
-                    && !isUsernameAvailable(source, username, profile))) {
+                    && !isUsernameAvailable(source, username, profile, premiumUUID.get()))) {
                 //nothing detected the player as premium -> start a cracked session
                 if ((boolean) core.getConfig().get("offline-whitelist")) {
                     source.kick(core.getMessage("offline-whitelist-kick-message"));
@@ -226,14 +230,18 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
         return true;
     }
 
-    private boolean isUsernameAvailable(S source, String username, StoredProfile profile) throws Exception {
+    private boolean isUsernameAvailable(S source, String username, StoredProfile profile, Profile mojang)
+            throws Exception {
         if (core.isDebug()) {
             core.getPlugin().getLog().info("GameProfile {} uses a premium username", username);
         }
-        // A Fabric account may already own this name. The Velocity proxy has no EasyAuth
-        // account hook, so it must never auto-enrol an unknown name as premium.
-        if (shouldReserveUnknownPremiumNames()) {
+        // Fabric can use this path only after its backend has confirmed account ownership.
+        if (!canUsePremiumAccount(username, mojang.getId())) {
             return false;
+        }
+        if (isPreRegisteredPremiumAccount(username, mojang.getId())) {
+            requestPremiumLogin(source, profile, username, true);
+            return true;
         }
         if ((boolean) core.getConfig().get("autoRegister") && (authHook == null || !authHook.isRegistered(username))) {
             requestPremiumLogin(source, profile, username, false);
@@ -268,11 +276,12 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                     core.getPlugin().getLog().info("GameProfile {} changed it's username", profile);
                 }
 
-                //update the username to the new one in the database
-                storedProfile.setPlayerName(username);
-
-                requestPremiumLogin(source, storedProfile, username, false);
-                return true;
+                if (canUsePremiumAccount(username, profile.getId())) {
+                    //update the username to the new one in the database
+                    storedProfile.setPlayerName(username);
+                    requestPremiumLogin(source, storedProfile, username, false);
+                    return true;
+                }
             }
         }
 
@@ -286,11 +295,31 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     public abstract void startCrackedSession(S source, StoredProfile profile, String username);
 
     /**
-     * The Fabric mode reserves new premium names until the backend account owner opts in.
+     * The Fabric mode keeps undecided names reserved after Mojang lookup failures.
      *
      * @return true when this login path enforces the reservation
      */
     protected boolean shouldReserveUnknownPremiumNames() {
+        return false;
+    }
+
+    /**
+     * Checks backend ownership before requesting a premium session.
+     * @param username exact login name
+     * @param mojangUuid known Mojang UUID, or null for a stored profile without one
+     * @return true when premium login may be attempted
+     */
+    protected boolean canUsePremiumAccount(String username, java.util.UUID mojangUuid) {
+        return true;
+    }
+
+    /**
+     * Reports a backend premium account that FLP has not recorded yet.
+     * @param username exact login name
+     * @param mojangUuid Mojang UUID from name lookup
+     * @return true when the backend account is already bound to that UUID
+     */
+    protected boolean isPreRegisteredPremiumAccount(String username, java.util.UUID mojangUuid) {
         return false;
     }
 

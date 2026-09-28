@@ -27,6 +27,7 @@ package com.github.hayston1001.fastloginplus.fabric;
 
 import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim;
 import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision;
+import com.github.hayston1001.fastloginplus.fabric.protocol.AccountStatusWire;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.minecraft.network.chat.Component;
@@ -41,6 +42,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.ZonedDateTime;
@@ -91,6 +93,8 @@ final class EasyAuth344Bridge {
             playerAuth.getMethod("easyAuth$getIpAddress");
             ipLimit.getMethod("invalidateCache", String.class);
             playersCache.getMethod("get", String.class);
+            Class<?> dbType = Class.forName("xyz.nikitacartes.easyauth.storage.database.DbApi");
+            dbType.getMethod("getUserData", String.class);
             entryType.getField("password");
             entryType.getField("uuid");
             entryType.getField("onlineAccount");
@@ -98,6 +102,7 @@ final class EasyAuth344Bridge {
             entryType.getField("lastAuthenticatedDate");
             entryType.getField("loginTries");
             entryType.getField("lastIp");
+            entryType.getField("username");
         } catch (ReflectiveOperationException missingMember) {
             throw new IllegalStateException("EasyAuth 3.4.4 API does not match the verified release", missingMember);
         }
@@ -133,6 +138,7 @@ final class EasyAuth344Bridge {
                 if (entry == null || !entryType.isInstance(entry)) {
                     throw new IllegalStateException("EasyAuth account was not loaded before configuration");
                 }
+                verifyCurrentAccount(claim);
                 if (claim.getDecision() == Decision.PREMIUM_VERIFIED) {
                     checkPremiumEntry(entry, claim.getPlayerName(), claim.getVerifiedMojangUuid());
                 } else if (claim.getDecision() == Decision.OFFLINE) {
@@ -157,6 +163,9 @@ final class EasyAuth344Bridge {
         if (bool(config, "premiumAutoLogin")) {
             throw new IllegalStateException("EasyAuth premium-auto-login must be false");
         }
+        if (bool(config, "offlineByDefault")) {
+            throw new IllegalStateException("EasyAuth offline-by-default must be false for first premium login");
+        }
         if (bool(config, "floodgateAutoLogin")) {
             throw new IllegalStateException("EasyAuth floodgate-auto-login must be false");
         }
@@ -171,6 +180,48 @@ final class EasyAuth344Bridge {
         }
     }
 
+    AccountStatusWire.Result accountStatus(String name) {
+        verifyPolicy();
+        Object db = field(easyAuth, null, "DB");
+        Object entry = invoke(db, "getUserData", String.class, name);
+        if (entry == null) {
+            return AccountStatusWire.result(AccountStatusWire.Status.OPEN, null);
+        }
+        if (!entryType.isInstance(entry) || !name.equals(field(entryType, entry, "username"))) {
+            return AccountStatusWire.result(AccountStatusWire.Status.CONFLICT, null);
+        }
+        String password = (String) field(entryType, entry, "password");
+        if (password == null) {
+            return AccountStatusWire.result(AccountStatusWire.Status.CONFLICT, null);
+        }
+        if (!password.isEmpty()) {
+            return AccountStatusWire.result(AccountStatusWire.Status.PASSWORD, null);
+        }
+        String kind = Objects.toString(field(entryType, entry, "onlineAccount"));
+        UUID uuid = (UUID) field(entryType, entry, "uuid");
+        if ("TRUE".equals(kind) && uuid != null) {
+            return AccountStatusWire.result(AccountStatusWire.Status.BOUND, uuid);
+        }
+        if ("UNKNOWN".equals(kind)) {
+            return AccountStatusWire.result(AccountStatusWire.Status.OPEN, null);
+        }
+        return AccountStatusWire.result(AccountStatusWire.Status.CONFLICT, null);
+    }
+
+    private void verifyCurrentAccount(IdentityClaim claim) {
+        AccountStatusWire.Result current = accountStatus(claim.getPlayerName());
+        if (claim.getDecision() == Decision.PREMIUM_VERIFIED) {
+            if (current.getStatus() != AccountStatusWire.Status.OPEN
+                    && (current.getStatus() != AccountStatusWire.Status.BOUND
+                    || !claim.getVerifiedMojangUuid().equals(current.getUuid()))) {
+                throw new IllegalStateException("EasyAuth account changed before premium authentication");
+            }
+        } else if (current.getStatus() == AccountStatusWire.Status.BOUND
+                || current.getStatus() == AccountStatusWire.Status.CONFLICT) {
+            throw new IllegalStateException("EasyAuth account changed before offline authentication");
+        }
+    }
+
     void onJoin(ServerPlayer player, IdentityClaim claim) {
         verifyPolicy();
         if (!playerAuth.isInstance(player)) {
@@ -182,6 +233,7 @@ final class EasyAuth344Bridge {
             throw new IllegalStateException("EasyAuth account is missing or was authenticated before FLP");
         }
         if (claim.getDecision() == Decision.OFFLINE) {
+            verifyCurrentAccount(claim);
             checkOfflineEntry(entry, claim.getPlayerName(), claim.getForwardedUuid());
             LOGGER.info("EasyAuth password lock remains active for {}", player.getGameProfile().name());
             return;
@@ -189,6 +241,7 @@ final class EasyAuth344Bridge {
         if (claim.getDecision() != Decision.PREMIUM_VERIFIED) {
             throw new IllegalStateException("Unresolved identity claim");
         }
+        verifyCurrentAccount(claim);
         authenticatePremium(player, entry, claim.getVerifiedMojangUuid());
     }
 
@@ -207,12 +260,14 @@ final class EasyAuth344Bridge {
         }
 
         Object oldKind = field(entryType, entry, "onlineAccount");
+        Object oldUuid = field(entryType, entry, "uuid");
         Object oldDate = field(entryType, entry, "lastAuthenticatedDate");
         Object oldTries = field(entryType, entry, "loginTries");
         try {
             @SuppressWarnings({"rawtypes", "unchecked"})
             Object premium = Enum.valueOf((Class<Enum>) oldKind.getClass(), "TRUE");
             set(entryType, entry, "onlineAccount", premium);
+            set(entryType, entry, "uuid", verifiedUuid);
             set(entryType, entry, "lastAuthenticatedDate", ZonedDateTime.now());
             set(entryType, entry, "loginTries", 0L);
             set(entryType, entry, "lastIp", ip);
@@ -222,6 +277,7 @@ final class EasyAuth344Bridge {
             }
         } catch (RuntimeException failure) {
             set(entryType, entry, "onlineAccount", oldKind);
+            set(entryType, entry, "uuid", oldUuid);
             set(entryType, entry, "lastAuthenticatedDate", oldDate);
             set(entryType, entry, "loginTries", oldTries);
             set(entryType, entry, "lastIp", oldIp);
@@ -246,11 +302,17 @@ final class EasyAuth344Bridge {
         String password = (String) field(entryType, entry, "password");
         UUID accountUuid = (UUID) field(entryType, entry, "uuid");
         String accountKind = Objects.toString(field(entryType, entry, "onlineAccount"));
-        if (!name.equals(accountName) || password == null || !password.isEmpty() || "FALSE".equals(accountKind)
-                || (!"UNKNOWN".equals(accountKind) && !"TRUE".equals(accountKind))
-                || (accountUuid != null && !accountUuid.equals(verifiedUuid))) {
+        boolean unclaimed = "UNKNOWN".equals(accountKind)
+                && (accountUuid == null || accountUuid.equals(offlineUuid(name))
+                || accountUuid.equals(verifiedUuid));
+        boolean bound = "TRUE".equals(accountKind) && verifiedUuid.equals(accountUuid);
+        if (!name.equals(accountName) || password == null || !password.isEmpty() || (!unclaimed && !bound)) {
             throw new IllegalStateException("EasyAuth account conflicts with verified premium identity");
         }
+    }
+
+    private static UUID offlineUuid(String name) {
+        return UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
     }
 
     private void checkOfflineEntry(Object entry, String name, UUID forwardedUuid) {

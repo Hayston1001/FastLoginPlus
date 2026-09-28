@@ -63,25 +63,28 @@ dependencies {
     implementation 'net.fabricmc.fabric-api:fabric-api:0.152.1+26.2'
 }
 
-// Compile the single shared wire codec in Fabric's own namespace. Velocity
-// still builds the original :protocol module; the wire format stays identical.
-def sharedClaimSource = project(':protocol').file(
-    'src/main/java/com/github/games647/fastlogin/protocol/IdentityClaim.java')
+// Compile shared wire codecs in Fabric's own namespace. Velocity still builds
+// the original :protocol module; the wire formats stay identical.
+def sharedProtocolSources = ['IdentityClaim.java', 'AccountStatusWire.java'].collect { name ->
+    project(':protocol').file("src/main/java/com/github/games647/fastlogin/protocol/${name}")
+}
 def generatedProtocolSources = rootProject.layout.buildDirectory.dir('generated/sources/fabric26_2Protocol/java')
 def generateFabricProtocol = tasks.register('generateFabricProtocol') {
-    inputs.file(sharedClaimSource)
+    inputs.files(sharedProtocolSources)
     outputs.dir(generatedProtocolSources)
     doLast {
         def originalPackage = 'package com.github.games647.fastlogin.protocol;'
-        def source = sharedClaimSource.getText('UTF-8')
-        if (source.count(originalPackage) != 1) {
-            throw new GradleException('Shared identity claim package changed; update Fabric generation')
+        sharedProtocolSources.each { sharedSource ->
+            def source = sharedSource.getText('UTF-8')
+            if (source.count(originalPackage) != 1) {
+                throw new GradleException("Shared protocol package changed in ${sharedSource.name}")
+            }
+            def target = generatedProtocolSources.get().file(
+                "com/github/hayston1001/fastloginplus/fabric/protocol/${sharedSource.name}").asFile
+            target.parentFile.mkdirs()
+            target.setText(source.replace(originalPackage,
+                'package com.github.hayston1001.fastloginplus.fabric.protocol;'), 'UTF-8')
         }
-        def target = generatedProtocolSources.get().file(
-            'com/github/hayston1001/fastloginplus/fabric/protocol/IdentityClaim.java').asFile
-        target.parentFile.mkdirs()
-        target.setText(source.replace(originalPackage,
-            'package com.github.hayston1001.fastloginplus.fabric.protocol;'), 'UTF-8')
     }
 }
 sourceSets.main.java.srcDir(generatedProtocolSources)
@@ -143,6 +146,9 @@ def verifyFabricJar = tasks.register('verifyFabricJar') {
             }
             if (zip.getEntry('com/github/hayston1001/fastloginplus/fabric/protocol/IdentityClaim.class') == null) {
                 throw new GradleException('Fabric jar is missing the relocated identity protocol')
+            }
+            if (zip.getEntry('com/github/hayston1001/fastloginplus/fabric/protocol/AccountStatusWire.class') == null) {
+                throw new GradleException('Fabric jar is missing the relocated account protocol')
             }
             zip.entries().each { entry ->
                 if (entry.name.startsWith('com/github/games647/')) {

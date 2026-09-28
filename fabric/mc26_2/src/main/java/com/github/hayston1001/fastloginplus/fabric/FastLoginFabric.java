@@ -46,11 +46,21 @@ import java.util.List;
 public final class FastLoginFabric implements ModInitializer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("fastloginplus_fabric");
+    private AccountStatusServer accountStatusServer;
 
     @Override
     public void onInitialize() {
         EasyAuth344Bridge bridge = new EasyAuth344Bridge();
-        ServerLifecycleEvents.SERVER_STARTED.register(server -> bridge.verifyPolicy());
+        ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+            bridge.verifyPolicy();
+            accountStatusServer = new AccountStatusServer(server, bridge);
+        });
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            if (accountStatusServer != null) {
+                accountStatusServer.close();
+                accountStatusServer = null;
+            }
+        });
         ServerConfigurationConnectionEvents.BEFORE_CONFIGURE.register((listener, server) -> {
             GameProfile profile = listener.getOwner();
             try {

@@ -34,6 +34,8 @@ Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow
 
 ## Quick Start
 
+For the opt-in Velocity + Fabric 26.2 authentication pilot, see the [Fabric setup guide](docs/en/FABRIC.md).
+
 **Spigot/Paper**: drop `FastLoginPlusBukkit.jar`, an auth plugin and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
 
 **Folia**: drop `FastLoginPlusFolia.jar`, an auth plugin and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`

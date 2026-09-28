@@ -56,6 +56,7 @@ import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 import com.github.games647.fastlogin.velocity.listener.ConnectListener;
 import com.github.games647.fastlogin.velocity.listener.PluginMessageListener;
+import com.github.games647.fastlogin.velocity.task.AccountStatusClient;
 import com.google.common.collect.MapMaker;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
@@ -104,6 +105,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     private GeyserService geyserService;
     private UUID proxyId;
     private boolean fabricNativeAuthEnabled;
+    private AccountStatusClient accountStatusClient;
 
     /**
      * Whether the dedicated Velocity + Fabric identity protocol is enabled.
@@ -112,6 +114,14 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
      */
     public boolean isFabricNativeAuthEnabled() {
         return fabricNativeAuthEnabled;
+    }
+
+    /**
+     * Gets the Fabric ownership query configured for this dedicated network.
+     * @return account status client, or null when Fabric mode is disabled
+     */
+    public AccountStatusClient getAccountStatusClient() {
+        return accountStatusClient;
     }
 
     @Inject
@@ -135,6 +145,14 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
             }
             if (isPluginInstalled("floodgate") || isPluginInstalled("Geyser-Velocity")) {
                 throw new IllegalStateException("Fabric native authentication does not support Bedrock in v1");
+            }
+            try {
+                byte[] key = Files.readAllBytes(dataDirectory.resolve("fastloginplus-account.key"));
+                accountStatusClient = new AccountStatusClient(
+                        fabricSection.getString("account-status-host"),
+                        fabricSection.getInt("account-status-port"), key);
+            } catch (IOException | IllegalArgumentException error) {
+                throw new IllegalStateException("Fabric account status key or endpoint is unavailable", error);
             }
             fabricNativeAuthEnabled = true;
         }

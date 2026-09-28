@@ -34,6 +34,8 @@
 
 ## 快速开始
 
+可选的 Velocity + Fabric 26.2 认证试验版参见 [Fabric 安装说明](docs/zh/FABRIC.md)。
+
 **Spigot/Paper**: 将 `FastLoginPlusBukkit.jar`、一个登录插件和 [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) 放入 `plugins/` → 设置 `online-mode=false`
 
 **Folia**: 将 `FastLoginPlusFolia.jar`、一个登录插件和 [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) 放入 `plugins/` → 设置 `online-mode=false`
