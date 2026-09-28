@@ -71,6 +71,17 @@ public class ForceLoginTask
             return;
         }
 
+        if (session.isBindingProof()) {
+            // EasyAuth still owns this password account. The backend will bind it
+            // only after its own password login on this Mojang-verified connection.
+            return;
+        }
+        if (session.getBackendBoundUuid() != null
+                && !session.getBackendBoundUuid().equals(session.getUuid())) {
+            core.getPlugin().getLog().warn("Refusing to save mismatched Fabric UUID for {}", player.getUsername());
+            return;
+        }
+
         super.run();
         if (!isOnlineMode()) {
             session.setAlreadySaved(true);

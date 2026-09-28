@@ -65,6 +65,7 @@ anti-bot:
   # Action when limit is hit: 'ignore' (FastLogin stops handling the connection —
   # login continues as a normal cracked login, no Mojang/DB requests) or 'block'
   # (reject the connection with the kick-antibot message)
+  # Fabric native auth requires 'block' when anti-bot is enabled.
   action: 'ignore'
 
   # --- Per-IP rate limiting ---
@@ -101,7 +102,10 @@ autoRegister: true
 
 # Dedicated Velocity + Fabric network only. Requires a backend that validates the
 # flp_identity property after Velocity modern forwarding; keep disabled elsewhere.
-# v1 requires premiumUuid: true and excludes Floodgate/Geyser connections.
+# Fabric mode requires premiumUuid: true, autoLogin: true,
+# nameChangeCheck: false, secondAttemptCracked: false,
+# offline-whitelist: false and anti-bot.action: block if enabled.
+# It excludes Floodgate/Geyser.
 fabric-native-auth:
   enabled: false
   # Account ownership is read from the Fabric backend before Velocity chooses

@@ -143,6 +143,29 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
             if (!core.getConfig().getBoolean("premiumUuid")) {
                 throw new IllegalStateException("Fabric native authentication requires premiumUuid: true");
             }
+            if (!core.getConfig().getBoolean("autoLogin")) {
+                throw new IllegalStateException("Fabric native authentication requires autoLogin: true");
+            }
+            if (core.getConfig().getBoolean("offline-whitelist")) {
+                throw new IllegalStateException("Fabric password accounts cannot use offline-whitelist: true");
+            }
+            if (core.getConfig().getBoolean("nameChangeCheck")) {
+                throw new IllegalStateException(
+                        "Fabric account name migration is not supported; set nameChangeCheck: false");
+            }
+            if (core.getConfig().getBoolean("secondAttemptCracked")) {
+                throw new IllegalStateException("Fabric native authentication cannot use secondAttemptCracked: true");
+            }
+            if (!"false".equalsIgnoreCase(core.getConfig().get("autoLoginFloodgate").toString())
+                    || core.getConfig().getBoolean("allowFloodgateNameConflict")
+                    || core.getConfig().getBoolean("autoRegisterFloodgate")) {
+                throw new IllegalStateException("Fabric native authentication cannot enable Bedrock options");
+            }
+            Configuration antiBot = core.getConfig().getSection("anti-bot");
+            if (antiBot != null && antiBot.getBoolean("enabled")
+                    && "ignore".equalsIgnoreCase(antiBot.getString("action"))) {
+                throw new IllegalStateException("Fabric native authentication requires anti-bot.action: block");
+            }
             if (isPluginInstalled("floodgate") || isPluginInstalled("Geyser-Velocity")) {
                 throw new IllegalStateException("Fabric native authentication does not support Bedrock in v1");
             }

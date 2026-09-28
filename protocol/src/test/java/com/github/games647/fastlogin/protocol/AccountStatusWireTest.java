@@ -71,4 +71,15 @@ class AccountStatusWireTest {
         assertThrows(IllegalArgumentException.class, () -> AccountStatusWire.parseResponse(
                 response, nonce, WRONG_KEY));
     }
+
+    @Test
+    void authenticatesPendingBindingWithoutClaimingOwnership() {
+        String nonce = AccountStatusWire.nonce();
+        String response = AccountStatusWire.response(nonce, AccountStatusWire.Status.BIND_PENDING, null, KEY);
+        AccountStatusWire.Result result = AccountStatusWire.parseResponse(response, nonce, KEY);
+        assertEquals(AccountStatusWire.Status.BIND_PENDING, result.getStatus());
+        assertEquals(null, result.getUuid());
+        assertThrows(IllegalArgumentException.class, () -> AccountStatusWire.response(
+                nonce, AccountStatusWire.Status.BIND_PENDING, UUID_ONE, KEY));
+    }
 }

@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.velocity.task;
 
 import com.github.games647.fastlogin.core.shared.JoinManagement;
+import com.github.games647.fastlogin.core.shared.FloodgateState;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.github.games647.fastlogin.protocol.IdentityClaim.Decision;
@@ -78,6 +79,37 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
             }
             if (accountStatus.getStatus() == AccountStatusWire.Status.CONFLICT) {
                 source.kick("FastLoginPlus: Fabric account ownership conflict");
+                return;
+            }
+            if (accountStatus.getStatus() == AccountStatusWire.Status.BIND_PENDING) {
+                StoredProfile profile = plugin.getCore().getStorage().loadProfile(username);
+                if (profile != null && profile.isOnlinemodePreferred()) {
+                    source.kick("FastLoginPlus: proxy account conflicts with pending bind");
+                    return;
+                }
+                if (profile == null) {
+                    profile = new StoredProfile(null, username, false, FloodgateState.FALSE,
+                            source.getAddress().getAddress().getHostAddress());
+                }
+                requestPremiumLogin(source, profile, username, true);
+                VelocityLoginSession proof = plugin.getSession().get(connection.getRemoteAddress());
+                proof.setBindingProof(true);
+                return;
+            }
+            if (accountStatus.getStatus() == AccountStatusWire.Status.BOUND) {
+                StoredProfile profile = plugin.getCore().getStorage().loadProfile(username);
+                if (profile != null && profile.isOnlinemodePreferred()
+                        && !accountStatus.getUuid().equals(profile.getId())) {
+                    source.kick("FastLoginPlus: proxy and Fabric account UUIDs conflict");
+                    return;
+                }
+                if (profile == null) {
+                    profile = new StoredProfile(null, username, false, FloodgateState.FALSE,
+                            source.getAddress().getAddress().getHostAddress());
+                }
+                requestPremiumLogin(source, profile, username, true);
+                VelocityLoginSession bound = plugin.getSession().get(connection.getRemoteAddress());
+                bound.setBackendBoundUuid(accountStatus.getUuid());
                 return;
             }
         }

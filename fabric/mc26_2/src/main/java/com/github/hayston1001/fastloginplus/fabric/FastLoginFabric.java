@@ -30,6 +30,7 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.network.chat.Component;
@@ -38,6 +39,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import static net.minecraft.commands.Commands.literal;
 
 /**
  * Validates an authenticated forwarding claim before configuration and applies
@@ -51,6 +54,28 @@ public final class FastLoginFabric implements ModInitializer {
     @Override
     public void onInitialize() {
         EasyAuth344Bridge bridge = new EasyAuth344Bridge();
+        CommandRegistrationCallback.EVENT.register((dispatcher, dedicated, environment) ->
+                dispatcher.register(literal("flp")
+                        .then(literal("premium").executes(context -> {
+                            var player = context.getSource().getPlayerOrException();
+                            try {
+                                bridge.beginBinding(player, parseClaim(player.getGameProfile()));
+                                return 1;
+                            } catch (RuntimeException rejected) {
+                                player.sendSystemMessage(Component.literal("FastLoginPlus: " + rejected.getMessage()));
+                                return 0;
+                            }
+                        }))
+                        .then(literal("bind").executes(context -> {
+                            var player = context.getSource().getPlayerOrException();
+                            try {
+                                bridge.completeBinding(player, parseClaim(player.getGameProfile()));
+                                return 1;
+                            } catch (RuntimeException rejected) {
+                                player.sendSystemMessage(Component.literal("FastLoginPlus: " + rejected.getMessage()));
+                                return 0;
+                            }
+                        }))));
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             bridge.verifyPolicy();
             accountStatusServer = new AccountStatusServer(server, bridge);

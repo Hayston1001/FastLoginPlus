@@ -27,10 +27,13 @@ package com.github.games647.fastlogin.velocity;
 
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import java.util.UUID;
 
 public class VelocityLoginSession extends LoginSession {
     private boolean alreadySaved;
     private boolean alreadyLogged;
+    private boolean bindingProof;
+    private UUID backendBoundUuid;
 
     public VelocityLoginSession(String requestUsername, boolean registered, StoredProfile profile) {
         super(requestUsername, registered, profile);
@@ -54,6 +57,22 @@ public class VelocityLoginSession extends LoginSession {
 
     public synchronized void setAlreadyLogged(boolean alreadyLogged) {
         this.alreadyLogged = alreadyLogged;
+    }
+
+    public synchronized boolean isBindingProof() {
+        return bindingProof;
+    }
+
+    public synchronized void setBindingProof(boolean bindingProof) {
+        this.bindingProof = bindingProof;
+    }
+
+    public synchronized UUID getBackendBoundUuid() {
+        return backendBoundUuid;
+    }
+
+    public synchronized void setBackendBoundUuid(UUID backendBoundUuid) {
+        this.backendBoundUuid = backendBoundUuid;
     }
 
     @Override

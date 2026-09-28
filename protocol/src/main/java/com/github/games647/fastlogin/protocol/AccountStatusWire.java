@@ -45,7 +45,7 @@ public final class AccountStatusWire {
 
     /** Backend account classification. */
     public enum Status {
-        OPEN, PASSWORD, BOUND, CONFLICT
+        OPEN, PASSWORD, BIND_PENDING, BOUND, CONFLICT
     }
 
     private AccountStatusWire() {
