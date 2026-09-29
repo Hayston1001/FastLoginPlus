@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -48,6 +49,10 @@ class BindingCookieProofTest {
         BindingCookieProof.expireStoreRequest(connection, request);
         BindingCookieProof.expireStoreRequest(connection, request);
 
+        assertEquals(0, verified.get());
+        assertEquals(1, failed.get());
+        assertTrue(BindingCookieProof.accept(connection,
+                new ServerboundCookieResponsePacket(BindingCookieProof.KEY, new byte[]{1})));
         assertEquals(0, verified.get());
         assertEquals(1, failed.get());
     }
@@ -97,5 +102,57 @@ class BindingCookieProofTest {
 
         assertEquals(1, verified.get());
         assertEquals(0, failed.get());
+    }
+
+    @Test
+    void overlappingAttemptsCannotTransferFromOldCookieAndCanRetry() {
+        Connection connection = mock(Connection.class);
+        AtomicInteger verified = new AtomicInteger();
+        AtomicInteger failed = new AtomicInteger();
+        var oldRequest = BindingCookieProof.registerStoreRequest(connection, "Player", new byte[]{1},
+                verified::incrementAndGet, failed::incrementAndGet);
+        var newRequest = BindingCookieProof.registerStoreRequest(connection, "Player", new byte[]{2},
+                verified::incrementAndGet, failed::incrementAndGet);
+
+        assertTrue(BindingCookieProof.accept(connection,
+                new ServerboundCookieResponsePacket(BindingCookieProof.KEY, new byte[]{1})));
+        BindingCookieProof.expireStoreRequest(connection, oldRequest);
+        BindingCookieProof.expireStoreRequest(connection, newRequest);
+        assertEquals(0, verified.get());
+        assertEquals(1, failed.get());
+
+        BindingCookieProof.registerStoreRequest(connection, "Player", new byte[]{3},
+                verified::incrementAndGet, failed::incrementAndGet);
+        assertTrue(BindingCookieProof.accept(connection,
+                new ServerboundCookieResponsePacket(BindingCookieProof.KEY, new byte[]{3})));
+        assertEquals(1, verified.get());
+        assertEquals(1, failed.get());
+    }
+
+    @Test
+    void cookieFromAnotherConnectionCannotConfirmThisAttempt() {
+        Connection first = mock(Connection.class);
+        Connection second = mock(Connection.class);
+        AtomicInteger verified = new AtomicInteger();
+        AtomicInteger failed = new AtomicInteger();
+        var request = BindingCookieProof.registerStoreRequest(first, "Player", new byte[]{1},
+                verified::incrementAndGet, failed::incrementAndGet);
+
+        assertTrue(BindingCookieProof.accept(second,
+                new ServerboundCookieResponsePacket(BindingCookieProof.KEY, new byte[]{1})));
+        assertEquals(0, verified.get());
+        assertTrue(BindingCookieProof.accept(first,
+                new ServerboundCookieResponsePacket(BindingCookieProof.KEY, new byte[]{1})));
+        BindingCookieProof.expireStoreRequest(first, request);
+        assertEquals(1, verified.get());
+        assertEquals(0, failed.get());
+    }
+
+    @Test
+    void unrelatedCookieStillUsesVanillaHandling() {
+        Connection connection = mock(Connection.class);
+
+        assertFalse(BindingCookieProof.accept(connection, new ServerboundCookieResponsePacket(
+                net.minecraft.resources.Identifier.fromNamespaceAndPath("other", "cookie"), new byte[]{1})));
     }
 }

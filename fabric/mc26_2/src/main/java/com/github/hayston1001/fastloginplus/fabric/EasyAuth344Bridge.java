@@ -59,6 +59,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.LongSupplier;
 
 /** Fixed-version bridge for EasyAuth 3.4.4's account and login lifecycle. */
 final class EasyAuth344Bridge {
@@ -228,11 +229,11 @@ final class EasyAuth344Bridge {
                 return AccountStatusWire.result(AccountStatusWire.Status.CONFLICT, null);
             }
             PendingBinding pending = pendingBindings.get(name);
-            if (pending != null && (!pending.isLive() || !pending.passwordHash.equals(password))) {
+            if (pending != null && !pending.matches(accountUuid, password)) {
                 pendingBindings.remove(name, pending);
                 pending = null;
             }
-            if (pending != null && pending.isLive() && pending.offlineUuid.equals(accountUuid)) {
+            if (pending != null) {
                 return AccountStatusWire.result(AccountStatusWire.Status.BIND_PENDING, null);
             }
             return AccountStatusWire.result(AccountStatusWire.Status.PASSWORD, null);
@@ -475,20 +476,32 @@ final class EasyAuth344Bridge {
         }
     }
 
-    private static final class PendingBinding {
+    static final class PendingBinding {
         private final UUID offlineUuid;
         private final String passwordHash;
         private final byte[] token;
-        private final long expiresAt = System.nanoTime() + BIND_WINDOW_NANOS;
+        private final long expiresAt;
+        private final LongSupplier nanoTime;
 
         private PendingBinding(UUID offlineUuid, String passwordHash, byte[] token) {
+            this(offlineUuid, passwordHash, token, System::nanoTime);
+        }
+
+        PendingBinding(UUID offlineUuid, String passwordHash, byte[] token, LongSupplier nanoTime) {
             this.offlineUuid = offlineUuid;
             this.passwordHash = passwordHash;
             this.token = token.clone();
+            this.nanoTime = nanoTime;
+            this.expiresAt = nanoTime.getAsLong() + BIND_WINDOW_NANOS;
         }
 
         private boolean isLive() {
-            return System.nanoTime() - expiresAt < 0;
+            return nanoTime.getAsLong() - expiresAt < 0;
+        }
+
+        boolean matches(UUID accountUuid, String currentPasswordHash) {
+            return isLive() && offlineUuid.equals(accountUuid)
+                    && passwordHash.equals(currentPasswordHash);
         }
     }
 

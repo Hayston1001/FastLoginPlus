@@ -110,7 +110,10 @@ public final class BindingCookieProof {
         }
         String name = REQUESTED.remove(connection);
         if (name == null) {
-            return false;
+            // A response can arrive after our five-second confirmation deadline.
+            // It carries no authority without an outstanding request, but vanilla
+            // would disconnect the player for an unexpected cookie response.
+            return true;
         }
         byte[] payload = packet.payload();
         RESPONSES.put(connection, new Response(name, payload == null ? null : payload.clone()));
