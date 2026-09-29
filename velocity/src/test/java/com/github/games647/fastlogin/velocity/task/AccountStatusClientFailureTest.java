@@ -10,6 +10,8 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -41,6 +43,28 @@ class AccountStatusClientFailureTest {
             assertThrows(IOException.class, () -> new AccountStatusClient("127.0.0.1",
                     listener.getLocalPort(), KEY).query("Alex"));
             responder.join();
+        }
+    }
+
+    @Test
+    void stalledBackendFailsTheQuery() throws Exception {
+        try (ServerSocket listener = new ServerSocket(0)) {
+            CountDownLatch release = new CountDownLatch(1);
+            Thread responder = new Thread(() -> {
+                try (var socket = listener.accept()) {
+                    release.await(5, TimeUnit.SECONDS);
+                } catch (IOException | InterruptedException error) {
+                    throw new AssertionError(error);
+                }
+            });
+            responder.start();
+            try {
+                assertThrows(IOException.class, () -> new AccountStatusClient("127.0.0.1",
+                        listener.getLocalPort(), KEY).query("Alex"));
+            } finally {
+                release.countDown();
+                responder.join();
+            }
         }
     }
 }

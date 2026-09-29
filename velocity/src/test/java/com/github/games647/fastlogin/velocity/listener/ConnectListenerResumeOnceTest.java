@@ -28,6 +28,7 @@ package com.github.games647.fastlogin.velocity.listener;
 import com.github.games647.fastlogin.core.antibot.AntiBotService;
 import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
+import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
 import com.velocitypowered.api.event.Continuation;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
@@ -35,6 +36,7 @@ import com.velocitypowered.api.proxy.InboundConnection;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -45,6 +47,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 
 /**
  * the EventTask continuation must be resumed exactly once on every
@@ -100,6 +105,47 @@ class ConnectListenerResumeOnceTest {
 
         verify(continuation, times(1)).resume();
         assertTrue(resumed.get(), "the guard must stay flipped after the fallback resume");
+    }
+
+    @Test
+    void fabricDecisionFailureDeniesBeforeResuming() {
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        FastLoginCore<?, ?, ?> core = mock(FastLoginCore.class);
+        doReturn(core).when(plugin).getCore();
+        when(plugin.getLog()).thenReturn(mock(Logger.class));
+        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
+        when(core.getMessage(anyString())).thenThrow(new IllegalStateException("boom"));
+        ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
+        PreLoginEvent event = mock(PreLoginEvent.class);
+        Continuation continuation = mock(Continuation.class);
+
+        listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Block,
+                continuation, new AtomicBoolean(false));
+
+        verify(event).setResult(argThat(result -> !result.isAllowed()));
+        verify(continuation, times(1)).resume();
+    }
+
+    @Test
+    void fabricAsyncPremiumFailureDeniesBeforeResuming() {
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        AsyncScheduler scheduler = mock(AsyncScheduler.class);
+        when(plugin.getLog()).thenReturn(mock(Logger.class));
+        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
+        when(plugin.getScheduler()).thenReturn(scheduler);
+        doAnswer(invocation -> {
+            invocation.getArgument(0, Runnable.class).run();
+            return CompletableFuture.completedFuture(null);
+        }).when(scheduler).runAsync(any(Runnable.class));
+        ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
+        PreLoginEvent event = mock(PreLoginEvent.class);
+        Continuation continuation = mock(Continuation.class);
+
+        listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Continue,
+                continuation, new AtomicBoolean(false));
+
+        verify(event).setResult(argThat(result -> !result.isAllowed()));
+        verify(continuation, times(1)).resume();
     }
 
     @Test

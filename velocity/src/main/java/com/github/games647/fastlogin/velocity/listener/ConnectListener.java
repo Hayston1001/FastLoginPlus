@@ -57,6 +57,7 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.util.GameProfile;
 import com.velocitypowered.api.util.GameProfile.Property;
+import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.geysermc.floodgate.api.player.FloodgatePlayer;
@@ -120,6 +121,11 @@ public class ConnectListener {
                     plugin.getProxy().getEventManager().fire(antiBotEvent).whenComplete((unused, ex) -> {
                         if (ex != null) {
                             plugin.getLog().error("Error firing anti-bot event", ex);
+                            if (plugin.isFabricNativeAuthEnabled()) {
+                                rejectFabricPreLogin(preLoginEvent);
+                                resumeOnce(continuation, resumed);
+                                return;
+                            }
                         }
                         Action effective = antiBotEvent.isCancelled() ? Action.Continue : action;
                         applyDecisionSafely(preLoginEvent, connection, checkedUsername, effective,
@@ -127,6 +133,7 @@ public class ConnectListener {
                     });
                 } catch (Exception fireEx) {
                     plugin.getLog().error("Error firing anti-bot event", fireEx);
+                    rejectFabricPreLogin(preLoginEvent);
                     resumeOnce(continuation, resumed);
                 }
             });
@@ -179,6 +186,7 @@ public class ConnectListener {
                         new AsyncPremiumCheck(plugin, connection, username, preLoginEvent).run();
                     } catch (Exception runEx) {
                         plugin.getLog().error("Error during premium check", runEx);
+                        rejectFabricPreLogin(preLoginEvent);
                     } finally {
                         // same guard as the outer paths: at most one resume
                         resumeOnce(continuation, resumed);
@@ -191,7 +199,7 @@ public class ConnectListener {
     /**
      * apply the decision and guarantee that the continuation is
      * resumed even when applying it throws — otherwise the login hangs until
-     * the read timeout instead of degrading to a normal login.
+     * the read timeout. Fabric mode rejects failures before resuming.
      *
      * @param preLoginEvent the paused pre-login event
      * @param connection    the inbound connection
@@ -207,7 +215,15 @@ public class ConnectListener {
             applyAntiBotDecision(preLoginEvent, connection, username, action, continuation, resumed);
         } catch (Exception decisionEx) {
             plugin.getLog().error("Error applying anti-bot decision for {}", username, decisionEx);
+            rejectFabricPreLogin(preLoginEvent);
             resumeOnce(continuation, resumed);
+        }
+    }
+
+    private void rejectFabricPreLogin(PreLoginEvent event) {
+        if (plugin.isFabricNativeAuthEnabled()) {
+            event.setResult(PreLoginComponentResult.denied(Component.text(
+                    "FastLoginPlus: Fabric authentication is unavailable")));
         }
     }
 
