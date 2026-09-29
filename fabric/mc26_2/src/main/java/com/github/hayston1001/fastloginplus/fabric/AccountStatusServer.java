@@ -129,13 +129,18 @@ final class AccountStatusServer implements AutoCloseable {
         try (socket) {
             String line = readLine(socket);
             AccountStatusWire.Request request = AccountStatusWire.parseRequest(line, key);
-            AccountStatusWire.Result result = server.submit(() -> bridge.accountStatus(request.getName()))
-                    .get(2, TimeUnit.SECONDS);
-            String response = AccountStatusWire.response(request.getNonce(), result.getStatus(), result.getUuid(), key);
-            socket.getOutputStream().write((response + "\n").getBytes(StandardCharsets.US_ASCII));
+            try {
+                AccountStatusWire.Result result = server.submit(() -> bridge.accountStatus(request.getName()))
+                        .get(2, TimeUnit.SECONDS);
+                String response = AccountStatusWire.response(
+                        request.getNonce(), result.getStatus(), result.getUuid(), key);
+                socket.getOutputStream().write((response + "\n").getBytes(StandardCharsets.US_ASCII));
+            } catch (Exception failure) {
+                LOGGER.warn("Authenticated account query failed for {}", request.getName(), failure);
+            }
         } catch (Exception failure) {
-            // Invalid MAC, unavailable database and timeout all close without an answer.
-            // The proxy fails this login closed rather than guessing account ownership.
+            // Invalid MAC or malformed requests close silently. Authenticated query
+            // failures are logged above; the proxy still fails this login closed.
         }
     }
 
