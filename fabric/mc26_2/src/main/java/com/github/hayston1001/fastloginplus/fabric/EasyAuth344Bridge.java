@@ -39,6 +39,8 @@ import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.io.IOException;
@@ -50,6 +52,7 @@ import java.util.Properties;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.sql.Connection;
 import java.time.ZonedDateTime;
 import java.util.HexFormat;
 import java.util.Objects;
@@ -210,7 +213,7 @@ final class EasyAuth344Bridge {
     AccountStatusWire.Result accountStatus(String name) {
         verifyPolicy();
         Object db = field(easyAuth, null, "DB");
-        Object entry = invoke(db, "getUserData", String.class, name);
+        Object entry = readAccount(db, name);
         if (entry == null) {
             return AccountStatusWire.result(AccountStatusWire.Status.OPEN, null);
         }
@@ -308,7 +311,7 @@ final class EasyAuth344Bridge {
         checkBindingEntry(entry, name);
         TransferTarget transfer = transferTarget();
         Object db = field(easyAuth, null, "DB");
-        Object current = invoke(db, "getUserData", String.class, name);
+        Object current = readAccount(db, name);
         checkBindingEntry(current, name);
         String passwordHash = (String) field(entryType, entry, "password");
         if (!passwordHash.equals(field(entryType, current, "password"))) {
@@ -391,7 +394,7 @@ final class EasyAuth344Bridge {
             return;
         }
         Object db = field(easyAuth, null, "DB");
-        Object current = invoke(db, "getUserData", String.class, name);
+        Object current = readAccount(db, name);
         checkBindingEntry(current, name);
         if (!pending.passwordHash.equals(field(entryType, current, "password"))) {
             throw new IllegalStateException("EasyAuth password account changed during binding");
@@ -428,7 +431,7 @@ final class EasyAuth344Bridge {
         Object entry = invoke(player, "easyAuth$getPlayerEntryV1");
         checkBindingEntry(entry, name);
         Object db = field(easyAuth, null, "DB");
-        Object current = invoke(db, "getUserData", String.class, name);
+        Object current = readAccount(db, name);
         checkBindingEntry(current, name);
         if (!Objects.equals(field(entryType, current, "lastAuthenticatedDate"),
                 field(entryType, entry, "lastAuthenticatedDate"))
@@ -586,6 +589,33 @@ final class EasyAuth344Bridge {
 
     private static UUID offlineUuid(String name) {
         return UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private Object readAccount(Object db, String name) {
+        if (!db.getClass().getName().equals("xyz.nikitacartes.easyauth.storage.database.SQLite")) {
+            return invoke(db, "getUserData", String.class, name);
+        }
+        try {
+            Field connectionField = db.getClass().getDeclaredField("connection");
+            connectionField.setAccessible(true);
+            Field configField = db.getClass().getDeclaredField("config");
+            configField.setAccessible(true);
+            Object storageConfig = configField.get(db);
+            Object sqliteConfig = field(storageConfig.getClass(), storageConfig, "sqlite");
+            String table = (String) field(sqliteConfig.getClass(), sqliteConfig, "sqliteTable");
+            Object extended = field(easyAuth, null, "extendedConfig");
+            boolean caseInsensitive = bool(extended, "allowCaseInsensitiveUsername");
+            SQLiteAccountReader.Row row = SQLiteAccountReader.read(
+                    (Connection) connectionField.get(db), table, name, caseInsensitive);
+            if (row == null) {
+                return null;
+            }
+            Constructor<?> constructor = entryType.getConstructor(
+                    String.class, String.class, String.class, String.class);
+            return constructor.newInstance(row.username(), row.usernameLowerCase(), row.uuid(), row.data());
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("EasyAuth SQLite account read is unavailable", error);
+        }
     }
 
     private void checkOfflineEntry(Object entry, String name, UUID forwardedUuid) {
