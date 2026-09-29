@@ -212,7 +212,7 @@ flowchart TD
 
 ## 代理模式(BungeeCord / Velocity)
 
-本节描述 Bukkit/Folia 后端。可选的 [Velocity + Fabric 26.2 流程](FABRIC.md)沿用代理端的决策树，在开启正版认证前查询 EasyAuth 账号归属，并由 Fabric 模组完成认证。已有密码账号先经过两次连接的验证绑定，随后才免密。
+本节描述 Bukkit/Folia 后端。可选的 Velocity + Fabric 26.2 流程沿用代理端的决策树，在开启正版认证前查询 EasyAuth 账号归属，并由 Fabric 模组完成认证。已有密码账号先经过两次连接的验证绑定，随后才免密。
 
 当检测到 `bungee: true`(spigot.yml)或 Velocity 转发时, FLP 运行在**代理/后端分离**架构下:
 
