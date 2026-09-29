@@ -448,24 +448,8 @@ final class EasyAuth344Bridge {
     }
 
     private void writeBinding(Object db, Object entry, UUID verifiedUuid) {
-        String oldPassword = (String) field(entryType, entry, "password");
-        Object oldKind = field(entryType, entry, "onlineAccount");
-        UUID oldUuid = (UUID) field(entryType, entry, "uuid");
-        try {
-            @SuppressWarnings({"rawtypes", "unchecked"})
-            Object premium = Enum.valueOf((Class<Enum>) oldKind.getClass(), "TRUE");
-            set(entryType, entry, "password", "");
-            set(entryType, entry, "onlineAccount", premium);
-            set(entryType, entry, "uuid", verifiedUuid);
-            if (!Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, entry))) {
-                throw new IllegalStateException("EasyAuth account update failed");
-            }
-        } catch (RuntimeException failure) {
-            set(entryType, entry, "password", oldPassword);
-            set(entryType, entry, "onlineAccount", oldKind);
-            set(entryType, entry, "uuid", oldUuid);
-            throw failure;
-        }
+        EasyAuthAccountUpdate.bind(entryType, entry, verifiedUuid,
+                candidate -> Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, candidate)));
     }
 
     private void checkBindingEntry(Object entry, String name) {
@@ -530,35 +514,9 @@ final class EasyAuth344Bridge {
             throw new IllegalStateException("EasyAuth did not resolve a player IP");
         }
 
-        Object oldPassword = field(entryType, entry, "password");
-        Object oldKind = field(entryType, entry, "onlineAccount");
-        Object oldUuid = field(entryType, entry, "uuid");
-        Object oldDate = field(entryType, entry, "lastAuthenticatedDate");
-        Object oldTries = field(entryType, entry, "loginTries");
-        try {
-            @SuppressWarnings({"rawtypes", "unchecked"})
-            Object premium = Enum.valueOf((Class<Enum>) oldKind.getClass(), "TRUE");
-            if (binding) {
-                set(entryType, entry, "password", "");
-            }
-            set(entryType, entry, "onlineAccount", premium);
-            set(entryType, entry, "uuid", verifiedUuid);
-            set(entryType, entry, "lastAuthenticatedDate", ZonedDateTime.now());
-            set(entryType, entry, "loginTries", 0L);
-            set(entryType, entry, "lastIp", ip);
-            Object db = field(easyAuth, null, "DB");
-            if (!Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, entry))) {
-                throw new IllegalStateException("EasyAuth account update failed");
-            }
-        } catch (RuntimeException failure) {
-            set(entryType, entry, "password", oldPassword);
-            set(entryType, entry, "onlineAccount", oldKind);
-            set(entryType, entry, "uuid", oldUuid);
-            set(entryType, entry, "lastAuthenticatedDate", oldDate);
-            set(entryType, entry, "loginTries", oldTries);
-            set(entryType, entry, "lastIp", oldIp);
-            throw failure;
-        }
+        Object db = field(easyAuth, null, "DB");
+        EasyAuthAccountUpdate.authenticate(entryType, entry, verifiedUuid, ZonedDateTime.now(), ip,
+                binding, candidate -> Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, candidate)));
 
         invoke(ipLimit, null, "invalidateCache", String.class, oldIp);
         if (!oldIp.equals(ip)) {
@@ -642,14 +600,6 @@ final class EasyAuth344Bridge {
             return type.getField(name).get(owner);
         } catch (ReflectiveOperationException error) {
             throw new IllegalStateException("EasyAuth field is unavailable: " + name, error);
-        }
-    }
-
-    private static void set(Class<?> type, Object owner, String name, Object value) {
-        try {
-            type.getField(name).set(owner, value);
-        } catch (ReflectiveOperationException error) {
-            throw new IllegalStateException("EasyAuth field cannot be updated: " + name, error);
         }
     }
 
