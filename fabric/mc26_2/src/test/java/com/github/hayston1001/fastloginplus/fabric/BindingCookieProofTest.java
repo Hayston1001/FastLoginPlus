@@ -149,6 +149,56 @@ class BindingCookieProofTest {
     }
 
     @Test
+    void disconnectedConnectionCannotFailOrVerifyReplacementConnection() {
+        Connection oldConnection = mock(Connection.class);
+        Connection newConnection = mock(Connection.class);
+        AtomicInteger oldFailed = new AtomicInteger();
+        AtomicInteger verified = new AtomicInteger();
+        AtomicInteger failed = new AtomicInteger();
+        var oldRequest = BindingCookieProof.registerStoreRequest(oldConnection, "Player", new byte[]{1},
+                () -> { throw new AssertionError("Disconnected request verified"); }, oldFailed::incrementAndGet);
+        BindingCookieProof.drop((BindingCookieProof.ConnectionAccess) () -> oldConnection);
+        var newRequest = BindingCookieProof.registerStoreRequest(newConnection, "Player", new byte[]{2},
+                verified::incrementAndGet, failed::incrementAndGet);
+
+        BindingCookieProof.expireStoreRequest(oldConnection, oldRequest);
+        assertTrue(BindingCookieProof.accept(oldConnection,
+                new ServerboundCookieResponsePacket(BindingCookieProof.KEY, new byte[]{1})));
+        assertEquals(1, oldFailed.get());
+        assertEquals(0, failed.get());
+        assertEquals(0, verified.get());
+        assertTrue(BindingCookieProof.accept(newConnection,
+                new ServerboundCookieResponsePacket(BindingCookieProof.KEY, new byte[]{2})));
+        BindingCookieProof.expireStoreRequest(newConnection, newRequest);
+        assertEquals(1, verified.get());
+        assertEquals(0, failed.get());
+    }
+
+    @Test
+    void lateResponsesAfterSuccessfulRetryCannotRunCallbacksAgain() {
+        Connection connection = mock(Connection.class);
+        AtomicInteger verified = new AtomicInteger();
+        AtomicInteger failed = new AtomicInteger();
+        var oldRequest = BindingCookieProof.registerStoreRequest(connection, "Player", new byte[]{1},
+                verified::incrementAndGet, failed::incrementAndGet);
+        BindingCookieProof.expireStoreRequest(connection, oldRequest);
+        var newRequest = BindingCookieProof.registerStoreRequest(connection, "Player", new byte[]{2},
+                verified::incrementAndGet, failed::incrementAndGet);
+        assertTrue(BindingCookieProof.accept(connection,
+                new ServerboundCookieResponsePacket(BindingCookieProof.KEY, new byte[]{2})));
+
+        assertTrue(BindingCookieProof.accept(connection,
+                new ServerboundCookieResponsePacket(BindingCookieProof.KEY, new byte[]{1})));
+        assertTrue(BindingCookieProof.accept(connection,
+                new ServerboundCookieResponsePacket(BindingCookieProof.KEY, new byte[]{2})));
+        BindingCookieProof.expireStoreRequest(connection, oldRequest);
+        BindingCookieProof.expireStoreRequest(connection, newRequest);
+        BindingCookieProof.drop((BindingCookieProof.ConnectionAccess) () -> connection);
+        assertEquals(1, verified.get());
+        assertEquals(1, failed.get());
+    }
+
+    @Test
     void unrelatedCookieStillUsesVanillaHandling() {
         Connection connection = mock(Connection.class);
 

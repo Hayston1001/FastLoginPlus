@@ -37,7 +37,9 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -48,6 +50,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 
@@ -145,6 +150,60 @@ class ConnectListenerResumeOnceTest {
                 continuation, new AtomicBoolean(false));
 
         verify(event).setResult(argThat(result -> !result.isAllowed()));
+        verify(continuation, times(1)).resume();
+    }
+
+    @Test
+    void fabricQueuedPremiumFailureDeniesBeforeResuming() {
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        AsyncScheduler scheduler = mock(AsyncScheduler.class);
+        when(plugin.getLog()).thenReturn(mock(Logger.class));
+        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
+        when(plugin.getScheduler()).thenReturn(scheduler);
+        AtomicReference<Runnable> queued = new AtomicReference<>();
+        doAnswer(invocation -> {
+            queued.set(invocation.getArgument(0, Runnable.class));
+            return new CompletableFuture<>();
+        }).when(scheduler).runAsync(any(Runnable.class));
+        ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
+        PreLoginEvent event = mock(PreLoginEvent.class);
+        Continuation continuation = mock(Continuation.class);
+        AtomicBoolean resumed = new AtomicBoolean(false);
+
+        listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Continue,
+                continuation, resumed);
+        verify(continuation, never()).resume();
+        assertFalse(resumed.get());
+        queued.get().run();
+
+        var order = inOrder(event, continuation);
+        order.verify(event).setResult(argThat(result -> !result.isAllowed()));
+        order.verify(continuation).resume();
+        ConnectListener.resumeOnce(continuation, resumed);
+        verify(continuation, times(1)).resume();
+    }
+
+    @Test
+    void fabricRejectedSchedulingDeniesBeforeResuming() {
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        AsyncScheduler scheduler = mock(AsyncScheduler.class);
+        when(plugin.getLog()).thenReturn(mock(Logger.class));
+        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
+        when(plugin.getScheduler()).thenReturn(scheduler);
+        doThrow(new RejectedExecutionException("stopping"))
+                .when(scheduler).runAsync(any(Runnable.class));
+        ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
+        PreLoginEvent event = mock(PreLoginEvent.class);
+        Continuation continuation = mock(Continuation.class);
+        AtomicBoolean resumed = new AtomicBoolean(false);
+
+        listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Continue,
+                continuation, resumed);
+
+        var order = inOrder(event, continuation);
+        order.verify(event).setResult(argThat(result -> !result.isAllowed()));
+        order.verify(continuation).resume();
+        ConnectListener.resumeOnce(continuation, resumed);
         verify(continuation, times(1)).resume();
     }
 

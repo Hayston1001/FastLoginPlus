@@ -333,12 +333,7 @@ final class EasyAuth344Bridge {
                     BindingCookieProof.StoreRequest request = BindingCookieProof.confirmStoredCookie(
                             player, name, token, () ->
                                     server.execute(() -> {
-                                        if (pendingBindings.get(name) == pending && pending.isLive()
-                                                && player.connection.isAcceptingMessages()) {
-                                            LOGGER.info("Transferring {} for verified premium binding", name);
-                                            player.connection.send(
-                                                    new ClientboundTransferPacket(transfer.host, transfer.port));
-                                        }
+                                        transferAfterConfirmation(player, name, pending, transfer.host, transfer.port);
                                     }), () -> server.execute(() ->
                                             failStoredCookie(player, name, pending)));
                     CompletableFuture.delayedExecutor(STORE_CONFIRM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -347,7 +342,15 @@ final class EasyAuth344Bridge {
                 }));
     }
 
-    private void failStoredCookie(ServerPlayer player, String name, PendingBinding pending) {
+    void transferAfterConfirmation(ServerPlayer player, String name, PendingBinding pending, String host, int port) {
+        if (pendingBindings.get(name) == pending && pending.isLive()
+                && player.connection.isAcceptingMessages()) {
+            LOGGER.info("Transferring {} for verified premium binding", name);
+            player.connection.send(new ClientboundTransferPacket(host, port));
+        }
+    }
+
+    void failStoredCookie(ServerPlayer player, String name, PendingBinding pending) {
         if (pendingBindings.remove(name, pending)) {
             LOGGER.warn("Client did not confirm the binding cookie for {}", name);
             if (player.connection.isAcceptingMessages()) {
