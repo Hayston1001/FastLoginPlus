@@ -504,31 +504,26 @@ final class EasyAuth344Bridge {
         }
         Object config = field(easyAuth, null, "config");
         ZonedDateTime lastKick = (ZonedDateTime) field(entryType, entry, "lastKickedDate");
-        if (lastKick == null || lastKick.plusSeconds(number(config, "resetLoginAttemptsTimeout"))
-                .isAfter(ZonedDateTime.now())) {
-            throw new IllegalStateException("EasyAuth account is in a login timeout");
-        }
         String ip = (String) invoke(player, "easyAuth$getIpAddress");
         String oldIp = (String) field(entryType, entry, "lastIp");
-        if (ip == null || ip.isEmpty() || oldIp == null) {
-            throw new IllegalStateException("EasyAuth did not resolve a player IP");
-        }
 
         Object db = field(easyAuth, null, "DB");
-        EasyAuthAccountUpdate.authenticate(entryType, entry, verifiedUuid, ZonedDateTime.now(), ip,
-                binding, candidate -> Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, candidate)));
-
-        invoke(ipLimit, null, "invalidateCache", String.class, oldIp);
-        if (!oldIp.equals(ip)) {
-            invoke(ipLimit, null, "invalidateCache", String.class, ip);
-        }
-        invoke(player, "easyAuth$restoreTrueLocation");
-        invoke(player, "easyAuth$setAuthenticated", boolean.class, true);
-        if (!Boolean.TRUE.equals(invoke(player, "easyAuth$isAuthenticated"))) {
-            throw new IllegalStateException("EasyAuth did not accept the premium authentication state");
-        }
-        player.sendSystemMessage(Component.literal("Authenticated with FastLoginPlus"));
-        LOGGER.info("Completed EasyAuth premium login for {}", player.getGameProfile().name());
+        var context = new EasyAuthLoginFlow.LoginContext(ZonedDateTime.now(), lastKick,
+                number(config, "resetLoginAttemptsTimeout"), ip, oldIp);
+        EasyAuthLoginFlow.authenticate(entryType, entry, verifiedUuid, context, binding,
+                candidate -> Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, candidate)), () -> {
+                    invoke(ipLimit, null, "invalidateCache", String.class, oldIp);
+                    if (!oldIp.equals(ip)) {
+                        invoke(ipLimit, null, "invalidateCache", String.class, ip);
+                    }
+                    invoke(player, "easyAuth$restoreTrueLocation");
+                    invoke(player, "easyAuth$setAuthenticated", boolean.class, true);
+                    if (!Boolean.TRUE.equals(invoke(player, "easyAuth$isAuthenticated"))) {
+                        throw new IllegalStateException("EasyAuth did not accept the premium authentication state");
+                    }
+                    player.sendSystemMessage(Component.literal("Authenticated with FastLoginPlus"));
+                    LOGGER.info("Completed EasyAuth premium login for {}", player.getGameProfile().name());
+                });
     }
 
     private void checkPremiumEntry(Object entry, String name, UUID verifiedUuid) {
