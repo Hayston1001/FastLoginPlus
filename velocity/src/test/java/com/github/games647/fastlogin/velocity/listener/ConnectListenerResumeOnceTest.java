@@ -37,6 +37,8 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -210,5 +212,68 @@ class ConnectListenerResumeOnceTest {
     @Test
     void freshGuardStartsUnresumed() {
         assertFalse(new AtomicBoolean(false).get());
+    }
+
+    @Test
+    void fabricShutdownSchedulerDeniesSkippedTaskBeforeResuming() {
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        Logger logger = mock(Logger.class);
+        SchedulerWithStoppableExecutor scheduler = new SchedulerWithStoppableExecutor(logger);
+        scheduler.shutdown();
+        when(plugin.getLog()).thenReturn(logger);
+        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
+        when(plugin.getScheduler()).thenReturn(scheduler);
+        ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
+        PreLoginEvent event = mock(PreLoginEvent.class);
+        Continuation continuation = mock(Continuation.class);
+        AtomicBoolean resumed = new AtomicBoolean(false);
+
+        listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Continue,
+                continuation, resumed);
+        scheduler.stopExecutor();
+
+        var order = inOrder(event, continuation);
+        order.verify(event).setResult(argThat(result -> !result.isAllowed()));
+        order.verify(continuation).resume();
+        ConnectListener.resumeOnce(continuation, resumed);
+        verify(continuation, times(1)).resume();
+        verify(plugin, never()).getCore();
+    }
+
+    @Test
+    void fabricRealExecutorRejectionDeniesBeforeResuming() {
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        Logger logger = mock(Logger.class);
+        SchedulerWithStoppableExecutor scheduler = new SchedulerWithStoppableExecutor(logger);
+        scheduler.stopExecutor();
+        when(plugin.getLog()).thenReturn(logger);
+        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
+        when(plugin.getScheduler()).thenReturn(scheduler);
+        ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
+        PreLoginEvent event = mock(PreLoginEvent.class);
+        Continuation continuation = mock(Continuation.class);
+        AtomicBoolean resumed = new AtomicBoolean(false);
+
+        listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Continue,
+                continuation, resumed);
+
+        var order = inOrder(event, continuation);
+        order.verify(event).setResult(argThat(result -> !result.isAllowed()));
+        order.verify(continuation).resume();
+        verify(continuation, times(1)).resume();
+        verify(plugin, never()).getCore();
+    }
+
+    private static final class SchedulerWithStoppableExecutor extends AsyncScheduler {
+
+        SchedulerWithStoppableExecutor(Logger logger) {
+            super(logger, Executors.newSingleThreadExecutor());
+        }
+
+        void stopExecutor() {
+            // Java 21 replaces the constructor's pool with a virtual-thread
+            // executor. Stop the pool actually used by the loaded variant.
+            ((ExecutorService) processingPool).shutdownNow();
+        }
     }
 }

@@ -70,6 +70,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 public class ConnectListener {
 
@@ -181,7 +182,9 @@ public class ConnectListener {
             default:
                 // third-party handler cancelled the anti-bot action — run the
                 // premium check off the event loop and resume when it completes
-                plugin.getScheduler().runAsync(() -> {
+                AtomicBoolean executed = new AtomicBoolean(false);
+                CompletableFuture<Void> scheduled = plugin.getScheduler().runAsync(() -> {
+                    executed.set(true);
                     try {
                         new AsyncPremiumCheck(plugin, connection, username, preLoginEvent).run();
                     } catch (Exception runEx) {
@@ -192,6 +195,17 @@ public class ConnectListener {
                         resumeOnce(continuation, resumed);
                     }
                 });
+                if (plugin.isFabricNativeAuthEnabled()) {
+                    // A stopped scheduler completes without running the task. Its
+                    // completion must still reject and resume the paused login.
+                    scheduled.whenComplete((unused, error) -> {
+                        if (!executed.get()) {
+                            plugin.getLog().warn("Fabric premium check was not executed for {}", username);
+                            rejectFabricPreLogin(preLoginEvent);
+                            resumeOnce(continuation, resumed);
+                        }
+                    });
+                }
                 break;
         }
     }
