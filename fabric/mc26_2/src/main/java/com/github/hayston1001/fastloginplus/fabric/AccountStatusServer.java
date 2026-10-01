@@ -43,7 +43,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.SecureRandom;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -57,6 +60,9 @@ final class AccountStatusServer implements AutoCloseable {
     private final ServerSocket listener;
     private final ThreadPoolExecutor workers;
     private final Thread acceptor;
+    private final Set<Socket> connections = ConcurrentHashMap.newKeySet();
+    private final Set<CompletableFuture<?>> queries = ConcurrentHashMap.newKeySet();
+    private volatile boolean closed;
 
     AccountStatusServer(MinecraftServer server, EasyAuth344Bridge bridge) {
         this.server = server;
@@ -111,10 +117,18 @@ final class AccountStatusServer implements AutoCloseable {
         while (!listener.isClosed()) {
             try {
                 Socket socket = listener.accept();
-                socket.setSoTimeout(1500);
+                synchronized (this) {
+                    if (closed) {
+                        socket.close();
+                        continue;
+                    }
+                    connections.add(socket);
+                }
                 try {
+                    socket.setSoTimeout(1500);
                     workers.execute(() -> handle(socket));
-                } catch (java.util.concurrent.RejectedExecutionException full) {
+                } catch (IOException | java.util.concurrent.RejectedExecutionException full) {
+                    connections.remove(socket);
                     socket.close();
                 }
             } catch (IOException error) {
@@ -129,18 +143,43 @@ final class AccountStatusServer implements AutoCloseable {
         try (socket) {
             String line = readLine(socket);
             AccountStatusWire.Request request = AccountStatusWire.parseRequest(line, key);
+            CompletableFuture<AccountStatusWire.Result> query = null;
             try {
-                AccountStatusWire.Result result = server.submit(() -> bridge.accountStatus(request.getName()))
-                        .get(2, TimeUnit.SECONDS);
+                synchronized (this) {
+                    if (closed) {
+                        throw new IllegalStateException("Account status service is stopping");
+                    }
+                    query = server.submit(() -> {
+                        if (closed) {
+                            throw new IllegalStateException("Account status service is stopping");
+                        }
+                        return bridge.accountStatus(request.getName());
+                    });
+                    queries.add(query);
+                }
+                AccountStatusWire.Result result = query.get(2, TimeUnit.SECONDS);
+                if (closed) {
+                    throw new IllegalStateException("Account status service is stopping");
+                }
                 String response = AccountStatusWire.response(
                         request.getNonce(), result.getStatus(), result.getUuid(), key);
                 socket.getOutputStream().write((response + "\n").getBytes(StandardCharsets.US_ASCII));
             } catch (Exception failure) {
+                if (failure instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 LOGGER.warn("Authenticated account query failed for {}", request.getName(), failure);
+            } finally {
+                if (query != null) {
+                    query.cancel(false);
+                    queries.remove(query);
+                }
             }
         } catch (Exception failure) {
             // Invalid MAC or malformed requests close silently. Authenticated query
             // failures are logged above; the proxy still fails this login closed.
+        } finally {
+            connections.remove(socket);
         }
     }
 
@@ -160,11 +199,27 @@ final class AccountStatusServer implements AutoCloseable {
 
     @Override
     public void close() {
+        synchronized (this) {
+            if (closed) {
+                return;
+            }
+            closed = true;
+        }
         try {
             listener.close();
         } catch (IOException error) {
             LOGGER.warn("Could not close account status listener", error);
         }
+        queries.forEach(query -> query.cancel(false));
+        connections.forEach(socket -> {
+            try {
+                socket.close();
+            } catch (IOException error) {
+                LOGGER.warn("Could not close account status connection", error);
+            }
+        });
         workers.shutdownNow();
+        queries.clear();
+        connections.clear();
     }
 }
