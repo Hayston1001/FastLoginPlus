@@ -312,7 +312,7 @@ flowchart TD
 | `autoLogin` | 为老正版玩家在登录插件中自动登录(forceLogin) | true |
 | `auto-register-unknown` | 当 session 说"登录"但登录插件不认识该玩家时, 仍然注册 | true |
 | `offline-whitelist` | 准入控制: 放行正版玩家, 踢出新离线玩家, 允许老离线玩家进入 | false |
-| `premiumUuid` | 正版玩家使用其正版 UUID(而非离线 UUID) | true |
+| `premiumUuid` | 正版验证后是否使用正版 UUID(不决定是否启用正版验证) | true |
 | `forwardSkin` | 向玩家转发正版皮肤(SkinsRestorer 自定义皮肤优先) | true |
 | `secondAttemptCracked` | 正版验证未完成的新玩家下次按离线加入(一次性标记) | false |
 | `mojang-retry-count` / `mojang-retry-delay` | Mojang API 网络失败重试次数 / 退避基准延迟(指数增长, 上限 10 秒) | 3 / 500 |

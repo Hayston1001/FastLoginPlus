@@ -119,7 +119,8 @@ fabric-native-auth:
 # which executes it through the auth plugin.
 autoLogin: true
 
-# Use premium UUID for premium players
+# Whether to use the premium UUID after premium verification (does not decide
+# whether premium verification is enabled).
 # The native proxy API handles the premium UUID. false = override the premium
 # UUID with the offline UUID (demote).
 # This setting is the single authority on which UUID reaches the backend. If

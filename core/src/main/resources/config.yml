@@ -140,7 +140,8 @@ autoRegister: true
 # Enable auto-login for premium players
 autoLogin: true
 
-# Use premium UUID for premium players
+# Whether to use the premium UUID after premium verification (does not decide
+# whether premium verification is enabled).
 # In standalone mode, true = inject the premium UUID into the offline-mode
 # server (ProtocolLib reflection)
 # Behind a proxy: ignored here - the proxy decides the UUID

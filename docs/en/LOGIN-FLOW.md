@@ -312,7 +312,7 @@ Defaults shown below are the current values from `core/src/main/resources/config
 | `autoLogin` | Auto-login premium players with the auth plugin (forceLogin) | true |
 | `auto-register-unknown` | When a session says "login" but the auth plugin does not know the player, register them anyway | true |
 | `offline-whitelist` | Access control: admit premium players, kick new offline players, let returning offline players join | false |
-| `premiumUuid` | Premium players use their premium UUID (instead of the offline UUID) | true |
+| `premiumUuid` | Whether to use the premium UUID after premium verification (does not decide whether premium verification is enabled) | true |
 | `forwardSkin` | Forward the premium skin to the player (SkinsRestorer custom skins take priority) | true |
 | `secondAttemptCracked` | New players whose premium verification did not complete join offline next time (single-use marker) | false |
 | `mojang-retry-count` / `mojang-retry-delay` | Mojang API retry count on network failures / base backoff delay (exponential, capped at 10s) | 3 / 500 |
