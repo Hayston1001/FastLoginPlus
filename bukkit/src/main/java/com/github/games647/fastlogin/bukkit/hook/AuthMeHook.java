@@ -121,6 +121,17 @@ public class AuthMeHook implements AuthPlugin<Player>, Listener {
     }
 
     @Override
+    public com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState inspectAccount(
+            String playerName) throws Exception {
+        com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+                plugin.getAuthMePremiumIntegrator();
+        if (integrator != null) {
+            return integrator.inspectAccount(playerName);
+        }
+        return AuthPlugin.super.inspectAccount(playerName);
+    }
+
+    @Override
     //this automatically login the player too
     public boolean forceRegister(Player player, String password) {
         //if we have the management - we can trigger register with IP limit checks

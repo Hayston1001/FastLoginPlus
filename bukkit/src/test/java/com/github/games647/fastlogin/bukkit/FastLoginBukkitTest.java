@@ -151,4 +151,25 @@ class FastLoginBukkitTest {
         assertTrue(FastLoginBukkit.isCrackedOverrideActive(now + ttl, now, ttl));
         assertFalse(FastLoginBukkit.isCrackedOverrideActive(now + ttl + 1L, now, ttl));
     }
+
+    @Test
+    void premiumSessionSeedingToleratesAbsentIdentityFacts() {
+        // the early channel may declare nothing (no claim, or one that did not
+        // pass validation): the granted premium login must still seed its
+        // session instead of failing on a null facts bundle
+        UUID premiumUuid = UUID.randomUUID();
+
+        BukkitLoginSession undeclared = FastLoginBukkit.newPremiumSession("TestUser", premiumUuid, null);
+        assertEquals(premiumUuid, undeclared.getUuid());
+        assertTrue(undeclared.isVerifiedPremium());
+        assertFalse(undeclared.isFactsPresent());
+
+        com.github.games647.fastlogin.protocol.IdentityClaim.Facts facts =
+                new com.github.games647.fastlogin.protocol.IdentityClaim.Facts(
+                        true, false, com.github.games647.fastlogin.protocol.IdentityClaim.Consent.YES,
+                        true, false, false);
+        BukkitLoginSession declared = FastLoginBukkit.newPremiumSession("TestUser", premiumUuid, facts);
+        assertTrue(declared.isFactsPresent());
+        assertEquals(com.github.games647.fastlogin.protocol.IdentityClaim.Consent.YES, declared.getConsent());
+    }
 }

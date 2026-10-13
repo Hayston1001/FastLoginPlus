@@ -38,6 +38,7 @@ import com.github.games647.fastlogin.velocity.event.VelocityFastLoginAutoLoginEv
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 import java.util.UUID;
 
@@ -130,6 +131,11 @@ public class ForceLoginTask
     @Override
     public String getName(Player player) {
         return player.getUsername();
+    }
+
+    @Override
+    public void denyLogin(Player player, String message) {
+        player.disconnect(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
     }
 
     @Override

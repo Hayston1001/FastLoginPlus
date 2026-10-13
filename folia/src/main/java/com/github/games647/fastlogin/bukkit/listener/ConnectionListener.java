@@ -62,6 +62,13 @@ public class ConnectionListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerLogin(PlayerLoginEvent loginEvent) {
         removeBlockedStatus(loginEvent.getPlayer());
+        String denied = plugin.takePendingKick(loginEvent.getPlayer().getName());
+        if (denied != null) {
+            // a login refused by the login-method decision during the
+            // configuration phase: kick before the player ever joins
+            loginEvent.disallow(Result.KICK_OTHER, denied);
+            return;
+        }
         if (loginEvent.getResult() == Result.ALLOWED && !plugin.isServerFullyStarted()) {
             loginEvent.disallow(Result.KICK_OTHER, plugin.getCore().getMessage("not-started"));
         }

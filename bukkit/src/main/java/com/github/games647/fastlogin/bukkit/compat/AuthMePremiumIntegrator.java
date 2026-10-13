@@ -471,6 +471,40 @@ public final class AuthMePremiumIntegrator {
     }
 
     /**
+     * Classifies the AuthMe account behind a name for the login-method decision:
+     * no record, a password account, or an account this plugin or AuthMe's own
+     * premium flow established as premium. A premium record counts as an upgrade
+     * consent (R-7); an empty password hash is the other half of that shape.
+     * Reflective read failures propagate so the caller can fail closed (rule 1).
+     *
+     * @param playerName the player name
+     * @return the account state
+     * @throws Exception when the AuthMe account cannot be read
+     */
+    public com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState inspectAccount(String playerName)
+            throws Exception {
+        String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
+        Object ds = getDataSource();
+        if (ds == null) {
+            throw new IllegalStateException("AuthMe DataSource is unavailable");
+        }
+        Method getAuth = ds.getClass().getMethod("getAuth", String.class);
+        Object auth = getAuth.invoke(ds, lowerName);
+        if (auth == null) {
+            return com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.NONE;
+        }
+        Method isPremium = auth.getClass().getMethod("isPremium");
+        boolean premium = (boolean) isPremium.invoke(auth);
+        Object password = auth.getClass().getMethod("getPassword").invoke(auth);
+        String hash = password == null ? null
+                : (String) password.getClass().getMethod("getHash").invoke(password);
+        if (premium || (hash != null && hash.isEmpty())) {
+            return com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.PREMIUM_OWNED;
+        }
+        return com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.PASSWORD_ACCOUNT;
+    }
+
+    /**
      * Lightweight check called during cracked-session login to detect and clean
      * up stale AuthMe premium records left over from a failed
      * {@link #clearPlayerPremium(String)}. Only triggers full cleanup if the

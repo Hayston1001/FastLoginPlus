@@ -78,6 +78,8 @@ wait-on-proxy: '&6Sending request... (Do not forget to follow the BungeeCord set
 # Error messages
 error-kick: '&4Error occurred'
 database-error: '&4Database error. Please contact an admin.'
+ownership-conflict: '&4This name has an account whose owner has not upgraded it to premium, so automatic login is refused. Please contact an admin.'
+account-state-unavailable: '&6Your account state could not be confirmed, so the automatic premium login was skipped. Use your password to log in.'
 invalid-verify-token: '&4Invalid nonce token. Please verify you are using the correct server address'
 invalid-session: '&4Invalid session'
 invalid-request: '&4Invalid request'

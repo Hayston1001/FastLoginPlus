@@ -285,5 +285,12 @@ class ForceLoginManagementTest {
         public boolean isOnlineMode() {
             return onlineMode;
         }
+
+        @Override
+        public void denyLogin(Object player, String message) {
+            denied = message;
+        }
+
+        private String denied;
     }
 }

@@ -99,6 +99,18 @@ class IdentityClaimTest {
     }
 
     @Test
+    void roundTripsTheProxyIdToken() {
+        UUID proxyId = UUID.fromString("c1a0d5d2-9e5b-4d0a-9c1e-2b4f6a8c0d1e");
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                "Player_1", FORWARDED, MOJANG, IdentityClaim.Facts.defaults(), proxyId);
+
+        IdentityClaim parsed = IdentityClaim.parseExactlyOne(
+                Collections.singletonList(claim.encode()), "Player_1", FORWARDED);
+
+        assertEquals(proxyId, parsed.getProxyId());
+    }
+
+    @Test
     void rejectsMalformedWireValues() {
         String prefix = "1:PREMIUM_VERIFIED:Player_1:" + FORWARDED + ":";
         for (String value : Arrays.asList("2:OFFLINE:Player_1:" + FORWARDED + ":-",

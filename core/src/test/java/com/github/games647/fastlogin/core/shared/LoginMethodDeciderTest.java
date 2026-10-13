@@ -108,6 +108,19 @@ class LoginMethodDeciderTest {
     }
 
     @Test
+    void undeclaredFactsFromAnOldProxyStayConservative() {
+        // a proxy that predates the facts declares nothing: the consent is
+        // UNKNOWN, which never unlocks a password account (and a name without an
+        // account has no ownership question either)
+        assertEquals(Outcome.PASSWORD,
+                LoginMethodDecider.decide(true, AccountState.PASSWORD_ACCOUNT, Consent.UNKNOWN));
+        assertEquals(Outcome.AUTO_REGISTER_LOGIN,
+                LoginMethodDecider.decide(true, AccountState.NONE, Consent.UNKNOWN));
+        assertEquals(Outcome.PASSWORD,
+                LoginMethodDecider.decide(false, AccountState.PASSWORD_ACCOUNT, Consent.UNKNOWN));
+    }
+
+    @Test
     void authPluginPremiumAccountCountsAsConsent() {
         // R-7: an account the auth plugin itself established as premium is
         // trusted as an upgrade consent

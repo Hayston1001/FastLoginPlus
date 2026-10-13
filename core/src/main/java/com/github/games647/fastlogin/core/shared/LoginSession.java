@@ -43,6 +43,7 @@ public abstract class LoginSession {
     private Decision identityDecision = Decision.UNDECIDED;
 
     private IdentityClaim.Facts facts = IdentityClaim.Facts.defaults();
+    private boolean factsPresent;
 
     protected boolean registered;
 
@@ -149,12 +150,24 @@ public abstract class LoginSession {
 
     /**
      * Applies the identity facts and policy received with a login message
-     * (backend side).
+     * (backend side). Marking the facts as present distinguishes "a proxy
+     * declared these" (possibly the conservative shape of an older proxy) from
+     * "no proxy at all" (standalone deployments read their own keys).
      *
      * @param facts the proxy's fact bundle for this connection
      */
     public synchronized void setFacts(IdentityClaim.Facts facts) {
         this.facts = java.util.Objects.requireNonNull(facts, "facts");
+        this.factsPresent = true;
+    }
+
+    /**
+     * Whether a proxy declared identity facts for this connection.
+     *
+     * @return true on the message path, false in standalone deployments
+     */
+    public synchronized boolean isFactsPresent() {
+        return factsPresent;
     }
 
     /**

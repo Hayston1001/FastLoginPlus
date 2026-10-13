@@ -64,15 +64,23 @@ public final class IdentityClaim {
         private final boolean autoLogin;
         private final boolean autoRegisterUnknown;
         private final boolean offlineWhitelist;
+        private final boolean declared;
 
         public Facts(boolean newPlayer, boolean sameNameCracked, Consent consent,
                      boolean autoLogin, boolean autoRegisterUnknown, boolean offlineWhitelist) {
+            this(newPlayer, sameNameCracked, consent, autoLogin, autoRegisterUnknown, offlineWhitelist, true);
+        }
+
+        public Facts(boolean newPlayer, boolean sameNameCracked, Consent consent,
+                     boolean autoLogin, boolean autoRegisterUnknown, boolean offlineWhitelist,
+                     boolean policyDeclared) {
             this.newPlayer = newPlayer;
             this.sameNameCracked = sameNameCracked;
             this.consent = Objects.requireNonNull(consent, "consent");
             this.autoLogin = autoLogin;
             this.autoRegisterUnknown = autoRegisterUnknown;
             this.offlineWhitelist = offlineWhitelist;
+            this.declared = policyDeclared;
         }
 
         /**
@@ -81,7 +89,7 @@ public final class IdentityClaim {
          * @return the conservative fact bundle
          */
         public static Facts defaults() {
-            return new Facts(false, false, Consent.UNKNOWN, true, false, false);
+            return new Facts(false, false, Consent.UNKNOWN, true, false, false, false);
         }
 
         public boolean newPlayer() {
@@ -107,6 +115,18 @@ public final class IdentityClaim {
         public boolean offlineWhitelist() {
             return offlineWhitelist;
         }
+
+        /**
+         * Whether a proxy actually declared the policy keys, as opposed to an
+         * older proxy (or a facts-only declaration) leaving the conservative
+         * defaults behind. The observation facts and the consent use their own
+         * values: an undeclared consent simply stays {@link Consent#UNKNOWN}.
+         *
+         * @return true when the policy keys came from a declaring proxy
+         */
+        public boolean policyDeclared() {
+            return declared;
+        }
     }
 
     private final Decision decision;
@@ -114,13 +134,19 @@ public final class IdentityClaim {
     private final UUID forwardedUuid;
     private final UUID verifiedMojangUuid;
     private final Facts facts;
+    private final UUID proxyId;
 
     public IdentityClaim(Decision decision, String playerName, UUID forwardedUuid, UUID verifiedMojangUuid) {
-        this(decision, playerName, forwardedUuid, verifiedMojangUuid, Facts.defaults());
+        this(decision, playerName, forwardedUuid, verifiedMojangUuid, Facts.defaults(), null);
     }
 
     public IdentityClaim(Decision decision, String playerName, UUID forwardedUuid, UUID verifiedMojangUuid,
                          Facts facts) {
+        this(decision, playerName, forwardedUuid, verifiedMojangUuid, facts, null);
+    }
+
+    public IdentityClaim(Decision decision, String playerName, UUID forwardedUuid, UUID verifiedMojangUuid,
+                         Facts facts, UUID proxyId) {
         this.decision = Objects.requireNonNull(decision, "decision");
         if (playerName == null || !PLAYER_NAME.matcher(playerName).matches()) {
             throw new IllegalArgumentException("Invalid player name");
@@ -132,6 +158,7 @@ public final class IdentityClaim {
         }
         this.verifiedMojangUuid = verifiedMojangUuid;
         this.facts = Objects.requireNonNull(facts, "facts");
+        this.proxyId = proxyId;
     }
 
     public Decision getDecision() {
@@ -217,6 +244,16 @@ public final class IdentityClaim {
     }
 
     /**
+     * The proxy whose verified login produced this claim, used by early-channel
+     * consumers to check the claim against their proxy allowlist (D-04).
+     *
+     * @return the proxy UUID, or null when the sender declared none
+     */
+    public UUID getProxyId() {
+        return proxyId;
+    }
+
+    /**
      * Encodes a claim with an exact wire shape. A name cannot contain the delimiter.
      *
      * @return property value
@@ -228,7 +265,8 @@ public final class IdentityClaim {
                 + (facts.consent() == Consent.UNKNOWN ? "-"
                 : facts.consent() == Consent.YES ? "Y" : "N") + ":"
                 + (facts.autoLogin() ? "Y" : "N") + ":" + (facts.autoRegisterUnknown() ? "Y" : "N") + ":"
-                + (facts.offlineWhitelist() ? "Y" : "N");
+                + (facts.offlineWhitelist() ? "Y" : "N") + ":"
+                + (proxyId == null ? "-" : proxyId.toString());
     }
 
     /**
@@ -249,13 +287,14 @@ public final class IdentityClaim {
         if (iterator.hasNext()) {
             throw new IllegalArgumentException("Duplicate identity claim");
         }
-        if (value == null || value.length() > 128) {
+        if (value == null || value.length() > 192) {
             throw new IllegalArgumentException("Invalid identity claim length");
         }
         String[] parts = value.split(":", -1);
-        // five mandatory fields plus optional trailing fact and policy fields; a
-        // proxy that predates them sends the short shape and the facts stay unknown
-        if ((parts.length != 5 && parts.length != 8 && parts.length != 11)
+        // five mandatory fields plus optional trailing fact, policy and proxy
+        // fields; a proxy that predates them sends the short shape and the facts
+        // stay unknown
+        if ((parts.length != 5 && parts.length != 8 && parts.length != 11 && parts.length != 12)
                 || !Integer.toString(VERSION).equals(parts[0])) {
             throw new IllegalArgumentException("Unsupported identity claim format");
         }
@@ -273,19 +312,26 @@ public final class IdentityClaim {
         boolean autoLogin = true;
         boolean autoRegisterUnknown = false;
         boolean offlineWhitelist = false;
+        boolean declared = false;
         if (parts.length >= 8) {
             newPlayer = parseFlag(parts[5], "new player");
             sameNameCracked = parseFlag(parts[6], "same-name cracked");
             consent = parseConsent(parts[7]);
         }
-        if (parts.length == 11) {
+        if (parts.length >= 11) {
             autoLogin = parseFlag(parts[8], "auto login");
             autoRegisterUnknown = parseFlag(parts[9], "auto register unknown");
             offlineWhitelist = parseFlag(parts[10], "offline whitelist");
+            declared = true;
+        }
+        UUID proxyId = null;
+        if (parts.length == 12 && !"-".equals(parts[11])) {
+            proxyId = parseUuid(parts[11]);
         }
         IdentityClaim claim = new IdentityClaim(decision, parts[2], forwarded, verified,
                 new Facts(newPlayer, sameNameCracked, consent, autoLogin, autoRegisterUnknown,
-                        offlineWhitelist));
+                        offlineWhitelist, declared),
+                proxyId);
         if (!claim.playerName.equals(expectedName) || !claim.forwardedUuid.equals(expectedUuid)) {
             throw new IllegalArgumentException("Identity claim does not match forwarding profile");
         }

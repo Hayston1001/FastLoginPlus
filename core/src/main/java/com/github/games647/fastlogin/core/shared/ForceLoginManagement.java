@@ -91,9 +91,49 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                         });
                     }
                 } else {
-                    boolean success = true;
                     String playerName = getName(player);
-                    if ((boolean) core.getConfig().get("autoLogin")) {
+                    boolean success = true;
+                    if (session.isFactsPresent()) {
+                        // The message path: a proxy exists, so the decision table
+                        // (D-03) decides from the account state plus its facts.
+                        LoginMethodDecider.AccountState account = readAccountState(authPlugin, playerName);
+                        if (!session.getFacts().policyDeclared()) {
+                            core.getPlugin().getLog().warn(
+                                    "Proxy did not declare identity facts for {}; falling back to "
+                                            + "conservative behaviour", playerName);
+                        }
+                        LoginMethodDecider.Outcome outcome = LoginMethodDecider.decide(true, account,
+                                session.getFacts().consent(), resolveAutoLogin(session));
+                        switch (outcome) {
+                            case AUTO_REGISTER_LOGIN:
+                                success = forceRegister(player);
+                                break;
+                            case AUTO_LOGIN:
+                                success = !callFastLoginAutoLoginEvent(session, playerProfile).isCancelled()
+                                        && forceLogin(player);
+                                break;
+                            case REJECT:
+                                denyLogin(player, core.getMessage("ownership-conflict"));
+                                return;
+                            case PASSWORD:
+                            case GUIDE_REGISTER:
+                            default:
+                                // nothing to do: the auth plugin keeps its password
+                                // or registration flow, and no premium row is
+                                // written, so an undeclared consent can never
+                                // turn into one
+                                core.getPlugin().getLog().info(
+                                        "Keeping the auth plugin's own login flow for {}", playerName);
+                                if (account == LoginMethodDecider.AccountState.READ_FAILURE) {
+                                    core.getPlugin().sendMessage(player,
+                                            core.getMessage("account-state-unavailable"));
+                                }
+                                return;
+                        }
+                    } else if ((boolean) core.getConfig().get("autoLogin")) {
+                        // Standalone deployment: no proxy declared anything, so the
+                        // local keys and the session's registration expectation
+                        // decide, exactly as before the decision table landed.
                         if (session.needsRegistration()
                                 || ((boolean) core.getConfig().get("auto-register-unknown")
                                 && !authPlugin.isRegistered(playerName))) {
@@ -199,4 +239,48 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     public abstract boolean isOnline(P player);
 
     public abstract boolean isOnlineMode();
+
+    /**
+     * Refuses the connection over an account ownership conflict (rules 7 and 8).
+     *
+     * @param player the player to disconnect
+     * @param message the localized reason
+     */
+    public abstract void denyLogin(P player, String message);
+
+    /**
+     * Reads the account state from the auth plugin. A read failure becomes
+     * {@code READ_FAILURE}: the caller fails closed to the password lock and
+     * logs it (rule 1).
+     *
+     * @param authPlugin the auth plugin hook
+     * @param playerName the player name
+     * @return the account state, never null
+     */
+    private LoginMethodDecider.AccountState readAccountState(AuthPlugin<P> authPlugin, String playerName) {
+        try {
+            // the account state comes from the auth plugin itself, so a name can
+            // never be handed to someone just because a premium identity claims it
+            return authPlugin.inspectAccount(playerName);
+        } catch (Exception readError) {
+            core.getPlugin().getLog().warn(
+                    "Could not read the account state of {}; keeping the password lock",
+                    playerName, readError);
+            return LoginMethodDecider.AccountState.READ_FAILURE;
+        }
+    }
+
+    /**
+     * The auto-login policy for this login: the proxy's declared value when it
+     * declared one (R-10), otherwise this server's own key, which keeps older
+     * proxies on the pre-decision behaviour.
+     *
+     * @param session the login session
+     * @return whether premium auto-login is enabled
+     */
+    private boolean resolveAutoLogin(L session) {
+        return session.getFacts().policyDeclared()
+                ? session.getFacts().autoLogin()
+                : (boolean) core.getConfig().get("autoLogin");
+    }
 }

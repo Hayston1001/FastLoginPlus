@@ -39,7 +39,9 @@ import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.protocol.IdentityClaim;
 import com.google.common.base.Throwables;
+import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
 import net.md_5.bungee.api.connection.PendingConnection;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
@@ -275,6 +277,11 @@ public class ConnectListener implements Listener {
                     // property.
                     attachPremiumAttestation(connection, verifiedUsername, verifiedUUID);
                 }
+
+                // The early channel also carries the identity facts (D-02: both
+                // proxy kinds ride the forwarded profile attributes), so a
+                // Paper/Folia backend can decide before AuthMe's dialog opens.
+                attachIdentityFacts(connection, verifiedUsername, verifiedUUID, session);
             } else {
                 plugin.getLog().warn("Unexpected connection type {} — cannot update the login"
                         + " profile for {}", connection.getClass().getName(), verifiedUsername);
@@ -324,6 +331,32 @@ public class ConnectListener implements Listener {
         if (attached) {
             plugin.getLog().info("Attaching verified premium UUID {} to the forwarded profile",
                     premiumUuid);
+        }
+    }
+
+    /**
+     * Hands the backend the identity facts for this verified login as a login
+     * profile property (D-02: the early channel is the forwarded attributes on
+     * both proxy kinds), together with this proxy's ID token, which early-channel
+     * consumers check against their proxy allowlist (D-04).
+     *
+     * @param connection   the login connection being established
+     * @param username     the player name
+     * @param verifiedUUID the Mojang UUID verified for this connection
+     * @param session      the login session holding the facts
+     */
+    private void attachIdentityFacts(PendingConnection connection, String username,
+                                     UUID verifiedUUID, LoginSession session) {
+        session.computeFacts(connection.getAddress().getAddress().getHostAddress(), plugin.getCore());
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                username, connection.getUniqueId(), verifiedUUID, session.getFacts(),
+                UUID.fromString(ProxyServer.getInstance().getConfig().getUuid()));
+        boolean attached = LoginProfileProperties.attach(loginProfile(connection),
+                ForwardingAttributes.IDENTITY, claim.encode(),
+                failure -> plugin.getLog().warn("Could not attach the identity facts for {}"
+                        + " to the login profile: {}", username, failure.toString()));
+        if (attached) {
+            plugin.getLog().info("Attaching identity facts for {} to the forwarded profile", username);
         }
     }
 

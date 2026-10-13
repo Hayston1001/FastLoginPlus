@@ -169,6 +169,28 @@ public class BungeeManager {
         return false;
     }
 
+    /**
+     * Whether the forwarded profile attributes arrive over a signature-protected
+     * channel (Velocity modern forwarding signs the whole forwarding payload with
+     * the shared secret). Legacy forwarding (BungeeCord) carries unsigned
+     * attributes, so their claims need the proxy ID token instead (D-04).
+     *
+     * <p>Both mechanisms enabled at once (a migration or a misconfiguration) is
+     * handled as the legacy chain, the stricter side: only signature-protected
+     * forwarding may skip the token check.</p>
+     *
+     * @return true when forwarded attributes are signature-protected
+     */
+    public boolean isSignedForwarding() {
+        try {
+            return isVelocityEnabled() && !isProxySupported("org.spigotmc.SpigotConfig", "bungee");
+        } catch (Exception unavailable) {
+            // undetectable: fall back to the stricter legacy handling
+            plugin.getLog().warn("Cannot check the proxy forwarding setup", unavailable);
+            return false;
+        }
+    }
+
     private boolean detectProxy() {
         try {
             if (isProxySupported("org.spigotmc.SpigotConfig", "bungee")) {

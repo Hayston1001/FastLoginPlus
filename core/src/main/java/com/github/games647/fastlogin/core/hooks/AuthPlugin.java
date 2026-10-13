@@ -102,4 +102,24 @@ public interface AuthPlugin<P> {
      * @throws Exception if an error occurred
      */
     boolean isRegistered(String playerName) throws Exception;
+
+    /**
+     * Classifies the account behind a name so the login-method decision can tell
+     * a password account from one the auth plugin itself established as premium
+     * (R-7: such a record counts as an upgrade consent).
+     * <p>
+     * Failures must propagate: the caller maps them to
+     * {@link com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState#READ_FAILURE},
+     * which fails closed to the password lock and is logged (rule 1).
+     *
+     * @param playerName player name
+     * @return the account state, never null
+     * @throws Exception when the account state cannot be read
+     */
+    default com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState inspectAccount(
+            String playerName) throws Exception {
+        return isRegistered(playerName)
+                ? com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.PASSWORD_ACCOUNT
+                : com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.NONE;
+    }
 }

@@ -141,6 +141,11 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
     }
 
     @Override
+    public void denyLogin(Player player, String message) {
+        player.kickPlayer(message);
+    }
+
+    @Override
     public boolean isOnline(Player player) {
         // Folia: use Entity.getScheduler() + CompletableFuture instead of callSyncMethod
         CompletableFuture<Boolean> future = new CompletableFuture<>();
