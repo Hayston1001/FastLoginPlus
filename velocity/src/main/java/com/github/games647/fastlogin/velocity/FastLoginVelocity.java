@@ -56,7 +56,6 @@ import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 import com.github.games647.fastlogin.velocity.listener.ConnectListener;
 import com.github.games647.fastlogin.velocity.listener.PluginMessageListener;
-import com.github.games647.fastlogin.velocity.task.AccountStatusClient;
 import com.google.common.collect.MapMaker;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
@@ -74,7 +73,6 @@ import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.messages.ChannelMessageSink;
 import com.velocitypowered.api.proxy.messages.ChannelRegistrar;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
-import net.md_5.bungee.config.Configuration;
 
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
@@ -104,25 +102,6 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     private FloodgateService floodgateService;
     private GeyserService geyserService;
     private UUID proxyId;
-    private boolean fabricNativeAuthEnabled;
-    private AccountStatusClient accountStatusClient;
-
-    /**
-     * Whether the dedicated Velocity + Fabric identity protocol is enabled.
-     *
-     * @return true when Fabric native authentication is configured
-     */
-    public boolean isFabricNativeAuthEnabled() {
-        return fabricNativeAuthEnabled;
-    }
-
-    /**
-     * Gets the Fabric ownership query configured for this dedicated network.
-     * @return account status client, or null when Fabric mode is disabled
-     */
-    public AccountStatusClient getAccountStatusClient() {
-        return accountStatusClient;
-    }
 
     @Inject
     public FastLoginVelocity(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory) {
@@ -138,48 +117,6 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         // Proxies ship a trimmed config template without backend-only keys
         core.setConfigTemplate("config-proxy.yml");
         core.load();
-        Configuration fabricSection = core.getConfig().getSection("fabric-native-auth");
-        if (fabricSection != null && fabricSection.getBoolean("enabled")) {
-            if (!core.getConfig().getBoolean("premiumUuid")) {
-                throw new IllegalStateException("Fabric native authentication requires premiumUuid: true");
-            }
-            if (!core.getConfig().getBoolean("autoLogin")) {
-                throw new IllegalStateException("Fabric native authentication requires autoLogin: true");
-            }
-            if (core.getConfig().getBoolean("offline-whitelist")) {
-                throw new IllegalStateException("Fabric password accounts cannot use offline-whitelist: true");
-            }
-            if (core.getConfig().getBoolean("nameChangeCheck")) {
-                throw new IllegalStateException(
-                        "Fabric account name migration is not supported; set nameChangeCheck: false");
-            }
-            if (core.getConfig().getBoolean("secondAttemptCracked")) {
-                throw new IllegalStateException("Fabric native authentication cannot use secondAttemptCracked: true");
-            }
-            if (!"false".equalsIgnoreCase(core.getConfig().get("autoLoginFloodgate").toString())
-                    || core.getConfig().getBoolean("allowFloodgateNameConflict")
-                    || core.getConfig().getBoolean("autoRegisterFloodgate")) {
-                throw new IllegalStateException("Fabric native authentication cannot enable Bedrock options");
-            }
-            Configuration antiBot = core.getConfig().getSection("anti-bot");
-            if (antiBot != null && antiBot.getBoolean("enabled")
-                    && !"block".equals(antiBot.getString("action"))) {
-                throw new IllegalStateException(
-                        "Fabric native authentication requires anti-bot.action: block exactly");
-            }
-            if (isPluginInstalled("floodgate") || isPluginInstalled("Geyser-Velocity")) {
-                throw new IllegalStateException("Fabric native authentication does not support Bedrock in v1");
-            }
-            try {
-                byte[] key = Files.readAllBytes(dataDirectory.resolve("fastloginplus-account.key"));
-                accountStatusClient = new AccountStatusClient(
-                        fabricSection.getString("account-status-host"),
-                        fabricSection.getInt("account-status-port"), key);
-            } catch (IOException | IllegalArgumentException error) {
-                throw new IllegalStateException("Fabric account status key or endpoint is unavailable", error);
-            }
-            fabricNativeAuthEnabled = true;
-        }
         loadOrGenerateProxyId();
         if (!core.setupDatabase() || proxyId == null) {
             return;

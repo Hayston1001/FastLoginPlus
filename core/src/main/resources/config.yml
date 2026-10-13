@@ -134,10 +134,13 @@ anti-bot:
 # Premium Detection
 # ========================================
 # Auto-register new premium players on first join
-# Behind a proxy: only Paper reads it, in the configure phase (pre-registration)
+# Behind a proxy: ignored here - the proxy's value travels with the identity
+# facts and is enforced here; this copy only applies in standalone mode
 autoRegister: true
 
 # Enable auto-login for premium players
+# Behind a proxy: ignored here - the proxy's value travels with the identity
+# facts and is enforced here; this copy only applies in standalone mode
 autoLogin: true
 
 # Whether to use the premium UUID after premium verification (does not decide
@@ -185,7 +188,9 @@ forwardSkin: true
 premium-warning: true
 
 # Kick the player from the server after they confirm /flp premium, forcing them to reconnect
-# Behind a proxy: only Paper reads it, to kick after relaying a queued toggle
+# Behind a proxy: the proxy's copy decides the kick after a toggle; this copy
+# additionally kicks after relaying a queued toggle and only applies fully in
+# standalone mode
 kick-toggle: true
 
 # ========================================
@@ -195,6 +200,8 @@ kick-toggle: true
 debug: false
 
 # Auto-register players in flp DB but missing from auth plugin DB
+# Behind a proxy: ignored here - the proxy's value travels with the identity
+# facts and is enforced here; this copy only applies in standalone mode
 auto-register-unknown: true
 
 # Respect auth plugin per-IP registration limit

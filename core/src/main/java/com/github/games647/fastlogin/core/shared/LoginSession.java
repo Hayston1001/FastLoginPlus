@@ -26,6 +26,8 @@
 package com.github.games647.fastlogin.core.shared;
 
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.protocol.IdentityClaim;
+import com.github.games647.fastlogin.protocol.IdentityClaim.Consent;
 import com.github.games647.fastlogin.protocol.IdentityClaim.Decision;
 
 import java.util.StringJoiner;
@@ -39,6 +41,8 @@ public abstract class LoginSession {
     private String username;
     private UUID uuid;
     private Decision identityDecision = Decision.UNDECIDED;
+
+    private IdentityClaim.Facts facts = IdentityClaim.Facts.defaults();
 
     protected boolean registered;
 
@@ -112,6 +116,101 @@ public abstract class LoginSession {
         this.identityDecision = java.util.Objects.requireNonNull(identityDecision, "identityDecision");
     }
 
+    /**
+     * Computes the observation facts and the upgrade consent this connection
+     * declares to the backend. Everything here is a snapshot of the proxy's own
+     * state at login time: the record's existence, the recorded consent, and a
+     * premium name that was observed without a passing verification.
+     *
+     * @param ip login address of this connection
+     * @param core the proxy core, for the failed-verification memory
+     */
+    public synchronized void computeFacts(String ip, FastLoginCore<?, ?, ?> core) {
+        StoredProfile stored = profile;
+        boolean newPlayer = stored == null || !stored.isExistingPlayer();
+        Consent consent = stored != null && stored.isOnlinemodePreferred() ? Consent.YES : Consent.NO;
+        boolean premiumName = (stored != null && stored.getId() != null)
+                || core.hasFailedLogin(ip, requestUsername);
+        // policy keys live on the proxy (R-10) and travel with the facts
+        this.facts = new IdentityClaim.Facts(newPlayer, premiumName && uuid == null, consent,
+                core.getConfig().getBoolean("autoLogin"),
+                core.getConfig().getBoolean("auto-register-unknown"),
+                core.getConfig().getBoolean("offline-whitelist"));
+    }
+
+    /**
+     * The declared facts and policy of this connection.
+     *
+     * @return the proxy's fact bundle for this connection
+     */
+    public synchronized IdentityClaim.Facts getFacts() {
+        return facts;
+    }
+
+    /**
+     * Applies the identity facts and policy received with a login message
+     * (backend side).
+     *
+     * @param facts the proxy's fact bundle for this connection
+     */
+    public synchronized void setFacts(IdentityClaim.Facts facts) {
+        this.facts = java.util.Objects.requireNonNull(facts, "facts");
+    }
+
+    /**
+     * Whether the proxy has no record for this name.
+     *
+     * @return true when the name is new to FastLoginPlus
+     */
+    public synchronized boolean isNewPlayer() {
+        return facts.newPlayer();
+    }
+
+    /**
+     * Whether a premium name was observed without a passing verification.
+     *
+     * @return true for the same-name cracked observation
+     */
+    public synchronized boolean isSameNameCracked() {
+        return facts.sameNameCracked();
+    }
+
+    /**
+     * The name's upgrade consent as recorded on the proxy.
+     *
+     * @return consent state, unknown when nothing was declared
+     */
+    public synchronized Consent getConsent() {
+        return facts.consent();
+    }
+
+    /**
+     * Whether auto-login for verified premium identities is enabled.
+     *
+     * @return the proxy's autoLogin value
+     */
+    public synchronized boolean isAutoLogin() {
+        return facts.autoLogin();
+    }
+
+    /**
+     * Whether verified identities without a local account are auto-registered.
+     *
+     * @return the proxy's auto-register-unknown value
+     */
+    public synchronized boolean isAutoRegisterUnknown() {
+        return facts.autoRegisterUnknown();
+    }
+
+    /**
+     * Whether unregistered new players are rejected.
+     *
+     * @return the proxy's offline-whitelist value
+     */
+    public synchronized boolean isOfflineWhitelist() {
+        return facts.offlineWhitelist();
+    }
+
     @Override
     public String toString() {
         return new StringJoiner(", ", LoginSession.class.getSimpleName() + '[', "]")
@@ -121,6 +220,7 @@ public abstract class LoginSession {
                 .add("uuid=" + uuid)
                 .add("registered=" + registered)
                 .add("identityDecision=" + identityDecision)
+                .add("facts=" + facts)
                 .toString();
     }
 }

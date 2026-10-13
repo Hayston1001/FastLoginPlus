@@ -212,7 +212,7 @@ flowchart TD
 
 ## Proxy Mode (BungeeCord / Velocity)
 
-This section describes Bukkit/Folia backends. The opt-in Velocity + Fabric 26.2 path uses the same proxy decision tree, checks EasyAuth account ownership before online mode, and completes authentication in the Fabric mod. Existing password accounts use its two-connection verified binding flow before becoming passwordless.
+This section describes Bukkit/Folia backends. The opt-in Velocity + Fabric 26.2 path uses the same proxy decision tree: the proxy forwards the identity facts and the Fabric mod decides the login method from its own EasyAuth account state. An existing password account can queue an upgrade with `/flp premium`, which pins the premium UUID of its name and never touches the account; the account is converted to passwordless only at the first successful passwordless login whose verified UUID matches that pin.
 
 When `bungee: true` (spigot.yml) or Velocity forwarding is detected, FLP runs in a **proxy/backend split** architecture:
 

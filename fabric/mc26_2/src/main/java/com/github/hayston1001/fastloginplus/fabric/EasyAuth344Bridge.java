@@ -27,15 +27,12 @@ package com.github.hayston1001.fastloginplus.fabric;
 
 import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim;
 import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision;
-import com.github.hayston1001.fastloginplus.fabric.protocol.AccountStatusWire;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.common.ClientboundStoreCookiePacket;
 import net.minecraft.network.protocol.common.ClientboundTransferPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,11 +48,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
 import java.sql.Connection;
 import java.time.ZonedDateTime;
 import java.util.HexFormat;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
@@ -83,8 +80,9 @@ final class EasyAuth344Bridge {
     private final Class<?> playersCache;
     private final ConcurrentHashMap<String, PendingBinding> pendingBindings = new ConcurrentHashMap<>();
     private static final long BIND_WINDOW_NANOS = TimeUnit.MINUTES.toNanos(10);
-    private static final long STORE_CONFIRM_TIMEOUT_SECONDS = 5;
-    private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
+    /** The proxy needs a moment to record the consent before the reconnect asks for verification. */
+    private static final long CONSENT_SETTLE_DELAY_MILLIS = 1000;
+    private final PremiumNameResolver premiumNames = PremiumNameResolver.mojang();
 
     EasyAuth344Bridge() {
         var mod = FabricLoader.getInstance().getModContainer("easyauth")
@@ -153,15 +151,29 @@ final class EasyAuth344Bridge {
                 if (entry == null || !entryType.isInstance(entry)) {
                     throw new IllegalStateException("EasyAuth account was not loaded before configuration");
                 }
-                verifyCurrentAccount(claim);
+                AccountState.Snapshot state = accountStatus(claim.getPlayerName());
+                PendingBinding binding = matchedBinding(claim);
                 if (claim.getDecision() == Decision.PREMIUM_VERIFIED) {
-                    if (accountStatus(claim.getPlayerName()).getStatus()
-                            == AccountStatusWire.Status.BIND_PENDING) {
+                    PremiumGate.Action action = PremiumGate.decideVerified(claim.getConsent(), state,
+                            claim.getVerifiedMojangUuid(), binding != null, claim.isAutoLogin());
+                    if (action == PremiumGate.Action.REJECT) {
+                        throw new IllegalStateException("EasyAuth account changed before premium authentication");
+                    }
+                    if (action == PremiumGate.Action.PASSWORD_LOCK) {
+                        // nothing to claim and nothing to log in: keep the
+                        // password lock (expired or lost claim window, unfinished
+                        // upgrade, or the autoLogin policy being off)
+                        return;
+                    }
+                    if (action == PremiumGate.Action.CLAIM_AND_LOGIN) {
                         checkBindingEntry(entry, claim.getPlayerName());
                     } else {
                         checkPremiumEntry(entry, claim.getPlayerName(), claim.getVerifiedMojangUuid());
                     }
-                } else if (claim.getDecision() == Decision.OFFLINE) {
+                } else {
+                    if (PremiumGate.decideUnverified(state) == PremiumGate.Action.REJECT) {
+                        throw new IllegalStateException("EasyAuth account changed before offline authentication");
+                    }
                     checkOfflineEntry(entry, claim.getPlayerName(), claim.getForwardedUuid());
                 }
             }).get(3, TimeUnit.SECONDS);
@@ -170,13 +182,6 @@ final class EasyAuth344Bridge {
             throw new IllegalStateException("EasyAuth account check was interrupted", error);
         } catch (ExecutionException | TimeoutException error) {
             throw new IllegalStateException("EasyAuth account check failed before configuration", error);
-        }
-    }
-
-    void requestBindingCookie(ServerConfigurationPacketListenerImpl listener, IdentityClaim claim) {
-        if (claim.getDecision() == Decision.PREMIUM_VERIFIED
-                && accountStatus(claim.getPlayerName()).getStatus() == AccountStatusWire.Status.BIND_PENDING) {
-            BindingCookieProof.request(listener, claim.getPlayerName());
         }
     }
 
@@ -210,61 +215,63 @@ final class EasyAuth344Bridge {
         }
     }
 
-    AccountStatusWire.Result accountStatus(String name) {
+    AccountState.Snapshot accountStatus(String name) {
         verifyPolicy();
         Object db = field(easyAuth, null, "DB");
         Object entry = readAccount(db, name);
         if (entry == null) {
-            return AccountStatusWire.result(AccountStatusWire.Status.OPEN, null);
+            return new AccountState.Snapshot(AccountState.OPEN, null);
         }
         if (!entryType.isInstance(entry) || !name.equals(field(entryType, entry, "username"))) {
-            return AccountStatusWire.result(AccountStatusWire.Status.CONFLICT, null);
+            return new AccountState.Snapshot(AccountState.CONFLICT, null);
         }
         String password = (String) field(entryType, entry, "password");
         if (password == null) {
-            return AccountStatusWire.result(AccountStatusWire.Status.CONFLICT, null);
+            return new AccountState.Snapshot(AccountState.CONFLICT, null);
         }
         if (!password.isEmpty()) {
             UUID accountUuid = (UUID) field(entryType, entry, "uuid");
             String kind = Objects.toString(field(entryType, entry, "onlineAccount"));
             if (!offlineUuid(name).equals(accountUuid)
                     || (!"FALSE".equals(kind) && !"UNKNOWN".equals(kind))) {
-                return AccountStatusWire.result(AccountStatusWire.Status.CONFLICT, null);
+                return new AccountState.Snapshot(AccountState.CONFLICT, null);
             }
             PendingBinding pending = pendingBindings.get(name);
-            if (pending != null && !pending.matches(accountUuid, password)) {
+            if (pending != null && !pending.matchesAccount(accountUuid, password)) {
                 pendingBindings.remove(name, pending);
                 pending = null;
             }
             if (pending != null) {
-                return AccountStatusWire.result(AccountStatusWire.Status.BIND_PENDING, null);
+                return new AccountState.Snapshot(AccountState.BIND_PENDING, null);
             }
-            return AccountStatusWire.result(AccountStatusWire.Status.PASSWORD, null);
+            return new AccountState.Snapshot(AccountState.PASSWORD, null);
         }
         String kind = Objects.toString(field(entryType, entry, "onlineAccount"));
         UUID uuid = (UUID) field(entryType, entry, "uuid");
         if ("TRUE".equals(kind) && uuid != null) {
-            return AccountStatusWire.result(AccountStatusWire.Status.BOUND, uuid);
+            return new AccountState.Snapshot(AccountState.BOUND, uuid);
         }
         if ("UNKNOWN".equals(kind)) {
-            return AccountStatusWire.result(AccountStatusWire.Status.OPEN, null);
+            return new AccountState.Snapshot(AccountState.OPEN, null);
         }
-        return AccountStatusWire.result(AccountStatusWire.Status.CONFLICT, null);
+        return new AccountState.Snapshot(AccountState.CONFLICT, null);
     }
 
-    private void verifyCurrentAccount(IdentityClaim claim) {
-        AccountStatusWire.Result current = accountStatus(claim.getPlayerName());
-        if (claim.getDecision() == Decision.PREMIUM_VERIFIED) {
-            if (current.getStatus() != AccountStatusWire.Status.OPEN
-                    && current.getStatus() != AccountStatusWire.Status.BIND_PENDING
-                    && (current.getStatus() != AccountStatusWire.Status.BOUND
-                    || !claim.getVerifiedMojangUuid().equals(current.getUuid()))) {
-                throw new IllegalStateException("EasyAuth account changed before premium authentication");
-            }
-        } else if (current.getStatus() == AccountStatusWire.Status.BOUND
-                || current.getStatus() == AccountStatusWire.Status.CONFLICT) {
-            throw new IllegalStateException("EasyAuth account changed before offline authentication");
+    /**
+     * Returns the pending binding this verified identity may claim: a live
+     * entry for the name whose pinned premium UUID matches the verified one.
+     * The verification is the claim — a matching verified connection is the
+     * only proof the binding window accepts.
+     *
+     * @param claim the identity facts of the connecting player
+     * @return the claimable entry, or null when nothing may be claimed
+     */
+    private PendingBinding matchedBinding(IdentityClaim claim) {
+        PendingBinding pending = pendingBindings.get(claim.getPlayerName());
+        if (pending == null || !pending.matchesTarget(claim.getVerifiedMojangUuid())) {
+            return null;
         }
+        return pending;
     }
 
     void onJoin(ServerPlayer player, IdentityClaim claim) {
@@ -277,8 +284,12 @@ final class EasyAuth344Bridge {
                 || Boolean.TRUE.equals(invoke(player, "easyAuth$isAuthenticated"))) {
             throw new IllegalStateException("EasyAuth account is missing or was authenticated before FLP");
         }
+        AccountState.Snapshot state = accountStatus(claim.getPlayerName());
+        PendingBinding binding = matchedBinding(claim);
         if (claim.getDecision() == Decision.OFFLINE) {
-            verifyCurrentAccount(claim);
+            if (PremiumGate.decideUnverified(state) == PremiumGate.Action.REJECT) {
+                throw new IllegalStateException("EasyAuth account conflicts with offline identity");
+            }
             checkOfflineEntry(entry, claim.getPlayerName(), claim.getForwardedUuid());
             LOGGER.info("EasyAuth password lock remains active for {}", player.getGameProfile().name());
             return;
@@ -286,15 +297,43 @@ final class EasyAuth344Bridge {
         if (claim.getDecision() != Decision.PREMIUM_VERIFIED) {
             throw new IllegalStateException("Unresolved identity claim");
         }
-        verifyCurrentAccount(claim);
-        if (accountStatus(claim.getPlayerName()).getStatus() == AccountStatusWire.Status.BIND_PENDING) {
+        PremiumGate.Action action = PremiumGate.decideVerified(claim.getConsent(), state,
+                claim.getVerifiedMojangUuid(), binding != null, claim.isAutoLogin());
+        if (action == PremiumGate.Action.PASSWORD_LOCK) {
+            // no premium handling to do: the claim window expired, the entry was
+            // lost to a restart, the upgrade never finished, or the autoLogin
+            // policy is off. The password account keeps its password and
+            // /flp premium can be retried after logging in.
+            LOGGER.info("Premium login not applied; the password lock stays for {}",
+                    player.getGameProfile().name());
+            return;
+        }
+        if (action == PremiumGate.Action.REJECT) {
+            throw new IllegalStateException("EasyAuth account changed before premium authentication");
+        }
+        if (action == PremiumGate.Action.CLAIM_AND_LOGIN) {
+            // the first successful passwordless login claims the queued binding:
+            // the account is only converted here, never at command time
             checkBindingEntry(entry, claim.getPlayerName());
-            completeBindingFromCookie(player, claim, entry);
+            completeBindingClaim(player, claim, entry, binding);
             return;
         }
         authenticatePremium(player, entry, claim.getVerifiedMojangUuid());
     }
 
+    /**
+     * Queues a pending upgrade for the logged-in password account. The command
+     * only sets the proxy's FastLoginPlus record (the network-level preference)
+     * and this entry (pin of the claimed name's premium UUID, one claim window);
+     * the EasyAuth account is <em>not</em> touched. The account is converted to
+     * premium (cleared password, pinned UUID) only at the first successful
+     * passwordless login whose verified UUID matches the pin, so a failed
+     * upgrade never costs the password lock.
+     *
+     * @param server the running server
+     * @param player the authenticated password account holder
+     * @param claim  the identity facts of the current connection
+     */
     void beginBinding(MinecraftServer server, ServerPlayer player, IdentityClaim claim) {
         verifyPolicy();
         String name = player.getGameProfile().name();
@@ -303,13 +342,16 @@ final class EasyAuth344Bridge {
             throw new IllegalStateException("Log in to the EasyAuth password account first");
         }
         Object entry = invoke(player, "easyAuth$getPlayerEntryV1");
-        AccountStatusWire.Status state = accountStatus(name).getStatus();
-        if (entry == null || (state != AccountStatusWire.Status.PASSWORD
-                && state != AccountStatusWire.Status.BIND_PENDING)) {
+        AccountState.Snapshot state = accountStatus(name);
+        if (entry == null || (state.state() != AccountState.PASSWORD
+                && state.state() != AccountState.BIND_PENDING)) {
             throw new IllegalStateException("A password account is required to start binding");
         }
         checkBindingEntry(entry, name);
-        TransferTarget transfer = transferTarget();
+        Properties config = readConfig();
+        TransferTarget transfer = transferTarget(config);
+        String proxyIds = config.getProperty("allowed-proxy-ids", "");
+        FabricConfig.warnIfUntrusted(config);
         Object db = field(easyAuth, null, "DB");
         Object current = readAccount(db, name);
         checkBindingEntry(current, name);
@@ -317,32 +359,54 @@ final class EasyAuth344Bridge {
         if (!passwordHash.equals(field(entryType, current, "password"))) {
             throw new IllegalStateException("EasyAuth password account is still saving; retry /flp premium shortly");
         }
-        byte[] token = new byte[32];
-        TOKEN_RANDOM.nextBytes(token);
-        PendingBinding pending = new PendingBinding(offlineUuid(name), passwordHash, token);
-        pendingBindings.put(name, pending);
-        player.connection.send(new ClientboundStoreCookiePacket(BindingCookieProof.KEY, token.clone()));
-        player.sendSystemMessage(Component.literal("FastLoginPlus: verifying this client, then transferring "
-                + "for premium binding. Keep Minecraft open."));
-        CompletableFuture.delayedExecutor(300, TimeUnit.MILLISECONDS).execute(() ->
-                server.execute(() -> {
-                    if (pendingBindings.get(name) != pending || !pending.isLive()
-                            || !player.connection.isAcceptingMessages()) {
-                        return;
-                    }
-                    BindingCookieProof.StoreRequest request = BindingCookieProof.confirmStoredCookie(
-                            player, name, token, () ->
-                                    server.execute(() -> {
-                                        transferAfterConfirmation(player, name, pending, transfer.host, transfer.port);
-                                    }), () -> server.execute(() ->
-                                            failStoredCookie(player, name, pending)));
-                    CompletableFuture.delayedExecutor(STORE_CONFIRM_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                            .execute(() -> server.execute(() ->
-                                    BindingCookieProof.expireStoreRequest(player, request)));
-                }));
+        player.sendSystemMessage(Component.literal("FastLoginPlus: checking the premium identity of "
+                + name + "..."));
+        // resolve the pinned premium UUID off the server thread, then finish on it
+        CompletableFuture.supplyAsync(() -> premiumNames.resolve(name)).whenComplete((target, error) ->
+                server.execute(() -> finishBinding(server, player, name, passwordHash, target,
+                        transfer, proxyIds)));
     }
 
-    void transferAfterConfirmation(ServerPlayer player, String name, PendingBinding pending, String host, int port) {
+    private void finishBinding(MinecraftServer server, ServerPlayer player, String name,
+                               String passwordHash, Optional<UUID> target, TransferTarget transfer,
+                               String proxyIds) {
+        if (target == null || target.isEmpty()) {
+            player.sendSystemMessage(Component.literal("FastLoginPlus: Mojang has no premium identity "
+                    + "named " + name + " right now; the upgrade needs one. Retry later."));
+            return;
+        }
+        if (!player.connection.isAcceptingMessages()) {
+            return;
+        }
+        Object db = field(easyAuth, null, "DB");
+        Object current = readAccount(db, name);
+        try {
+            checkBindingEntry(current, name);
+        } catch (RuntimeException changed) {
+            player.sendSystemMessage(Component.literal("FastLoginPlus: the account changed while "
+                    + "checking; nothing was modified. " + changed.getMessage()));
+            return;
+        }
+        if (!passwordHash.equals(field(entryType, current, "password"))) {
+            player.sendSystemMessage(Component.literal("FastLoginPlus: the password account changed "
+                    + "while checking; nothing was modified. Retry /flp premium."));
+            return;
+        }
+        PendingBinding pending = new PendingBinding(offlineUuid(name), passwordHash, target.get());
+        pendingBindings.put(name, pending);
+        // the command only books the upgrade: the proxy record (network-level
+        // preference) is set here, the EasyAuth account stays a password account
+        BindingConsentWriter.send(player, name, proxyIds);
+        player.sendSystemMessage(Component.literal("FastLoginPlus: premium upgrade queued for " + name
+                + " (target " + target.get() + "). Keep Minecraft open; the client reconnects for "
+                + "Mojang verification. Your password is unchanged until the upgrade succeeds; "
+                + "retry /flp premium if this fails."));
+        CompletableFuture.delayedExecutor(CONSENT_SETTLE_DELAY_MILLIS, TimeUnit.MILLISECONDS).execute(() ->
+                server.execute(() -> transferForBinding(player, name, pending, transfer.host, transfer.port)));
+    }
+
+    private void transferForBinding(ServerPlayer player, String name, PendingBinding pending,
+                                    String host, int port) {
         if (pendingBindings.get(name) == pending && pending.isLive()
                 && player.connection.isAcceptingMessages()) {
             LOGGER.info("Transferring {} for verified premium binding", name);
@@ -350,25 +414,11 @@ final class EasyAuth344Bridge {
         }
     }
 
-    void failStoredCookie(ServerPlayer player, String name, PendingBinding pending) {
-        if (pendingBindings.remove(name, pending)) {
-            LOGGER.warn("Client did not confirm the binding cookie for {}", name);
-            if (player.connection.isAcceptingMessages()) {
-                String message = "FastLoginPlus: client cookie confirmation failed or timed out. "
-                        + "Your password is unchanged; retry /flp premium.";
-                player.sendSystemMessage(Component.literal(message));
-            }
-        }
+    private Properties readConfig() {
+        return FabricConfig.load();
     }
 
-    private TransferTarget transferTarget() {
-        Path file = FabricLoader.getInstance().getConfigDir().resolve("fastloginplus-fabric.properties");
-        Properties config = new Properties();
-        try (InputStream input = Files.newInputStream(file)) {
-            config.load(input);
-        } catch (IOException error) {
-            throw new IllegalStateException("Configure binding-transfer-host and binding-transfer-port", error);
-        }
+    private TransferTarget transferTarget(Properties config) {
         String host = config.getProperty("binding-transfer-host", "").trim();
         int port;
         try {
@@ -385,29 +435,41 @@ final class EasyAuth344Bridge {
     private record TransferTarget(String host, int port) {
     }
 
-    private void completeBindingFromCookie(ServerPlayer player, IdentityClaim claim, Object entry) {
+    /**
+     * Claims the pending binding on a Mojang-verified connection. The pin is
+     * already matched (see {@link #matchedBinding}); the account must still be
+     * the one the holder started the binding with, otherwise the entry dies
+     * and the password account stays untouched.
+     *
+     * @param player  the verified connection claiming the account
+     * @param claim   the identity facts of that connection
+     * @param entry   the live EasyAuth account entry
+     * @param pending the queued binding being claimed
+     */
+    private void completeBindingClaim(ServerPlayer player, IdentityClaim claim, Object entry,
+                                      PendingBinding pending) {
         String name = claim.getPlayerName();
-        PendingBinding pending = pendingBindings.get(name);
-        if (pending == null || !pending.isLive()
-                || !pending.passwordHash.equals(field(entryType, entry, "password"))
-                || !BindingCookieProof.consume(player.connection, name, pending.token)) {
-            player.sendSystemMessage(Component.literal("FastLoginPlus: client proof unavailable. "
-                    + "Your password is unchanged; use /login and /flp bind to finish."));
-            LOGGER.warn("Automatic binding proof was unavailable for {}", name);
+        if (!pending.matchesAccount((UUID) field(entryType, entry, "uuid"),
+                (String) field(entryType, entry, "password"))) {
+            player.sendSystemMessage(Component.literal("FastLoginPlus: the account changed during "
+                    + "the upgrade. Nothing was modified and your password is unchanged; log in "
+                    + "with it and run /flp premium to retry."));
+            LOGGER.warn("Binding window no longer matches the EasyAuth account for {}", name);
             return;
         }
         Object db = field(easyAuth, null, "DB");
         Object current = readAccount(db, name);
         checkBindingEntry(current, name);
-        if (!pending.passwordHash.equals(field(entryType, current, "password"))) {
+        if (!pending.matchesAccount((UUID) field(entryType, current, "uuid"),
+                (String) field(entryType, current, "password"))) {
             throw new IllegalStateException("EasyAuth password account changed during binding");
         }
         try {
             authenticatePremium(player, entry, claim.getVerifiedMojangUuid(), true);
         } catch (RuntimeException failure) {
-            AccountStatusWire.Result saved = accountStatus(name);
-            if (saved.getStatus() == AccountStatusWire.Status.BOUND
-                    && claim.getVerifiedMojangUuid().equals(saved.getUuid())) {
+            AccountState.Snapshot saved = accountStatus(name);
+            if (saved.state() == AccountState.BOUND
+                    && claim.getVerifiedMojangUuid().equals(saved.uuid())) {
                 pendingBindings.remove(name, pending);
                 LOGGER.error("Binding was saved for {}, but EasyAuth could not finish this login", name, failure);
                 player.connection.disconnect(Component.literal(
@@ -421,40 +483,6 @@ final class EasyAuth344Bridge {
                 claim.getVerifiedMojangUuid());
     }
 
-    void completeBinding(ServerPlayer player, IdentityClaim claim) {
-        verifyPolicy();
-        String name = player.getGameProfile().name();
-        if (claim.getDecision() != Decision.PREMIUM_VERIFIED
-                || !Boolean.TRUE.equals(invoke(player, "easyAuth$isAuthenticated"))) {
-            throw new IllegalStateException("A verified Mojang connection and EasyAuth password login are required");
-        }
-        if (accountStatus(name).getStatus() != AccountStatusWire.Status.BIND_PENDING) {
-            throw new IllegalStateException("Binding window expired; start again from the password account");
-        }
-        Object entry = invoke(player, "easyAuth$getPlayerEntryV1");
-        checkBindingEntry(entry, name);
-        Object db = field(easyAuth, null, "DB");
-        Object current = readAccount(db, name);
-        checkBindingEntry(current, name);
-        if (!Objects.equals(field(entryType, current, "lastAuthenticatedDate"),
-                field(entryType, entry, "lastAuthenticatedDate"))
-                || !Objects.equals(field(entryType, current, "password"),
-                field(entryType, entry, "password"))) {
-            throw new IllegalStateException("EasyAuth password login is still saving; retry /flp bind shortly");
-        }
-        writeBinding(db, entry, claim.getVerifiedMojangUuid());
-        pendingBindings.remove(name);
-        LOGGER.info("Bound EasyAuth password account {} to verified Mojang UUID {}", name,
-                claim.getVerifiedMojangUuid());
-        player.connection.disconnect(Component.literal(
-                "FastLoginPlus binding complete. Reconnect for passwordless login."));
-    }
-
-    private void writeBinding(Object db, Object entry, UUID verifiedUuid) {
-        EasyAuthAccountUpdate.bind(entryType, entry, verifiedUuid,
-                candidate -> Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, candidate)));
-    }
-
     private void checkBindingEntry(Object entry, String name) {
         if (entry == null || !entryType.isInstance(entry)
                 || !name.equals(field(entryType, entry, "username"))
@@ -466,32 +494,54 @@ final class EasyAuth344Bridge {
         }
     }
 
+    /**
+     * One queued binding: the account it was started from, the pinned premium
+     * UUID of the claimed name, and the claim window. One verified connection
+     * whose UUID matches the pin claims it.
+     */
     static final class PendingBinding {
         private final UUID offlineUuid;
         private final String passwordHash;
-        private final byte[] token;
+        private final UUID targetUuid;
         private final long expiresAt;
         private final LongSupplier nanoTime;
 
-        private PendingBinding(UUID offlineUuid, String passwordHash, byte[] token) {
-            this(offlineUuid, passwordHash, token, System::nanoTime);
+        private PendingBinding(UUID offlineUuid, String passwordHash, UUID targetUuid) {
+            this(offlineUuid, passwordHash, targetUuid, System::nanoTime);
         }
 
-        PendingBinding(UUID offlineUuid, String passwordHash, byte[] token, LongSupplier nanoTime) {
+        PendingBinding(UUID offlineUuid, String passwordHash, UUID targetUuid, LongSupplier nanoTime) {
             this.offlineUuid = offlineUuid;
             this.passwordHash = passwordHash;
-            this.token = token.clone();
+            this.targetUuid = targetUuid;
             this.nanoTime = nanoTime;
             this.expiresAt = nanoTime.getAsLong() + BIND_WINDOW_NANOS;
         }
 
-        private boolean isLive() {
+        boolean isLive() {
             return nanoTime.getAsLong() - expiresAt < 0;
         }
 
-        boolean matches(UUID accountUuid, String currentPasswordHash) {
+        /**
+         * The EasyAuth account is still the one the binding was started from.
+         *
+         * @param accountUuid         the account's stored UUID
+         * @param currentPasswordHash the account's current password hash
+         * @return true when the window is live and the account is unchanged
+         */
+        boolean matchesAccount(UUID accountUuid, String currentPasswordHash) {
             return isLive() && offlineUuid.equals(accountUuid)
                     && passwordHash.equals(currentPasswordHash);
+        }
+
+        /**
+         * The verified identity is the pinned premium identity of the name.
+         *
+         * @param verifiedUuid the Mojang UUID the connection was verified as
+         * @return true when the window is live and the UUID matches the pin
+         */
+        boolean matchesTarget(UUID verifiedUuid) {
+            return isLive() && targetUuid.equals(verifiedUuid);
         }
     }
 

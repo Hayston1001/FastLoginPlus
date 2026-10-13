@@ -36,28 +36,40 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PendingBindingTest {
 
+    private static final UUID OFFLINE = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID TARGET = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID OTHER = UUID.fromString("00000000-0000-0000-0000-000000000003");
+
     @Test
     void passwordChangeOrWrongAccountInvalidatesWindow() {
         AtomicLong clock = new AtomicLong(100);
-        UUID offlineUuid = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        var pending = new EasyAuth344Bridge.PendingBinding(offlineUuid, "old-hash", new byte[]{1},
-                clock::get);
+        var pending = new EasyAuth344Bridge.PendingBinding(OFFLINE, "old-hash", TARGET, clock::get);
 
-        assertTrue(pending.matches(offlineUuid, "old-hash"));
-        assertFalse(pending.matches(offlineUuid, "new-hash"));
-        assertFalse(pending.matches(UUID.fromString("00000000-0000-0000-0000-000000000002"),
-                "old-hash"));
+        assertTrue(pending.matchesAccount(OFFLINE, "old-hash"));
+        assertFalse(pending.matchesAccount(OFFLINE, "new-hash"));
+        assertFalse(pending.matchesAccount(OTHER, "old-hash"));
+    }
+
+    @Test
+    void onlyThePinnedPremiumIdentityMatches() {
+        AtomicLong clock = new AtomicLong(100);
+        var pending = new EasyAuth344Bridge.PendingBinding(OFFLINE, "hash", TARGET, clock::get);
+
+        assertTrue(pending.matchesTarget(TARGET));
+        assertFalse(pending.matchesTarget(OTHER));
+        assertFalse(pending.matchesTarget(null));
     }
 
     @Test
     void windowExpiresAtDeadlineAndNewAttemptCanStart() {
         AtomicLong clock = new AtomicLong(100);
-        UUID offlineUuid = UUID.fromString("00000000-0000-0000-0000-000000000001");
-        var old = new EasyAuth344Bridge.PendingBinding(offlineUuid, "hash", new byte[]{1}, clock::get);
+        var old = new EasyAuth344Bridge.PendingBinding(OFFLINE, "hash", TARGET, clock::get);
 
         clock.addAndGet(TimeUnit.MINUTES.toNanos(10));
-        assertFalse(old.matches(offlineUuid, "hash"));
-        var retry = new EasyAuth344Bridge.PendingBinding(offlineUuid, "hash", new byte[]{2}, clock::get);
-        assertTrue(retry.matches(offlineUuid, "hash"));
+        assertFalse(old.matchesAccount(OFFLINE, "hash"));
+        assertFalse(old.matchesTarget(TARGET));
+        var retry = new EasyAuth344Bridge.PendingBinding(OFFLINE, "hash", TARGET, clock::get);
+        assertTrue(retry.matchesAccount(OFFLINE, "hash"));
+        assertTrue(retry.matchesTarget(TARGET));
     }
 }

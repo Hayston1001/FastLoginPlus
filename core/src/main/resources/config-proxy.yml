@@ -34,6 +34,12 @@
 # the database, and forwards force-login commands to the backends.
 # Backend-only keys (verifyClientKeys, respectIpLimit) and behaviorally inert
 # keys (useProxyAgnosticResolver) are NOT present here.
+#
+# Effect scope legend (R-10):
+#   [proxy]      takes effect on the proxy only
+#   [distributed] policy decided here, sent to the backends with the identity
+#                 facts and enforced there; a backend's same-named key only
+#                 applies in standalone (no-proxy) deployments
 
 # ========================================
 # Language
@@ -98,25 +104,15 @@ anti-bot:
 # here; the backend only executes forceLogin/forceRegister through its auth
 # plugin on Bukkit/Folia. Fabric checks account ownership first, then binds an
 # unclaimed EasyAuth account after a verified online login.
+# [distributed] the proxy only verifies unknown paid names when this is on, so
+# a verified premium name reaching a backend already carries this policy.
 autoRegister: true
-
-# Dedicated Velocity + Fabric network only. Requires a backend that validates the
-# flp_identity property after Velocity modern forwarding; keep disabled elsewhere.
-# Fabric mode requires premiumUuid: true, autoLogin: true,
-# nameChangeCheck: false, secondAttemptCracked: false,
-# offline-whitelist: false and anti-bot.action: block if enabled.
-# It excludes Floodgate/Geyser.
-fabric-native-auth:
-  enabled: false
-  # Account ownership is read from the Fabric backend before Velocity chooses
-  # online mode. Copy config/fastloginplus-account.key from Fabric to this
-  # proxy's plugins/fastloginplus/ directory; keep the key private.
-  account-status-host: 127.0.0.1
-  account-status-port: 25578
 
 # Enable auto-login for premium players
 # The proxy decides and forwards the force-login command to the backend,
 # which executes it through the auth plugin.
+# [distributed] sent with the identity facts; the backend enforces it and does
+# not read its own copy when a proxy is in front.
 autoLogin: true
 
 # Whether to use the premium UUID after premium verification (does not decide
@@ -126,15 +122,18 @@ autoLogin: true
 # This setting is the single authority on which UUID reaches the backend. If
 # AuthMe's proxy plugin (AuthMeBungee / AuthMe Velocity) is installed,
 # FastLoginPlus pins its premium.keepOfflineUuidCompatibility to false and reloads it.
+# [proxy] applied to the forwarded profile here.
 premiumUuid: true
 
 # Query Mojang API for new players and detect name changes by UUID
 # If a player's name is not in the database but their UUID is (under an old name),
 # the old record is updated with the new name and they log in as premium
+# [distributed] the rename is decided and booked here; backends apply the result.
 nameChangeCheck: true
 
 # If an offline player uses a premium username but fails authentication, 
 # remember them so they can join in offline mode next time (not recommended)
+# [proxy] the failed-verification memory is kept here.
 secondAttemptCracked: false
 
 # ========================================
@@ -145,7 +144,8 @@ secondAttemptCracked: false
 # No restrictions apply to online players
 # Use /flp cracked <player> to add offline players to the database
 # Use /flp delete <player> to remove offline players from the database
-# Enforced by the proxy.
+# [proxy] the known list is the proxy's database (network-wide): the proxy
+# judges admission and kicks. Backends do not re-judge it behind a proxy.
 offline-whitelist: false
 
 # ========================================
@@ -170,10 +170,13 @@ verify-backend-messages: true
 # ========================================
 # Show warning before /flp premium command takes effect
 # The proxy asks for confirmation when a backend forwards the toggle.
+# [proxy] the confirmation gate lives here.
 premium-warning: true
 
 # Kick the player from the server after they confirm /flp premium, forcing them to reconnect
 # The proxy kicks the player after a toggle.
+# [proxy] the kick lives here; a Fabric backend's transfer is its own reconnect
+# helper and does not read this key.
 kick-toggle: true
 
 # ========================================
@@ -185,6 +188,8 @@ debug: false
 # Auto-register players in flp DB but missing from auth plugin DB
 # Decided by the proxy; the backend executes the registration through the
 # auth plugin.
+# [distributed] sent with the identity facts; the backend repairs a missing
+# account accordingly and ignores its own copy behind a proxy.
 auto-register-unknown: true
 
 # ======[[ Mojang API retry ]]======

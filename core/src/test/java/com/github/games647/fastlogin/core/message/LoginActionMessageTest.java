@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.core.message;
 
 import com.github.games647.fastlogin.core.message.LoginActionMessage.Type;
+import com.github.games647.fastlogin.protocol.IdentityClaim;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
@@ -102,6 +103,50 @@ class LoginActionMessageTest {
         assertEquals("Steve", decoded.getPlayerName());
         assertEquals(PROXY_ID, decoded.getProxyId());
         assertNull(decoded.getVerifiedPremiumUuid());
+    }
+
+    @Test
+    void roundTripPreservesIdentityFacts() {
+        LoginActionMessage original = new LoginActionMessage(Type.LOGIN, "Steve", PROXY_ID, PREMIUM_UUID);
+        original.setFacts(new IdentityClaim.Facts(
+                true, false, IdentityClaim.Consent.YES, false, true, true));
+
+        ByteArrayDataOutput out = ByteStreams.newDataOutput();
+        original.writeTo(out);
+
+        LoginActionMessage decoded = new LoginActionMessage();
+        decoded.readFrom(ByteStreams.newDataInput(out.toByteArray()));
+
+        assertEquals(true, decoded.isNewPlayer());
+        assertEquals(false, decoded.isSameNameCracked());
+        assertEquals(IdentityClaim.Consent.YES, decoded.getConsent());
+        assertEquals(false, decoded.isAutoLogin());
+        assertEquals(true, decoded.isAutoRegisterUnknown());
+        assertEquals(true, decoded.isOfflineWhitelist());
+    }
+
+    @Test
+    void frameWithoutFactsReadsAsUnknownConsent() {
+        // a proxy that knows the verified UUID but predates the facts: type, name,
+        // proxyId and the UUID pair. The facts stay in their conservative state.
+        ByteArrayDataOutput out = ByteStreams.newDataOutput();
+        out.writeByte(Type.LOGIN.ordinal());
+        out.writeUTF("Steve");
+        out.writeLong(PROXY_ID.getMostSignificantBits());
+        out.writeLong(PROXY_ID.getLeastSignificantBits());
+        out.writeLong(PREMIUM_UUID.getMostSignificantBits());
+        out.writeLong(PREMIUM_UUID.getLeastSignificantBits());
+
+        LoginActionMessage decoded = new LoginActionMessage();
+        decoded.readFrom(ByteStreams.newDataInput(out.toByteArray()));
+
+        assertEquals(PREMIUM_UUID, decoded.getVerifiedPremiumUuid());
+        assertEquals(false, decoded.isNewPlayer());
+        assertEquals(false, decoded.isSameNameCracked());
+        assertEquals(IdentityClaim.Consent.UNKNOWN, decoded.getConsent());
+        assertEquals(true, decoded.isAutoLogin());
+        assertEquals(false, decoded.isAutoRegisterUnknown());
+        assertEquals(false, decoded.isOfflineWhitelist());
     }
 
     @Test

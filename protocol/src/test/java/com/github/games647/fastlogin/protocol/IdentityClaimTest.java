@@ -66,6 +66,39 @@ class IdentityClaimTest {
     }
 
     @Test
+    void roundTripsIdentityFacts() {
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE,
+                "Player_1", FORWARDED, null, new IdentityClaim.Facts(
+                        true, true, IdentityClaim.Consent.NO, false, true, true));
+
+        IdentityClaim parsed = IdentityClaim.parseExactlyOne(
+                Collections.singletonList(claim.encode()), "Player_1", FORWARDED);
+
+        assertEquals(true, parsed.isNewPlayer());
+        assertEquals(true, parsed.isSameNameCracked());
+        assertEquals(IdentityClaim.Consent.NO, parsed.getConsent());
+        assertEquals(false, parsed.isAutoLogin());
+        assertEquals(true, parsed.isAutoRegisterUnknown());
+        assertEquals(true, parsed.isOfflineWhitelist());
+    }
+
+    @Test
+    void shortShapeFromOlderProxyLeavesFactsUnknown() {
+        // five fields: the shape a proxy predating the facts sends
+        String value = "1:OFFLINE:Player_1:" + FORWARDED + ":-";
+
+        IdentityClaim parsed = IdentityClaim.parseExactlyOne(
+                Collections.singletonList(value), "Player_1", FORWARDED);
+
+        assertEquals(false, parsed.isNewPlayer());
+        assertEquals(false, parsed.isSameNameCracked());
+        assertEquals(IdentityClaim.Consent.UNKNOWN, parsed.getConsent());
+        assertEquals(true, parsed.isAutoLogin());
+        assertEquals(false, parsed.isAutoRegisterUnknown());
+        assertEquals(false, parsed.isOfflineWhitelist());
+    }
+
+    @Test
     void rejectsMalformedWireValues() {
         String prefix = "1:PREMIUM_VERIFIED:Player_1:" + FORWARDED + ":";
         for (String value : Arrays.asList("2:OFFLINE:Player_1:" + FORWARDED + ":-",

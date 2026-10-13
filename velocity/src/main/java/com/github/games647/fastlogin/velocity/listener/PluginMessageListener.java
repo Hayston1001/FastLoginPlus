@@ -238,10 +238,6 @@ public class PluginMessageListener {
                         forPlayer.getUsername());
                 return;
             }
-            if (loginSession.isBindingProof() || (loginSession.getBackendBoundUuid() != null
-                    && !loginSession.getBackendBoundUuid().equals(loginSession.getUuid()))) {
-                return;
-            }
             StoredProfile playerProfile = loginSession.getProfile();
             loginSession.setRegistered(true);
             // persist under the name-level striped lock so this cannot

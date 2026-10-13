@@ -67,7 +67,8 @@ tasks.register('checkLicenseHeaders') {
     inputs.files(licensedSources)
     doLast {
         def missing = licensedSources.files.findAll { file ->
-            !file.getText('UTF-8').take(1500).contains('SPDX-License-Identifier: MIT')
+            // git ls-files also lists deleted-but-unstaged files during development
+            file.isFile() && !file.getText('UTF-8').take(1500).contains('SPDX-License-Identifier: MIT')
         }
         if (missing) throw new GradleException('Missing MIT license header: ' +
             missing.collect { rootDir.toPath().relativize(it.toPath()) }.join(', '))

@@ -25,6 +25,7 @@
  */
 package com.github.games647.fastlogin.core.message;
 
+import com.github.games647.fastlogin.protocol.IdentityClaim;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteArrayDataOutput;
 
@@ -54,11 +55,23 @@ public class LoginActionMessage implements ChannelMessage {
      */
     private UUID verifiedPremiumUuid;
 
+    /** Everything the proxy declared about this connection (facts + policy). */
+    private IdentityClaim.Facts facts = IdentityClaim.Facts.defaults();
+
     public LoginActionMessage(Type type, String playerName, UUID proxyId, UUID verifiedPremiumUuid) {
         this.type = type;
         this.playerName = playerName;
         this.proxyId = proxyId;
         this.verifiedPremiumUuid = verifiedPremiumUuid;
+    }
+
+    /**
+     * Sets the identity facts and policy keys this message declares.
+     *
+     * @param facts the proxy's fact bundle for this connection
+     */
+    public void setFacts(IdentityClaim.Facts facts) {
+        this.facts = java.util.Objects.requireNonNull(facts, "facts");
     }
 
     public LoginActionMessage() {
@@ -84,6 +97,70 @@ public class LoginActionMessage implements ChannelMessage {
      */
     public UUID getVerifiedPremiumUuid() {
         return verifiedPremiumUuid;
+    }
+
+    /**
+     * The declared facts and policy of this connection.
+     *
+     * @return the proxy's fact bundle for this connection
+     */
+    public IdentityClaim.Facts getFacts() {
+        return facts;
+    }
+
+    /**
+     * Whether the proxy has no record for this name.
+     *
+     * @return true when the name is new to FastLoginPlus
+     */
+    public boolean isNewPlayer() {
+        return facts.newPlayer();
+    }
+
+    /**
+     * Whether a premium name was observed without a passing verification.
+     *
+     * @return true for the same-name cracked observation
+     */
+    public boolean isSameNameCracked() {
+        return facts.sameNameCracked();
+    }
+
+    /**
+     * The name's upgrade consent as recorded on the proxy.
+     *
+     * @return consent state, unknown when the proxy declared none
+     */
+    public IdentityClaim.Consent getConsent() {
+        return facts.consent();
+    }
+
+    /**
+     * Whether auto-login for verified premium identities is enabled (proxy policy).
+     *
+     * @return the proxy's autoLogin value
+     */
+    public boolean isAutoLogin() {
+        return facts.autoLogin();
+    }
+
+    /**
+     * Whether verified identities without a local account are auto-registered
+     * (proxy policy).
+     *
+     * @return the proxy's auto-register-unknown value
+     */
+    public boolean isAutoRegisterUnknown() {
+        return facts.autoRegisterUnknown();
+    }
+
+    /**
+     * Whether unregistered new players are rejected (proxy policy).
+     *
+     * @return the proxy's offline-whitelist value
+     */
+    public boolean isOfflineWhitelist() {
+        return facts.offlineWhitelist();
     }
 
     @Override
@@ -123,6 +200,22 @@ public class LoginActionMessage implements ChannelMessage {
         } catch (IllegalStateException truncated) {
             this.verifiedPremiumUuid = null;
         }
+
+        // optional trailing identity facts and policy keys. A proxy older than
+        // them sends nothing here; absence means "no observation, no consent
+        // declaration", which consumers treat as the conservative state.
+        try {
+            boolean newPlayer = input.readBoolean();
+            boolean sameNameCracked = input.readBoolean();
+            IdentityClaim.Consent consent = consentOf(input.readByte());
+            boolean autoLogin = input.readBoolean();
+            boolean autoRegisterUnknown = input.readBoolean();
+            boolean offlineWhitelist = input.readBoolean();
+            this.facts = new IdentityClaim.Facts(newPlayer, sameNameCracked, consent,
+                    autoLogin, autoRegisterUnknown, offlineWhitelist);
+        } catch (IllegalStateException truncated) {
+            this.facts = IdentityClaim.Facts.defaults();
+        }
     }
 
     @Override
@@ -147,6 +240,36 @@ public class LoginActionMessage implements ChannelMessage {
             output.writeLong(verifiedPremiumUuid.getMostSignificantBits());
             output.writeLong(verifiedPremiumUuid.getLeastSignificantBits());
         }
+
+        // identity facts (observation + consent) and policy keys (proxy-owned,
+        // backend-enforced). Trailing, so old backends stop reading earlier and
+        // unaffected ones keep their conservative defaults.
+        output.writeBoolean(facts.newPlayer());
+        output.writeBoolean(facts.sameNameCracked());
+        output.writeByte(consentCode(facts.consent()));
+        output.writeBoolean(facts.autoLogin());
+        output.writeBoolean(facts.autoRegisterUnknown());
+        output.writeBoolean(facts.offlineWhitelist());
+    }
+
+    private static byte consentCode(IdentityClaim.Consent consent) {
+        if (consent == IdentityClaim.Consent.YES) {
+            return 1;
+        }
+        if (consent == IdentityClaim.Consent.NO) {
+            return 2;
+        }
+        return 0;
+    }
+
+    private static IdentityClaim.Consent consentOf(byte code) {
+        if (code == 1) {
+            return IdentityClaim.Consent.YES;
+        }
+        if (code == 2) {
+            return IdentityClaim.Consent.NO;
+        }
+        return IdentityClaim.Consent.UNKNOWN;
     }
 
     @Override

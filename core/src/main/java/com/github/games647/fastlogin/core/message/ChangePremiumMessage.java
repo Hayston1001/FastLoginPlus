@@ -25,12 +25,15 @@
  */
 package com.github.games647.fastlogin.core.message;
 
+import com.github.games647.fastlogin.protocol.ToggleWire;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteArrayDataOutput;
 
+import java.io.IOException;
+
 public class ChangePremiumMessage implements ProxyAuthenticatedMessage {
 
-    public static final String CHANGE_CHANNEL = "ch-st";
+    public static final String CHANGE_CHANNEL = ToggleWire.CHANNEL;
 
     private String playerName;
     private boolean willEnable;
@@ -79,26 +82,25 @@ public class ChangePremiumMessage implements ProxyAuthenticatedMessage {
 
     @Override
     public void readFrom(ByteArrayDataInput input) {
-        willEnable = input.readBoolean();
-        playerName = input.readUTF();
-        isSourceInvoker = input.readBoolean();
-
-        // optional trailing authentication field; legacy payloads
-        // (older backend) end here and surface as RuntimeException on EOF
+        ToggleWire.Toggle toggle;
         try {
-            sourceProxyId = input.readUTF();
-        } catch (RuntimeException legacyFormat) {
-            sourceProxyId = "";
+            toggle = ToggleWire.read(input);
+        } catch (IOException truncated) {
+            throw new IllegalArgumentException("Truncated premium toggle payload", truncated);
         }
+        this.willEnable = toggle.willEnable();
+        this.playerName = toggle.playerName();
+        this.isSourceInvoker = toggle.isSourceInvoker();
+        this.sourceProxyId = toggle.sourceProxyId();
     }
 
     @Override
     public void writeTo(ByteArrayDataOutput output) {
-        output.writeBoolean(willEnable);
-        output.writeUTF(playerName);
-        output.writeBoolean(isSourceInvoker);
-        // always appended so the wire format has no arity ambiguity
-        output.writeUTF(sourceProxyId);
+        try {
+            ToggleWire.write(output, willEnable, playerName, isSourceInvoker, sourceProxyId);
+        } catch (IOException impossible) {
+            throw new IllegalArgumentException("Cannot serialize premium toggle payload", impossible);
+        }
     }
 
     @Override

@@ -53,10 +53,8 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.argThat;
 
 /**
  * the EventTask continuation must be resumed exactly once on every
@@ -115,30 +113,10 @@ class ConnectListenerResumeOnceTest {
     }
 
     @Test
-    void fabricDecisionFailureDeniesBeforeResuming() {
-        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
-        FastLoginCore<?, ?, ?> core = mock(FastLoginCore.class);
-        doReturn(core).when(plugin).getCore();
-        when(plugin.getLog()).thenReturn(mock(Logger.class));
-        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
-        when(core.getMessage(anyString())).thenThrow(new IllegalStateException("boom"));
-        ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
-        PreLoginEvent event = mock(PreLoginEvent.class);
-        Continuation continuation = mock(Continuation.class);
-
-        listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Block,
-                continuation, new AtomicBoolean(false));
-
-        verify(event).setResult(argThat(result -> !result.isAllowed()));
-        verify(continuation, times(1)).resume();
-    }
-
-    @Test
-    void fabricAsyncPremiumFailureDeniesBeforeResuming() {
+    void asyncPremiumFailureStillResumesExactlyOnce() {
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
         AsyncScheduler scheduler = mock(AsyncScheduler.class);
         when(plugin.getLog()).thenReturn(mock(Logger.class));
-        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
         when(plugin.getScheduler()).thenReturn(scheduler);
         doAnswer(invocation -> {
             invocation.getArgument(0, Runnable.class).run();
@@ -151,16 +129,17 @@ class ConnectListenerResumeOnceTest {
         listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Continue,
                 continuation, new AtomicBoolean(false));
 
-        verify(event).setResult(argThat(result -> !result.isAllowed()));
+        // no proxy-side denial: a failing login carries no verified fact and the
+        // backend keeps it behind the password lock
+        verify(event, never()).setResult(any());
         verify(continuation, times(1)).resume();
     }
 
     @Test
-    void fabricQueuedPremiumFailureDeniesBeforeResuming() {
+    void queuedPremiumTaskResumesWhenItFinallyRuns() {
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
         AsyncScheduler scheduler = mock(AsyncScheduler.class);
         when(plugin.getLog()).thenReturn(mock(Logger.class));
-        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
         when(plugin.getScheduler()).thenReturn(scheduler);
         AtomicReference<Runnable> queued = new AtomicReference<>();
         doAnswer(invocation -> {
@@ -178,19 +157,16 @@ class ConnectListenerResumeOnceTest {
         assertFalse(resumed.get());
         queued.get().run();
 
-        var order = inOrder(event, continuation);
-        order.verify(event).setResult(argThat(result -> !result.isAllowed()));
-        order.verify(continuation).resume();
+        verify(continuation, times(1)).resume();
         ConnectListener.resumeOnce(continuation, resumed);
         verify(continuation, times(1)).resume();
     }
 
     @Test
-    void fabricRejectedSchedulingDeniesBeforeResuming() {
+    void rejectedSchedulingStillResumesExactlyOnce() {
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
         AsyncScheduler scheduler = mock(AsyncScheduler.class);
         when(plugin.getLog()).thenReturn(mock(Logger.class));
-        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
         when(plugin.getScheduler()).thenReturn(scheduler);
         doThrow(new RejectedExecutionException("stopping"))
                 .when(scheduler).runAsync(any(Runnable.class));
@@ -202,9 +178,7 @@ class ConnectListenerResumeOnceTest {
         listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Continue,
                 continuation, resumed);
 
-        var order = inOrder(event, continuation);
-        order.verify(event).setResult(argThat(result -> !result.isAllowed()));
-        order.verify(continuation).resume();
+        verify(continuation, times(1)).resume();
         ConnectListener.resumeOnce(continuation, resumed);
         verify(continuation, times(1)).resume();
     }
@@ -215,13 +189,12 @@ class ConnectListenerResumeOnceTest {
     }
 
     @Test
-    void fabricShutdownSchedulerDeniesSkippedTaskBeforeResuming() {
+    void shutdownSchedulerFutureStillResumesExactlyOnce() {
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
         Logger logger = mock(Logger.class);
         SchedulerWithStoppableExecutor scheduler = new SchedulerWithStoppableExecutor(logger);
         scheduler.shutdown();
         when(plugin.getLog()).thenReturn(logger);
-        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
         when(plugin.getScheduler()).thenReturn(scheduler);
         ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
         PreLoginEvent event = mock(PreLoginEvent.class);
@@ -232,22 +205,19 @@ class ConnectListenerResumeOnceTest {
                 continuation, resumed);
         scheduler.stopExecutor();
 
-        var order = inOrder(event, continuation);
-        order.verify(event).setResult(argThat(result -> !result.isAllowed()));
-        order.verify(continuation).resume();
+        verify(continuation, times(1)).resume();
         ConnectListener.resumeOnce(continuation, resumed);
         verify(continuation, times(1)).resume();
         verify(plugin, never()).getCore();
     }
 
     @Test
-    void fabricRealExecutorRejectionDeniesBeforeResuming() {
+    void realExecutorRejectionStillResumesExactlyOnce() {
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
         Logger logger = mock(Logger.class);
         SchedulerWithStoppableExecutor scheduler = new SchedulerWithStoppableExecutor(logger);
         scheduler.stopExecutor();
         when(plugin.getLog()).thenReturn(logger);
-        when(plugin.isFabricNativeAuthEnabled()).thenReturn(true);
         when(plugin.getScheduler()).thenReturn(scheduler);
         ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
         PreLoginEvent event = mock(PreLoginEvent.class);
@@ -257,9 +227,6 @@ class ConnectListenerResumeOnceTest {
         listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Continue,
                 continuation, resumed);
 
-        var order = inOrder(event, continuation);
-        order.verify(event).setResult(argThat(result -> !result.isAllowed()));
-        order.verify(continuation).resume();
         verify(continuation, times(1)).resume();
         verify(plugin, never()).getCore();
     }

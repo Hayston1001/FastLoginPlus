@@ -28,7 +28,6 @@ package com.github.games647.fastlogin.bungee.task;
 import com.github.games647.fastlogin.bungee.BungeeLoginSession;
 import com.github.games647.fastlogin.bungee.FastLoginBungee;
 import com.github.games647.fastlogin.bungee.event.BungeeFastLoginAutoLoginEvent;
-import com.github.games647.fastlogin.core.message.ChannelMessage;
 import com.github.games647.fastlogin.core.message.LoginActionMessage;
 import com.github.games647.fastlogin.core.message.LoginActionMessage.Type;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
@@ -112,8 +111,12 @@ public class ForceLoginTask
         // to stamp AuthMe's premium_uuid when premiumUuid:false, where the forwarded connection
         // UUID is deliberately the offline one and therefore carries no premium signal at all.
         // Null when this connection was not verified as premium.
-        ChannelMessage loginMessage = new LoginActionMessage(type, player.getName(), proxyId,
+        // The trailing facts are the proxy's observations plus the recorded upgrade
+        // consent; the backend decides the login method from them.
+        session.computeFacts(player.getAddress().getAddress().getHostAddress(), core);
+        LoginActionMessage loginMessage = new LoginActionMessage(type, player.getName(), proxyId,
                 session.getUuid());
+        loginMessage.setFacts(session.getFacts());
 
         core.getPlugin().sendPluginMessage(server, loginMessage);
     }

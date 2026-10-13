@@ -45,12 +45,82 @@ public final class IdentityClaim {
         OFFLINE, PREMIUM_VERIFIED, UNDECIDED
     }
 
+    /** Upgrade consent of the name's FastLoginPlus record. */
+    public enum Consent {
+        /** The record's owner explicitly upgraded this name to premium. */
+        YES,
+        /** The record exists without an upgrade consent. */
+        NO,
+        /** Nothing was declared (older proxy, or no session). */
+        UNKNOWN
+    }
+
+    /** Everything the proxy declares about one connection beyond the decision. */
+    public static final class Facts {
+
+        private final boolean newPlayer;
+        private final boolean sameNameCracked;
+        private final Consent consent;
+        private final boolean autoLogin;
+        private final boolean autoRegisterUnknown;
+        private final boolean offlineWhitelist;
+
+        public Facts(boolean newPlayer, boolean sameNameCracked, Consent consent,
+                     boolean autoLogin, boolean autoRegisterUnknown, boolean offlineWhitelist) {
+            this.newPlayer = newPlayer;
+            this.sameNameCracked = sameNameCracked;
+            this.consent = Objects.requireNonNull(consent, "consent");
+            this.autoLogin = autoLogin;
+            this.autoRegisterUnknown = autoRegisterUnknown;
+            this.offlineWhitelist = offlineWhitelist;
+        }
+
+        /**
+         * The shape older proxies (or missing sessions) leave behind.
+         *
+         * @return the conservative fact bundle
+         */
+        public static Facts defaults() {
+            return new Facts(false, false, Consent.UNKNOWN, true, false, false);
+        }
+
+        public boolean newPlayer() {
+            return newPlayer;
+        }
+
+        public boolean sameNameCracked() {
+            return sameNameCracked;
+        }
+
+        public Consent consent() {
+            return consent;
+        }
+
+        public boolean autoLogin() {
+            return autoLogin;
+        }
+
+        public boolean autoRegisterUnknown() {
+            return autoRegisterUnknown;
+        }
+
+        public boolean offlineWhitelist() {
+            return offlineWhitelist;
+        }
+    }
+
     private final Decision decision;
     private final String playerName;
     private final UUID forwardedUuid;
     private final UUID verifiedMojangUuid;
+    private final Facts facts;
 
     public IdentityClaim(Decision decision, String playerName, UUID forwardedUuid, UUID verifiedMojangUuid) {
+        this(decision, playerName, forwardedUuid, verifiedMojangUuid, Facts.defaults());
+    }
+
+    public IdentityClaim(Decision decision, String playerName, UUID forwardedUuid, UUID verifiedMojangUuid,
+                         Facts facts) {
         this.decision = Objects.requireNonNull(decision, "decision");
         if (playerName == null || !PLAYER_NAME.matcher(playerName).matches()) {
             throw new IllegalArgumentException("Invalid player name");
@@ -61,6 +131,7 @@ public final class IdentityClaim {
             throw new IllegalArgumentException("Mojang UUID must exist only for verified premium claims");
         }
         this.verifiedMojangUuid = verifiedMojangUuid;
+        this.facts = Objects.requireNonNull(facts, "facts");
     }
 
     public Decision getDecision() {
@@ -80,13 +151,84 @@ public final class IdentityClaim {
     }
 
     /**
-     * Encodes a claim with an exact five-field wire shape. A name cannot contain the delimiter.
+     * The declared facts and policy of this connection.
+     *
+     * @return the fact bundle the proxy sent
+     */
+    public Facts getFacts() {
+        return facts;
+    }
+
+    /**
+     * Whether the proxy has no record for this name (observation fact).
+     *
+     * @return true when the name is new to FastLoginPlus
+     */
+    public boolean isNewPlayer() {
+        return facts.newPlayer();
+    }
+
+    /**
+     * Whether a premium name was observed without a passing verification.
+     *
+     * @return true for the same-name cracked observation
+     */
+    public boolean isSameNameCracked() {
+        return facts.sameNameCracked();
+    }
+
+    /**
+     * The name's upgrade consent as recorded on the proxy.
+     *
+     * @return consent state, unknown when the proxy declared none
+     */
+    public Consent getConsent() {
+        return facts.consent();
+    }
+
+    /**
+     * Whether auto-login for verified premium identities is enabled (policy key,
+     * lives on the proxy and is only enforced here).
+     *
+     * @return the proxy's autoLogin value
+     */
+    public boolean isAutoLogin() {
+        return facts.autoLogin();
+    }
+
+    /**
+     * Whether verified identities without a local account are auto-registered
+     * (policy key, lives on the proxy).
+     *
+     * @return the proxy's auto-register-unknown value
+     */
+    public boolean isAutoRegisterUnknown() {
+        return facts.autoRegisterUnknown();
+    }
+
+    /**
+     * Whether unregistered new players are rejected (policy key, lives on the
+     * proxy; the known list is the proxy's record set).
+     *
+     * @return the proxy's offline-whitelist value
+     */
+    public boolean isOfflineWhitelist() {
+        return facts.offlineWhitelist();
+    }
+
+    /**
+     * Encodes a claim with an exact wire shape. A name cannot contain the delimiter.
      *
      * @return property value
      */
     public String encode() {
         return VERSION + ":" + decision.name() + ":" + playerName + ":" + forwardedUuid + ":"
-                + (verifiedMojangUuid == null ? "-" : verifiedMojangUuid.toString());
+                + (verifiedMojangUuid == null ? "-" : verifiedMojangUuid.toString()) + ":"
+                + (facts.newPlayer() ? "Y" : "N") + ":" + (facts.sameNameCracked() ? "Y" : "N") + ":"
+                + (facts.consent() == Consent.UNKNOWN ? "-"
+                : facts.consent() == Consent.YES ? "Y" : "N") + ":"
+                + (facts.autoLogin() ? "Y" : "N") + ":" + (facts.autoRegisterUnknown() ? "Y" : "N") + ":"
+                + (facts.offlineWhitelist() ? "Y" : "N");
     }
 
     /**
@@ -111,7 +253,10 @@ public final class IdentityClaim {
             throw new IllegalArgumentException("Invalid identity claim length");
         }
         String[] parts = value.split(":", -1);
-        if (parts.length != 5 || !Integer.toString(VERSION).equals(parts[0])) {
+        // five mandatory fields plus optional trailing fact and policy fields; a
+        // proxy that predates them sends the short shape and the facts stay unknown
+        if ((parts.length != 5 && parts.length != 8 && parts.length != 11)
+                || !Integer.toString(VERSION).equals(parts[0])) {
             throw new IllegalArgumentException("Unsupported identity claim format");
         }
         Decision decision;
@@ -122,7 +267,25 @@ public final class IdentityClaim {
         }
         UUID forwarded = parseUuid(parts[3]);
         UUID verified = "-".equals(parts[4]) ? null : parseUuid(parts[4]);
-        IdentityClaim claim = new IdentityClaim(decision, parts[2], forwarded, verified);
+        boolean newPlayer = false;
+        boolean sameNameCracked = false;
+        Consent consent = Consent.UNKNOWN;
+        boolean autoLogin = true;
+        boolean autoRegisterUnknown = false;
+        boolean offlineWhitelist = false;
+        if (parts.length >= 8) {
+            newPlayer = parseFlag(parts[5], "new player");
+            sameNameCracked = parseFlag(parts[6], "same-name cracked");
+            consent = parseConsent(parts[7]);
+        }
+        if (parts.length == 11) {
+            autoLogin = parseFlag(parts[8], "auto login");
+            autoRegisterUnknown = parseFlag(parts[9], "auto register unknown");
+            offlineWhitelist = parseFlag(parts[10], "offline whitelist");
+        }
+        IdentityClaim claim = new IdentityClaim(decision, parts[2], forwarded, verified,
+                new Facts(newPlayer, sameNameCracked, consent, autoLogin, autoRegisterUnknown,
+                        offlineWhitelist));
         if (!claim.playerName.equals(expectedName) || !claim.forwardedUuid.equals(expectedUuid)) {
             throw new IllegalArgumentException("Identity claim does not match forwarding profile");
         }
@@ -162,5 +325,28 @@ public final class IdentityClaim {
             throw new IllegalArgumentException("Invalid UUID in identity claim");
         }
         return UUID.fromString(value);
+    }
+
+    private static boolean parseFlag(String value, String fact) {
+        if ("Y".equals(value)) {
+            return true;
+        }
+        if ("N".equals(value)) {
+            return false;
+        }
+        throw new IllegalArgumentException("Invalid " + fact + " fact in identity claim");
+    }
+
+    private static Consent parseConsent(String value) {
+        if ("-".equals(value)) {
+            return Consent.UNKNOWN;
+        }
+        if ("Y".equals(value)) {
+            return Consent.YES;
+        }
+        if ("N".equals(value)) {
+            return Consent.NO;
+        }
+        throw new IllegalArgumentException("Invalid consent fact in identity claim");
     }
 }

@@ -9,7 +9,6 @@
   "entrypoints": {
     "main": ["com.github.hayston1001.fastloginplus.fabric.FastLoginFabric"]
   },
-  "mixins": ["fastloginplus-fabric.mixins.json"],
   "depends": {
     "fabricloader": ">=0.19.3",
     "minecraft": "26.2",

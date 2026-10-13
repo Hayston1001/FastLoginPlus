@@ -57,7 +57,6 @@ import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
 import com.velocitypowered.api.util.GameProfile;
 import com.velocitypowered.api.util.GameProfile.Property;
-import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.geysermc.floodgate.api.player.FloodgatePlayer;
@@ -122,11 +121,6 @@ public class ConnectListener {
                     plugin.getProxy().getEventManager().fire(antiBotEvent).whenComplete((unused, ex) -> {
                         if (ex != null) {
                             plugin.getLog().error("Error firing anti-bot event", ex);
-                            if (plugin.isFabricNativeAuthEnabled()) {
-                                rejectFabricPreLogin(preLoginEvent);
-                                resumeOnce(continuation, resumed);
-                                return;
-                            }
                         }
                         Action effective = antiBotEvent.isCancelled() ? Action.Continue : action;
                         applyDecisionSafely(preLoginEvent, connection, checkedUsername, effective,
@@ -134,7 +128,6 @@ public class ConnectListener {
                     });
                 } catch (Exception fireEx) {
                     plugin.getLog().error("Error firing anti-bot event", fireEx);
-                    rejectFabricPreLogin(preLoginEvent);
                     resumeOnce(continuation, resumed);
                 }
             });
@@ -182,30 +175,19 @@ public class ConnectListener {
             default:
                 // third-party handler cancelled the anti-bot action — run the
                 // premium check off the event loop and resume when it completes
-                AtomicBoolean executed = new AtomicBoolean(false);
                 CompletableFuture<Void> scheduled = plugin.getScheduler().runAsync(() -> {
-                    executed.set(true);
                     try {
                         new AsyncPremiumCheck(plugin, connection, username, preLoginEvent).run();
                     } catch (Exception runEx) {
                         plugin.getLog().error("Error during premium check", runEx);
-                        rejectFabricPreLogin(preLoginEvent);
                     } finally {
                         // same guard as the outer paths: at most one resume
                         resumeOnce(continuation, resumed);
                     }
                 });
-                if (plugin.isFabricNativeAuthEnabled()) {
-                    // A stopped scheduler completes without running the task. Its
-                    // completion must still reject and resume the paused login.
-                    scheduled.whenComplete((unused, error) -> {
-                        if (!executed.get()) {
-                            plugin.getLog().warn("Fabric premium check was not executed for {}", username);
-                            rejectFabricPreLogin(preLoginEvent);
-                            resumeOnce(continuation, resumed);
-                        }
-                    });
-                }
+                // A stopped scheduler completes without running the task. Its
+                // completion must still resume the paused login.
+                scheduled.whenComplete((unused, error) -> resumeOnce(continuation, resumed));
                 break;
         }
     }
@@ -213,7 +195,8 @@ public class ConnectListener {
     /**
      * apply the decision and guarantee that the continuation is
      * resumed even when applying it throws — otherwise the login hangs until
-     * the read timeout. Fabric mode rejects failures before resuming.
+     * the read timeout. Failing connections surface as an undecided or
+     * missing identity fact; the backend decides how to treat them.
      *
      * @param preLoginEvent the paused pre-login event
      * @param connection    the inbound connection
@@ -229,15 +212,7 @@ public class ConnectListener {
             applyAntiBotDecision(preLoginEvent, connection, username, action, continuation, resumed);
         } catch (Exception decisionEx) {
             plugin.getLog().error("Error applying anti-bot decision for {}", username, decisionEx);
-            rejectFabricPreLogin(preLoginEvent);
             resumeOnce(continuation, resumed);
-        }
-    }
-
-    private void rejectFabricPreLogin(PreLoginEvent event) {
-        if (plugin.isFabricNativeAuthEnabled()) {
-            event.setResult(PreLoginComponentResult.denied(Component.text(
-                    "FastLoginPlus: Fabric authentication is unavailable")));
         }
     }
 
@@ -255,15 +230,12 @@ public class ConnectListener {
 
     @Subscribe
     public void onGameProfileRequest(GameProfileRequestEvent event) {
-        LoginSession claimSession = plugin.isFabricNativeAuthEnabled()
-                ? plugin.getSession().get(event.getConnection().getRemoteAddress()) : null;
+        LoginSession claimSession = plugin.getSession().get(event.getConnection().getRemoteAddress());
         if (event.isOnlineMode()) {
             LoginSession session = plugin.getSession().get(event.getConnection().getRemoteAddress());
             if (session == null) {
                 plugin.getLog().error("No active login session found for onlinemode player {}", event.getUsername());
-                if (plugin.isFabricNativeAuthEnabled()) {
-                    attachIdentityClaim(event, null);
-                }
+                attachIdentityClaim(event, null);
                 return;
             }
 
@@ -310,9 +282,7 @@ public class ConnectListener {
                 event.setGameProfile(event.getGameProfile().withProperties(newProp));
             }
         }
-        if (plugin.isFabricNativeAuthEnabled()) {
-            attachIdentityClaim(event, claimSession);
-        }
+        attachIdentityClaim(event, claimSession);
     }
 
     private void attachIdentityClaim(GameProfileRequestEvent event, LoginSession session) {
@@ -336,6 +306,13 @@ public class ConnectListener {
         try {
             boolean bedrock = plugin.getFloodgateService() != null
                     && getFloodgateUsername(event.getConnection()) != null;
+            if (session != null) {
+                // observation facts + upgrade consent, computed from the record state
+                // this connection saw at login time
+                session.computeFacts(
+                        event.getConnection().getRemoteAddress().getAddress().getHostAddress(),
+                        plugin.getCore());
+            }
             claim = IdentityDecisionPolicy.decide(session, event.isOnlineMode(), bedrock,
                     profile.getName(), forwardedUuid);
         } catch (IllegalArgumentException invalidProfile) {

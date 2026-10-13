@@ -25,7 +25,6 @@
  */
 package com.github.games647.fastlogin.velocity.task;
 
-import com.github.games647.fastlogin.core.message.ChannelMessage;
 import com.github.games647.fastlogin.core.message.LoginActionMessage;
 import com.github.games647.fastlogin.core.message.LoginActionMessage.Type;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
@@ -68,17 +67,6 @@ public class ForceLoginTask
     public void run() {
         if (session == null) {
             core.getPlugin().getLog().info("No active login session on force handling for {}", player);
-            return;
-        }
-
-        if (session.isBindingProof()) {
-            // EasyAuth still owns this password account. The backend will bind it
-            // only after its own password login on this Mojang-verified connection.
-            return;
-        }
-        if (session.getBackendBoundUuid() != null
-                && !session.getBackendBoundUuid().equals(session.getUuid())) {
-            core.getPlugin().getLog().warn("Refusing to save mismatched Fabric UUID for {}", player.getUsername());
             return;
         }
 
@@ -130,8 +118,12 @@ public class ForceLoginTask
         // backend needs it to stamp AuthMe's premium_uuid when premiumUuid:false, where the
         // forwarded connection UUID is deliberately the offline one and therefore carries no
         // premium signal at all. Null when this connection was not verified as premium.
-        ChannelMessage loginMessage = new LoginActionMessage(type, player.getUsername(), proxyId,
+        // The trailing facts are the proxy's observations plus the recorded upgrade
+        // consent; the backend decides the login method from them.
+        session.computeFacts(player.getRemoteAddress().getAddress().getHostAddress(), core);
+        LoginActionMessage loginMessage = new LoginActionMessage(type, player.getUsername(), proxyId,
                 session.getUuid());
+        loginMessage.setFacts(session.getFacts());
         core.getPlugin().sendPluginMessage(server, loginMessage);
     }
 

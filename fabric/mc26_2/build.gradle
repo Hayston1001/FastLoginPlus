@@ -66,7 +66,7 @@ dependencies {
 
 // Compile shared wire codecs in Fabric's own namespace. Velocity still builds
 // the original :protocol module; the wire formats stay identical.
-def sharedProtocolSources = ['IdentityClaim.java', 'AccountStatusWire.java'].collect { name ->
+def sharedProtocolSources = ['IdentityClaim.java', 'ToggleWire.java'].collect { name ->
     project(':protocol').file("src/main/java/com/github/games647/fastlogin/protocol/${name}")
 }
 def generatedProtocolSources = rootProject.layout.buildDirectory.dir('generated/sources/fabric26_2Protocol/java')
@@ -148,8 +148,8 @@ def verifyFabricJar = tasks.register('verifyFabricJar') {
             if (zip.getEntry('com/github/hayston1001/fastloginplus/fabric/protocol/IdentityClaim.class') == null) {
                 throw new GradleException('Fabric jar is missing the relocated identity protocol')
             }
-            if (zip.getEntry('com/github/hayston1001/fastloginplus/fabric/protocol/AccountStatusWire.class') == null) {
-                throw new GradleException('Fabric jar is missing the relocated account protocol')
+            if (zip.getEntry('com/github/hayston1001/fastloginplus/fabric/protocol/ToggleWire.class') == null) {
+                throw new GradleException('Fabric jar is missing the relocated toggle protocol')
             }
             zip.entries().each { entry ->
                 if (entry.name.startsWith('com/github/games647/')) {

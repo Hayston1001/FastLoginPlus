@@ -64,6 +64,15 @@ final class IdentityDecisionPolicy {
                 decision = Decision.OFFLINE;
             }
         }
-        return new IdentityClaim(decision, name, uuid, verified);
+        boolean newPlayer = session != null && session.isNewPlayer();
+        boolean sameNameCracked = session != null && session.isSameNameCracked();
+        IdentityClaim.Consent consent =
+                session == null ? IdentityClaim.Consent.UNKNOWN : session.getConsent();
+        boolean autoLogin = session == null || session.isAutoLogin();
+        boolean autoRegisterUnknown = session != null && session.isAutoRegisterUnknown();
+        boolean offlineWhitelist = session != null && session.isOfflineWhitelist();
+        return new IdentityClaim(decision, name, uuid, verified,
+                new IdentityClaim.Facts(newPlayer, sameNameCracked, consent,
+                        autoLogin, autoRegisterUnknown, offlineWhitelist));
     }
 }

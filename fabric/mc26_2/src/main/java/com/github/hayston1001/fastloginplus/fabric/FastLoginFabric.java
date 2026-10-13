@@ -49,11 +49,11 @@ import static net.minecraft.commands.Commands.literal;
 public final class FastLoginFabric implements ModInitializer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("fastloginplus_fabric");
-    private AccountStatusServer accountStatusServer;
 
     @Override
     public void onInitialize() {
         EasyAuth344Bridge bridge = new EasyAuth344Bridge();
+        BindingConsentWriter.register();
         CommandRegistrationCallback.EVENT.register((dispatcher, dedicated, environment) ->
                 dispatcher.register(literal("flp")
                         .then(literal("premium").executes(context -> {
@@ -66,25 +66,14 @@ public final class FastLoginFabric implements ModInitializer {
                                 player.sendSystemMessage(Component.literal("FastLoginPlus: " + rejected.getMessage()));
                                 return 0;
                             }
-                        }))
-                        .then(literal("bind").executes(context -> {
-                            var player = context.getSource().getPlayerOrException();
-                            try {
-                                bridge.completeBinding(player, parseClaim(player.getGameProfile()));
-                                return 1;
-                            } catch (RuntimeException rejected) {
-                                player.sendSystemMessage(Component.literal("FastLoginPlus: " + rejected.getMessage()));
-                                return 0;
-                            }
                         }))));
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             bridge.verifyPolicy();
-            accountStatusServer = new AccountStatusServer(server, bridge);
-        });
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-            if (accountStatusServer != null) {
-                accountStatusServer.close();
-                accountStatusServer = null;
+            try {
+                FabricConfig.warnIfUntrusted(FabricConfig.load());
+            } catch (RuntimeException unreadable) {
+                // never fail the server start over our own settings (R-6)
+                LOGGER.warn("Fabric configuration could not be read: {}", unreadable.getMessage());
             }
         });
         ServerConfigurationConnectionEvents.BEFORE_CONFIGURE.register((listener, server) -> {
@@ -93,7 +82,6 @@ public final class FastLoginFabric implements ModInitializer {
                 bridge.verifyPolicy();
                 IdentityClaim claim = parseClaim(profile);
                 bridge.beforeConfigure(server, claim);
-                bridge.requestBindingCookie(listener, claim);
                 LOGGER.info("Validated {} forwarding claim for {}; profile property names={}",
                         claim.getDecision(), profile.name(), profile.properties().keySet().size());
             } catch (IllegalArgumentException invalidClaim) {
@@ -114,10 +102,6 @@ public final class FastLoginFabric implements ModInitializer {
                 handler.disconnect(Component.literal("FastLoginPlus Fabric account check failed"));
             }
         });
-        ServerConfigurationConnectionEvents.DISCONNECT.register((listener, server) ->
-                BindingCookieProof.drop(listener));
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
-                BindingCookieProof.drop(handler));
     }
 
     private static IdentityClaim parseClaim(GameProfile profile) {
