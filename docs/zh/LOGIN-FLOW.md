@@ -41,14 +41,14 @@ flowchart TD
     K["触发 PreLogin 事件<br/>置 lastIp = 当前 IP"] --> L{"isExistingPlayer?<br/>即 rowId >= 0?"}
 
     %% ===== 老玩家 =====
-    L -->|是: 老玩家| M{"isOnlinemodePreferred?<br/>即 Premium 标记?"}
-    M -->|true: 上次为正版| N["requestPremiumLogin<br/>(profile, registered=true)"]
-    M -->|false: 上次为离线| O{名字以基岩版前缀开头?}
+    L -->|是: 老玩家| M{"该付费名走正版验证?<br/>有同意, 或<br/>(有正版 UUID 观察<br/>且无同名盗版观察)"}
+    M -->|true| N["requestPremiumLogin<br/>(profile, registered=true)"]
+    M -->|false: 密码流程| O{名字以基岩版前缀开头?}
     O -->|是| P([踢出: 非法用户名])
     O -->|否| Q["startCrackedSession()"]
 
     %% ===== 新玩家 =====
-    L -->|否: 新玩家| R{"secondAttemptCracked 已启用?<br/>且此前已为该 IP+用户名<br/>启动过正版验证?"}
+    L -->|否: 新玩家| R{"secondAttemptCracked 已启用?<br/>且该名字有未验证的<br/>正版尝试记录?"}
     R -->|是| Q
     R -->|否| S{"nameChangeCheck 或<br/>autoRegister 或<br/>offline-whitelist 已启用?"}
 
@@ -86,7 +86,7 @@ flowchart TD
     subgraph FL ["requestPremiumLogin"]
         direction TB
         F1["开启在线模式(Mojang 握手)"]
-        F1 --> F2["记录待验证标记(IP+用户名)<br/>供 secondAttemptCracked 使用"]
+        F1 --> F2["为该名字计一次未验证的正版尝试<br/>(验证成功即清零;<br/>供 secondAttemptCracked 回退使用)"]
         F2 --> F3["创建 LoginSession<br/>携带 profile 与 registered 标记"]
     end
 
@@ -107,7 +107,8 @@ flowchart TD
 
 - `loadProfile(name)` 只在 SQL 出错时返回 `null`; 未知玩家拿到的是 `rowId = -1` 的空壳(`isExistingPlayer() == false`), 所以分支 `E` 几乎不会走到.
 - 从读库到建 session 的整个窗口(老玩家分支)都在**按名字的条带锁**内执行, 因此同一名字的并发登录、管理命令与插件消息保存不会交错(自 0.5.0 起).
-- `secondAttemptCracked` 标记在正版验证**启动时**写入(IP+用户名), 且**只能用一次**: 下一次仍被判为新玩家的连接会消费它并直接走离线.
+- **同名盗版观察**取代了旧的一次性标记: 正版验证尝试**按名字**跟踪, **一次"已结算的确定失败"**即确认观察(会话服不可达之类的抽风永不计入, 见下文行为变化). 观察一经确认就落库(`SameNameCracked`), 该名字之后的连接直达密码流程, 不再先失败一次; 首次翻转标记的那次确认会给玩家**一次性聊天提示**(`same-name-cracked-recorded`), 告知名字已被记录为盗版以及如何用 `/flp premium` 重新验证 -- 提示在玩家进服后由代理投递(代理模式下经典与 Fabric 后端同样收到), 已记录名字的后续登录不再提示. 该回退只作用于**无同意**的名字: 有同意的名字每次连接都验证, 任何人都无法用盗版客户端把正版名字拖进密码流程. 观察的**读取跟随配置**: `secondAttemptCracked` 关闭时被记过的名字当作未记过、照常验证(验证成功后顺手清掉旧标记).
+- 同一回退也覆盖"有正版 UUID 观察但无同意"的老名字: 观察到失败后它们落到密码流程, 账号主人可凭密码登录后执行 `/flp premium`(拍板 7 的恢复路径).
 - `requestPremiumLogin` 与 `startCrackedSession` 是平台实现: bukkit/folia 通过 ProtocolLib 取消原始 START 包并注入在线模式握手(ProtocolSupport 路径类似); 代理端由 `enableOnlinemode()` 让代理与客户端完成握手.
 
 ## ForceLoginManagement.run()(session 执行阶段)
@@ -132,7 +133,7 @@ flowchart TD
         G4 -->|否| G5["onForceActionSuccess<br/>(代理模式下 = 向后端发送<br/>LOGIN/REGISTER 插件消息)"]
         G4 -->|是| G6{autoLogin 已启用?}
         G6 -->|否| G7["跳过注册/登录<br/>(onForceActionSuccess 仍会触发)"]
-        G6 -->|是| G8{"needsRegistration?<br/>或 auto-register-unknown=true<br/>且登录插件中未注册?"}
+        G6 -->|是| G8{"本机无账号?<br/>(needsRegistration 或 未注册)<br/>且 auto-register-unknown=开?"}
         G8 -->|是| G9["forceRegister()<br/>生成随机密码 → 在登录插件中注册<br/>把密码告知玩家"]
         G8 -->|否| G10{"FastLoginAutoLoginEvent<br/>被取消?"}
         G10 -->|是| G7
@@ -142,9 +143,10 @@ flowchart TD
         G11 --> GSAVE
         G5 --> GSAVE
         G7 --> GSAVE
-        GSAVE["写库: 设置正版 UUID + Premium=true<br/>(成功与失败都会写;<br/>AuthMe 6.0 下 forceLogin 可能返回 false,<br/>因为 AuthMe 已自行完成认证)<br/>+ onForceActionSuccess"]
+        GSAVE["写库: 正版 UUID + 清除同名盗版观察.<br/>同意位(Premium=true)只在**确认结果**时写:<br/>登录插件的强制操作成功(或 AuthMe 6.0 已自行认证),<br/>代理模式下还需后端 ack 确认.<br/>后端尚未裁决的登录绝不写同意"]
+        G5NOTE["代理无登录插件: 此分支在后端裁决**之前**执行<br/>(拍板 7/8 仍可能拒绝), 所以只记录观察"] -.-> G5
 
-        G3 -->|离线| G12["置 UUID=null, Premium=false"]
+        G3 -->|离线| G12["只保存簿记字段:<br/>正版 UUID 观察、同名盗版观察<br/>与同意位都保留"]
     end
 
     G12 --> SAVE
@@ -155,8 +157,8 @@ flowchart TD
         S0{"session 携带 profile?<br/>(代理子服的 session 没有 profile,<br/>所以后端从不写库)"}
         S0 -->|否| S4([跳过写库])
         S0 -->|是| S1{"rowId >= 0?<br/>即已在库中?"}
-        S1 -->|是| S2["UPDATE premium SET<br/>UUID, Name, Premium,<br/>Floodgate, LastIp,<br/>LastLogin = CURRENT_TIMESTAMP<br/>WHERE UserID = ?"]
-        S1 -->|否 rowId=-1| S3["INSERT INTO premium<br/>(UUID, Name, Premium,<br/>Floodgate, LastIp)<br/>→ 把自增 ID 回填到 rowId<br/>(SQLite/MySQL 使用 upsert,<br/>并发的首次保存不会丢行)"]
+        S1 -->|是| S2["UPDATE premium SET<br/>UUID, Name, Premium,<br/>Floodgate, SameNameCracked, LastIp,<br/>LastLogin = CURRENT_TIMESTAMP<br/>WHERE UserID = ?"]
+        S1 -->|否 rowId=-1| S3["INSERT INTO premium<br/>(UUID, Name, Premium,<br/>Floodgate, SameNameCracked, LastIp)<br/>→ 把自增 ID 回填到 rowId<br/>(SQLite/MySQL 使用 upsert,<br/>并发的首次保存不会丢行)"]
     end
 ```
 
@@ -166,7 +168,7 @@ flowchart TD
 
 | 触发场景 | profile 参数 | registered | 效果 |
 |---|---|---|---|
-| 老正版玩家(Premium=true) | 数据库中的原记录 | true | 再次进行在线模式验证, 然后自动登录 |
+| 老正版名字(有同意或有正版 UUID 观察) | 数据库中的原记录 | true | 再次进行在线模式验证, 然后自动登录 |
 | `nameChangeCheck` | 按 UUID 找到的**旧记录**(保留历史) | false | 更新名字 + 在登录插件中注册 |
 | `autoRegister` | 按名字查到的**当前 profile**(可能是空壳) | false | 在登录插件中注册 |
 | `offline-whitelist` | 按名字查到的**当前 profile**(可能是空壳) | true | 仅做准入, 不注册 |
@@ -174,7 +176,7 @@ flowchart TD
 `registered` 标记驱动 `ForceLoginManagement`:
 - `registered=false` → `needsRegistration()=true` → `forceRegister()`(自动注册)
 - `registered=true` → `needsRegistration()=false` → `forceLogin()`(自动登录)
-- 例外: 当 `auto-register-unknown=true` 时, 即使 `registered=true`, 只要登录插件还不认识该玩家, 也会触发注册
+- 例外: "本机无账号"一侧 (`needsRegistration` 或未注册) 整体受 `auto-register-unknown` 门控 (F-15 A): 开 (默认) 为已验证身份自动建档, 关 = 走登录插件自己的注册对话框、本人设密码 -- 绝不自动建档
 
 ## 基岩版(Floodgate / Geyser)流程
 
@@ -212,7 +214,7 @@ flowchart TD
 
 ## 代理模式(BungeeCord / Velocity)
 
-本节描述 Bukkit/Folia 后端。可选的 Velocity + Fabric 26.2 流程沿用代理端的决策树：代理递身份事实，Fabric 模组按本机 EasyAuth 账号状态定登录方式。已有密码账号可用 `/flp premium` 排队升级，钉住该名字的正版 UUID 且不动账号；只有首次"验证 UUID 与钉一致"的正版免密成功时，账号才转为免密。
+本节描述 Bukkit/Folia 后端。可选的 Velocity + Fabric 26.2 流程沿用代理端的决策树：代理递身份事实，Fabric 模组按本机 EasyAuth 账号状态定登录方式。已有密码账号可用 `/flp premium` 排队升级，钉住该名字的正版 UUID 且不动账号；只有首次"验证 UUID 与钉一致"的正版免密成功时，账号才转为免密。排队条目保留十分钟; 过期(或中途重启后)密码账号照常可用, 重跑一次 `/flp premium` 即可 -- 不会锁死任何一方。来自代理的身份声明只有在代理 ID 列入 Fabric 配置的信任键 `allowed-proxy-ids` 时才被接受: 信任键为空时所有声明被丢弃、登录退回密码流程(fail-closed), FLP 会在启动时以及 `/flp premium` 升级因此被丢弃时给出告警。
 
 当检测到 `bungee: true`(spigot.yml)或 Velocity 转发时, FLP 运行在**代理/后端分离**架构下:
 
@@ -234,7 +236,7 @@ flowchart TD
         P10 --> P11
         P8 --> P11{"ServerConnectedEvent<br/>进入子服"}
         P11 --> P12["ForceLoginTask<br/>(代理端通常没有登录插件)"]
-        P12 --> P13["写代理库(Premium=true)<br/>发送 LoginActionMessage<br/>(LOGIN 或 REGISTER, 玩家名, proxyId)"]
+        P12 --> P13["写代理库: 正版 UUID 观察<br/>+ 清除同名盗版观察<br/>(同意位此时不写 -- 后端尚未裁决)<br/>发送 LoginActionMessage<br/>(LOGIN 或 REGISTER, 玩家名, proxyId, 事实)"]
     end
 
     subgraph BACKEND ["后端 (Bukkit / Folia)"]
@@ -256,6 +258,7 @@ flowchart TD
 
 - `LoginActionMessage` 走插件消息通道 `fastloginplus:force`; `proxyId` 是代理端首次启动时生成的 UUID(Velocity 存在 `proxyId.txt`, BungeeCord 使用其自身 `config.yml` 的 `stats` 值, 该文件由 BungeeCord 首次启动时生成); 后端用 `allowed-proxies.txt` 校验它以防伪造
 - 该消息现在还携带代理端 `LoginEvent` 中验证过的 Mojang UUID(`LoginActionMessage.verifiedPremiumUuid`), 因此即使 `premiumUuid: false` 让连接 UUID 变成了离线 UUID, 后端仍能给 AuthMe 盖上 `premium_uuid`
+- 消息尾部还携带身份事实(新玩家? 同名盗版? 升级同意)与政策值(`autoLogin`/`auto-register-unknown`/`offline-whitelist`)。后端按"账号状态 + 事实"定登录方式并**按声明的政策执法** -- 代理模式下后端本地同名键被忽略(只在独立部署生效); 只有当代理什么都没声明(滚动升级中的旧代理)才回退读本地值
 - REGISTER 消息只在后端确认玩家未注册后才执行; LOGIN 消息直接执行登录
 - 后端会拒绝未知 proxyId 以及被标记为 block 的玩家(防止暴力猜 BungeeCord ID)
 - 代理模式下, `/flp premium|cracked|delete` 请求由后端转发到代理端(见下一节)
@@ -310,14 +313,48 @@ flowchart TD
 | `nameChangeCheck` | 查询 Mojang API, 按 UUID 检测改名玩家并更新其旧记录 | true |
 | `autoRegister` | 为新正版玩家在登录插件中自动注册(forceRegister) | true |
 | `autoLogin` | 为老正版玩家在登录插件中自动登录(forceLogin) | true |
-| `auto-register-unknown` | 当 session 说"登录"但登录插件不认识该玩家时, 仍然注册 | true |
+| `auto-register-unknown` | 为**已验证正版**且本机无账号的玩家自动建档(账号被删/两边不一致); 关 = 走注册对话框. 离线/盗版名**不适用** -- 它们没有身份证明、自己设密码(键名有误导: "unknown"指本机缺账号, 不是陌生/离线玩家) | true |
 | `offline-whitelist` | 准入控制: 放行正版玩家, 踢出新离线玩家, 允许老离线玩家进入 | false |
 | `premiumUuid` | 正版验证后是否使用正版 UUID(不决定是否启用正版验证) | true |
 | `forwardSkin` | 向玩家转发正版皮肤(SkinsRestorer 自定义皮肤优先) | true |
-| `secondAttemptCracked` | 正版验证未完成的新玩家下次按离线加入(一次性标记) | false |
+| `secondAttemptCracked` | 正版验证未通过的名字按名记入观察, 下次直达密码流程(持久化的同名盗版观察; 读取跟随配置: 关闭时已记名字重新验证) | false |
 | `mojang-retry-count` / `mojang-retry-delay` | Mojang API 网络失败重试次数 / 退避基准延迟(指数增长, 上限 10 秒) | 3 / 500 |
 | `anti-bot.enabled` / `anti-bot.action` | 反机器人开关 / 触发限制时的动作(ignore/block) | true / ignore |
 | `autoLoginFloodgate` / `autoRegisterFloodgate` / `allowFloodgateNameConflict` | 基岩版自动登录 / 自动注册 / 名字冲突策略(true/false/linked/no-conflict) | false / false / false |
 | `verifyClientKeys` / `respectIpLimit` | 仅单端模式(客户端公钥校验 / 登录插件的每 IP 注册限制) | false / false |
 
 注意: `premiumUuid` 在单端后端与代理端语义相反 —— 单端后端本身就是离线模式服务器, 所以 `true` 表示**注入**正版 UUID; 代理端本来就通过在线模式验证拿到正版 UUID, 所以用 `false` 把它覆盖成离线 UUID.
+
+## 记录语义(观察事实 + 本人同意)
+
+`premium` 表的每行是一份按名记录, 三类状态刻意分开:
+
+| 列 | 含义 | 写入者 | 清除者 |
+|---|---|---|---|
+| `UUID` | **观察**: 该名字验证通过的 Mojang UUID(关于"名字"的事实) | 验证通过、`/flp premium` | `/flp cracked`、`/flp delete` |
+| `Premium` | **升级同意**: 该名字的正版登录可免密打开账号 | `/flp premium`, 以及**确认的**正版结果(后端为已验证身份自动注册/自动登录, 含认证插件自建正版档案的同步) | `/flp cracked` |
+| `SameNameCracked` | **观察**: 该名字的正版验证以确定否定失败且此后未再通过(付费名下的盗版客户端) | 一次已结算的确定失败(见 `secondAttemptCracked`; 抽风与中断不计) | 验证通过、`/flp premium`、`/flp cracked`; `secondAttemptCracked` 关闭时启动/重载也会批量清空 |
+
+由此有两条规则:
+
+1. **尚未裁决的登录绝不记录同意.** 连接验证通过时代理只写观察; 同意只随后端确认的正版结果(其 `SuccessMessage` ack)或玩家/管理员的 `/flp premium` 落库. 被拒绝的登录(拍板 7/8 归属冲突)让记录保持"已观察、未同意", 之后的重连复现同样的裁决, 而不是演成免密接管.
+2. **路由跟随记录的事实.** 名字在"有同意"或"正版 UUID 观察完好且无同名盗版观察"时走正版验证. 有同意的名字永远验证(没人能用盗版客户端把它拖进密码流程); 观察到同名盗版的名字跳过注定失败的验证, 直达密码流程.
+
+**同意未被记录时的恢复**(例如自动注册已确认但 ack 因玩家断线而丢失): 名字停在"已观察、未同意", 拍板 7 会拒绝它之后的每一次正版登录. 拒绝即踢出, 而正版客户端每次都验证成功 -- 验证成功会清零未验证计数, 同名盗版回退对它永不触发 -- 所以**正版客户端在这条路径下拿不到任何密码框, 也无法自愈**. 出路只有两条:
+
+1. **管理员执行 `/flp premium <name>`** -- 同意立即落库, 下一次正版登录即恢复免密.
+2. `secondAttemptCracked` 开启时, 账号主人改用**盗版客户端**连接: 失败一次促成同名盗版观察(同时弹出一次性"已被记录为盗版"提示, 指向 `/flp premium`), 名字转入密码流程, 用账号密码登录后自行 `/flp premium`.(自动注册账号的生成密码只在注册时打印过一次; 没记住的话这条路仍会停在管理员这一步.)`secondAttemptCracked: false` 时只剩第 1 条.
+
+旧库继续可用: 观察列在启动时原地补加, 旧行读作"未观察"; 旧行的 `Premium=true` 读作同意(该行写入时这个标记就是这个含义).
+
+启动(以及任何配置重载)还会按配置**对账**标记: `secondAttemptCracked` 关闭时, 库里所有 `SameNameCracked` 标记被清空(只动这一列). 配置可能在服务器停机期间被改, 没有运行中的变更事件可捕捉 -- 在加载时对账才能防止管理员来回切换开关时旧标记复活. 读取侧的检查是权威, 这里的清理只是让数据库与它保持一致.
+
+## 行为变化(身份/记录改造)
+
+与旧版本相比用户可感知的变化:
+
+- **被拒绝的接管尝试不再翻转记录.** 旧代码在后端裁决前就写 `Premium=true`, 一次被拒的登录可能让下一次尝试免密打开别人的密码账号. 现在同意只跟确认结果或显式切换走.
+- **`secondAttemptCracked` 变为按名持久化.** 旧的一次性标记(IP+用户名, 五分钟, 被下一条连接消费)已删除: 尝试按名跟踪, **只计"已结算的确定失败"**. 首次确认时会给玩家**一次性聊天提示**(`same-name-cracked-recorded`: 名字已被记录为盗版, 如被误判可 `/flp premium` 重新验证). "确定"的判定分链: 独立部署由 FLP 自己的会话校验区分 -- Mojang 明确否定(计入)、会话服不可达(不计, FLP 踢出并给出 `auth-server-unreachable` 文案: "认证服务器暂时无法连接，无法确认你的正版身份，请稍后重连。")、玩家中途断线(不计). 代理链上会话校验归代理且不暴露判决, FLP 在请求验证约 12 秒后**探会话服可达性**判定: 不可达 = 抽风 -> 不计(玩家看到的是代理自己的提示, Bungee 文案偏含糊属代理行为); 可达 = 客户端自身问题 -> 计入. **已知边界**: "玩家自己网络断、而 Mojang 通"分不出来, 会计一次 -- 由一次性提示 + `/flp premium` 自救兜底.
+- **名字查询没跑完绝不误判玩家.** Mojang 查名不可完成时 (限流/网络故障/重试中断), FLP 踢出并给出 `auth-server-unreachable` 文案("认证服务器暂时无法连接，无法确认你的正版身份，请稍后重连。"), 而不是把名字当盗版处理. 这堵住了一个严重危害: 全新正版玩家撞上查询失败会被送进注册对话框、注册成密码账号, 而记录里既无同意位也无正版 UUID 观察, 按路由**永远不再验证** -- 免密永久丢失. 只有"查询成功且 Mojang 查无此名"才是确定的"没有正版账号", 才走注册流程. **代价**: Mojang 抽风或限流期间**新名字进不来** (有记录的老玩家不受影响 -- 他们不走这次查询).
+- **代理模式下后端忽略本地政策键.** `autoRegister`/`autoLogin`/`auto-register-unknown`/`offline-whitelist` 由代理决定并随身份事实执法; 后端本地副本只在独立部署生效(配置模板一直这样标注). `auto-register-unknown` 现在还门控"已验证正版且本机无账号"这一格(自动建档 vs 注册对话框) -- 确切范围见该键的配置注释.
+- **登录期拒绝移到后端裁决.** 旧的登录前账号查询(以及 Fabric 的一次性绑定 cookie)已删除: 归属冲突现在由后端基于账号状态加身份事实裁决, 拒绝发生在事实所述的那一次登录上, 而不是一次投机式的提前探查.

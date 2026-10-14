@@ -41,14 +41,14 @@ flowchart TD
     K["Fire the PreLogin event<br/>Set lastIp = current IP"] --> L{"isExistingPlayer?<br/>i.e. rowId >= 0?"}
 
     %% ===== Returning players =====
-    L -->|Yes: returning| M{"isOnlinemodePreferred?<br/>i.e. the Premium flag?"}
-    M -->|true: was premium| N["requestPremiumLogin<br/>(profile, registered=true)"]
-    M -->|false: was offline| O{Name starts with the Bedrock prefix?}
+    L -->|Yes: returning| M{"Premium name routed to verification?<br/>consent OR<br/>(premium UUID recorded AND<br/>no same-name cracked observation)"}
+    M -->|true| N["requestPremiumLogin<br/>(profile, registered=true)"]
+    M -->|false: password flow| O{Name starts with the Bedrock prefix?}
     O -->|Yes| P([Kick: illegal username])
     O -->|No| Q["startCrackedSession()"]
 
     %% ===== New players =====
-    L -->|No: new player| R{"secondAttemptCracked enabled?<br/>AND a premium verification was<br/>previously started for IP+username?"}
+    L -->|No: new player| R{"secondAttemptCracked enabled?<br/>AND the name has an unverified<br/>premium attempt on record?"}
     R -->|Yes| Q
     R -->|No| S{"nameChangeCheck OR<br/>autoRegister OR<br/>offline-whitelist enabled?"}
 
@@ -86,7 +86,7 @@ flowchart TD
     subgraph FL ["requestPremiumLogin"]
         direction TB
         F1["Enable online mode (Mojang handshake)"]
-        F1 --> F2["Record a pending-verification marker (IP+username)<br/>used by secondAttemptCracked"]
+        F1 --> F2["Count one unverified premium attempt for the name<br/>(cleared when a verification passes;<br/>used by the secondAttemptCracked fallback)"]
         F2 --> F3["Create the LoginSession<br/>carrying the profile and the registered flag"]
     end
 
@@ -107,7 +107,8 @@ Notes:
 
 - `loadProfile(name)` returns `null` only on a SQL error; unknown players get an empty shell with `rowId = -1` (`isExistingPlayer() == false`), so branch `E` is almost never taken.
 - The whole load-to-session window (returning-player branch) runs inside a **name-level striped lock**, so concurrent logins, admin commands and plugin-message saves for the same name cannot interleave (since 0.5.0).
-- The `secondAttemptCracked` marker is written when the premium verification **starts** (IP+username) and is **single-use**: the next connection that is still treated as a new player consumes it and goes straight offline.
+- The **same-name cracked observation** replaces the old single-use marker: premium verification attempts are tracked **per name** and **one settled, definitive failure** confirms the observation (a session-server outage never counts — see the behavior notes below). Once confirmed, the name is recorded (`SameNameCracked`) and every later connection goes straight to the password flow instead of failing one connection first. The confirmation that first flips the flag shows a **one-time chat notice** (`same-name-cracked-recorded`) telling the player the name was recorded as cracked and how to re-verify with `/flp premium` — delivered when the player reaches the game (by the proxy in proxy mode, so classic and Fabric backends alike), and later joins of an already recorded name are silent. The fallback only applies to names **without consent**: a consented name is verified on every connection, so nobody can drag a premium name into the password flow by connecting with a cracked client. The observation is **read together with the config**: with `secondAttemptCracked` off a recorded name is treated as never marked and verifies again (and a passing verification then clears the stale mark).
+- The same fallback also covers returning names whose premium identity is recorded but not consented: after the observed failures they reach the password flow, where the account owner can log in with their password and run `/flp premium` (rule 7's recovery path).
 - `requestPremiumLogin` and `startCrackedSession` are platform implementations: bukkit/folia cancel the original START packet via ProtocolLib and inject the online-mode handshake (the ProtocolSupport path is similar); on a proxy `enableOnlinemode()` makes the proxy perform the handshake with the client.
 
 ## ForceLoginManagement.run() (session execution phase)
@@ -132,7 +133,7 @@ flowchart TD
         G4 -->|No| G5["onForceActionSuccess<br/>(in proxy mode = sending the<br/>LOGIN/REGISTER plugin message to the backend)"]
         G4 -->|Yes| G6{autoLogin enabled?}
         G6 -->|No| G7["Skip register/login<br/>(onForceActionSuccess still fires)"]
-        G6 -->|Yes| G8{"needsRegistration?<br/>OR auto-register-unknown=true<br/>AND not registered in the auth plugin?"}
+        G6 -->|Yes| G8{"no local account?<br/>(needsRegistration OR not registered)<br/>AND auto-register-unknown=on?"}
         G8 -->|Yes| G9["forceRegister()<br/>generate a random password → register in the auth plugin<br/>tell the player the password"]
         G8 -->|No| G10{"FastLoginAutoLoginEvent<br/>cancelled?"}
         G10 -->|Yes| G7
@@ -142,9 +143,10 @@ flowchart TD
         G11 --> GSAVE
         G5 --> GSAVE
         G7 --> GSAVE
-        GSAVE["DB write: set the premium UUID + Premium=true<br/>(written on success AND failure;<br/>with AuthMe 6.0 forceLogin may return false<br/>because AuthMe already authenticated the player)<br/>+ onForceActionSuccess"]
+        GSAVE["DB write: premium UUID + clear the same-name cracked observation.<br/>Consent (Premium=true) is only written for a CONFIRMED outcome:<br/>the auth-plugin force action succeeded (or AuthMe 6.0 had already<br/>authenticated the player) and, in proxy mode, the backend acked it.<br/>A login the backend has not decided yet never grants consent"]
+        G5NOTE["Proxy without an auth plugin: this branch runs BEFORE the backend<br/>decides (rule 7/8 may still reject), so it only records the observation"] -.-> G5
 
-        G3 -->|Offline| G12["Set UUID=null, Premium=false"]
+        G3 -->|Offline| G12["Save the bookkeeping fields only:<br/>the premium UUID observation, the same-name cracked<br/>observation and the consent survive an offline join"]
     end
 
     G12 --> SAVE
@@ -155,8 +157,8 @@ flowchart TD
         S0{"Session carries a profile?<br/>(a proxied backend session has no profile,<br/>so the backend never writes)"}
         S0 -->|No| S4([Skip the DB write])
         S0 -->|Yes| S1{"rowId >= 0?<br/>i.e. already in the DB?"}
-        S1 -->|Yes| S2["UPDATE premium SET<br/>UUID, Name, Premium,<br/>Floodgate, LastIp,<br/>LastLogin = CURRENT_TIMESTAMP<br/>WHERE UserID = ?"]
-        S1 -->|No rowId=-1| S3["INSERT INTO premium<br/>(UUID, Name, Premium,<br/>Floodgate, LastIp)<br/>→ backfill the auto-increment ID into rowId<br/>(SQLite/MySQL use an upsert,<br/>so concurrent first saves do not lose rows)"]
+        S1 -->|Yes| S2["UPDATE premium SET<br/>UUID, Name, Premium,<br/>Floodgate, SameNameCracked, LastIp,<br/>LastLogin = CURRENT_TIMESTAMP<br/>WHERE UserID = ?"]
+        S1 -->|No rowId=-1| S3["INSERT INTO premium<br/>(UUID, Name, Premium,<br/>Floodgate, SameNameCracked, LastIp)<br/>→ backfill the auto-increment ID into rowId<br/>(SQLite/MySQL use an upsert,<br/>so concurrent first saves do not lose rows)"]
     end
 ```
 
@@ -166,7 +168,7 @@ flowchart TD
 
 | Trigger | profile argument | registered | Effect |
 |---|---|---|---|
-| Returning premium player (Premium=true) | The original DB record | true | Online-mode verification again, then auto-login |
+| Returning premium name (consent, or a premium UUID observation) | The original DB record | true | Online-mode verification again, then auto-login |
 | `nameChangeCheck` | The **old record** found by UUID (preserves history) | false | Update the name + register with the auth plugin |
 | `autoRegister` | The **current profile** looked up by name (possibly an empty shell) | false | Register with the auth plugin |
 | `offline-whitelist` | The **current profile** looked up by name (possibly an empty shell) | true | Admission only, no registration |
@@ -174,7 +176,7 @@ flowchart TD
 The `registered` flag drives `ForceLoginManagement`:
 - `registered=false` → `needsRegistration()=true` → `forceRegister()` (auto-registration)
 - `registered=true` → `needsRegistration()=false` → `forceLogin()` (auto-login)
-- Exception: with `auto-register-unknown=true`, even `registered=true` sessions trigger a registration when the auth plugin does not know the player yet
+- The whole "no local account" side (`needsRegistration` or not registered) is gated by `auto-register-unknown` (F-15 A): on (default) the account is auto-created for the verified identity, off the player gets the auth plugin's own register dialog and sets a password — never an automatic account
 
 ## Bedrock (Floodgate / Geyser) Flow
 
@@ -212,7 +214,7 @@ flowchart TD
 
 ## Proxy Mode (BungeeCord / Velocity)
 
-This section describes Bukkit/Folia backends. The opt-in Velocity + Fabric 26.2 path uses the same proxy decision tree: the proxy forwards the identity facts and the Fabric mod decides the login method from its own EasyAuth account state. An existing password account can queue an upgrade with `/flp premium`, which pins the premium UUID of its name and never touches the account; the account is converted to passwordless only at the first successful passwordless login whose verified UUID matches that pin.
+This section describes Bukkit/Folia backends. The opt-in Velocity + Fabric 26.2 path uses the same proxy decision tree: the proxy forwards the identity facts and the Fabric mod decides the login method from its own EasyAuth account state. An existing password account can queue an upgrade with `/flp premium`, which pins the premium UUID of its name and never touches the account; the account is converted to passwordless only at the first successful passwordless login whose verified UUID matches that pin. The queued upgrade lives for ten minutes; when it expires (or the backend restarted in between) the password account keeps working and `/flp premium` can simply be run again — nothing is locked out. Claims from a proxy are only accepted when the proxy's ID is listed in the Fabric config's `allowed-proxy-ids` trust key: with an empty list every claim is dropped and the login falls back to the password flow (fail-closed), and FastLoginPlus warns about the empty list at startup and when a `/flp premium` upgrade is dropped because of it.
 
 When `bungee: true` (spigot.yml) or Velocity forwarding is detected, FLP runs in a **proxy/backend split** architecture:
 
@@ -234,7 +236,7 @@ flowchart TD
         P10 --> P11
         P8 --> P11{"ServerConnectedEvent<br/>entering the sub-server"}
         P11 --> P12["ForceLoginTask<br/>(the proxy usually has no auth plugin)"]
-        P12 --> P13["Write the proxy DB (Premium=true)<br/>send LoginActionMessage<br/>(LOGIN or REGISTER, player name, proxyId)"]
+        P12 --> P13["Write the proxy DB: the premium UUID observation<br/>+ clear the same-name cracked observation<br/>(no consent yet — the backend has not decided)<br/>send LoginActionMessage<br/>(LOGIN or REGISTER, player name, proxyId, facts)"]
     end
 
     subgraph BACKEND ["Backend (Bukkit / Folia)"]
@@ -249,13 +251,14 @@ flowchart TD
     end
 
     P13 --> B1
-    B7 --> P14["Proxy receives SuccessMessage<br/>and persists the player's premium record"]
+    B7 --> P14["Proxy receives SuccessMessage<br/>and records the upgrade consent<br/>(the confirmed premium outcome)"]
 ```
 
 Key points:
 
 - `LoginActionMessage` travels on the plugin message channel `fastloginplus:force`; the `proxyId` is a UUID generated on the proxy's first start (Velocity stores it in `proxyId.txt`, BungeeCord uses the `stats` value of its own `config.yml`, which BungeeCord generates on first start); the backend validates it against `allowed-proxies.txt` to prevent forgery
 - The message now also carries the Mojang UUID verified at the proxy's `LoginEvent` (`LoginActionMessage.verifiedPremiumUuid`), so the backend can stamp AuthMe's `premium_uuid` even when `premiumUuid: false` made the connection UUID the offline one
+- The message tail also carries the identity facts (new player? same-name cracked? upgrade consent) and the policy values (`autoLogin`, `auto-register-unknown`, `offline-whitelist`). The backend decides the login method from the account state plus those facts and **enforces the declared policy** — its own local copies of those keys are ignored behind a proxy (they only apply in standalone deployments); the local value is consulted only when a proxy declared nothing (an older proxy during a rolling upgrade)
 - A REGISTER message is only executed after the backend confirms the player is unregistered; a LOGIN message runs the login directly
 - The backend rejects unknown proxyIds and players marked as blocked (anti BungeeCord-ID brute force)
 - In proxy mode, `/flp premium|cracked|delete` requests are forwarded from the backend to the proxy (see next section)
@@ -310,14 +313,48 @@ Defaults shown below are the current values from `core/src/main/resources/config
 | `nameChangeCheck` | Query the Mojang API, detect renamed players by UUID and update their old DB record | true |
 | `autoRegister` | Auto-register new premium players with the auth plugin (forceRegister) | true |
 | `autoLogin` | Auto-login premium players with the auth plugin (forceLogin) | true |
-| `auto-register-unknown` | When a session says "login" but the auth plugin does not know the player, register them anyway | true |
+| `auto-register-unknown` | Auto-create a local account for a **verified premium** player the auth plugin has no account for (deleted/drifted databases). Off = the register dialog instead. Never for offline/cracked names — they carry no identity proof and set their own password (the key name misleads: "unknown" is the missing local account, not strangers) | true |
 | `offline-whitelist` | Access control: admit premium players, kick new offline players, let returning offline players join | false |
 | `premiumUuid` | Whether to use the premium UUID after premium verification (does not decide whether premium verification is enabled) | true |
 | `forwardSkin` | Forward the premium skin to the player (SkinsRestorer custom skins take priority) | true |
-| `secondAttemptCracked` | New players whose premium verification did not complete join offline next time (single-use marker) | false |
+| `secondAttemptCracked` | A name whose premium verification attempt does not verify is remembered per name and joins offline next time (persistent same-name cracked observation). Read together with the config: off = recorded names verify again | false |
 | `mojang-retry-count` / `mojang-retry-delay` | Mojang API retry count on network failures / base backoff delay (exponential, capped at 10s) | 3 / 500 |
 | `anti-bot.enabled` / `anti-bot.action` | Anti-bot switch / action when limits are hit (ignore/block) | true / ignore |
 | `autoLoginFloodgate` / `autoRegisterFloodgate` / `allowFloodgateNameConflict` | Bedrock auto-login / auto-registration / name-conflict policy (true/false/linked/no-conflict) | false / false / false |
 | `verifyClientKeys` / `respectIpLimit` | Standalone mode only (client public-key verification / auth-plugin per-IP registration limit) | false / false |
 
 Note: `premiumUuid` points in the opposite direction on a standalone backend versus a proxy — a standalone backend is an offline-mode server, so `true` means **injecting** the premium UUID; a proxy naturally gets the premium UUID from online-mode verification, so `false` is what overrides it with the offline UUID.
+
+## Record Semantics (observations + consent)
+
+Each row of the `premium` table is a per-name record with three kinds of state, kept deliberately separate:
+
+| Column | Meaning | Written by | Cleared by |
+|---|---|---|---|
+| `UUID` | **Observation**: the Mojang UUID this name verified with (a fact about the *name*) | a passing verification, `/flp premium` | `/flp cracked`, `/flp delete` |
+| `Premium` | **Upgrade consent**: this name's premium login is allowed to open the account without a password | `/flp premium`, and a *confirmed* premium outcome (the backend auto-registered or auto-logged the verified identity, incl. the auth-plugin premium-account sync) | `/flp cracked` |
+| `SameNameCracked` | **Observation**: premium verification for this name failed with a definitive verdict and none passed since (a cracked client under a premium name) | one settled definitive failure (see `secondAttemptCracked`; outages and interruptions never count) | a passing verification, `/flp premium`, `/flp cracked`; also cleared in bulk at startup/reload when `secondAttemptCracked` is off |
+
+Two rules follow from the split:
+
+1. **A login that has not been decided yet never records consent.** The proxy writes the observation when the connection is verified, but the consent only lands when the backend confirmed a premium outcome (its `SuccessMessage` ack) or the player/admin said so with `/flp premium`. A rejected login (rule 7/8 ownership conflict) leaves the record exactly as "observed, not consented", so a later reconnect reproduces the same decision instead of turning into a passwordless takeover.
+2. **Routing follows the record's facts.** A name goes through premium verification when it is consented, or when its premium UUID observation is intact and no same-name cracked observation was recorded. Consented names always verify (nobody can push them into the password flow with a cracked client); observed-cracked names skip the doomed attempt and go straight to the password flow.
+
+**Recovery when the consent was never recorded** (for example a confirmed auto-registration whose ack was lost because the player disconnected in between): the name then sits at "observed, not consented" and rule 7 rejects every premium login of it. The rejection is a kick, and a premium client keeps passing the verification — which resets the unverified-attempt counter, so the same-name cracked fallback never triggers for it — so **a premium client cannot reach any password dialog here and cannot fix this itself**. Two ways out:
+
+1. **An administrator runs `/flp premium <name>`** — the consent is recorded at once and the next premium login goes through.
+2. With `secondAttemptCracked` enabled, the account owner connects with a **cracked** client: the failed attempt confirms the same-name cracked observation (which also shows the one-time "recorded as cracked" notice pointing at `/flp premium`), the name drops to the password flow, and after logging in with the account password they run `/flp premium` themselves. (The generated password of an auto-registered account was only printed once at registration; without it this path still ends at the administrator.) With `secondAttemptCracked: false` only the first way is left.
+
+Older databases keep working: the observation column is added in place at startup and old rows read as "not observed"; an old `Premium=true` row reads as consent (that is what the flag meant when the row was written).
+
+Startup (and any config reload) also **reconciles** the marks with the config: with `secondAttemptCracked` off, every `SameNameCracked` flag is cleared in the database (only that column). The config can change while the server is down, so there is no runtime change event to catch — reconciling at load time is what keeps stale marks from resurfacing when an administrator toggles the switch back and forth. The read-side check above stays the authority; this cleanup just keeps the database consistent with it.
+
+## Behavior Changes (identity/record rework)
+
+User-visible changes compared with earlier releases:
+
+- **A rejected takeover attempt no longer flips the record.** Previously a verified connection recorded `Premium=true` before the backend had decided, so one rejected login could turn a foreign password account into a passwordless login on the next try. Consent now only follows confirmed outcomes or the explicit toggle.
+- **`secondAttemptCracked` is persistent and per name.** The old single-use marker (IP + name, five minutes, consumed by the next connection) is gone: attempts are tracked per name and **only a settled, definitive failure counts**. The first confirmation shows a one-time chat notice (`same-name-cracked-recorded`) telling the player the name was recorded as cracked and how to re-verify with `/flp premium`. What counts as definitive is per chain: on a standalone server the session check itself tells the cases apart — Mojang explicitly rejected the session (counted), the session server could not be reached (not counted, FLP kicks with `auth-server-unreachable`: "The authentication servers are unreachable right now, so your premium identity could not be confirmed. Please reconnect later."), the player left mid-verification (not counted). Behind a proxy the proxy owns the session check and exposes no verdict, so the attempt is judged about 12 seconds after it was requested by probing the session server: unreachable = an authentication outage → not counted (the proxy's own message explains it; Bungee's wording is vague but that is proxy behavior), reachable = the client itself → counted. **Known boundary**: a player whose own network dropped while Mojang was up cannot be told apart and is counted once — the one-time notice and `/flp premium` cover that case.
+- **An unfinished name lookup never degrades a player.** When the Mojang name lookup cannot complete (rate limit, network trouble, an interrupted retry), FastLoginPlus kicks with `auth-server-unreachable` ("The authentication servers are unreachable right now, so your premium identity could not be confirmed. Please reconnect later.") instead of treating the name as cracked. This closes a serious hazard: a brand-new premium player hitting a lookup failure used to be sent to the register dialog, would create a password account and — with neither consent nor a premium-UUID observation on record — would never verify again, losing the passwordless login for good. Only "the lookup succeeded and Mojang has no such name" is a definite "not premium" and goes to the register flow. **Cost**: while Mojang is flaking or rate-limiting, NEW names cannot join (recorded players are unaffected — they never hit this lookup).
+- **Behind a proxy the backend ignores its local policy keys.** `autoRegister`, `autoLogin`, `auto-register-unknown` and `offline-whitelist` are decided by the proxy and enforced from the identity facts; the backend's own copies only apply in standalone deployments (as the config templates always said). `auto-register-unknown` now also gates the "verified premium player without a local account" cell (auto-create vs. the register dialog) — see the key's config comment for its exact scope.
+- **Login-time rejections moved to the backend decision.** The old pre-login account query (and the one-shot binding cookie on Fabric) is gone: ownership conflicts are now rejected by the backend's decision from the account state plus the identity facts, which means the rejection happens at the login the facts describe instead of a speculative earlier probe.
