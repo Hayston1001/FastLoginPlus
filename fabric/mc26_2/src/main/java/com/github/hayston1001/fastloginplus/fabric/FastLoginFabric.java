@@ -33,6 +33,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +53,8 @@ public final class FastLoginFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        LOGGER.info("FastLoginPlus Fabric {} | EasyAuth {}",
+                modVersion("fastloginplus_fabric"), modVersion("easyauth"));
         EasyAuth344Bridge bridge = new EasyAuth344Bridge();
         BindingConsentWriter.register();
         CommandRegistrationCallback.EVENT.register((dispatcher, dedicated, environment) ->
@@ -70,7 +73,7 @@ public final class FastLoginFabric implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             bridge.verifyPolicy();
             try {
-                FabricConfig.warnIfUntrusted(FabricConfig.load());
+                FabricConfig.warnIfUntrusted(FabricConfig.loadAtStartup());
             } catch (RuntimeException unreadable) {
                 // never fail the server start over our own settings (R-6)
                 LOGGER.warn("Fabric configuration could not be read: {}", unreadable.getMessage());
@@ -102,6 +105,17 @@ public final class FastLoginFabric implements ModInitializer {
                 handler.disconnect(Component.literal("FastLoginPlus Fabric account check failed"));
             }
         });
+    }
+
+    private static String modVersion(String id) {
+        try {
+            return FabricLoader.getInstance().getModContainer(id)
+                    .map(mod -> mod.getMetadata().getVersion().getFriendlyString())
+                    .filter(version -> !version.isBlank())
+                    .orElse("unknown (unavailable)");
+        } catch (RuntimeException unavailable) {
+            return "unknown (unavailable)";
+        }
     }
 
     private static IdentityClaim parseClaim(GameProfile profile) {

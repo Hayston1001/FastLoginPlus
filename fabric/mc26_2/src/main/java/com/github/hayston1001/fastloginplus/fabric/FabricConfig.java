@@ -47,21 +47,56 @@ final class FabricConfig {
     private static final Logger LOGGER = LoggerFactory.getLogger("fastloginplus_fabric");
     private static final String FILE_NAME = "fastloginplus-fabric.properties";
 
+    private static StartupSettings startupSettings;
+    private static RuntimeException startupFailure;
+
     private FabricConfig() {
     }
 
     /**
-     * Writes the commented default on first start and loads the settings.
+     * Loads the startup-only settings once, including an unavailable-file result.
      *
-     * @return the parsed settings
+     * @return the immutable startup snapshot
      */
-    static Properties load() {
+    static synchronized StartupSettings loadAtStartup() {
+        if (startupSettings == null && startupFailure == null) {
+            try {
+                startupSettings = new StartupSettings(readFile().getProperty("allowed-proxy-ids", ""));
+            } catch (RuntimeException unreadable) {
+                startupFailure = unreadable;
+            }
+        }
+        return startup();
+    }
+
+    static synchronized StartupSettings startup() {
+        if (startupFailure != null) {
+            throw startupFailure;
+        }
+        if (startupSettings == null) {
+            throw new IllegalStateException("Fabric configuration was not loaded at startup");
+        }
+        return startupSettings;
+    }
+
+    /**
+     * Only these two fields are reread for each binding command.
+     *
+     * @return the command-time transfer target settings
+     */
+    static TransferSettings readTransferSettings() {
+        Properties config = readFile();
+        return new TransferSettings(config.getProperty("binding-transfer-host", ""),
+                config.getProperty("binding-transfer-port", ""));
+    }
+
+    private static Properties readFile() {
         Path file = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
         writeDefaultOnce(file);
         try {
             return ConfigurationFiles.loadProperties(file);
         } catch (IOException error) {
-            throw new IllegalStateException("Configure binding-transfer-host and binding-transfer-port", error);
+            throw new IllegalStateException("Cannot read fastloginplus-fabric.properties", error);
         }
     }
 
@@ -72,12 +107,20 @@ final class FabricConfig {
      *
      * @param config the parsed settings
      */
-    static void warnIfUntrusted(Properties config) {
-        if (config.getProperty("allowed-proxy-ids", "").trim().isEmpty()) {
+    static void warnIfUntrusted(StartupSettings config) {
+        if (config.allowedProxyIds().trim().isEmpty()) {
             LOGGER.warn("fastloginplus-fabric.properties has an empty allowed-proxy-ids; the proxy "
                     + "will refuse the upgrade consent message and /flp premium can never complete. "
                     + "Fill in the proxy's UUID (its proxyId.txt).");
         }
+    }
+
+    /** Frozen at SERVER_STARTED; file edits require a backend restart. */
+    record StartupSettings(String allowedProxyIds) {
+    }
+
+    /** Command-time exceptions, not a reload of startup settings. */
+    record TransferSettings(String host, String port) {
     }
 
     private static void writeDefaultOnce(Path file) {

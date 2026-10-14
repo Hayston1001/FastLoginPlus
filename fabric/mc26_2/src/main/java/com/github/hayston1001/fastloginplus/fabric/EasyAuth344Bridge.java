@@ -45,7 +45,6 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
-import java.util.Properties;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
@@ -354,9 +353,9 @@ final class EasyAuth344Bridge {
             throw new IllegalStateException("A password account is required to start binding");
         }
         checkBindingEntry(entry, name);
-        Properties config = readConfig();
-        TransferTarget transfer = transferTarget(config);
-        String proxyIds = config.getProperty("allowed-proxy-ids", "");
+        FabricConfig.StartupSettings config = FabricConfig.startup();
+        TransferTarget transfer = transferTarget(FabricConfig.readTransferSettings());
+        String proxyIds = config.allowedProxyIds();
         FabricConfig.warnIfUntrusted(config);
         Object db = field(easyAuth, null, "DB");
         Object current = readAccount(db, name);
@@ -420,15 +419,11 @@ final class EasyAuth344Bridge {
         }
     }
 
-    private Properties readConfig() {
-        return FabricConfig.load();
-    }
-
-    private TransferTarget transferTarget(Properties config) {
-        String host = config.getProperty("binding-transfer-host", "").trim();
+    private TransferTarget transferTarget(FabricConfig.TransferSettings config) {
+        String host = config.host().trim();
         int port;
         try {
-            port = Integer.parseInt(config.getProperty("binding-transfer-port", ""));
+            port = Integer.parseInt(config.port());
         } catch (NumberFormatException error) {
             throw new IllegalStateException("Invalid binding-transfer-port", error);
         }
