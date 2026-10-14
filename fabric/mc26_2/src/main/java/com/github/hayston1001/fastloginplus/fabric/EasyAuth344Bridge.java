@@ -154,8 +154,14 @@ final class EasyAuth344Bridge {
                 AccountState.Snapshot state = accountStatus(claim.getPlayerName());
                 PendingBinding binding = matchedBinding(claim);
                 if (claim.getDecision() == Decision.PREMIUM_VERIFIED) {
+                    // R-10: the declared policy governs; an older proxy that
+                    // declared nothing keeps the previous behaviour (on) — the
+                    // Fabric config has no local copy of this key (F-15 A)
+                    boolean autoRegisterUnknown = claim.getFacts().policyDeclared()
+                            ? claim.getFacts().autoRegisterUnknown() : true;
                     PremiumGate.Action action = PremiumGate.decideVerified(claim.getConsent(), state,
-                            claim.getVerifiedMojangUuid(), binding != null, claim.isAutoLogin());
+                            claim.getVerifiedMojangUuid(), binding != null, claim.isAutoLogin(),
+                            autoRegisterUnknown);
                     if (action == PremiumGate.Action.REJECT) {
                         throw new IllegalStateException("EasyAuth account changed before premium authentication");
                     }

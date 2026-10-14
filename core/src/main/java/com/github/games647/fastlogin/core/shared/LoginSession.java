@@ -120,18 +120,21 @@ public abstract class LoginSession {
     /**
      * Computes the observation facts and the upgrade consent this connection
      * declares to the backend. Everything here is a snapshot of the proxy's own
-     * state at login time: the record's existence, the recorded consent, and a
-     * premium name that was observed without a passing verification.
+     * record at login time: the record's existence, the recorded consent, the
+     * premium UUID observation and the same-name cracked observation.
      *
-     * @param ip login address of this connection
-     * @param core the proxy core, for the failed-verification memory
+     * @param core the proxy core, for the policy keys (R-10)
      */
-    public synchronized void computeFacts(String ip, FastLoginCore<?, ?, ?> core) {
+    public synchronized void computeFacts(FastLoginCore<?, ?, ?> core) {
         StoredProfile stored = profile;
         boolean newPlayer = stored == null || !stored.isExistingPlayer();
         Consent consent = stored != null && stored.isOnlinemodePreferred() ? Consent.YES : Consent.NO;
-        boolean premiumName = (stored != null && stored.getId() != null)
-                || core.hasFailedLogin(ip, requestUsername);
+        // reading the same-name cracked observation follows the configured
+        // fallback semantics (F-12): with secondAttemptCracked off the mark is
+        // dormant and the name is reported as never observed
+        boolean premiumName = stored != null
+                && (stored.getId() != null
+                || (stored.isSameNameCracked() && core.getConfig().getBoolean("secondAttemptCracked")));
         // policy keys live on the proxy (R-10) and travel with the facts
         this.facts = new IdentityClaim.Facts(newPlayer, premiumName && uuid == null, consent,
                 core.getConfig().getBoolean("autoLogin"),
@@ -209,7 +212,15 @@ public abstract class LoginSession {
     /**
      * Whether verified identities without a local account are auto-registered.
      *
-     * @return the proxy's auto-register-unknown value
+     * <p>Scope (the key name misleads — "unknown" is not "strangers/offline
+     * players"): the repair case only, for a connection Mojang has verified
+     * whose name has no account in the auth plugin (the account was deleted, or
+     * the databases drifted apart). Offline/cracked connections are never
+     * covered — they carry no identity proof and always go through the register
+     * dialog with a password the player chooses. Off = such a verified player
+     * gets the register dialog instead of an automatic account.</p>
+     *
+     * @return the policy value as declared by the proxy
      */
     public synchronized boolean isAutoRegisterUnknown() {
         return facts.autoRegisterUnknown();

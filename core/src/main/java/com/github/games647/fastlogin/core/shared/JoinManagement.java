@@ -30,6 +30,7 @@ import com.github.games647.craftapi.resolver.RateLimitException;
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
 import com.github.games647.fastlogin.core.hooks.bedrock.BedrockService;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
+import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import net.md_5.bungee.config.Configuration;
 
@@ -90,8 +91,41 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             callFastLoginPreLoginEvent(username, source, profile);
 
             profile.setLastIp(ip);
-            if (profile.isExistingPlayer()) {
-                if (profile.isOnlinemodePreferred()) {
+            // reading the observation follows the configured fallback semantics
+            // (F-12): with secondAttemptCracked off a marked name is treated as if
+            // it had never been recorded, so it verifies again — and a passing
+            // verification then clears the stale mark. The read side is the
+            // authority; the startup reconciliation only keeps the database tidy.
+            boolean observedCracked = profile.isSameNameCracked() && isFallbackEnabled();
+            boolean hasRealRecord = profile.isOnlinemodePreferred() || profile.getId() != null;
+            // a row that holds nothing but a dormant observation — the mark is
+            // stored, but the fallback is off and there is neither consent nor a
+            // premium UUID — is treated as if it had never been recorded
+            boolean dormantObservationOnly = profile.isSameNameCracked() && !observedCracked && !hasRealRecord;
+            if (profile.isExistingPlayer() && !dormantObservationOnly) {
+                // routing follows the record's facts (D-03): a consented name or a
+                // name whose premium UUID observation is still intact is verified
+                // again; everything else keeps the password flow
+                boolean premiumName = profile.isOnlinemodePreferred()
+                        || (profile.getId() != null && !observedCracked);
+                if (premiumName) {
+                    // the cracked fallback only applies to names without consent: a
+                    // consented name is verified on every connection (an impostor can
+                    // never drag it into the password flow), while a name whose premium
+                    // identity is not consented can recover through the password flow
+                    // (rule 7's "log in with the password, then upgrade")
+                    if (!profile.isOnlinemodePreferred() && shouldFallBackToCracked(username)) {
+                        if (core.isDebug()) {
+                            core.getPlugin().getLog()
+                                    .info("Unverified premium attempt -> cracked {}", username);
+                        }
+                        confirmSameNameCracked(username, profile);
+                        if (isValidUsername(source, profile)) {
+                            startCrackedSession(source, profile, username);
+                        }
+                        return null;
+                    }
+
                     if (core.isDebug()) {
                         core.getPlugin().getLog()
                             .info("Requesting premium login for registered player: {}", username);
@@ -109,34 +143,33 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                 return null;
             }
 
-            // brand-new player: decision needs Mojang lookups, run outside the lock
+            // brand-new player, or a name whose only record is an ignored
+            // observation: both get the same decision as an unknown name
+            // (including the premium check), run outside the lock
             return profile;
         });
 
         if (newPlayerProfile != null) {
-            performNewPlayerLogin(username, source, ip, newPlayerProfile);
+            performNewPlayerLogin(username, source, newPlayerProfile);
         }
     }
 
-    private void performNewPlayerLogin(String username, S source, String ip, StoredProfile profile) {
+    private void performNewPlayerLogin(String username, S source, StoredProfile profile) {
         try {
-            if (core.hasFailedLogin(ip, username)) {
+            if (shouldFallBackToCracked(username)) {
                 if (core.isDebug()) {
-                    core.getPlugin().getLog().info("Second attempt login -> cracked {}", username);
+                    core.getPlugin().getLog().info("Unverified premium attempt -> cracked {}", username);
                 }
 
-                //first login request failed so make a cracked session
-                if (shouldReserveUnknownPremiumNames()) {
-                    startUndecidedSession(source, profile, username);
-                } else {
-                    startCrackedSession(source, profile, username);
-                }
+                // the previous attempt never verified: record the same-name cracked
+                // observation (D-03 Q-E) and open the password flow directly
+                confirmSameNameCracked(username, profile);
+                startCrackedSession(source, profile, username);
                 return;
             }
 
             Configuration config = core.getConfig();
             Optional<Profile> premiumUUID = Optional.empty();
-            boolean checkedPremium = false;
             if ((boolean) config.get("nameChangeCheck") || (boolean) config.get("autoRegister")
                     || (boolean) config.get("offline-whitelist")) {
                 int retryCount = Math.max(1,
@@ -144,6 +177,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                 long retryDelay =
                         ((Number) config.get("mojang-retry-delay")).longValue();
 
+                boolean checkedPremium = false;
                 for (int attempt = 1; attempt <= retryCount; attempt++) {
                     try {
                         premiumUUID = core.getResolver().findProfile(username);
@@ -185,6 +219,21 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                         break;
                     }
                 }
+
+                if (!checkedPremium) {
+                    // "could not tell" (F-13): a lookup that never completed —
+                    // rate limit, network trouble or an interruption — says
+                    // nothing about the name. It must not degrade the player
+                    // into the password flow: a new premium player would then
+                    // register a password account without the premium UUID
+                    // observation, and per the routing would never verify again
+                    // (the passwordless login would be lost for good).
+                    core.getPlugin().getLog().warn(
+                            "Could not determine whether {} owns a premium account: the Mojang"
+                                    + " lookup did not complete. Refusing to guess.", username);
+                    source.kick(core.getMessage("auth-server-unreachable"));
+                    return;
+                }
             }
 
             if (!premiumUUID.isPresent()
@@ -196,11 +245,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                     return;
                 }
 
-                if (shouldReserveUnknownPremiumNames() && !checkedPremium) {
-                    startUndecidedSession(source, profile, username);
-                } else {
-                    startCrackedSession(source, profile, username);
-                }
+                startCrackedSession(source, profile, username);
             }
         } catch (Exception ex) {
             core.getPlugin().getLog().error("Failed to check premium state of {}", username, ex);
@@ -295,10 +340,67 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     public abstract void startCrackedSession(S source, StoredProfile profile, String username);
 
     /**
+     * Whether the configured cracked fallback is active ({@code secondAttemptCracked}).
+     * The same switch governs reading a stored observation: with it off a recorded
+     * name is treated as never marked (F-12).
+     *
+     * @return true when the fallback and the observation semantics are enabled
+     */
+    protected boolean isFallbackEnabled() {
+        return (boolean) core.getConfig().get("secondAttemptCracked");
+    }
+
+    /**
+     * Whether repeated unverified premium attempts for the name open the cracked
+     * fallback. Requires the {@code secondAttemptCracked} fallback to be enabled
+     * and one settled, definitive "not premium" verdict (F-13) — an attempt that
+     * merely never verified counts only once the settlement judged it failed.
+     *
+     * @param username exact login name
+     * @return true when the name should skip the premium attempt
+     */
+    protected boolean shouldFallBackToCracked(String username) {
+        return isFallbackEnabled() && core.getDefiniteFailures(username) >= 1;
+    }
+
+    /**
+     * Records the same-name cracked observation (D-03 Q-E) on the name's row: a
+     * premium verification for this name was observed to fail and none passed
+     * since. The observation is per name and persistent, so later connections go
+     * straight to the password flow instead of failing one connection first.
+     *
+     * <p>Only the confirmation that actually flips the flag queues the one-time
+     * chat notice: a record that already exists must not nag on every join.</p>
+     *
+     * @param username exact login name
+     * @param profile the name's record (new or existing)
+     */
+    protected void confirmSameNameCracked(String username, StoredProfile profile) {
+        SQLStorage storage = core.getStorage();
+        boolean firstConfirmation = storage.withNameLock(username, () -> {
+            boolean first = !profile.isSameNameCracked();
+            profile.setSameNameCracked(true);
+            storage.save(profile);
+            return first;
+        });
+        if (firstConfirmation) {
+            core.queueSameNameCrackedNotice(username);
+        }
+    }
+
+    /**
      * The Fabric mode keeps undecided names reserved after Mojang lookup failures.
+     *
+     * <p>Superseded (F-13, 2026-10-14): an unfinished Mojang lookup is "could
+     * not tell", and the unified handling is a kick that explains why
+     * ({@code auth-server-unreachable}) — reserving the name would keep a
+     * degraded, half-known state instead. This hook has no implementer in the
+     * tree (the Fabric mod runs its own flow) and is kept only so out-of-tree
+     * subclasses keep compiling.</p>
      *
      * @return true when this login path enforces the reservation
      */
+    @Deprecated
     protected boolean shouldReserveUnknownPremiumNames() {
         return false;
     }
@@ -326,10 +428,16 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     /**
      * Fallback for a decision without a completed Mojang lookup.
      *
+     * <p>Superseded (F-13, 2026-10-14) alongside
+     * {@link #shouldReserveUnknownPremiumNames()}: an unfinished lookup now
+     * kicks with {@code auth-server-unreachable} instead of starting any
+     * session. Kept so out-of-tree subclasses keep compiling.</p>
+     *
      * @param source this connection
      * @param profile the unresolved stored profile
      * @param username the requested name
      */
+    @Deprecated
     protected void startUndecidedSession(S source, StoredProfile profile, String username) {
         startCrackedSession(source, profile, username);
     }

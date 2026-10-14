@@ -43,6 +43,14 @@ import com.github.games647.fastlogin.protocol.IdentityClaim.Consent;
  * <p>The account state {@link AccountState#READ_FAILURE} must fail closed to the
  * password lock; callers log it (a database that cannot be read is never a
  * reason to hand out passwordless login).
+ *
+ * <p>{@code auto-register-unknown} (the repair for a verified premium player
+ * whose local account went missing — deleted, or the databases drifted apart)
+ * gates the "verified premium identity without a local account" cell (F-15 A).
+ * Its scope: only a connection Mojang has verified whose name has no local
+ * account — never an offline/cracked connection, which carries no identity
+ * proof and must set its own password in the register dialog. Off = such a
+ * verified player gets the register dialog, not an automatic account.
  */
 public final class LoginMethodDecider {
 
@@ -79,6 +87,23 @@ public final class LoginMethodDecider {
     }
 
     /**
+     * Resolves a policy value behind a proxy (R-10): the proxy's declared value
+     * is the authority and this server's local copy is never even read for it
+     * (its config.yml copy is "ignored here"). The local value only serves facts
+     * that never arrived — an older proxy during a rolling upgrade — and
+     * standalone deployments.
+     *
+     * @param policyDeclared whether a proxy declared the policy block
+     * @param declaredValue the proxy's declared value
+     * @param localValue this server's own configured value; only read when nothing was declared
+     * @return the value to enforce
+     */
+    public static boolean resolvePolicyValue(boolean policyDeclared, boolean declaredValue,
+                                             java.util.function.Supplier<Boolean> localValue) {
+        return policyDeclared ? declaredValue : localValue.get();
+    }
+
+    /**
      * Applies the decision table to one login with premium handling enabled.
      *
      * @param verifiedPremium whether this connection passed Mojang verification
@@ -91,13 +116,9 @@ public final class LoginMethodDecider {
     }
 
     /**
-     * Applies the decision table to one login. The policy keys live on the proxy
-     * (R-10) and arrive with the identity facts; this backend only enforces them.
-     * With auto-login off no premium handling happens at all (D-06 #1), so the
-     * rows collapse to the password lock or the registration flow. Admission
-     * (offline-whitelist) and the auto-register-unknown repair are the caller's
-     * checks: the first needs the proxy's known list, the second the proxy's
-     * registration expectation.
+     * Applies the decision table to one login with the auto-register repair on
+     * (the default; see {@link #decide(boolean, AccountState, Consent, boolean,
+     * boolean)}).
      *
      * @param verifiedPremium whether this connection passed Mojang verification
      * @param account state of the local auth plugin account, including read failure
@@ -107,6 +128,32 @@ public final class LoginMethodDecider {
      */
     public static Outcome decide(boolean verifiedPremium, AccountState account, Consent consent,
                                  boolean autoLogin) {
+        return decide(verifiedPremium, account, consent, autoLogin, true);
+    }
+
+    /**
+     * Applies the decision table to one login. The policy keys live on the proxy
+     * (R-10) and arrive with the identity facts; this backend only enforces them.
+     * With auto-login off no premium handling happens at all (D-06 #1), so the
+     * rows collapse to the password lock or the registration flow. Admission
+     * (offline-whitelist) is the caller's check: it needs the proxy's known list.
+     *
+     * <p>{@code autoRegisterUnknown} gates the "verified premium identity without
+     * a local account" cell (F-15 A — the key name misleads: "unknown" is the
+     * missing local account of a proven identity, not strangers/offline names):
+     * on (default) the account is auto-created for the proven identity, off the
+     * player gets the register dialog and sets their own password. Offline
+     * connections never reach this cell with {@code verifiedPremium} set.</p>
+     *
+     * @param verifiedPremium whether this connection passed Mojang verification
+     * @param account state of the local auth plugin account, including read failure
+     * @param consent the name's upgrade consent as the proxy recorded it
+     * @param autoLogin the proxy's autoLogin policy value
+     * @param autoRegisterUnknown the proxy's auto-register-unknown policy value
+     * @return the login method to apply
+     */
+    public static Outcome decide(boolean verifiedPremium, AccountState account, Consent consent,
+                                 boolean autoLogin, boolean autoRegisterUnknown) {
         if (account == AccountState.READ_FAILURE) {
             return Outcome.PASSWORD;
         }
@@ -121,7 +168,7 @@ public final class LoginMethodDecider {
 
         if (verifiedPremium) {
             if (!registered) {
-                return Outcome.AUTO_REGISTER_LOGIN;
+                return autoRegisterUnknown ? Outcome.AUTO_REGISTER_LOGIN : Outcome.GUIDE_REGISTER;
             }
             if (effective == Consent.YES) {
                 return Outcome.AUTO_LOGIN;

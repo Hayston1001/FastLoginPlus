@@ -62,22 +62,32 @@ public abstract class SQLStorage implements AuthStorage {
     protected static final String ADD_FLOODGATE_COLUMN_STMT = "ALTER TABLE `" + PREMIUM_TABLE
             + "` ADD COLUMN `Floodgate` INTEGER(3)";
 
+    // the same-name cracked observation (D-03 Q-E); rows that predate the column
+    // read as "not observed" (NULL -> false)
+    protected static final String ADD_SAME_NAME_CRACKED_COLUMN_STMT = "ALTER TABLE `" + PREMIUM_TABLE
+            + "` ADD COLUMN `SameNameCracked` INTEGER(3)";
+
     protected static final String LOAD_BY_NAME = "SELECT * FROM `" + PREMIUM_TABLE
             + "` WHERE `Name`=? LIMIT 1";
     protected static final String LOAD_BY_UUID = "SELECT * FROM `" + PREMIUM_TABLE
             + "` WHERE `UUID`=? LIMIT 1";
     protected static final String INSERT_PROFILE = "INSERT INTO `" + PREMIUM_TABLE
-            + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`) " + "VALUES (?, ?, ?, ?, ?) ";
+            + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `SameNameCracked`, `LastIp`) "
+            + "VALUES (?, ?, ?, ?, ?, ?) ";
     // fallback row-id lookup for the upsert update branch, where
     // getGeneratedKeys() behavior is driver-dependent and may return no row
     protected static final String SELECT_ID_BY_NAME = "SELECT `UserID` FROM `" + PREMIUM_TABLE
             + "` WHERE `Name`=?";
     // limit not necessary here, because it's unique
     protected static final String UPDATE_PROFILE = "UPDATE `" + PREMIUM_TABLE
-            + "` SET `UUID`=?, `Name`=?, `Premium`=?, `Floodgate`=?, `LastIp`=?, "
+            + "` SET `UUID`=?, `Name`=?, `Premium`=?, `Floodgate`=?, `SameNameCracked`=?, `LastIp`=?, "
             + "`LastLogin`=CURRENT_TIMESTAMP WHERE `UserID`=?";
     protected static final String DELETE_BY_NAME = "DELETE FROM `" + PREMIUM_TABLE
             + "` WHERE `Name`=?";
+    // observation bookkeeping (D-03 Q-E): clears only the SameNameCracked
+    // column, never any other field or table
+    protected static final String CLEAR_SAME_NAME_CRACKED_STMT = "UPDATE `" + PREMIUM_TABLE
+            + "` SET `SameNameCracked`=0 WHERE `SameNameCracked` != 0";
 
     // name-level striped locks close the cross-thread
     // load-modify-save window that the per-profile saveLock cannot cover (it is
@@ -160,6 +170,11 @@ public abstract class SQLStorage implements AuthStorage {
                 stmt.executeUpdate(ADD_FLOODGATE_COLUMN_STMT);
             }
 
+            // add the same-name cracked observation column (D-03 Q-E)
+            if (isColumnMissing(md, "SameNameCracked")) {
+                stmt.executeUpdate(ADD_SAME_NAME_CRACKED_COLUMN_STMT);
+            }
+
         }
     }
 
@@ -211,6 +226,8 @@ public abstract class SQLStorage implements AuthStorage {
 
             String name = resultSet.getString("Name");
             boolean premium = resultSet.getBoolean("Premium");
+            // NULL (rows older than the column) reads as "not observed"
+            boolean sameNameCracked = resultSet.getBoolean("SameNameCracked");
             int floodgateNum = resultSet.getInt("Floodgate");
             FloodgateState floodgate;
 
@@ -223,7 +240,9 @@ public abstract class SQLStorage implements AuthStorage {
 
             String lastIp = resultSet.getString("LastIp");
             Instant lastLogin = resultSet.getTimestamp("LastLogin").toInstant();
-            return Optional.of(new StoredProfile(userId, uuid, name, premium, floodgate, lastIp, lastLogin));
+            StoredProfile profile = new StoredProfile(userId, uuid, name, premium, floodgate, lastIp, lastLogin);
+            profile.setSameNameCracked(sameNameCracked);
+            return Optional.of(profile);
         }
 
         return Optional.empty();
@@ -255,9 +274,10 @@ public abstract class SQLStorage implements AuthStorage {
                         saveStmt.setString(2, playerProfile.getName());
                         saveStmt.setBoolean(3, playerProfile.isOnlinemodePreferred());
                         saveStmt.setInt(4, playerProfile.getFloodgate().getValue());
-                        saveStmt.setString(5, playerProfile.getLastIp());
+                        saveStmt.setBoolean(5, playerProfile.isSameNameCracked());
+                        saveStmt.setString(6, playerProfile.getLastIp());
 
-                        saveStmt.setLong(6, playerProfile.getRowId());
+                        saveStmt.setLong(7, playerProfile.getRowId());
                         saveStmt.execute();
                     }
                 } else {
@@ -268,7 +288,8 @@ public abstract class SQLStorage implements AuthStorage {
                         saveStmt.setString(2, playerProfile.getName());
                         saveStmt.setBoolean(3, playerProfile.isOnlinemodePreferred());
                         saveStmt.setInt(4, playerProfile.getFloodgate().getValue());
-                        saveStmt.setString(5, playerProfile.getLastIp());
+                        saveStmt.setBoolean(5, playerProfile.isSameNameCracked());
+                        saveStmt.setString(6, playerProfile.getLastIp());
 
                         saveStmt.execute();
                         backfillRowId(playerProfile, con, saveStmt);
@@ -330,6 +351,25 @@ public abstract class SQLStorage implements AuthStorage {
     }
 
     /**
+     * Clears every same-name cracked observation (D-03 Q-E) in the database.
+     *
+     * <p>Only the {@code SameNameCracked} column is touched — no other field,
+     * row property or table. Rows without a mark (including ones older than the
+     * column, which read as "not observed") are left alone.</p>
+     *
+     * @return the number of cleared rows; -1 when the database could not be reached
+     */
+    public int clearSameNameCrackedObservations() {
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement clearStmt = con.prepareStatement(CLEAR_SAME_NAME_CRACKED_STMT)) {
+            return clearStmt.executeUpdate();
+        } catch (SQLException ex) {
+            log.error("Failed to clear the same-name cracked observations", ex);
+            return -1;
+        }
+    }
+
+    /**
      * SQLite has a slightly different syntax, so this will be overridden by SQLiteStorage
      * @return An SQL Statement to create the `premium` table
      */
@@ -343,8 +383,8 @@ public abstract class SQLStorage implements AuthStorage {
      * name cannot race the UNIQUE(Name) constraint and silently lose the
      * second profile.
      *
-     * @return an insert statement with five parameters
-     *         (UUID, Name, Premium, Floodgate, LastIp)
+     * @return an insert statement with six parameters
+     *         (UUID, Name, Premium, Floodgate, SameNameCracked, LastIp)
      */
     protected String getInsertProfileStmt() {
         return INSERT_PROFILE;

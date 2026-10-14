@@ -247,6 +247,9 @@ public class ConnectListener implements Listener {
             String verifiedUsername = connection.getName();
             session.setUuid(verifiedUUID);
             session.setVerifiedUsername(verifiedUsername);
+            // this connection passed the Mojang verification: it refutes any
+            // pending same-name cracked suspicion for the name
+            plugin.getCore().resetVerificationState(verifiedUsername);
 
             StoredProfile playerProfile = session.getProfile();
             playerProfile.setId(verifiedUUID);
@@ -347,7 +350,7 @@ public class ConnectListener implements Listener {
      */
     private void attachIdentityFacts(PendingConnection connection, String username,
                                      UUID verifiedUUID, LoginSession session) {
-        session.computeFacts(connection.getAddress().getAddress().getHostAddress(), plugin.getCore());
+        session.computeFacts(plugin.getCore());
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
                 username, connection.getUniqueId(), verifiedUUID, session.getFacts(),
                 UUID.fromString(ProxyServer.getInstance().getConfig().getUuid()));

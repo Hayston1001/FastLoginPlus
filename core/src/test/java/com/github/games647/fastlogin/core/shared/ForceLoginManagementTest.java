@@ -88,13 +88,15 @@ class ForceLoginManagementTest {
         }).when(storage).withNameLock(anyString(), any(Runnable.class));
     }
 
-    // ---- proxy without auth hook: persist the premium row locally ----
+    // ---- proxy without auth hook: record the observation, never the consent ----
 
     @Test
-    void proxyWithoutAuthHookPersistsVerifiedPremiumRow() {
+    void proxyWithoutAuthHookRecordsObservationWithoutConsent() {
         // Velocity: authPlugin is always null (no setAuthPluginHook call in the
-        // velocity module). The proxy verified the session, so the row must be
-        // written locally instead of waiting for a SuccessMessage ack.
+        // velocity module). The proxy verified the session, so the observation
+        // must be written locally instead of waiting for a SuccessMessage ack —
+        // but this write happens BEFORE the backend decided (rule 7/8 could still
+        // reject), so it must never grant the upgrade consent (D-03 E-3).
         UUID premiumUuid = UUID.randomUUID();
         StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
         TestLoginSession session = new TestLoginSession("TestUser", true, profile);
@@ -103,18 +105,21 @@ class ForceLoginManagementTest {
         TestForceLoginManagement mgmt = createManagement(session, true);
         mgmt.run();
 
-        assertTrue(profile.isOnlinemodePreferred());
+        assertFalse(profile.isOnlinemodePreferred(),
+                "the pre-decision write must not grant the upgrade consent");
         assertEquals(premiumUuid, profile.getId());
+        assertFalse(profile.isSameNameCracked(), "a passing verification refutes the observation");
         verify(storage).save(profile);
         assertEquals(1, mgmt.ackCount, "proxy must still forward the force-login action");
     }
 
     @Test
-    void proxyUpgradesStaleCrackedRowToPremium() {
+    void proxyWriteRecordsPremiumUuidOnStaleCrackedRow() {
         // Locks the null-branch save semantics: a StoredProfile backed by an
-        // existing premium=false row is upgraded (never demoted) on a verified
-        // premium session. Reachable via JoinManagement.isNameChanged, which
-        // passes an existing row (premium=false, rowId>=0) into
+        // existing premium=false row gets the premium UUID observation (which is
+        // what routes the name through verification on the next login), while the
+        // consent bit is left untouched. Reachable via JoinManagement.isNameChanged,
+        // which passes an existing row (premium=false, rowId>=0) into
         // requestPremiumLogin when a player changed their name.
         UUID premiumUuid = UUID.randomUUID();
         StoredProfile profile = new StoredProfile(1, null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1",
@@ -125,7 +130,7 @@ class ForceLoginManagementTest {
         TestForceLoginManagement mgmt = createManagement(session, true);
         mgmt.run();
 
-        assertTrue(profile.isOnlinemodePreferred());
+        assertFalse(profile.isOnlinemodePreferred(), "the observation write never flips the consent");
         assertEquals(premiumUuid, profile.getId());
         verify(storage).save(profile);
     }
@@ -165,18 +170,131 @@ class ForceLoginManagementTest {
         when(authPlugin.forceLogin(any())).thenReturn(true);
 
         StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
+        profile.setSameNameCracked(true);
         TestLoginSession session = new TestLoginSession("TestUser", true, profile);
         session.setUuid(UUID.randomUUID());
 
         TestForceLoginManagement mgmt = createManagement(session, true);
         mgmt.run();
 
+        // the confirmed outcome ("registered as premium") is what records consent
         assertTrue(profile.isOnlinemodePreferred());
+        assertFalse(profile.isSameNameCracked(), "a passing verification refutes the observation");
         verify(storage).save(profile);
         assertEquals(1, mgmt.ackCount);
     }
 
-    // ---- regression: cracked sessions keep persisting premium=false ----
+    // ---- the decision table's REJECT must converge the record, not flip it ----
+
+    @Test
+    void rejectedOwnershipConflictLeavesTheRecordUntouched() throws Exception {
+        // rule 7: verified premium identity + password account + no consent.
+        // The record must keep its "observed, not consented" shape, so a later
+        // reconnect reproduces the same outcome instead of an auto-login takeover.
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(core.getMessage("ownership-conflict")).thenReturn("ownership-conflict");
+        when(authPlugin.inspectAccount("TestUser"))
+                .thenReturn(LoginMethodDecider.AccountState.PASSWORD_ACCOUNT);
+
+        StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
+        TestLoginSession session = new TestLoginSession("TestUser", true, profile);
+        session.setUuid(UUID.randomUUID());
+        session.setFacts(new com.github.games647.fastlogin.protocol.IdentityClaim.Facts(
+                false, false, com.github.games647.fastlogin.protocol.IdentityClaim.Consent.NO,
+                true, false, false));
+
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.run();
+
+        assertEquals("ownership-conflict", mgmt.denied, "the ownership conflict must be rejected");
+        assertFalse(profile.isOnlinemodePreferred(), "a rejected login must not record consent");
+        verify(storage, never()).save(any());
+        assertEquals(0, mgmt.ackCount, "a rejected login must not be acked");
+    }
+
+    // ---- a cracked join is not an identity reset ----
+
+    @Test
+    void crackedJoinKeepsRecordObservations() {
+        // The name -> premium UUID and the same-name cracked observations are
+        // facts about the name; an ordinary offline join neither refutes nor
+        // revokes them (only the toggles and a passing verification do).
+        UUID premiumUuid = UUID.randomUUID();
+        StoredProfile profile = new StoredProfile(1, premiumUuid, "TestUser", false, FloodgateState.FALSE,
+                "127.0.0.1", java.time.Instant.now());
+        profile.setSameNameCracked(true);
+        TestLoginSession session = new TestLoginSession("TestUser", false, profile);
+
+        TestForceLoginManagement mgmt = createManagement(session, false);
+        mgmt.run();
+
+        assertFalse(profile.isOnlinemodePreferred());
+        assertEquals(premiumUuid, profile.getId(), "the premium UUID observation survives an offline join");
+        assertTrue(profile.isSameNameCracked(), "the observation survives an offline join");
+        verify(storage).save(profile);
+    }
+
+    // ---- a passing verification resets the unverified-attempt streak ----
+
+    @Test
+    void verifiedLoginResetsUnverifiedAttempts() {
+        StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
+        TestLoginSession session = new TestLoginSession("TestUser", true, profile);
+        session.setUuid(UUID.randomUUID());
+
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.run();
+
+        verify(core).resetVerificationState("TestUser");
+    }
+
+    // ---- the one-time notice for a freshly confirmed observation ----
+
+    @Test
+    void crackedJoinDeliversTheOneTimeObservationNotice() {
+        StoredProfile profile = new StoredProfile(1, null, "TestUser", false, FloodgateState.FALSE,
+                "127.0.0.1", java.time.Instant.now());
+        profile.setSameNameCracked(true);
+        TestLoginSession session = new TestLoginSession("TestUser", false, profile);
+        when(core.consumeSameNameCrackedNotice("TestUser")).thenReturn(true);
+
+        TestForceLoginManagement mgmt = createManagement(session, false);
+        mgmt.run();
+
+        verify(core).sendLocaleMessage("same-name-cracked-recorded", (Object) "fakePlayer");
+    }
+
+    @Test
+    void crackedJoinWithoutQueuedNoticeStaysSilent() {
+        StoredProfile profile = new StoredProfile(1, null, "TestUser", false, FloodgateState.FALSE,
+                "127.0.0.1", java.time.Instant.now());
+        profile.setSameNameCracked(true);
+        TestLoginSession session = new TestLoginSession("TestUser", false, profile);
+        when(core.consumeSameNameCrackedNotice("TestUser")).thenReturn(false);
+
+        TestForceLoginManagement mgmt = createManagement(session, false);
+        mgmt.run();
+
+        verify(core, never()).sendLocaleMessage(anyString(), any());
+    }
+
+    @Test
+    void clearedObservationSkipsTheQueuedNotice() {
+        // the record was cleared between the confirmation and this join (for
+        // example an administrator ran /flp premium): the stale "recorded as
+        // cracked" notice must not be shown
+        StoredProfile profile = new StoredProfile(1, null, "TestUser", false, FloodgateState.FALSE,
+                "127.0.0.1", java.time.Instant.now());
+        TestLoginSession session = new TestLoginSession("TestUser", false, profile);
+        when(core.consumeSameNameCrackedNotice("TestUser")).thenReturn(true);
+
+        TestForceLoginManagement mgmt = createManagement(session, false);
+        mgmt.run();
+
+        verify(core, never()).sendLocaleMessage(anyString(), any());
+    }
+
+    // ---- a fresh cracked join creates the plain record ----
 
     @Test
     void crackedSessionPersistsPremiumFalseRow() {
@@ -236,6 +354,47 @@ class ForceLoginManagementTest {
 
         verify(authPlugin).forceRegister(any(), anyString());
         verify(plugin, never()).sendMessage(any(), anyString());
+    }
+
+    // ---- F-15 A: auto-register-unknown gates the "no local account" cell ----
+
+    @Test
+    void standaloneGuidesRegistrationWhenAutoRegisterUnknownIsOff() throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(config.get("autoLogin")).thenReturn(true);
+        when(config.get("auto-register-unknown")).thenReturn(false);
+        when(authPlugin.isRegistered("TestUser")).thenReturn(false);
+
+        StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
+        TestLoginSession session = new TestLoginSession("TestUser", true, profile);
+        session.setUuid(UUID.randomUUID());
+
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.run();
+
+        verify(authPlugin, never()).forceRegister(any(), anyString());
+        verify(authPlugin, never()).forceLogin(any());
+        verify(storage, never()).save(any());
+        assertEquals(0, mgmt.ackCount, "guide register is not a confirmed premium outcome");
+    }
+
+    @Test
+    void standaloneAutoRegistersWhenAutoRegisterUnknownIsOn() throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(core.getPasswordGenerator()).thenReturn(new DefaultPasswordGenerator<>());
+        when(config.get("autoLogin")).thenReturn(true);
+        when(config.get("auto-register-unknown")).thenReturn(true);
+        when(authPlugin.isRegistered("TestUser")).thenReturn(false);
+        when(authPlugin.forceRegister(any(), anyString())).thenReturn(true);
+
+        StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
+        TestLoginSession session = new TestLoginSession("TestUser", true, profile);
+        session.setUuid(UUID.randomUUID());
+
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.run();
+
+        verify(authPlugin).forceRegister(any(), anyString());
     }
 
     @SuppressWarnings("unchecked")

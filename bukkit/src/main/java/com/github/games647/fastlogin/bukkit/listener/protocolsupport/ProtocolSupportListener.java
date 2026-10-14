@@ -117,6 +117,10 @@ public class ProtocolSupportListener extends JoinManagement<Player, CommandSende
             // the event returns, so afterwards neither resolvePremiumUuid source is v4 and AuthMe
             // would never get a premium_uuid written.
             session.setUuid(profileCompleteEvent.getConnection().getProfile().getUUID());
+            // this connection passed the Mojang verification: it refutes any
+            // pending same-name cracked suspicion for the name
+            plugin.getCore().resetVerificationState(Optional.ofNullable(profileCompleteEvent.getForcedName())
+                    .orElse(profileCompleteEvent.getConnection().getProfile().getName()));
 
             if (!plugin.getConfig().getBoolean("premiumUuid")) {
                 String username = Optional.ofNullable(profileCompleteEvent.getForcedName())
@@ -139,8 +143,7 @@ public class ProtocolSupportListener extends JoinManagement<Player, CommandSende
                                     boolean registered) {
         source.enableOnlinemode();
 
-        String ip = source.getAddress().getAddress().getHostAddress();
-        plugin.getCore().addLoginAttempt(ip, username);
+        plugin.getCore().markPendingVerification(username);
 
         BukkitLoginSession playerSession = new BukkitLoginSession(username, registered, profile);
         plugin.putSession(source.getAddress(), playerSession);

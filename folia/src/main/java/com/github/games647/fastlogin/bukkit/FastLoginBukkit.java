@@ -675,7 +675,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     @SuppressWarnings("unchecked")
     private void onPlayerConfigure(Object event) {
-        if (!bungeeManager.isEnabled() || !getConfig().getBoolean("autoRegister")) {
+        if (!runsProxyPremiumPath(bungeeManager.isEnabled(), getConfig().getBoolean("autoRegister"))) {
             return;
         }
 
@@ -880,6 +880,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                                          java.net.InetSocketAddress address,
                                          boolean isPendingPremium,
                                          com.github.games647.fastlogin.protocol.IdentityClaim.Facts facts) {
+        // the proxy attested this connection as premium: it refutes any pending
+        // same-name cracked suspicion for the name, even if the decision below
+        // then rejects the login
+        getCore().resetVerificationState(playerName);
+
         // Login-method decision (D-03): the account state plus the declared facts
         // decide, never the attestation alone. A missing or untrusted declaration
         // leaves the consent unknown, which never unlocks a password account.
@@ -996,6 +1001,23 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     /**
+     * Whether the premium path runs for proxy-forwarded logins (the configure
+     * phase on Paper, the pre-login pre-create on Spigot). Behind a proxy the
+     * login policy arrives with the identity facts, so this server's local
+     * autoRegister copy never gates the path — config.yml marks that copy
+     * "ignored here" and only standalone deployments read it. The local value is
+     * a parameter only to keep that contract visible and pinned where it is
+     * decided.
+     *
+     * @param proxyMode           whether this server is a proxy backend
+     * @param localAutoRegister   this server's local autoRegister copy (deliberately ignored)
+     * @return true when the premium path handles this login
+     */
+    static boolean runsProxyPremiumPath(boolean proxyMode, boolean localAutoRegister) {
+        return proxyMode;
+    }
+
+    /**
      * The login-method decision behind the configure-phase premium grant (D-03):
      * the account state plus the declared facts, never the attestation alone.
      *
@@ -1018,10 +1040,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
         com.github.games647.fastlogin.protocol.IdentityClaim.Facts declared = facts == null
                 ? com.github.games647.fastlogin.protocol.IdentityClaim.Facts.defaults() : facts;
-        boolean autoLogin = declared.policyDeclared() ? declared.autoLogin() : getConfig().getBoolean("autoLogin");
+        boolean autoLogin = com.github.games647.fastlogin.core.shared.LoginMethodDecider.resolvePolicyValue(
+                declared.policyDeclared(), declared.autoLogin(),
+                () -> getConfig().getBoolean("autoLogin"));
+        boolean autoRegisterUnknown =
+                com.github.games647.fastlogin.core.shared.LoginMethodDecider.resolvePolicyValue(
+                        declared.policyDeclared(), declared.autoRegisterUnknown(),
+                        () -> getConfig().getBoolean("auto-register-unknown"));
         com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome outcome =
                 com.github.games647.fastlogin.core.shared.LoginMethodDecider.decide(
-                        true, account, declared.consent(), autoLogin);
+                        true, account, declared.consent(), autoLogin, autoRegisterUnknown);
         if (outcome == com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.REJECT) {
             denyLogin(playerName, core.getMessage("ownership-conflict"));
             return false;

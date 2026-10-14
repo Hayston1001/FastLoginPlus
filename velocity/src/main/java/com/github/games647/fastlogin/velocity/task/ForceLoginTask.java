@@ -121,7 +121,7 @@ public class ForceLoginTask
         // premium signal at all. Null when this connection was not verified as premium.
         // The trailing facts are the proxy's observations plus the recorded upgrade
         // consent; the backend decides the login method from them.
-        session.computeFacts(player.getRemoteAddress().getAddress().getHostAddress(), core);
+        session.computeFacts(core);
         LoginActionMessage loginMessage = new LoginActionMessage(type, player.getUsername(), proxyId,
                 session.getUuid());
         loginMessage.setFacts(session.getFacts());

@@ -41,8 +41,10 @@ import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -193,6 +195,91 @@ class SQLiteStorageTest {
 
         storage.save(new StoredProfile(null, "Steve", true, FloodgateState.FALSE, "127.0.0.1"));
         assertNotNull(storage.loadProfile("steve"));
+    }
+
+    @Test
+    void roundTripsSameNameCrackedObservation() {
+        StoredProfile observed = new StoredProfile(null, "Steve", false, FloodgateState.FALSE, "127.0.0.1");
+        observed.setSameNameCracked(true);
+        storage.save(observed);
+
+        StoredProfile loaded = storage.loadProfile("steve");
+        assertNotNull(loaded);
+        assertTrue(loaded.isSameNameCracked(), "the same-name cracked observation must survive the round trip");
+
+        StoredProfile plain = new StoredProfile(null, "Alex", false, FloodgateState.FALSE, "127.0.0.1");
+        storage.save(plain);
+        assertFalse(storage.loadProfile("alex").isSameNameCracked());
+    }
+
+    @Test
+    void reconciliationClearsMarksWhenTheFallbackIsDisabled() {
+        // the config can change while the server is down: startup (or a reload)
+        // with secondAttemptCracked=false must clear the marks (F-12)
+        UUID premiumUuid = UUID.randomUUID();
+        StoredProfile marked = new StoredProfile(premiumUuid, "Steve", true, FloodgateState.FALSE, "1.1.1.1");
+        marked.setSameNameCracked(true);
+        storage.save(marked);
+        storage.save(new StoredProfile(null, "Alex", false, FloodgateState.FALSE, "2.2.2.2"));
+
+        com.github.games647.fastlogin.core.shared.FastLoginCore.reconcileSameNameCracked(
+                storage, false, logger);
+
+        StoredProfile reloaded = storage.loadProfile("steve");
+        assertFalse(reloaded.isSameNameCracked(), "startup with the fallback off clears the marks");
+        assertEquals(premiumUuid, reloaded.getId(), "only the observation column is touched");
+        assertTrue(reloaded.isOnlinemodePreferred(), "only the observation column is touched");
+        assertEquals("1.1.1.1", reloaded.getLastIp(), "only the observation column is touched");
+    }
+
+    @Test
+    void reconciliationKeepsMarksWhenTheFallbackIsEnabled() {
+        StoredProfile marked = new StoredProfile(null, "Steve", false, FloodgateState.FALSE, "1.1.1.1");
+        marked.setSameNameCracked(true);
+        storage.save(marked);
+
+        com.github.games647.fastlogin.core.shared.FastLoginCore.reconcileSameNameCracked(
+                storage, true, logger);
+
+        assertTrue(storage.loadProfile("steve").isSameNameCracked(),
+                "startup with the fallback enabled must not touch the marks");
+    }
+
+    @Test
+    void migratesTableWithoutSameNameCrackedColumn() throws Exception {
+        // Databases that predate the observation column get it added; their rows
+        // read as "not observed" (D-03 Q-E old-data compatibility)
+        storage.close();
+        storage = null;
+
+        String dbPath = tempDir.resolve("FastLogin.db").toString();
+        Files.deleteIfExists(Paths.get(dbPath));
+        Files.deleteIfExists(Paths.get(dbPath + "-wal"));
+        Files.deleteIfExists(Paths.get(dbPath + "-shm"));
+
+        try (Connection con = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
+             Statement stmt = con.createStatement()) {
+            stmt.execute("CREATE TABLE `premium` ("
+                    + "`UserID` INTEGER PRIMARY KEY AUTOINCREMENT, "
+                    + "`UUID` CHAR(36), "
+                    + "`Name` VARCHAR(16) COLLATE NOCASE NOT NULL, "
+                    + "`Premium` BOOLEAN NOT NULL, "
+                    + "`LastIp` VARCHAR(255) NOT NULL, "
+                    + "`LastLogin` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                    + "`Floodgate` INTEGER(3), "
+                    + "UNIQUE (`Name`))");
+            stmt.execute("INSERT INTO `premium` (`UUID`, `Name`, `Premium`, `LastIp`, `Floodgate`) "
+                    + "VALUES (NULL, 'Steve', 1, '127.0.0.1', 0)");
+        }
+
+        storage = openStorage();
+        storage.createTables();
+
+        StoredProfile loaded = storage.loadProfile("steve");
+        assertNotNull(loaded);
+        assertTrue(loaded.isOnlinemodePreferred());
+        assertFalse(loaded.isSameNameCracked(),
+                "rows older than the column read as 'not observed'");
     }
 
     @Test

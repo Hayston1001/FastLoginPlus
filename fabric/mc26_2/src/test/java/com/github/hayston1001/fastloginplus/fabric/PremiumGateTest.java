@@ -62,6 +62,16 @@ class PremiumGateTest {
     }
 
     @Test
+    void newPremiumPlayerStaysOnTheRegisterFlowWhenAutoRegisterUnknownIsOff() {
+        // F-15 A: auto-register-unknown off keeps the player in the register
+        // dialog instead of creating an account; on (the default) creates it
+        assertEquals(Action.PASSWORD_LOCK, PremiumGate.decideVerified(
+                Consent.NO, NO_ACCOUNT, PINNED, false, true, false));
+        assertEquals(Action.FREE_LOGIN, PremiumGate.decideVerified(
+                Consent.NO, NO_ACCOUNT, PINNED, false, true, true));
+    }
+
+    @Test
     void expiredClaimWindowFallsBackToThePasswordFlow() {
         // the queued entry is gone after its window: consented, still a password
         // account -> no conversion, no rejection, the password stays usable

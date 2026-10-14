@@ -129,11 +129,12 @@ public abstract class FloodgateManagement<P extends C, C, L extends LoginSession
         try {
             //maybe Bungee without auth plugin
             if (authPlugin == null) {
-                if (profile != null) {
-                    isRegistered = profile.isOnlinemodePreferred();
-                } else {
-                    isRegistered = false;
-                }
+                // without an auth plugin only FastLogin's own record can say
+                // "already known": the record's existence marks a name whose
+                // auto-auth already ran once (Floodgate rows are created exactly
+                // there). The consent flag is not that signal — it only records
+                // the upgrade consent (D-03 E-3).
+                isRegistered = profile != null && profile.isExistingPlayer();
             } else {
                 isRegistered = authPlugin.isRegistered(username);
             }

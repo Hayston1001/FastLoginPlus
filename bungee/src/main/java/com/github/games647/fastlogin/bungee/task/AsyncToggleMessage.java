@@ -91,8 +91,10 @@ public class AsyncToggleMessage implements Runnable {
             sendMessage("database-error");
             return;
         }
-        //existing player is already cracked
-        if (playerProfile.isExistingPlayer() && !playerProfile.isOnlinemodePreferred()) {
+        //existing player is already fully cracked: no consent, no premium UUID
+        // observation and no same-name cracked observation left to clear
+        if (playerProfile.isExistingPlayer() && !playerProfile.isOnlinemodePreferred()
+                && playerProfile.getId() == null && !playerProfile.isSameNameCracked()) {
             if (core.isDebug()) {
                 core.getPlugin().getLog().info("{} is already cracked; skipping toggle", targetPlayer);
             }
@@ -107,6 +109,7 @@ public class AsyncToggleMessage implements Runnable {
 
         playerProfile.setOnlinemodePreferred(false);
         playerProfile.setId(null);
+        playerProfile.setSameNameCracked(false);
         core.getStorage().save(playerProfile);
         if (core.isDebug()) {
             core.getPlugin().getLog().info("Marked {} as cracked in proxy database", targetPlayer);
@@ -156,6 +159,9 @@ public class AsyncToggleMessage implements Runnable {
         }
 
         playerProfile.setOnlinemodePreferred(true);
+        // an explicit consent supersedes any same-name cracked observation: the
+        // name goes back to premium verification on every connection
+        playerProfile.setSameNameCracked(false);
 
         // Resolve and store the Mojang UUID so the profile carries the
         // correct premium UUID — without this, on reconnect the proxy may

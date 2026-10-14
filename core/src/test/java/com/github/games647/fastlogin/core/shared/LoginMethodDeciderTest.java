@@ -31,6 +31,8 @@ import com.github.games647.fastlogin.protocol.IdentityClaim.Consent;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pins the D-03 decision table row by row, plus the two confirmed extensions:
@@ -118,6 +120,45 @@ class LoginMethodDeciderTest {
                 LoginMethodDecider.decide(true, AccountState.NONE, Consent.UNKNOWN));
         assertEquals(Outcome.PASSWORD,
                 LoginMethodDecider.decide(false, AccountState.PASSWORD_ACCOUNT, Consent.UNKNOWN));
+    }
+
+    @Test
+    void declaredPolicyNeverReadsTheLocalCopy() {
+        // R-10 enforcement: behind a proxy the declared value is the authority;
+        // config.yml marks this server's local copy "ignored here", and the
+        // supplier proves the local key is not even read
+        assertTrue(LoginMethodDecider.resolvePolicyValue(true, true, LoginMethodDeciderTest::localKeyTouched));
+        assertFalse(LoginMethodDecider.resolvePolicyValue(true, false, LoginMethodDeciderTest::localKeyTouched));
+    }
+
+    @Test
+    void undeclaredPolicyFallsBackToTheLocalCopy() {
+        // rolling upgrade: an older proxy that never declared the policy block
+        // keeps the pre-decision behaviour from the local key
+        assertTrue(LoginMethodDecider.resolvePolicyValue(false, false, () -> true));
+        assertFalse(LoginMethodDecider.resolvePolicyValue(false, true, () -> false));
+    }
+
+    private static boolean localKeyTouched() {
+        throw new AssertionError("the local policy key must not be read when a proxy declared the value");
+    }
+
+    @Test
+    void autoRegisterUnknownGatesTheAutoRegisterCell() {
+        // F-15 A: "verified premium + no local account" — on (default) the
+        // account is auto-created for the proven identity, off the player gets
+        // the register dialog instead
+        assertEquals(Outcome.AUTO_REGISTER_LOGIN,
+                LoginMethodDecider.decide(true, AccountState.NONE, Consent.YES, true, true));
+        assertEquals(Outcome.GUIDE_REGISTER,
+                LoginMethodDecider.decide(true, AccountState.NONE, Consent.YES, true, false));
+    }
+
+    @Test
+    void autoRegisterUnknownGatesTheAutoRegisterCellEvenForConsentedNames() {
+        // the cell is about creating the account, not about the consent
+        assertEquals(Outcome.GUIDE_REGISTER,
+                LoginMethodDecider.decide(true, AccountState.NONE, Consent.NO, true, false));
     }
 
     @Test

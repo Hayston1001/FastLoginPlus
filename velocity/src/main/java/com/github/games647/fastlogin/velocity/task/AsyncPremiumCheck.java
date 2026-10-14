@@ -91,8 +91,7 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
         VelocityLoginSession session = new VelocityLoginSession(username, registered, profile);
         plugin.getSession().put(source.getConnection().getRemoteAddress(), session);
 
-        String ip = source.getAddress().getAddress().getHostAddress();
-        plugin.getCore().addLoginAttempt(ip, username);
+        plugin.getCore().markPendingVerification(username);
     }
 
     @Override

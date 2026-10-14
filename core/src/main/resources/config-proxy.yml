@@ -185,7 +185,17 @@ kick-toggle: true
 # Enable verbose logging for troubleshooting.
 debug: false
 
-# Auto-register players in flp DB but missing from auth plugin DB
+# Auto-register a verified premium player who is missing from the auth plugin DB
+# (the account was deleted, or the two databases drifted apart).
+# Scope - the key name misleads: "unknown" does NOT mean strangers or offline
+# players. This only applies to a connection Mojang has verified whose name has
+# no local account: the account is then registered for that proven identity, and
+# the generated password is only a backup - premium logins never need one.
+# Offline/cracked connections are never covered: they carry no identity proof at
+# all (the name is just a string), so they get the register dialog and set their
+# own password - an account can only change hands through a password its owner
+# chose. Off = a verified premium player without a local account gets the
+# register dialog instead of an automatic account.
 # Decided by the proxy; the backend executes the registration through the
 # auth plugin.
 # [distributed] sent with the identity facts; the backend repairs a missing

@@ -40,6 +40,7 @@ public class StoredProfile extends Profile {
     private final ReentrantLock saveLock = new ReentrantLock();
 
     private boolean premium;
+    private boolean sameNameCracked;
     private FloodgateState floodgate;
     private String lastIp;
     private Instant lastLogin;
@@ -108,14 +109,15 @@ public class StoredProfile extends Profile {
     }
 
     /**
-     * Return the online mode preference for this player.
+     * Return the recorded upgrade consent for this player.
      * <p>
      * <b>
      * Note: {@code false} doesn't represent that the player is offline. It could also mean that the player is premium,
-     * but didn't activated the premium login mode yet.
+     * but didn't activated the premium login mode yet. The flag is only set by an explicit consent (the premium
+     * toggle) or a confirmed premium outcome — never by a login that has not been decided yet.
      * </b>
      *
-     * @return whether the online mode should be enabled for this player
+     * @return whether the premium login is consented for this name
      */
     public synchronized boolean isOnlinemodePreferred() {
         return premium;
@@ -132,6 +134,25 @@ public class StoredProfile extends Profile {
 
     public synchronized void setOnlinemodePreferred(boolean premium) {
         this.premium = premium;
+    }
+
+    /**
+     * The same-name cracked observation: a premium verification for this name was
+     * observed to fail and no later verification passed. It records the observation
+     * per name (D-03 Q-E), so every later connection can skip the doomed verification
+     * attempt and go straight to the password flow.
+     *
+     * @return true when the name was observed as a same-name cracked player
+     */
+    public synchronized boolean isSameNameCracked() {
+        return sameNameCracked;
+    }
+
+    /**
+     * @param sameNameCracked true to record the failed premium verification observation
+     */
+    public synchronized void setSameNameCracked(boolean sameNameCracked) {
+        this.sameNameCracked = sameNameCracked;
     }
 
     public synchronized FloodgateState getFloodgate() {
@@ -177,13 +198,13 @@ public class StoredProfile extends Profile {
             return false;
         }
 
-        return rowId == that.rowId && premium == that.premium
+        return rowId == that.rowId && premium == that.premium && sameNameCracked == that.sameNameCracked
                 && Objects.equals(lastIp, that.lastIp) && lastLogin.equals(that.lastLogin);
     }
 
     @Override
     public synchronized int hashCode() {
-        return Objects.hash(super.hashCode(), rowId, premium, lastIp, lastLogin);
+        return Objects.hash(super.hashCode(), rowId, premium, sameNameCracked, lastIp, lastLogin);
     }
 
     @Override
@@ -191,6 +212,7 @@ public class StoredProfile extends Profile {
         return this.getClass().getSimpleName() + '{'
                 + "rowId=" + rowId
                 + ", premium=" + premium
+                + ", sameNameCracked=" + sameNameCracked
                 + ", floodgate=" + floodgate
                 + ", lastIp='" + lastIp + '\''
                 + ", lastLogin=" + lastLogin

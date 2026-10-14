@@ -64,18 +64,24 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
         try {
             if (isOnlineMode()) {
                 //premium player
+                // a passing verification refutes the same-name cracked observation
+                core.resetVerificationState(getName(player));
                 AuthPlugin<P> authPlugin = core.getAuthPluginHook();
                 if (authPlugin == null) {
                     // maybe only bungeecord plugin
                     // The proxy has already verified this session (online mode), so persist
-                    // the premium row locally instead of relying on the backend's
+                    // the premium observation locally instead of relying on the backend's
                     // SuccessMessage ack. With AuthMe 6.0 the ack is never sent: on a
                     // REGISTER action the backend skips ForceLoginTask when the AuthMe record
                     // already exists (pre-created), and on a LOGIN action forceLogin() returns
                     // false because AsynchronousJoin already authenticated the player. Without
                     // a row every reconnect is treated as a new player (performNewPlayerLogin)
-                    // and secondAttemptCracked can let a verified premium player join offline
+                    // and the cracked fallback can let a verified premium player join offline
                     // after a session expiry.
+                    // Only the observation is written here: the upgrade consent is the
+                    // backend's to confirm (SuccessMessage) or the player's to give (the
+                    // premium toggle). Writing it before the backend decided is exactly the
+                    // rejected-takeover leak this record model closes (D-03 E-3).
                     // Note: Floodgate forced-online sessions reach this branch too; their
                     // session UUID is never set (onGameProfileRequest only handles online-mode
                     // connections), so the row is written without a UUID — matching the
@@ -86,113 +92,161 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                         // persist under the name-level striped lock
                         storage.withNameLock(getName(player), () -> {
                             playerProfile.setId(session.getUuid());
-                            playerProfile.setOnlinemodePreferred(true);
+                            playerProfile.setSameNameCracked(false);
                             storage.save(playerProfile);
                         });
                     }
                 } else {
-                    String playerName = getName(player);
-                    boolean success = true;
-                    if (session.isFactsPresent()) {
-                        // The message path: a proxy exists, so the decision table
-                        // (D-03) decides from the account state plus its facts.
-                        LoginMethodDecider.AccountState account = readAccountState(authPlugin, playerName);
-                        if (!session.getFacts().policyDeclared()) {
-                            core.getPlugin().getLog().warn(
-                                    "Proxy did not declare identity facts for {}; falling back to "
-                                            + "conservative behaviour", playerName);
-                        }
-                        LoginMethodDecider.Outcome outcome = LoginMethodDecider.decide(true, account,
-                                session.getFacts().consent(), resolveAutoLogin(session));
-                        switch (outcome) {
-                            case AUTO_REGISTER_LOGIN:
-                                success = forceRegister(player);
-                                break;
-                            case AUTO_LOGIN:
-                                success = !callFastLoginAutoLoginEvent(session, playerProfile).isCancelled()
-                                        && forceLogin(player);
-                                break;
-                            case REJECT:
-                                denyLogin(player, core.getMessage("ownership-conflict"));
-                                return;
-                            case PASSWORD:
-                            case GUIDE_REGISTER:
-                            default:
-                                // nothing to do: the auth plugin keeps its password
-                                // or registration flow, and no premium row is
-                                // written, so an undeclared consent can never
-                                // turn into one
-                                core.getPlugin().getLog().info(
-                                        "Keeping the auth plugin's own login flow for {}", playerName);
-                                if (account == LoginMethodDecider.AccountState.READ_FAILURE) {
-                                    core.getPlugin().sendMessage(player,
-                                            core.getMessage("account-state-unavailable"));
-                                }
-                                return;
-                        }
-                    } else if ((boolean) core.getConfig().get("autoLogin")) {
-                        // Standalone deployment: no proxy declared anything, so the
-                        // local keys and the session's registration expectation
-                        // decide, exactly as before the decision table landed.
-                        if (session.needsRegistration()
-                                || ((boolean) core.getConfig().get("auto-register-unknown")
-                                && !authPlugin.isRegistered(playerName))) {
-                            success = forceRegister(player);
-                        } else if (!callFastLoginAutoLoginEvent(session, playerProfile).isCancelled()) {
-                            success = forceLogin(player);
-                        }
-                    }
-
-                    if (success) {
-                        //update only on success to prevent corrupt data
-                        if (playerProfile != null) {
-                            // persist under the name-level striped lock
-                            storage.withNameLock(getName(player), () -> {
-                                playerProfile.setId(session.getUuid());
-                                playerProfile.setOnlinemodePreferred(true);
-                                storage.save(playerProfile);
-                            });
-                        }
-
-                        onForceActionSuccess(session);
-                    } else {
-                        // forceLogin/forceRegister returned false but this is a verified
-                        // premium session. This happens with AuthMe 6.0: AuthMe's
-                        // AsynchronousJoin runs canBypassWithPremium() before FLP's
-                        // ForceLoginTask, so the player is already authenticated when
-                        // forceLogin() is called (returns false).
-                        // We still need to persist onlinemodePreferred=true so that future
-                        // reconnects route through requestPremiumLogin instead of
-                        // startCrackedSession (direct mode; proxy-mode backends keep
-                        // profile=null, so nothing is saved there).
-                        if (playerProfile != null) {
-                            // persist under the name-level striped lock
-                            storage.withNameLock(getName(player), () -> {
-                                playerProfile.setId(session.getUuid());
-                                playerProfile.setOnlinemodePreferred(true);
-                                storage.save(playerProfile);
-                            });
-
-                        }
-                        // Ack the proxy even when the auth plugin reported failure: the
-                        // session is already verified and the player is in game. Without
-                        // this ack the proxy never persists the premium row and
-                        // secondAttemptCracked can let the player join offline after a
-                        // session expiry.
-                        onForceActionSuccess(session);
-                    }
+                    runAuthPluginFlow(storage, playerProfile, authPlugin);
                 }
             } else if (playerProfile != null) {
-                //cracked player
-                // persist under the name-level striped lock
+                //cracked player: only the bookkeeping fields are saved. The record's
+                // observations (premium UUID, same-name cracked) and the consent survive
+                // an offline join — a cracked connection under a premium name is exactly
+                // the same-name cracked case, and only an explicit toggle revokes consent.
                 storage.withNameLock(getName(player), () -> {
-                    playerProfile.setId(null);
-                    playerProfile.setOnlinemodePreferred(false);
                     storage.save(playerProfile);
                 });
+
+                // the one-time notice for a freshly confirmed same-name cracked
+                // observation (D-03 Q-E). Delivered here — when the player has
+                // actually reached the game — because the login phase has no chat
+                // yet; it goes only to the password flow the observation caused,
+                // and only while the observation is still recorded.
+                if (core.consumeSameNameCrackedNotice(getName(player))
+                        && playerProfile.isSameNameCracked()) {
+                    core.sendLocaleMessage("same-name-cracked-recorded", player);
+                }
             }
         } catch (Exception ex) {
             core.getPlugin().getLog().warn("ERROR ON FORCE LOGIN of {}", getName(player), ex);
+        }
+    }
+
+    /**
+     * The login flow for a verified premium session with an auth plugin: the
+     * message path applies the decision table (D-03), the standalone path keeps
+     * its local keys, and only confirmed outcomes touch the record.
+     *
+     * @param storage the storage to persist the record with
+     * @param playerProfile the name's record, or null on proxy-mode backends
+     * @param authPlugin the auth plugin hook
+     * @throws Exception when the auth plugin query fails (handled by the caller)
+     */
+    private void runAuthPluginFlow(SQLStorage storage, StoredProfile playerProfile, AuthPlugin<P> authPlugin)
+            throws Exception {
+        String playerName = getName(player);
+        boolean success = true;
+        if (session.isFactsPresent()) {
+            // The message path: a proxy exists, so the decision table
+            // (D-03) decides from the account state plus its facts.
+            LoginMethodDecider.AccountState account = readAccountState(authPlugin, playerName);
+            if (!session.getFacts().policyDeclared()) {
+                core.getPlugin().getLog().warn(
+                        "Proxy did not declare identity facts for {}; falling back to "
+                                + "conservative behaviour", playerName);
+            }
+            LoginMethodDecider.Outcome outcome = LoginMethodDecider.decide(true, account,
+                    session.getFacts().consent(), resolveAutoLogin(session),
+                    resolveAutoRegisterUnknown(session));
+            switch (outcome) {
+                case AUTO_REGISTER_LOGIN:
+                    success = forceRegister(player);
+                    break;
+                case AUTO_LOGIN:
+                    success = !callFastLoginAutoLoginEvent(session, playerProfile).isCancelled()
+                            && forceLogin(player);
+                    break;
+                case REJECT:
+                    denyLogin(player, core.getMessage("ownership-conflict"));
+                    return;
+                case PASSWORD:
+                case GUIDE_REGISTER:
+                default:
+                    // nothing to do: the auth plugin keeps its password
+                    // or registration flow, and no premium row is
+                    // written, so an undeclared consent can never
+                    // turn into one
+                    core.getPlugin().getLog().info(
+                            "Keeping the auth plugin's own login flow for {}", playerName);
+                    if (account == LoginMethodDecider.AccountState.READ_FAILURE) {
+                        core.getPlugin().sendMessage(player,
+                                core.getMessage("account-state-unavailable"));
+                    }
+                    return;
+            }
+        } else if ((boolean) core.getConfig().get("autoLogin")) {
+            // Standalone deployment: no proxy declared anything, so the
+            // local keys and the session's registration expectation
+            // decide, exactly as before the decision table landed.
+            // The "verified premium + no local account" cell is gated by
+            // auto-register-unknown (F-15 A): on = auto-create for the proven
+            // identity, off = the auth plugin's own register dialog, never an
+            // automatic account. This whole branch is inside isOnlineMode(), so
+            // offline/cracked connections never reach it. The value follows
+            // R-10: the declared policy first, the local key only when nothing
+            // was declared (standalone).
+            boolean autoRegisterUnknown = resolveAutoRegisterUnknown(session);
+            boolean needsAccount = session.needsRegistration()
+                    || !authPlugin.isRegistered(playerName);
+            if (needsAccount && autoRegisterUnknown) {
+                success = forceRegister(player);
+            } else if (needsAccount) {
+                // guide register: the auth plugin's own dialog, the player sets
+                // the password (the decision table's GUIDE_REGISTER outcome)
+                core.getPlugin().getLog().info(
+                        "Not auto-registering {} (auto-register-unknown is off): "
+                                + "the auth plugin's own register flow applies", playerName);
+                return;
+            } else if (!callFastLoginAutoLoginEvent(session, playerProfile).isCancelled()) {
+                success = forceLogin(player);
+            }
+        }
+
+        if (success) {
+            //update only on success to prevent corrupt data
+            if (playerProfile != null) {
+                // persist under the name-level striped lock. This write is the
+                // confirmed outcome: the account now belongs to the verified
+                // premium identity ("registered as premium" / R-7), which is
+                // what the consent records.
+                storage.withNameLock(getName(player), () -> {
+                    playerProfile.setId(session.getUuid());
+                    playerProfile.setSameNameCracked(false);
+                    playerProfile.setOnlinemodePreferred(true);
+                    storage.save(playerProfile);
+                });
+            }
+
+            onForceActionSuccess(session);
+        } else {
+            // forceLogin/forceRegister returned false but this is a verified
+            // premium session. This happens with AuthMe 6.0: AuthMe's
+            // AsynchronousJoin runs canBypassWithPremium() before FLP's
+            // ForceLoginTask, so the player is already authenticated when
+            // forceLogin() is called (returns false).
+            // We still need to persist onlinemodePreferred=true so that future
+            // reconnects route through requestPremiumLogin instead of
+            // startCrackedSession (direct mode; proxy-mode backends keep
+            // profile=null, so nothing is saved there).
+            if (playerProfile != null) {
+                // persist under the name-level striped lock. The player is
+                // authenticated as this verified identity (AuthMe 6.0's
+                // bypass), so this is again a confirmed outcome.
+                storage.withNameLock(getName(player), () -> {
+                    playerProfile.setId(session.getUuid());
+                    playerProfile.setSameNameCracked(false);
+                    playerProfile.setOnlinemodePreferred(true);
+                    storage.save(playerProfile);
+                });
+
+            }
+            // Ack the proxy even when the auth plugin reported failure: the
+            // session is already verified and the player is in game. Without
+            // this ack the proxy never persists the premium row and
+            // secondAttemptCracked can let the player join offline after a
+            // session expiry.
+            onForceActionSuccess(session);
         }
     }
 
@@ -279,8 +333,22 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
      * @return whether premium auto-login is enabled
      */
     private boolean resolveAutoLogin(L session) {
-        return session.getFacts().policyDeclared()
-                ? session.getFacts().autoLogin()
-                : (boolean) core.getConfig().get("autoLogin");
+        return LoginMethodDecider.resolvePolicyValue(session.getFacts().policyDeclared(),
+                session.getFacts().autoLogin(), () -> (boolean) core.getConfig().get("autoLogin"));
+    }
+
+    /**
+     * The auto-register policy for this login (F-15 A): the proxy's declared
+     * value when it declared one (R-10), otherwise this server's own key. Gates
+     * the "verified premium + no local account" cell — never an offline/cracked
+     * connection.
+     *
+     * @param session the login session
+     * @return whether verified identities without a local account are auto-registered
+     */
+    private boolean resolveAutoRegisterUnknown(L session) {
+        return LoginMethodDecider.resolvePolicyValue(session.getFacts().policyDeclared(),
+                session.getFacts().autoRegisterUnknown(),
+                () -> (boolean) core.getConfig().get("auto-register-unknown"));
     }
 }

@@ -40,6 +40,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -85,9 +86,60 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     private static final long MAX_EXPIRE_RATE = 1_000_000;
 
+    /**
+     * Δ (F-13): how long a requested premium verification may stay unverified
+     * before the attempt is judged failed. 12 seconds is ~12x a normal
+     * verification (well under a second), so "not yet verified" is effectively
+     * "already failed", while staying inside the login read-timeouts of both
+     * proxies (30s+) and typical reconnect loops: a quick retry neither resets
+     * nor races the settlement, which always lands at the first attempt + Δ.
+     */
+    static final long PENDING_VERIFICATION_GRACE_MS = 12_000L;
+
+    /** How often the settlement sweep looks for due pending verifications. */
+    private static final Duration VERIFICATION_SETTLEMENT_SWEEP = Duration.ofSeconds(5);
+
+    /** How long one session-server reachability answer is reused (F-13). */
+    static final long SESSION_PROBE_CACHE_MS = 60_000L;
+
     private final Map<String, String> localeMessages = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, Object> pendingLogin = CommonUtil.buildCache(
-            Duration.ofMinutes(5), -1
+
+    // F-13 (R2): one "pending verification" mark per name — set when the
+    // premium verification is requested, timestamped, never refreshed while one
+    // is pending (an earlier unresolved attempt governs its own settlement),
+    // cleared by a passing verification, by an explicit verdict, or by the
+    // settlement itself. Key = lower-cased name (Minecraft names are
+    // case-insensitive).
+    private final ConcurrentMap<String, Long> pendingVerifications = new ConcurrentHashMap<>();
+
+    // F-13 (R2): settled definitive "not premium" verdicts — the only thing
+    // that counts towards the same-name cracked observation. Bounded with a
+    // long TTL: the confirmed observation itself lives in the storage row.
+    private final ConcurrentMap<String, Integer> definiteFailures = CommonUtil.buildCache(
+            Duration.ofHours(1), 10_000
+    );
+
+    // F-13 (R2): session-server reachability probe (see SessionServerProbe);
+    // created with the resolver in load()
+    private SessionServerProbe sessionProbe;
+
+    // F-13 (R2): the settlement sweep is a self-chaining delayed task (the same
+    // idiom as the relay retry), started with the storage and stopped at close
+    private volatile boolean settling;
+
+    // one-time chat notices owed for a freshly confirmed same-name cracked
+    // observation (D-03 Q-E): queued at the first confirmation, delivered when
+    // the player actually reaches the game — a login-phase connection cannot
+    // see chat yet. Delivered by the proxy's own ForceLoginManagement (the
+    // join-time task every proxy runs for every session), so both classic and
+    // Fabric backends are covered. Keys are names and an entry is only created
+    // when the flag flips (one per name at a time, consumed at the first
+    // completed join), so the map never expires — a player whose first attempt
+    // died before joining still gets the notice on the next one. The size cap
+    // is only a leak fuse for the theoretical flood of confirmed-but-never-
+    // joining names; it should never trigger in practice.
+    private final ConcurrentMap<String, Boolean> sameNameCrackedNotices = CommonUtil.buildCache(
+            null, 100_000
     );
 
     // concurrent set: proxy-side plugin-message listeners run on Netty
@@ -198,6 +250,9 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         // Initialize the resolver based on the config parameter
         this.resolver = this.config.getBoolean("useProxyAgnosticResolver")
             ? new ProxyAgnosticMojangResolver() : new MojangResolver();
+
+        // the F-13 reachability probe uses the session server of that resolver
+        this.sessionProbe = new SessionServerProbe(resolver, SESSION_PROBE_CACHE_MS);
 
         antiBot = createAntiBotService(config.getSection("anti-bot"));
         // validate entries — a missing colon or non-numeric port
@@ -464,6 +519,12 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
         try {
             storage.createTables();
+            // config and storage are both in place now: align the stored
+            // observation flags with the configured fallback semantics
+            reconcileSameNameCracked();
+            // F-13: the settlement sweep judges unverified attempts in time,
+            // independent of when (or whether) the player reconnects
+            startVerificationSettlement();
             return true;
         } catch (Exception ex) {
             plugin.getLog().warn("Failed to setup database. Disabling plugin...", ex);
@@ -482,6 +543,46 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         return config;
     }
 
+    /**
+     * Aligns the stored same-name cracked observations (D-03 Q-E) with the
+     * configured {@code secondAttemptCracked} semantics.
+     *
+     * <p>The read side consults the config wherever the observation is used and
+     * is authoritative ("switch off = as if never recorded"). This method is the
+     * bookkeeping side: the config can change while the server is down, so there
+     * is no runtime "changed true -&gt; false" event to catch — only reconciling
+     * whenever config and storage are (re)initialized keeps the database
+     * consistent, and keeps stale marks from resurfacing when an administrator
+     * toggles the switch back and forth. With the fallback disabled the marks
+     * are cleared ({@code SameNameCracked = 0}, only that column); with it
+     * enabled nothing is touched.</p>
+     */
+    public void reconcileSameNameCracked() {
+        reconcileSameNameCracked(storage,
+                config != null && (boolean) config.get("secondAttemptCracked"), plugin.getLog());
+    }
+
+    /**
+     * Decision half of {@link #reconcileSameNameCracked()}, split out so the
+     * "cleared when off, untouched when on" contract is unit-testable.
+     *
+     * @param storage the storage holding the observation flags, may be null
+     * @param fallbackEnabled the configured {@code secondAttemptCracked} value
+     * @param log the logger for the reconciliation report
+     */
+    public static void reconcileSameNameCracked(SQLStorage storage, boolean fallbackEnabled,
+                                                org.slf4j.Logger log) {
+        if (storage == null || fallbackEnabled) {
+            return;
+        }
+
+        int cleared = storage.clearSameNameCrackedObservations();
+        if (cleared > 0) {
+            log.info("Cleared {} same-name cracked observation(s): secondAttemptCracked is disabled,"
+                    + " such names verify again", cleared);
+        }
+    }
+
     public boolean isDebug() {
         return config != null && (boolean) config.get("debug");
     }
@@ -495,16 +596,174 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         this.passwordGenerator = passwordGenerator;
     }
 
-    public void addLoginAttempt(String ip, String username) {
-        pendingLogin.put(ip + username, new Object());
+    /**
+     * Records that a premium verification was requested for the name (F-13):
+     * one timestamped "pending verification" mark. It is never refreshed while
+     * one is pending, so a quick retry cannot push its own settlement away.
+     *
+     * @param username exact login name of the attempt
+     */
+    public void markPendingVerification(String username) {
+        markPendingVerification(username, System.currentTimeMillis());
     }
 
-    public boolean hasFailedLogin(String ip, String username) {
-        if (!(boolean) config.get("secondAttemptCracked")) {
-            return false;
+    /**
+     * Timestamped variant of {@link #markPendingVerification(String)}, split
+     * out so the "a quick retry never pushes the settlement away" contract is
+     * unit-testable.
+     *
+     * @param username exact login name of the attempt
+     * @param when the request time in milliseconds
+     */
+    void markPendingVerification(String username, long when) {
+        pendingVerifications.putIfAbsent(attemptKey(username), when);
+    }
+
+    /**
+     * Records a definitive "not premium" verdict for the name (F-13): the
+     * session server explicitly rejected the verification. This is the only
+     * observation that counts towards the same-name cracked record.
+     *
+     * @param username exact login name that failed the verification
+     */
+    public void recordDefiniteFailure(String username) {
+        pendingVerifications.remove(attemptKey(username));
+        definiteFailures.merge(attemptKey(username), 1, Integer::sum);
+    }
+
+    /**
+     * Drops a pending verification without counting it (F-13): the outcome was
+     * "could not tell" — an authentication outage, or a player who left
+     * mid-verification. Nothing is recorded.
+     *
+     * @param username exact login name whose attempt ended without a verdict
+     */
+    public void dropPendingVerification(String username) {
+        pendingVerifications.remove(attemptKey(username));
+    }
+
+    /**
+     * A passing verification refutes everything recorded for the name: the
+     * pending mark and every counted failure (F-13).
+     *
+     * @param username exact login name that verified
+     */
+    public void resetVerificationState(String username) {
+        pendingVerifications.remove(attemptKey(username));
+        definiteFailures.remove(attemptKey(username));
+    }
+
+    /**
+     * How many definitive "not premium" verdicts were settled for the name
+     * since the last passing verification. One is enough to confirm the
+     * same-name cracked observation.
+     *
+     * @param username exact login name
+     * @return the count of settled definitive failures
+     */
+    public int getDefiniteFailures(String username) {
+        return definiteFailures.getOrDefault(attemptKey(username), 0);
+    }
+
+    /**
+     * Settles the pending verifications that never turned into a verified login
+     * in time (F-13, R2). The settlement is the moment the attempt is judged
+     * failed — not the player's next connection, and not the request time — and
+     * it decides with a session-server reachability probe of that moment: the
+     * server answers (the client itself could not verify) -> count one
+     * definitive failure; it cannot be reached (an authentication outage) ->
+     * drop the attempt without counting and without any action.
+     */
+    public void settlePendingVerifications() {
+        if (pendingVerifications.isEmpty() || sessionProbe == null) {
+            return;
         }
 
-        return pendingLogin.remove(ip + username) != null;
+        settlePendingVerifications(System.currentTimeMillis(), sessionProbe.isReachable());
+    }
+
+    /**
+     * Decision half of {@link #settlePendingVerifications()}, split out so the
+     * counting rules are unit-testable without waiting for real time.
+     *
+     * @param now the current time in milliseconds
+     * @param sessionServerReachable whether the session server answered the probe
+     */
+    void settlePendingVerifications(long now, boolean sessionServerReachable) {
+        for (Map.Entry<String, Long> entry : pendingVerifications.entrySet()) {
+            if (now - entry.getValue() < PENDING_VERIFICATION_GRACE_MS) {
+                continue;
+            }
+
+            // remove-if-present: a concurrent success/verdict wins over the settlement
+            if (!pendingVerifications.remove(entry.getKey(), entry.getValue())) {
+                continue;
+            }
+
+            if (sessionServerReachable) {
+                definiteFailures.merge(entry.getKey(), 1, Integer::sum);
+                plugin.getLog().info("Premium verification for {} never completed while the session "
+                        + "server answers: counted as a failed verification", entry.getKey());
+            } else {
+                plugin.getLog().info("Premium verification for {} never completed and the session "
+                        + "server is unreachable: treated as an authentication outage, nothing recorded",
+                        entry.getKey());
+            }
+        }
+    }
+
+    /**
+     * Starts the settlement sweep (F-13): a self-chaining delayed task, so the
+     * settlement never degenerates into "when the player next connects".
+     */
+    public void startVerificationSettlement() {
+        if (settling) {
+            return;
+        }
+
+        settling = true;
+        scheduleVerificationSettlement();
+    }
+
+    private void scheduleVerificationSettlement() {
+        plugin.getScheduler().runAsyncDelayed(() -> {
+            if (!settling) {
+                return;
+            }
+
+            try {
+                settlePendingVerifications();
+            } catch (Exception ex) {
+                plugin.getLog().warn("Failed to settle pending verifications", ex);
+            }
+
+            scheduleVerificationSettlement();
+        }, VERIFICATION_SETTLEMENT_SWEEP);
+    }
+
+    private static String attemptKey(String username) {
+        return username == null ? "" : username.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Owes the name its one-time "recorded as cracked" chat notice: called when
+     * the same-name cracked observation is confirmed for the first time.
+     *
+     * @param username exact login name
+     */
+    public void queueSameNameCrackedNotice(String username) {
+        sameNameCrackedNotices.put(attemptKey(username), Boolean.TRUE);
+    }
+
+    /**
+     * Whether the name still owes its one-time notice; the entry is consumed
+     * either way so a notice is never delivered twice for one confirmation.
+     *
+     * @param username exact login name
+     * @return true when the notice was queued and not yet delivered
+     */
+    public boolean consumeSameNameCrackedNotice(String username) {
+        return sameNameCrackedNotices.remove(attemptKey(username)) != null;
     }
 
     public Collection<UUID> getPendingConfirms() {
@@ -682,6 +941,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     public void close() {
+        settling = false;
         plugin.getLog().info("Safely shutting down scheduler. This could take up to one minute.");
 
         if (storage != null) {

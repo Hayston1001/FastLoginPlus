@@ -172,4 +172,14 @@ class FastLoginBukkitTest {
         assertTrue(declared.isFactsPresent());
         assertEquals(com.github.games647.fastlogin.protocol.IdentityClaim.Consent.YES, declared.getConsent());
     }
+
+    @Test
+    void localAutoRegisterNeverGatesTheProxyPremiumPath() {
+        // R-10 enforcement switch: behind a proxy the login policy arrives with
+        // the identity facts, so this server's local autoRegister copy is
+        // "ignored here" (config.yml) — only standalone deployments read it
+        assertTrue(FastLoginBukkit.runsProxyPremiumPath(true, false));
+        assertTrue(FastLoginBukkit.runsProxyPremiumPath(true, true));
+        assertFalse(FastLoginBukkit.runsProxyPremiumPath(false, true));
+    }
 }

@@ -40,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Regression test: pendingConfirms must be a concurrent set —
@@ -91,5 +92,93 @@ class FastLoginCoreTest {
         assertEquals(10, FastLoginCore.validatedLimit(logger, "burst-limit", 10, 10));
         assertEquals(300_000L, FastLoginCore.validatedDurationMs(logger, "expire", 0, 300_000L));
         assertEquals(600_000L, FastLoginCore.validatedDurationMs(logger, "expire", 600_000L, 300_000L));
+    }
+
+    // ---- the settled verification verdicts (F-13) ----
+
+    @Test
+    void settleCountsOnlyWhenTheSessionServerAnswers() {
+        PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
+        when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+
+        core.markPendingVerification("TestUser", 0L);
+        core.settlePendingVerifications(FastLoginCore.PENDING_VERIFICATION_GRACE_MS + 1, true);
+        assertEquals(1, core.getDefiniteFailures("TestUser"),
+                "the session server answers: the client itself could not verify");
+
+        core.markPendingVerification("OtherUser", 0L);
+        core.settlePendingVerifications(FastLoginCore.PENDING_VERIFICATION_GRACE_MS + 1, false);
+        assertEquals(0, core.getDefiniteFailures("OtherUser"),
+                "an authentication outage is not a failed identity");
+    }
+
+    @Test
+    void settleIgnoresFreshPendings() {
+        PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+
+        core.markPendingVerification("TestUser", 0L);
+        core.settlePendingVerifications(FastLoginCore.PENDING_VERIFICATION_GRACE_MS - 1, true);
+
+        assertEquals(0, core.getDefiniteFailures("TestUser"), "within Δ the attempt is not judged yet");
+    }
+
+    @Test
+    void quickRetryDoesNotPushTheSettlementAway() {
+        // the settlement is judged from the first attempt: a player hammering
+        // reconnects must not postpone it forever
+        PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
+        when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+
+        core.markPendingVerification("TestUser", 0L);
+        core.markPendingVerification("TestUser", FastLoginCore.PENDING_VERIFICATION_GRACE_MS);
+        core.settlePendingVerifications(FastLoginCore.PENDING_VERIFICATION_GRACE_MS + 1, true);
+
+        assertEquals(1, core.getDefiniteFailures("TestUser"));
+    }
+
+    @Test
+    void definiteVerdictCountsAndClearsThePending() {
+        PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+
+        core.markPendingVerification("TestUser", 0L);
+        core.recordDefiniteFailure("TestUser");
+        assertEquals(1, core.getDefiniteFailures("TESTUSER"),
+                "a definitive verdict is name-keyed and case-insensitive");
+
+        // the settlement must not count it a second time
+        core.settlePendingVerifications(FastLoginCore.PENDING_VERIFICATION_GRACE_MS + 1, true);
+        assertEquals(1, core.getDefiniteFailures("TestUser"));
+    }
+
+    @Test
+    void droppedAttemptsAndVerificationsCountNothing() {
+        PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+
+        core.markPendingVerification("Dropped", 0L);
+        core.dropPendingVerification("Dropped");
+        core.settlePendingVerifications(FastLoginCore.PENDING_VERIFICATION_GRACE_MS + 1, true);
+        assertEquals(0, core.getDefiniteFailures("Dropped"), "a dropped attempt counts nothing");
+
+        core.recordDefiniteFailure("Verified");
+        core.resetVerificationState("Verified");
+        assertEquals(0, core.getDefiniteFailures("Verified"),
+                "a passing verification refutes everything recorded");
+    }
+
+    @Test
+    void sameNameCrackedNoticeIsConsumedOnce() {
+        PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+
+        core.queueSameNameCrackedNotice("TestUser");
+        assertTrue(core.consumeSameNameCrackedNotice("testuser"),
+                "the queued notice is name-keyed and case-insensitive");
+        assertFalse(core.consumeSameNameCrackedNotice("TestUser"),
+                "the one-time notice must not be delivered twice");
     }
 }

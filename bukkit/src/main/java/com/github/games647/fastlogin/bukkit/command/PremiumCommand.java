@@ -102,6 +102,8 @@ public class PremiumCommand extends ToggleCommand {
                 } else {
                     //todo: resolve uuid
                     profile.setOnlinemodePreferred(true);
+                    // an explicit consent supersedes any same-name cracked observation
+                    profile.setSameNameCracked(false);
                     plugin.getCore().getStorage().save(profile);
                     plugin.getServer().getPluginManager().callEvent(
                             new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_SELF)
@@ -146,6 +148,8 @@ public class PremiumCommand extends ToggleCommand {
                 } else {
                     //todo: resolve uuid
                     profile.setOnlinemodePreferred(true);
+                    // an explicit consent supersedes any same-name cracked observation
+                    profile.setSameNameCracked(false);
                     plugin.getCore().getStorage().save(profile);
                     plugin.getServer().getPluginManager().callEvent(
                             new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)

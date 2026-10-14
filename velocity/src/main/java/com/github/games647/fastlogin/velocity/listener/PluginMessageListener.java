@@ -245,7 +245,12 @@ public class PluginMessageListener {
             // already-saved check runs inside for the same reason
             plugin.getCore().getStorage().withNameLock(forPlayer.getUsername(), () -> {
                 if (!loginSession.isAlreadySaved()) {
+                    // the backend confirmed a premium outcome (auto-register or
+                    // auto-login), so the account now belongs to this verified
+                    // identity — this is what the consent records ("registered as
+                    // premium", incl. the R-7 sync for auth-plugin premium accounts)
                     playerProfile.setOnlinemodePreferred(true);
+                    playerProfile.setSameNameCracked(false);
                     plugin.getCore().getStorage().save(playerProfile);
                     loginSession.setAlreadySaved(true);
                 }

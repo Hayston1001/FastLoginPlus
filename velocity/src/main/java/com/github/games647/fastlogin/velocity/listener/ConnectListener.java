@@ -252,6 +252,9 @@ public class ConnectListener {
             String verifiedUsername = event.getUsername();
             session.setUuid(verifiedUUID);
             session.setVerifiedUsername(verifiedUsername);
+            // this connection passed the Mojang verification: it refutes any
+            // pending same-name cracked suspicion for the name
+            plugin.getCore().resetVerificationState(verifiedUsername);
 
             StoredProfile playerProfile = session.getProfile();
             playerProfile.setId(verifiedUUID);
@@ -309,9 +312,7 @@ public class ConnectListener {
             if (session != null) {
                 // observation facts + upgrade consent, computed from the record state
                 // this connection saw at login time
-                session.computeFacts(
-                        event.getConnection().getRemoteAddress().getAddress().getHostAddress(),
-                        plugin.getCore());
+                session.computeFacts(plugin.getCore());
             }
             claim = IdentityDecisionPolicy.decide(session, event.isOnlineMode(), bedrock,
                     profile.getName(), forwardedUuid);

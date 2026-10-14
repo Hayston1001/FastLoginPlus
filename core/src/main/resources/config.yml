@@ -65,14 +65,15 @@
 #   Behind a proxy: Editing this section HERE changes NOTHING. You should edit this in proxy's config.yml
 #
 #   --------------------------------
-#   # Behind a proxy: only Paper reads it, in the configure phase (pre-registration)
-#   autoRegister: true
+#   # Behind a proxy: only Paper reads it, in the configure phase
+#   ip-addresses:
 #   --------------------------------
 #   Standalone: This section fully works HERE.
-#   Behind a proxy: Only on Paper; On Spigot editing this section HERE changes NOTHING--you should edit this in proxy's config.yml
+#   Behind a proxy: Only Paper's configure phase reads it (for the pre-login Mojang
+#   lookup); on Spigot editing this section HERE changes NOTHING.
 #
 #   --------------------------------
-#   autoLogin: true
+#   language: en
 #   --------------------------------
 #   No "Behind a proxy:" line: behaves identically in both modes.
 
@@ -134,8 +135,10 @@ anti-bot:
 # Premium Detection
 # ========================================
 # Auto-register new premium players on first join
-# Behind a proxy: ignored here - the proxy's value travels with the identity
-# facts and is enforced here; this copy only applies in standalone mode
+# Behind a proxy: ignored here - the proxy's copy decides whether unknown paid
+# names are verified at all, and a verified premium name reaches this server's
+# premium path already carrying that policy; this copy only applies in
+# standalone mode
 autoRegister: true
 
 # Enable auto-login for premium players
@@ -199,7 +202,17 @@ kick-toggle: true
 # Enable verbose logging for troubleshooting.
 debug: false
 
-# Auto-register players in flp DB but missing from auth plugin DB
+# Auto-register a verified premium player who is missing from the auth plugin DB
+# (the account was deleted, or the two databases drifted apart).
+# Scope - the key name misleads: "unknown" does NOT mean strangers or offline
+# players. This only applies to a connection Mojang has verified whose name has
+# no local account: the account is then registered for that proven identity, and
+# the generated password is only a backup - premium logins never need one.
+# Offline/cracked connections are never covered: they carry no identity proof at
+# all (the name is just a string), so they get the register dialog and set their
+# own password - an account can only change hands through a password its owner
+# chose. Off = a verified premium player without a local account gets the
+# register dialog instead of an automatic account.
 # Behind a proxy: ignored here - the proxy's value travels with the identity
 # facts and is enforced here; this copy only applies in standalone mode
 auto-register-unknown: true

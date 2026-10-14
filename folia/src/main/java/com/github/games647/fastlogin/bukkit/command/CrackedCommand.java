@@ -99,7 +99,10 @@ public class CrackedCommand extends ToggleCommand {
                             plugin.getCore().sendLocaleMessage("database-error", sender));
                     return;
                 }
-                if (!profile.isOnlinemodePreferred()) {
+                //already fully cracked: no consent, no premium UUID and no
+                //same-name cracked observation left to clear
+                if (!profile.isOnlinemodePreferred() && profile.getId() == null
+                        && !profile.isSameNameCracked()) {
                     plugin.getScheduler().getSyncExecutor().execute(() ->
                             plugin.getCore().sendLocaleMessage("not-premium", sender));
                     return;
@@ -107,6 +110,7 @@ public class CrackedCommand extends ToggleCommand {
 
                 profile.setOnlinemodePreferred(false);
                 profile.setId(null);
+                profile.setSameNameCracked(false);
 
                 plugin.getCore().getStorage().save(profile);
 
@@ -166,8 +170,10 @@ public class CrackedCommand extends ToggleCommand {
                     return;
                 }
 
-                //existing player is already cracked
-                if (profile.isExistingPlayer() && !profile.isOnlinemodePreferred()) {
+                //already fully cracked: no consent, no premium UUID and no
+                //same-name cracked observation left to clear
+                if (profile.isExistingPlayer() && !profile.isOnlinemodePreferred()
+                        && profile.getId() == null && !profile.isSameNameCracked()) {
                     plugin.getScheduler().getSyncExecutor().execute(() ->
                             plugin.getCore().sendLocaleMessage("not-premium-other", sender));
                     return;
@@ -178,6 +184,7 @@ public class CrackedCommand extends ToggleCommand {
 
                 profile.setOnlinemodePreferred(false);
                 profile.setId(null);
+                profile.setSameNameCracked(false);
 
                 plugin.getCore().getStorage().save(profile);
 

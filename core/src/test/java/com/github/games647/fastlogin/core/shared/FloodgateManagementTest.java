@@ -196,6 +196,27 @@ class FloodgateManagementTest {
         assertTrue(loginStarted);
     }
 
+    @Test
+    void shouldTreatRecordExistenceAsRegisteredWithoutConsent() {
+        // the record's existence (not the consent flag) marks a name whose
+        // auto-auth already ran once. The pre-decision observation write no
+        // longer flips the consent (D-03 E-3), and a returning Bedrock player
+        // must still be treated as registered - autoRegisterFloodgate=false
+        // would otherwise defer them forever
+        setConfig("true", "false", "false");
+
+        StoredProfile existingProfile = makeProfile(FloodgateState.TRUE, false);
+        existingProfile.setRowId(1); // existing row, but no consent
+        when(storage.loadProfile("TestUser")).thenReturn(existingProfile);
+
+        FloodgatePlayer fgPlayer = mockUnlinkedPlayer();
+        TestFloodgateManagement mgmt = createManagement(fgPlayer);
+
+        mgmt.run();
+
+        assertTrue(loginStarted);
+    }
+
     // ---- run() branch: floodgate state mismatch ----
 
     @Test

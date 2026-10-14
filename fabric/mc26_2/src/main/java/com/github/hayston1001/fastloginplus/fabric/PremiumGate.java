@@ -57,9 +57,10 @@ final class PremiumGate {
      * account; without one, a consented name falls back to its password (the
      * upgrade can be retried), and an unconsented one is an ownership conflict
      * to refuse (rule 7). A name without an account has no ownership question
-     * (rule 1 row 1): it is auto-registered and logged in. Converted accounts
-     * only ever log in without a password, so a mismatched identity is refused
-     * (rule 8).
+     * (rule 1 row 1): it is auto-registered and logged in — unless the
+     * auto-register-unknown policy is off (F-15 A), which keeps the player in
+     * the register dialog instead. Converted accounts only ever log in without
+     * a password, so a mismatched identity is refused (rule 8).
      *
      * @param consent the name's upgrade consent as the proxy recorded it
      * @param state the local account state
@@ -70,6 +71,25 @@ final class PremiumGate {
      */
     static Action decideVerified(IdentityClaim.Consent consent, AccountState.Snapshot state,
                                  UUID verifiedUuid, boolean claimEntryMatches, boolean autoLogin) {
+        return decideVerified(consent, state, verifiedUuid, claimEntryMatches, autoLogin, true);
+    }
+
+    /**
+     * Full form of {@link #decideVerified(IdentityClaim.Consent,
+     * AccountState.Snapshot, UUID, boolean, boolean)} with the auto-register
+     * policy (F-15 A).
+     *
+     * @param consent the name's upgrade consent as the proxy recorded it
+     * @param state the local account state
+     * @param verifiedUuid the Mojang UUID this connection was verified as
+     * @param claimEntryMatches whether a live claim entry pins this verified UUID
+     * @param autoLogin the proxy's autoLogin policy value
+     * @param autoRegisterUnknown the proxy's auto-register-unknown policy value
+     * @return the action to apply
+     */
+    static Action decideVerified(IdentityClaim.Consent consent, AccountState.Snapshot state,
+                                 UUID verifiedUuid, boolean claimEntryMatches, boolean autoLogin,
+                                 boolean autoRegisterUnknown) {
         if (state.state() == AccountState.CONFLICT) {
             return Action.REJECT;
         }
@@ -82,9 +102,11 @@ final class PremiumGate {
             return Action.PASSWORD_LOCK;
         }
         if (state.state() == AccountState.OPEN) {
-            // decision table row 1: no account, no ownership question. The
-            // unclaimed entry is converted and the player logged in.
-            return Action.FREE_LOGIN;
+            // decision table row 1: no account, no ownership question. On
+            // (default) the unclaimed entry is converted and the player logged
+            // in; with auto-register-unknown off (F-15 A) the player gets the
+            // register dialog instead of an automatic account
+            return autoRegisterUnknown ? Action.FREE_LOGIN : Action.PASSWORD_LOCK;
         }
         if (claimEntryMatches) {
             return Action.CLAIM_AND_LOGIN;

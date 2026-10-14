@@ -154,6 +154,9 @@ public class VerifyResponseTask implements Runnable {
             if (!ProtocolLibCompat.isConnectionActive(plugin.getLog(), plugin.getCore().isDebug(), player)) {
                 plugin.getLog().info("Player {} disconnected during session verification, aborting",
                         requestedUsername);
+                // "could not tell" (F-13): a player who left is not a failed
+                // verification — nothing recorded, nothing kicked
+                plugin.getCore().dropPendingVerification(requestedUsername);
                 return;
             }
 
@@ -166,6 +169,9 @@ public class VerifyResponseTask implements Runnable {
 
                 // HTTP 204 — Mojang explicitly rejected the session, no point retrying
                 //user tried to fake an authentication
+                // the definitive "not premium" verdict (F-13): the only thing
+                // that counts towards the same-name cracked observation
+                plugin.getCore().recordDefiniteFailure(requestedUsername);
                 disconnect(
                         "invalid-session",
                         "Session server rejected incoming connection for GameProfile {} ({}). Possible reasons are "
@@ -200,12 +206,18 @@ public class VerifyResponseTask implements Runnable {
                         Thread.sleep(backoff);
                     } catch (InterruptedException interrupted) {
                         Thread.currentThread().interrupt();
-                        disconnect("session-retry-exhausted",
+                        // "could not tell" (F-13): an authentication problem, not
+                        // a failed identity — nothing recorded, tell the player so
+                        plugin.getCore().dropPendingVerification(requestedUsername);
+                        disconnect("auth-server-unreachable",
                                 "Interrupted during session server retry for {}", requestedUsername);
                         return;
                     }
                 } else {
-                    disconnect("session-retry-exhausted",
+                    // "could not tell" (F-13): an authentication problem, not
+                    // a failed identity — nothing recorded, tell the player so
+                    plugin.getCore().dropPendingVerification(requestedUsername);
+                    disconnect("auth-server-unreachable",
                             "Failed to connect to session server after {} attempts for {}",
                             retryCount, requestedUsername);
                 }
@@ -220,6 +232,8 @@ public class VerifyResponseTask implements Runnable {
         }
         String realUsername = verification.getName();
         if (realUsername == null) {
+            // a 200 with no usable verdict (F-13): "could not tell" — nothing recorded
+            plugin.getCore().dropPendingVerification(requestedUsername);
             disconnect("invalid-session", "Username field null for {}", requestedUsername);
             return;
         }
@@ -232,6 +246,9 @@ public class VerifyResponseTask implements Runnable {
         session.setVerifiedUsername(realUsername);
         session.setUuid(verification.getId());
         session.setVerifiedPremium(true);
+        // this connection passed the Mojang verification: it refutes any
+        // pending same-name cracked suspicion for the name
+        plugin.getCore().resetVerificationState(realUsername);
 
         // AuthMe 6.0 premium integration: inject state to skip Pre-Join dialog
         com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =

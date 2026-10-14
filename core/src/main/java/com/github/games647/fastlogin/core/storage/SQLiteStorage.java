@@ -55,6 +55,9 @@ public class SQLiteStorage extends SQLStorage {
             + "`LastLogin` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
             //the premium shouldn't steal the cracked account by changing the name
             + "`Floodgate` INTEGER(3), "
+            // the same-name cracked observation (D-03 Q-E); rows migrated from
+            // older schemas may hold NULL, which reads as "not observed"
+            + "`SameNameCracked` INTEGER(3), "
             + "UNIQUE (`Name`) "
             + ')';
 
@@ -179,8 +182,10 @@ public class SQLiteStorage extends SQLStorage {
                     // violate the new UNIQUE(Name) NOCASE constraint, so keep one row per name
                     // variant: premium rows win, otherwise the oldest (lowest UserID).
                     stmt.execute("INSERT INTO `" + PREMIUM_TABLE + "` "
-                            + "(`UserID`, `UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`, `LastLogin`) "
-                            + "SELECT `UserID`, `UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`, `LastLogin` "
+                            + "(`UserID`, `UUID`, `Name`, `Premium`, `Floodgate`, `SameNameCracked`, "
+                            + "`LastIp`, `LastLogin`) "
+                            + "SELECT `UserID`, `UUID`, `Name`, `Premium`, `Floodgate`, `SameNameCracked`, "
+                            + "`LastIp`, `LastLogin` "
                             + "FROM `premium_old` AS p "
                             + "WHERE `UserID` = ("
                             + "SELECT `UserID` FROM `premium_old` AS q "
@@ -223,11 +228,13 @@ public class SQLiteStorage extends SQLStorage {
     // but does NOT overwrite the existing row - preserving the anti
     // name-stealing semantics of the MySQLStorage upsert.
     private static final String INSERT_PROFILE_UPSERT = "INSERT INTO `" + PREMIUM_TABLE
-            + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`) VALUES (?, ?, ?, ?, ?) "
+            + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `SameNameCracked`, `LastIp`) VALUES (?, ?, ?, ?, ?, ?) "
             + "ON CONFLICT(`Name`) DO UPDATE SET "
             + "`UUID`=CASE WHEN hex(`Name`)=hex(excluded.`Name`) THEN excluded.`UUID` ELSE `UUID` END, "
             + "`Premium`=CASE WHEN hex(`Name`)=hex(excluded.`Name`) THEN excluded.`Premium` ELSE `Premium` END, "
             + "`Floodgate`=CASE WHEN hex(`Name`)=hex(excluded.`Name`) THEN excluded.`Floodgate` ELSE `Floodgate` END, "
+            + "`SameNameCracked`=CASE WHEN hex(`Name`)=hex(excluded.`Name`) "
+            + "THEN excluded.`SameNameCracked` ELSE `SameNameCracked` END, "
             + "`LastIp`=CASE WHEN hex(`Name`)=hex(excluded.`Name`) THEN excluded.`LastIp` ELSE `LastIp` END";
 
     @Override
