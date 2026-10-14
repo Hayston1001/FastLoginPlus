@@ -30,6 +30,7 @@ ext.javaFloor = 8
 apply from: rootProject.file('gradle/platform-common.gradle')
 
 dependencies {
+    implementation project(':shared')
     implementation project(':core')
     compileOnly(libs.paper.api) {
         exclude group: 'org.slf4j', module: 'slf4j-api'

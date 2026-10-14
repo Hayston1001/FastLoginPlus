@@ -25,7 +25,7 @@
  */
 package com.github.games647.fastlogin.bukkit;
 
-import com.github.games647.fastlogin.core.CommonUtil;
+import com.github.games647.fastlogin.shared.MessageColors;
 import java.util.UUID;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.chat.TextComponent;
@@ -67,7 +67,7 @@ class FastLoginBukkitTest {
     @Test
     void testRGB() {
         String message = "&x00002a00002b&lText";
-        String msg = CommonUtil.translateColorCodes(message);
+        String msg = MessageColors.translateColorCodes(message);
         assertEquals(msg, "§x00002a00002b§lText");
 
         @SuppressWarnings("deprecation")

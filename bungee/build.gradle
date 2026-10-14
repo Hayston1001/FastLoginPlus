@@ -30,6 +30,7 @@ ext.javaFloor = 17
 apply from: rootProject.file('gradle/bedrock.gradle')
 
 dependencies {
+    implementation project(':shared')
     implementation(project(':core')) {
         exclude group: 'net.md-5', module: 'bungeecord-config'
         exclude group: 'com.google.code.gson', module: 'gson'

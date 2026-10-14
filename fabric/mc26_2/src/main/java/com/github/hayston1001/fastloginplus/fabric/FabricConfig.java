@@ -25,6 +25,8 @@
  */
 package com.github.hayston1001.fastloginplus.fabric;
 
+import com.github.hayston1001.fastloginplus.fabric.shared.config.ConfigurationFiles;
+
 import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,13 +58,11 @@ final class FabricConfig {
     static Properties load() {
         Path file = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
         writeDefaultOnce(file);
-        Properties config = new Properties();
-        try (InputStream input = Files.newInputStream(file)) {
-            config.load(input);
+        try {
+            return ConfigurationFiles.loadProperties(file);
         } catch (IOException error) {
             throw new IllegalStateException("Configure binding-transfer-host and binding-transfer-port", error);
         }
-        return config;
     }
 
     /**

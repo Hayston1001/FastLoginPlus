@@ -47,8 +47,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import static java.util.function.Function.identity;
-import static java.util.stream.Collectors.toMap;
 
 import org.slf4j.Logger;
 
@@ -70,6 +68,8 @@ import com.github.games647.fastlogin.core.hooks.PasswordGenerator;
 import com.github.games647.fastlogin.core.storage.MySQLStorage;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.SQLiteStorage;
+import com.github.games647.fastlogin.shared.config.ConfigurationFiles;
+import com.github.games647.fastlogin.shared.message.LanguageMessages;
 import com.google.common.base.Ticker;
 import com.zaxxer.hikari.HikariConfig;
 
@@ -230,16 +230,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         try {
             Configuration messages = loadLanguageFile(messagesFile, defaultMessagesFile);
 
-            messages.getKeys()
-                    .stream()
-                    .filter(key -> messages.get(key) != null)
-                    .collect(toMap(identity(), messages::get))
-                    .forEach((key, message) -> {
-                        String colored = CommonUtil.translateColorCodes((String) message);
-                        if (!colored.isEmpty()) {
-                            localeMessages.put(key, colored.replace("/newline", "\n"));
-                        }
-                    });
+            LanguageMessages.populate(messages.getKeys(), messages::get, localeMessages);
 
             plugin.getLog().info("Loaded language file: {}", messagesFile);
         } catch (IOException ioEx) {
@@ -435,17 +426,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
         Path file = plugin.getPluginFolder().resolve(fileName);
 
-        Configuration config;
-        try (Reader reader = Files.newBufferedReader(file)) {
-            config = configProvider.load(reader, defaults);
-        }
-
-        // explicitly add keys here, because Configuration.getKeys doesn't return the keys from the default config
-        for (String key : defaults.getKeys()) {
-            config.set(key, config.get(key));
-        }
-
-        return config;
+        return ConfigurationFiles.load(file, defaults, configurationLoader(configProvider));
     }
 
     public MojangResolver getResolver() {
@@ -921,23 +902,31 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
         Path filePath = plugin.getPluginFolder().resolve(langFile);
 
-        Configuration config;
-        if (Files.exists(filePath)) {
-            try (Reader reader = Files.newBufferedReader(filePath)) {
-                config = configProvider.load(reader, defaults);
+        return LanguageMessages.load(filePath, defaults, configurationLoader(configProvider));
+    }
+
+    static ConfigurationFiles.Loader<Configuration> configurationLoader(ConfigurationProvider provider) {
+        return new ConfigurationFiles.Loader<Configuration>() {
+            @Override
+            public Configuration load(Reader reader, Configuration defaults) throws IOException {
+                return provider.load(reader, defaults);
             }
-        } else {
-            // Language file doesn't exist, use defaults only
-            config = defaults;
-        }
 
-        // Explicitly add keys from defaults, because Configuration.getKeys()
-        // doesn't return keys that only exist in the default config
-        for (String key : defaults.getKeys()) {
-            config.set(key, config.get(key));
-        }
+            @Override
+            public Collection<String> getKeys(Configuration config) {
+                return config.getKeys();
+            }
 
-        return config;
+            @Override
+            public Object get(Configuration config, String key) {
+                return config.get(key);
+            }
+
+            @Override
+            public void set(Configuration config, String key, Object value) {
+                config.set(key, value);
+            }
+        };
     }
 
     public void close() {
