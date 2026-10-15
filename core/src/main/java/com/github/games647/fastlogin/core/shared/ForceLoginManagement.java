@@ -45,6 +45,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
 
     @Override
     public void run() {
+        premiumHandlingAllowed = false;
         if (!isOnline(player)) {
             if (core.isDebug()) {
                 core.getPlugin().getLog().info("Player {} disconnected", player);
@@ -151,9 +152,11 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     resolveAutoRegisterUnknown(session));
             switch (outcome) {
                 case AUTO_REGISTER_LOGIN:
+                    premiumHandlingAllowed = true;
                     success = forceRegister(player);
                     break;
                 case AUTO_LOGIN:
+                    premiumHandlingAllowed = true;
                     success = !callFastLoginAutoLoginEvent(session, playerProfile).isCancelled()
                             && forceLogin(player);
                     break;
@@ -172,10 +175,15 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     if (account == LoginMethodDecider.AccountState.READ_FAILURE) {
                         core.getPlugin().sendMessage(player,
                                 core.getMessage("account-state-unavailable"));
+                    } else if (account == LoginMethodDecider.AccountState.PASSWORD_ACCOUNT
+                            && session.getFacts().consent()
+                            == com.github.games647.fastlogin.protocol.IdentityClaim.Consent.NO) {
+                        notifyPasswordLogin();
                     }
                     return;
             }
         } else if ((boolean) core.getConfig().get("autoLogin")) {
+            premiumHandlingAllowed = true;
             // Standalone deployment: no proxy declared anything, so the
             // local keys and the session's registration expectation
             // decide, exactly as before the decision table landed.
@@ -285,6 +293,14 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     }
 
     public abstract FastLoginAutoLoginEvent callFastLoginAutoLoginEvent(LoginSession session, StoredProfile profile);
+
+    /** Whether the decision allowed platform-specific premium account handling. */
+    protected boolean premiumHandlingAllowed;
+
+    /** Explains the password flow; platforms may deduplicate against configure-time delivery. */
+    protected void notifyPasswordLogin() {
+        core.sendLocaleMessage("premium-password-login", player);
+    }
 
     public abstract void onForceActionSuccess(LoginSession session);
 

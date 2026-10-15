@@ -1008,7 +1008,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // Login-method decision (D-03): the account state plus the declared facts
         // decide, never the attestation alone. A missing or untrusted declaration
         // leaves the consent unknown, which never unlocks a password account.
-        if (!allowsPremiumLogin(playerName, facts)) {
+        if (!allowsPremiumLogin(playerName, facts, connection, address)) {
             return;
         }
 
@@ -1187,6 +1187,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      */
     private boolean allowsPremiumLogin(String playerName,
             com.github.games647.fastlogin.protocol.IdentityClaim.Facts facts) {
+        return allowsPremiumLogin(playerName, facts, null, null);
+    }
+
+    private boolean allowsPremiumLogin(String playerName,
+            com.github.games647.fastlogin.protocol.IdentityClaim.Facts facts,
+            Object connection, java.net.InetSocketAddress address) {
         com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState account;
         try {
             com.github.games647.fastlogin.core.hooks.AuthPlugin<Player> authPlugin = core.getAuthPluginHook();
@@ -1211,21 +1217,31 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 com.github.games647.fastlogin.core.shared.LoginMethodDecider.decide(
                         true, account, declared.consent(), autoLogin, autoRegisterUnknown);
         if (outcome == com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.REJECT) {
-            denyLogin(playerName, core.getMessage("ownership-conflict"));
+            String reason = core.getMessage("ownership-conflict");
+            if (connection != null) {
+                disconnectConfiguration(playerName, connection, reason);
+            } else {
+                denyLogin(playerName, reason);
+            }
             return false;
         }
         if (outcome != com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.AUTO_REGISTER_LOGIN
                 && outcome != com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.AUTO_LOGIN) {
             logger.info("Keeping the auth plugin's own login flow for {} (decision {})",
                     playerName, outcome);
+            if (address != null
+                    && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
+                            .AccountState.PASSWORD_ACCOUNT
+                    && declared.consent() == com.github.games647.fastlogin.protocol.IdentityClaim.Consent.NO) {
+                passwordNotices.put(address, Boolean.TRUE);
+            }
             return false;
         }
         return true;
     }
 
     /**
-     * Refuses a login during the configuration phase: the player is kicked the
-     * moment the join event fires, before any dialog can trap them.
+     * Refuses a login on platforms without a configuration connection.
      *
      * @param playerName the player to refuse
      * @param message    the localized reason
@@ -1246,6 +1262,56 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      */
     public String takePendingKick(String playerName) {
         return pendingKicks.remove(playerName);
+    }
+
+    private final com.google.common.cache.Cache<java.net.InetSocketAddress, Boolean> passwordNotices =
+            com.google.common.cache.CacheBuilder.newBuilder().maximumSize(10000)
+                    .expireAfterWrite(2, java.util.concurrent.TimeUnit.MINUTES).build();
+
+    /**
+     * Sends the explanation at most once for this player connection.
+     *
+     * @param player the player on its owning thread
+     */
+    public void sendPasswordNotice(Player player) {
+        String key = "flp-password-notice";
+        if (!player.hasMetadata(key)) {
+            player.setMetadata(key, new org.bukkit.metadata.FixedMetadataValue(this, true));
+            core.sendLocaleMessage("premium-password-login", player);
+        }
+    }
+
+    /**
+     * Consumes configure-phase work on the joining player's owning thread.
+     *
+     * @param player the joining player
+     * @return whether the player may continue to the auth flow
+     */
+    public boolean deliverPendingLogin(Player player) {
+        String denied = takePendingKick(player.getName());
+        if (denied != null) {
+            player.kickPlayer(denied);
+            return false;
+        }
+        if (passwordNotices.asMap().remove(player.getAddress()) != null) {
+            sendPasswordNotice(player);
+        }
+        return true;
+    }
+
+    private void disconnectConfiguration(String playerName, Object connection, String reason) {
+        try {
+            Class<?> component = Class.forName("net.kyori.adventure.text.Component");
+            Class<?> serializer = Class.forName("net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer");
+            Object legacy = serializer.getMethod("legacySection").invoke(null);
+            Object message = serializer.getMethod("deserialize", String.class).invoke(legacy, reason);
+            Class.forName("io.papermc.paper.connection.PlayerConnection")
+                    .getMethod("disconnect", component).invoke(connection, message);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError failure) {
+            logger.error("Could not disconnect the configuration connection for {}; deferring rejection to join",
+                    playerName, failure);
+            denyLogin(playerName, reason);
+        }
     }
 
     /**

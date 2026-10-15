@@ -188,13 +188,13 @@ class ForceLoginManagementTest {
 
     @Test
     void rejectedOwnershipConflictLeavesTheRecordUntouched() throws Exception {
-        // rule 7: verified premium identity + password account + no consent.
+        // D-19: verified identity + converted account + explicit no consent.
         // The record must keep its "observed, not consented" shape, so a later
         // reconnect reproduces the same outcome instead of an auto-login takeover.
         when(core.getAuthPluginHook()).thenReturn(authPlugin);
         when(core.getMessage("ownership-conflict")).thenReturn("ownership-conflict");
         when(authPlugin.inspectAccount("TestUser"))
-                .thenReturn(LoginMethodDecider.AccountState.PASSWORD_ACCOUNT);
+                .thenReturn(LoginMethodDecider.AccountState.PREMIUM_OWNED);
 
         StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
         TestLoginSession session = new TestLoginSession("TestUser", true, profile);
@@ -213,6 +213,29 @@ class ForceLoginManagementTest {
     }
 
     // ---- a cracked join is not an identity reset ----
+
+    @Test
+    void passwordFallbackDoesNotMarkPremiumOrAcknowledgeConsent() throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(authPlugin.inspectAccount("TestUser"))
+                .thenReturn(LoginMethodDecider.AccountState.PASSWORD_ACCOUNT);
+        StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
+        TestLoginSession session = new TestLoginSession("TestUser", true, profile);
+        session.setUuid(UUID.randomUUID());
+        session.setFacts(new com.github.games647.fastlogin.protocol.IdentityClaim.Facts(
+                false, false, com.github.games647.fastlogin.protocol.IdentityClaim.Consent.NO,
+                true, false, false));
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.run();
+        assertNull(mgmt.denied);
+        assertFalse(mgmt.premiumHandlingAllowed);
+        assertFalse(profile.isOnlinemodePreferred());
+        assertEquals(0, mgmt.ackCount);
+        verify(storage, never()).save(any());
+        verify(authPlugin, never()).forceLogin(any());
+        verify(authPlugin, never()).forceRegister(any(), anyString());
+        verify(core).sendLocaleMessage("premium-password-login", mgmt.player);
+    }
 
     @Test
     void crackedJoinKeepsRecordObservations() {

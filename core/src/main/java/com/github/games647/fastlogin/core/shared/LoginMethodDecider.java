@@ -34,8 +34,8 @@ import com.github.games647.fastlogin.protocol.IdentityClaim.Consent;
  * <p>Decision table (D-03): a verified premium identity without an account is
  * auto-registered and logged in; with an account it needs the upgrade consent
  * (password = ownership, an account never follows a name alone); without the
- * consent the connection is rejected instead of password-locked, because a
- * password lock is a dead end for the verified owner. An unverified connection
+ * consent a password account keeps its password flow; an already converted
+ * account is rejected because it has no usable password. An unverified connection
  * keeps the password lock; with a consent it means the account switched
  * ownership behind the consent and is rejected symmetrically. Unknown consent
  * (facts that never arrived) never unlocks anything.
@@ -159,8 +159,9 @@ public final class LoginMethodDecider {
         }
 
         boolean registered = account != AccountState.NONE;
-        // an auth plugin's own premium account is an upgrade consent (R-7)
-        Consent effective = account == AccountState.PREMIUM_OWNED ? Consent.YES : consent;
+        // R-7 supplies missing consent, but never overrides an explicit refusal.
+        Consent effective = account == AccountState.PREMIUM_OWNED && consent == Consent.UNKNOWN
+                ? Consent.YES : consent;
 
         if (!autoLogin) {
             return registered ? Outcome.PASSWORD : Outcome.GUIDE_REGISTER;
@@ -173,9 +174,7 @@ public final class LoginMethodDecider {
             if (effective == Consent.YES) {
                 return Outcome.AUTO_LOGIN;
             }
-            // Q-B three-state: unknown consent never unlocks anything, but an
-            // explicit "no consent" is an ownership conflict to reject (rule 7)
-            return effective == Consent.UNKNOWN ? Outcome.PASSWORD : Outcome.REJECT;
+            return account == AccountState.PASSWORD_ACCOUNT ? Outcome.PASSWORD : Outcome.REJECT;
         }
 
         if (!registered) {
@@ -183,6 +182,7 @@ public final class LoginMethodDecider {
         }
         // rule 8, the symmetric row: a cracked connection onto a consented
         // premium name means the account moved behind the consent
-        return effective == Consent.YES ? Outcome.REJECT : Outcome.PASSWORD;
+        return account == AccountState.PREMIUM_OWNED || effective == Consent.YES
+                ? Outcome.REJECT : Outcome.PASSWORD;
     }
 }

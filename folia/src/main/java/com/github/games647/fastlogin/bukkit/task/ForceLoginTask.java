@@ -72,7 +72,7 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
 
         super.run();
 
-        if (session != null && session.isVerifiedPremium()) {
+        if (session != null && session.isVerifiedPremium() && premiumHandlingAllowed) {
             com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
                 plugin.getAuthMePremiumIntegrator();
             if (integrator != null && integrator.isAuthMePremiumEnabled()) {
@@ -142,7 +142,12 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
 
     @Override
     public void denyLogin(Player player, String message) {
-        player.kickPlayer(message);
+        player.getScheduler().run(core.getPlugin(), task -> player.kickPlayer(message), null);
+    }
+
+    @Override
+    protected void notifyPasswordLogin() {
+        player.getScheduler().run(core.getPlugin(), task -> core.getPlugin().sendPasswordNotice(player), null);
     }
 
     @Override

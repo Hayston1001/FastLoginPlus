@@ -55,10 +55,21 @@ class LoginMethodDeciderTest {
     }
 
     @Test
-    void verifiedPremiumOntoPasswordAccountIsRejected() {
-        // rule 7: a password lock would be a dead end for the verified owner
-        assertEquals(Outcome.REJECT,
+    void verifiedPremiumOntoPasswordAccountKeepsPasswordLogin() {
+        assertEquals(Outcome.PASSWORD,
                 LoginMethodDecider.decide(true, AccountState.PASSWORD_ACCOUNT, Consent.NO));
+    }
+
+    @Test
+    void convertedAccountWithoutConsentIsRejectedOnEveryReconnect() {
+        for (int reconnect = 0; reconnect < 3; reconnect++) {
+            assertEquals(Outcome.REJECT,
+                    LoginMethodDecider.decide(true, AccountState.PREMIUM_OWNED, Consent.NO));
+        }
+        assertEquals(Outcome.AUTO_LOGIN,
+                LoginMethodDecider.decide(true, AccountState.PREMIUM_OWNED, Consent.YES));
+        assertEquals(Outcome.REJECT,
+                LoginMethodDecider.decide(false, AccountState.PREMIUM_OWNED, Consent.NO));
     }
 
     @Test

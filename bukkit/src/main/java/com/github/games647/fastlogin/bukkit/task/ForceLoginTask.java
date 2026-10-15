@@ -67,7 +67,7 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
 
         // AuthMe 6.0: if we just registered/logged in a premium player,
         // also mark them as premium in AuthMe's database
-        if (session != null && session.isVerifiedPremium()) {
+        if (session != null && session.isVerifiedPremium() && premiumHandlingAllowed) {
             com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
                 plugin.getAuthMePremiumIntegrator();
             if (integrator != null && integrator.isAuthMePremiumEnabled()) {
@@ -137,7 +137,12 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
 
     @Override
     public void denyLogin(Player player, String message) {
-        player.kickPlayer(message);
+        Bukkit.getScheduler().runTask(core.getPlugin(), () -> player.kickPlayer(message));
+    }
+
+    @Override
+    protected void notifyPasswordLogin() {
+        Bukkit.getScheduler().runTask(core.getPlugin(), () -> core.getPlugin().sendPasswordNotice(player));
     }
 
     @Override

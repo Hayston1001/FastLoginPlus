@@ -83,6 +83,9 @@ public class ConnectionListener implements Listener {
     }
 
     private void delayForceLogin(Player player) {
+        if (!player.isOnline() || !plugin.deliverPendingLogin(player)) {
+            return;
+        }
         // session exists so the player is ready for force login
         // cases: Paper (firing BungeeCord message before PlayerJoinEvent) or not running BungeeCord and already
         // having the login session from the login process
@@ -121,6 +124,7 @@ public class ConnectionListener implements Listener {
         Player player = quitEvent.getPlayer();
 
         removeBlockedStatus(player);
+        player.removeMetadata("flp-password-notice", plugin);
         plugin.getCore().getPendingConfirms().remove(player.getUniqueId());
         plugin.getPremiumPlayers().remove(player.getUniqueId());
         plugin.getPlayerFloodgateState().remove(player.getUniqueId());

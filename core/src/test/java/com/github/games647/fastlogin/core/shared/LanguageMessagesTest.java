@@ -34,6 +34,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -41,11 +42,47 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import org.mockito.ArgumentCaptor;
 
 class LanguageMessagesTest {
 
     @TempDir
     Path folder;
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void premiumWarningUsesTheMultilineDeliveryWithoutChangingTheStoredText() throws Exception {
+        ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
+        for (String language : Arrays.asList("en", "zh")) {
+            try (InputStreamReader reader = new InputStreamReader(getClass().getResourceAsStream(
+                    "/messages_" + language + ".yml"), StandardCharsets.UTF_8)) {
+                String warning = provider.load(reader).getString("premium-warning");
+                assertTrue(warning.contains("\\n"));
+                PlatformPlugin<Object> plugin = mock(PlatformPlugin.class, CALLS_REAL_METHODS);
+                Object player = new Object();
+                plugin.sendMultiLineMessage(player, warning);
+                ArgumentCaptor<String> lines = ArgumentCaptor.forClass(String.class);
+                verify(plugin, times(2)).sendMessage(org.mockito.ArgumentMatchers.eq(player), lines.capture());
+                assertFalse(lines.getAllValues().stream().anyMatch(line -> line.contains("\\n")));
+            }
+        }
+    }
+
+    @Test
+    void defaultLanguageKeySetsStayInSync() throws Exception {
+        ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
+        try (InputStreamReader english = new InputStreamReader(getClass().getResourceAsStream(
+                "/messages_en.yml"), StandardCharsets.UTF_8);
+             InputStreamReader chinese = new InputStreamReader(getClass().getResourceAsStream(
+                     "/messages_zh.yml"), StandardCharsets.UTF_8)) {
+            assertEquals(new java.util.HashSet<>(provider.load(english).getKeys()),
+                    new java.util.HashSet<>(provider.load(chinese).getKeys()));
+        }
+    }
 
     @Test
     void missingEnglishKeysAreEnumeratedWithoutReplacingSelectedMessages() throws Exception {

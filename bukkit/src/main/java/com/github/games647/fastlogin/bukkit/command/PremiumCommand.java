@@ -78,7 +78,7 @@ public class PremiumCommand extends ToggleCommand {
         Player player = (Player) sender;
         UUID id = player.getUniqueId();
         if (plugin.getConfig().getBoolean("premium-warning") && !plugin.getCore().getPendingConfirms().contains(id)) {
-            sender.sendMessage(plugin.getCore().getMessage("premium-warning"));
+            plugin.getCore().sendLocaleMessage("premium-warning", sender);
             plugin.getCore().getPendingConfirms().add(id);
             return;
         }

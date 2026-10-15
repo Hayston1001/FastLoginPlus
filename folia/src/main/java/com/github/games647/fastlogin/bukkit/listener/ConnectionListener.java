@@ -85,6 +85,9 @@ public class ConnectionListener implements Listener {
     }
 
     private void delayForceLogin(Player player) {
+        if (!player.isOnline() || !plugin.deliverPendingLogin(player)) {
+            return;
+        }
         BukkitLoginSession session = plugin.getSession(player.spigot().getRawAddress());
 
         if (session == null) {
@@ -120,6 +123,7 @@ public class ConnectionListener implements Listener {
         Player player = quitEvent.getPlayer();
 
         removeBlockedStatus(player);
+        player.removeMetadata("flp-password-notice", plugin);
         plugin.getCore().getPendingConfirms().remove(player.getUniqueId());
         plugin.getPremiumPlayers().remove(player.getUniqueId());
         plugin.getPlayerFloodgateState().remove(player.getUniqueId());

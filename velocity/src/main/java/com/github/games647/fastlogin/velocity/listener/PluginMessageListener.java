@@ -134,8 +134,7 @@ public class PluginMessageListener {
                         plugin.getLog().info("Premium-warning gate hit for {}: showing confirmation prompt, "
                                 + "toggle deferred until the command is issued again", playerName);
                     }
-                    String message = core.getMessage("premium-warning");
-                    sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+                    core.sendLocaleMessage("premium-warning", sender);
                     return;
                 }
 
