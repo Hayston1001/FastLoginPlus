@@ -34,7 +34,6 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,7 +65,9 @@ public final class FastLoginFabric implements ModInitializer {
                                         parseClaim(player.getGameProfile()));
                                 return 1;
                             } catch (RuntimeException rejected) {
-                                player.sendSystemMessage(Component.literal("FastLoginPlus: " + rejected.getMessage()));
+                                LOGGER.warn("Premium binding rejected for {}",
+                                        player.getGameProfile().name(), rejected);
+                                player.sendSystemMessage(FabricMessages.reason(rejected, "auth-unavailable"));
                                 return 0;
                             }
                         }))));
@@ -89,10 +90,10 @@ public final class FastLoginFabric implements ModInitializer {
                         claim.getDecision(), profile.name(), profile.properties().keySet().size());
             } catch (IllegalArgumentException invalidClaim) {
                 LOGGER.warn("Invalid forwarding identity for {}: {}", profile.name(), invalidClaim.getMessage());
-                listener.disconnect(Component.literal("Invalid FastLoginPlus forwarding identity"));
+                listener.disconnect(FabricMessages.text("invalid-identity"));
             } catch (RuntimeException invalidEnvironment) {
                 LOGGER.error("EasyAuth policy rejected the connection", invalidEnvironment);
-                listener.disconnect(Component.literal("FastLoginPlus Fabric authentication is unavailable"));
+                listener.disconnect(FabricMessages.reason(invalidEnvironment, "auth-unavailable"));
             }
         });
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
@@ -102,7 +103,7 @@ public final class FastLoginFabric implements ModInitializer {
             } catch (RuntimeException rejected) {
                 LOGGER.warn("Rejecting Fabric player {}: {}", handler.player.getGameProfile().name(),
                         rejected.getMessage());
-                handler.disconnect(Component.literal("FastLoginPlus Fabric account check failed"));
+                handler.disconnect(FabricMessages.reason(rejected, "auth-unavailable"));
             }
         });
     }

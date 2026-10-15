@@ -61,7 +61,9 @@ final class FabricConfig {
     static synchronized StartupSettings loadAtStartup() {
         if (startupSettings == null && startupFailure == null) {
             try {
-                startupSettings = new StartupSettings(readFile().getProperty("allowed-proxy-ids", ""));
+                Properties file = readFile();
+                FabricMessages.load(file.getProperty("language", "en"));
+                startupSettings = new StartupSettings(file.getProperty("allowed-proxy-ids", ""));
             } catch (RuntimeException unreadable) {
                 startupFailure = unreadable;
             }

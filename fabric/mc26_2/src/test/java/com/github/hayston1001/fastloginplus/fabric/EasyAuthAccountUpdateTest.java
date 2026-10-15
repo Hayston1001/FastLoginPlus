@@ -55,6 +55,24 @@ class EasyAuthAccountUpdateTest {
         assertEquals("127.0.0.2", entry.lastIp);
     }
 
+    @Test
+    void authenticatedVerifiedRetryBindsWithoutReplayingLoginState() {
+        Entry entry = new Entry();
+        org.junit.jupiter.api.Assertions.assertTrue(BindingRequest.completeNow(
+                com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED,
+                true, AccountState.PASSWORD));
+        EasyAuthAccountUpdate.bind(Entry.class, entry, VERIFIED, candidate -> true);
+        assertEquals("", entry.password);
+        assertEquals(Kind.TRUE, entry.onlineAccount);
+        assertEquals(VERIFIED, entry.uuid);
+        assertEquals(ZonedDateTime.parse("2026-01-01T00:00:00Z"), entry.lastAuthenticatedDate);
+        assertEquals(2L, entry.loginTries);
+        assertEquals("127.0.0.1", entry.lastIp);
+        assertThrows(FabricMessages.PlayerFailure.class, () -> BindingRequest.completeNow(
+                com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED,
+                true, AccountState.BOUND));
+    }
+
     private static void assertOriginal(Entry entry) {
         assertEquals("old-hash", entry.password);
         assertEquals(Kind.FALSE, entry.onlineAccount);
