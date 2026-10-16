@@ -22,6 +22,7 @@ import java.util.Properties;
 
 /** Backend-local UTF-8 messages with per-key English fallback. */
 final class FabricMessages {
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("fastloginplus_fabric");
     private static final Properties ENGLISH = bundled("en");
     private static volatile Properties messages = ENGLISH;
 
@@ -30,11 +31,22 @@ final class FabricMessages {
 
     static void load(String language) {
         Path directory = FabricLoader.getInstance().getConfigDir().resolve("fastloginplus-fabric");
-        messages = load(language, directory);
+        messages = loadAndReportLanguage(language, directory, LOGGER);
+    }
+
+    static Properties loadAndReportLanguage(String language, Path directory, org.slf4j.Logger logger) {
+        Properties loaded = load(language, directory);
+        logger.info("Fabric message language={} (set language in fastloginplus-fabric.properties; "
+                + "restart the backend to apply changes)", effectiveLanguage(language));
+        return loaded;
+    }
+
+    private static String effectiveLanguage(String language) {
+        return "zh".equalsIgnoreCase(language) ? "zh" : "en";
     }
 
     static Properties load(String language, Path directory) {
-        String locale = "zh".equalsIgnoreCase(language) ? "zh" : "en";
+        String locale = effectiveLanguage(language);
         Path file = directory.resolve("messages_" + locale + ".properties");
         Properties defaults = bundled("en");
         // An absent override uses the bundled locale. A selected override file

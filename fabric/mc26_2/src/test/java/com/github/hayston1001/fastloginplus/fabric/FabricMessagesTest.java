@@ -22,6 +22,21 @@ class FabricMessagesTest {
     Path directory;
 
     @Test
+    void startupReportsEffectiveLanguageAndTheSettingToChange() throws Exception {
+        for (String requested : new String[]{"en", "zh", "ZH", "unsupported"}) {
+            String effective = "zh".equalsIgnoreCase(requested) ? "zh" : "en";
+            org.slf4j.Logger logger = org.mockito.Mockito.mock(org.slf4j.Logger.class);
+            Properties loaded = FabricMessages.loadAndReportLanguage(requested, directory, logger);
+            assertEquals(bundled(effective).getProperty("binding-checking"),
+                    loaded.getProperty("binding-checking"));
+            org.mockito.Mockito.verify(logger).info("Fabric message language={} "
+                    + "(set language in fastloginplus-fabric.properties; restart the backend to apply changes)",
+                    effective);
+            org.mockito.Mockito.verifyNoMoreInteractions(logger);
+        }
+    }
+
+    @Test
     void bundledLanguagesHaveIdenticalKeysAndChineseIsUtf8() throws Exception {
         Properties english = bundled("en");
         Properties chinese = bundled("zh");
@@ -38,6 +53,10 @@ class FabricMessagesTest {
                 .contains("no usable password"));
         assertNotEquals(english.getProperty("premium-policy-disabled"),
                 chinese.getProperty("premium-policy-disabled"));
+        assertEquals("你的账号已被记录为盗版. 你是正版玩家吗? 如被误判可使用 /flp premium 重新发起验证",
+                chinese.getProperty("same-name-cracked-recorded"));
+        org.junit.jupiter.api.Assertions.assertTrue(english.getProperty("same-name-cracked-recorded")
+                .contains("/flp premium"));
     }
 
     @Test
@@ -53,6 +72,8 @@ class FabricMessagesTest {
                 messages.getProperty("binding-login-required"));
         assertEquals(bundled("en").getProperty("binding-consent-required"),
                 messages.getProperty("binding-consent-required"));
+        assertEquals(bundled("en").getProperty("same-name-cracked-recorded"),
+                messages.getProperty("same-name-cracked-recorded"));
         assertEquals(bundled("en").getProperty("premium-policy-disabled"),
                 messages.getProperty("premium-policy-disabled"));
     }
@@ -72,6 +93,8 @@ class FabricMessagesTest {
                 messages.getProperty("binding-window-unavailable"));
         assertEquals(bundled("en").getProperty("binding-consent-required"),
                 messages.getProperty("binding-consent-required"));
+        assertEquals(bundled("en").getProperty("same-name-cracked-recorded"),
+                messages.getProperty("same-name-cracked-recorded"));
     }
 
     private Properties bundled(String language) throws Exception {

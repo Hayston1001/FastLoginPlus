@@ -1,32 +1,14 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.core.shared;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -36,7 +18,6 @@ import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.HashSet;
@@ -130,9 +111,9 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     // one-time chat notices owed for a freshly confirmed same-name cracked
     // observation (D-03 Q-E): queued at the first confirmation, delivered when
     // the player actually reaches the game — a login-phase connection cannot
-    // see chat yet. Delivered by the proxy's own ForceLoginManagement (the
-    // join-time task every proxy runs for every session), so both classic and
-    // Fabric backends are covered. Keys are names and an entry is only created
+    // see chat yet. The proxy's join task consumes it for proxy chat or hands
+    // it to a capable Fabric backend for backend-local rendering. Keys are
+    // names and an entry is only created
     // when the flag flips (one per name at a time, consumed at the first
     // completed join), so the map never expires — a player whose first attempt
     // died before joining still gets the notice on the next one. The size cap
@@ -223,8 +204,8 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             saveDefaultFile(messagesFile, defaultMessagesFile);
         }
 
-        // Auto-fill missing keys from the English default
-        appendMissingKeys(defaultMessagesFile, messagesFile);
+        // Upgrade from bundled selected-language values, with English only as fallback.
+        appendMissingKeys(messagesFile, defaultMessagesFile);
 
         // 3. Load language file with English as default fallback
         try {
@@ -747,6 +728,16 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         return sameNameCrackedNotices.remove(attemptKey(username)) != null;
     }
 
+    /**
+     * Checks pending notification work without consuming it during capability negotiation.
+     *
+     * @param username exact login name
+     * @return whether the first-confirmation notice is still owed
+     */
+    public boolean hasSameNameCrackedNotice(String username) {
+        return sameNameCrackedNotices.containsKey(attemptKey(username));
+    }
+
     public Collection<UUID> getPendingConfirms() {
         return pendingConfirms;
     }
@@ -824,61 +815,31 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Compare the user's language file against the default (English) and append any missing keys.
-     * @param defaultFile the default resource file in the jar (e.g. messages_en.yml)
+     * Appends localized missing keys and migrates untouched English defaults to their translations.
      * @param userFile the user's language file in the plugin folder (e.g. messages_zh.yml)
+     * @param defaultFile the English fallback resource in the jar
      */
-    private void appendMissingKeys(String defaultFile, String userFile) {
-        Path dataFolder = plugin.getPluginFolder();
-        Path userFilePath = dataFolder.resolve(userFile);
-        if (Files.notExists(userFilePath)) {
-            return;
-        }
-
-        ConfigurationProvider configProvider = ConfigurationProvider.getProvider(YamlConfiguration.class);
-
-        Configuration defaults;
-        try (InputStream defaultStream = getClass().getClassLoader().getResourceAsStream(defaultFile)) {
-            defaults = configProvider.load(defaultStream);
+    private void appendMissingKeys(String userFile, String defaultFile) {
+        ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
+        try (InputStream english = getClass().getClassLoader().getResourceAsStream(defaultFile);
+             InputStream selected = getClass().getClassLoader().getResourceAsStream(userFile)) {
+            if (english == null) {
+                throw new IOException("Missing bundled English messages");
+            }
+            Configuration defaults = provider.load(new InputStreamReader(english, StandardCharsets.UTF_8));
+            Configuration localized = selected == null ? defaults
+                    : provider.load(new InputStreamReader(selected, StandardCharsets.UTF_8));
+            LanguageFileUpdater.Result result = LanguageFileUpdater.update(
+                    plugin.getPluginFolder().resolve(userFile), defaults, localized);
+            if (result.added > 0) {
+                plugin.getLog().info("Appended {} missing keys to {}", result.added, userFile);
+            }
+            if (result.migrated > 0) {
+                plugin.getLog().info("Migrated {} unchanged English message values to bundled translations in {}",
+                        result.migrated, userFile);
+            }
         } catch (IOException ioEx) {
-            plugin.getLog().error("Cannot read default resource {}", defaultFile, ioEx);
-            return;
-        }
-
-        Configuration userConfig;
-        try (Reader reader = Files.newBufferedReader(userFilePath)) {
-            userConfig = configProvider.load(reader);
-        } catch (IOException ioEx) {
-            plugin.getLog().error("Cannot read user file {}", userFile, ioEx);
-            return;
-        }
-
-        Set<String> defaultKeys = new HashSet<>(defaults.getKeys());
-        Set<String> userKeys = new HashSet<>(userConfig.getKeys());
-
-        Set<String> missingKeys = new HashSet<>(defaultKeys);
-        missingKeys.removeAll(userKeys);
-
-        if (missingKeys.isEmpty()) {
-            return;
-        }
-
-        StringBuilder appendBuilder = new StringBuilder();
-        appendBuilder.append(System.lineSeparator());
-        appendBuilder.append("# === Keys below are auto-added by FastLoginPlus ===").append(System.lineSeparator());
-        for (String key : missingKeys) {
-            Object value = defaults.get(key);
-            String yamlValue = value instanceof String ? (String) value : String.valueOf(value);
-            appendBuilder.append(key).append(": '").append(yamlValue.replace("'", "''")).append('\'')
-                    .append(System.lineSeparator());
-        }
-
-        try {
-            Files.write(userFilePath, appendBuilder.toString().getBytes(StandardCharsets.UTF_8),
-                    StandardOpenOption.APPEND);
-            plugin.getLog().info("Appended {} missing keys to {}", missingKeys.size(), userFile);
-        } catch (IOException ioEx) {
-            plugin.getLog().error("Cannot append missing keys to {}", userFile, ioEx);
+            plugin.getLog().error("Cannot upgrade language file {}", userFile, ioEx);
         }
     }
 
