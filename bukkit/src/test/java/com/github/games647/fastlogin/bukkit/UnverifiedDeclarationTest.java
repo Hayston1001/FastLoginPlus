@@ -28,7 +28,6 @@ import org.slf4j.Logger;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,6 +46,7 @@ class UnverifiedDeclarationTest {
     private AuthPlugin hook;
     private BungeeManager manager;
     private Player player;
+    private com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -54,10 +54,18 @@ class UnverifiedDeclarationTest {
         core = mock(FastLoginCore.class);
         hook = mock(AuthPlugin.class);
         manager = mock(BungeeManager.class);
+        integrator = mock(com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator.class);
+        set("authMePremiumIntegrator", integrator);
+        com.github.games647.fastlogin.core.shared.PendingRelayStore relays =
+                mock(com.github.games647.fastlogin.core.shared.PendingRelayStore.class);
+        when(relays.getToggle(anyString())).thenReturn(null);
+        set("pendingRelayStore", relays);
+        set("passwordNotices", com.google.common.cache.CacheBuilder.newBuilder().build());
         set("core", core);
         set("logger", mock(Logger.class));
         set("bungeeManager", manager);
         set("preLoginAttestations", new ConcurrentHashMap<String, UUID>());
+        set("crackedOverrides", new ConcurrentHashMap<String, Long>());
         doReturn(plugin).when(core).getPlugin();
         doReturn("FastLoginPlus").when(plugin).getName();
         doReturn(mock(FileConfiguration.class)).when(plugin).getConfig();
@@ -129,11 +137,13 @@ class UnverifiedDeclarationTest {
         when(manager.isProxyAllowed(proxy)).thenReturn(true);
         new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player, message(UUID.randomUUID()));
         verify(plugin, never()).putSession(any(), any());
+        verify(integrator, never()).applyProxyAutoLogin(anyBoolean());
         assertTrue(plugin.getPremiumPlayers().isEmpty());
     }
 
     @Test
     void configureOfflineClaimRejectsBeforeLegacyPremiumShortcuts() throws Exception {
+        when(manager.isSignedForwarding()).thenReturn(false);
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, "TestUser", uuid, null, facts(), proxy);
         ConfigureConnection connection = new ConfigureConnection(new Profile(uuid, claim.encode()));
         Method configure = FastLoginBukkit.class.getDeclaredMethod("onPlayerConfigure", Object.class);
@@ -142,6 +152,75 @@ class UnverifiedDeclarationTest {
         assertEquals(Component.text("ownership-conflict"), connection.reason);
         verify(core, never()).getResolver();
         verify(plugin, never()).getAuthMePremiumIntegrator();
+        verify(integrator).applyProxyAutoLogin(false);
+        verify(integrator, never()).markPlayerAsPremium(anyString(), any());
+    }
+
+    @Test
+    void configureVerifiedPolicyOffSynchronizesBeforeAccountDecisionWithoutPremiumMarking() throws Exception {
+        UUID mojang = UUID.randomUUID();
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                "TestUser", mojang, mojang, facts(), proxy);
+        ConfigureConnection connection = new ConfigureConnection(new Profile(mojang, claim.encode()));
+        Method configure = FastLoginBukkit.class.getDeclaredMethod("onPlayerConfigure", Object.class);
+        configure.setAccessible(true);
+        configure.invoke(plugin, new ConfigureEvent(connection));
+        org.mockito.InOrder order = inOrder(integrator, hook);
+        order.verify(integrator).applyProxyAutoLogin(false);
+        order.verify(hook).inspectAccount("TestUser");
+        verify(integrator, never()).markPlayerAsPremium(anyString(), any());
+        verify(integrator, never()).injectVerifiedUuid(anyString(), any());
+        verify(plugin, never()).putSession(any(), any());
+        verify(hook, never()).forceLogin(any());
+    }
+
+    @Test
+    void lateFactSynchronizesEvenWhenTheCarrierWasAlreadyAuthenticated() {
+        when(player.hasMetadata("FastLoginPlus")).thenReturn(true);
+        new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player, message(uuid));
+        verify(integrator).applyProxyAutoLogin(false);
+        verify(plugin, never()).putSession(any(), any());
+        verify(integrator, never()).markPlayerAsPremium(anyString(), any());
+    }
+
+    @Test
+    void enabledPolicyUsesTrueAndMissingOrLegacyFactsDoNotInventAPolicy() {
+        plugin.synchronizeAuthMePremiumPolicy(null);
+        plugin.synchronizeAuthMePremiumPolicy(IdentityClaim.Facts.defaults());
+        verifyNoInteractions(integrator);
+        plugin.synchronizeAuthMePremiumPolicy(new IdentityClaim.Facts(
+                false, false, IdentityClaim.Consent.NO, true, true, false));
+        verify(integrator).applyProxyAutoLogin(true);
+    }
+
+    @Test
+    void authMeReloadReassertsTheRememberedPolicyAfterTheCommandNotInsideIt() {
+        when(integrator.hasProxyAutoLoginPolicy()).thenReturn(true);
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        org.bukkit.event.server.ServerCommandEvent event = mock(org.bukkit.event.server.ServerCommandEvent.class);
+        when(event.getCommand()).thenReturn("authme reload");
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            new com.github.games647.fastlogin.bukkit.listener.AuthMeTakeoverListener(plugin).onConsoleCommand(event);
+        }
+        ArgumentCaptor<Runnable> action = ArgumentCaptor.forClass(Runnable.class);
+        verify(scheduler).runTaskLater(eq(plugin), action.capture(), eq(1L));
+        verify(integrator, never()).reassertProxyAutoLogin();
+        action.getValue().run();
+        verify(integrator).reassertProxyAutoLogin();
+    }
+
+    @Test
+    void unknownProxyPolicyDoesNotScheduleReloadWork() {
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            plugin.reassertAuthMeTakeover("/authme reload while policy is unknown");
+        }
+        verifyNoInteractions(scheduler);
+        verify(integrator, never()).reassertProxyAutoLogin();
+        verify(integrator, never()).applyProxyAutoLogin(anyBoolean());
+        verify(integrator, never()).unregisterPremiumPacketListener();
     }
 
     @Test
@@ -165,6 +244,137 @@ class UnverifiedDeclarationTest {
         field.set(plugin, value);
     }
 
+    @Test
+    void unsignedPropertyWithoutDeclarationCannotPrecreate() throws Exception {
+        when(manager.isSignedForwarding()).thenReturn(false);
+        UUID premium = UUID.randomUUID();
+        Profile profile = new Profile(uuid, null, premium);
+        configureWithLookup(profile, premium);
+        assertNoPremiumGrant();
+        verify(core).getResolver();
+        verify(plugin.getLog()).warn(contains("unsigned forwarding has no validated flp_identity"), eq("TestUser"));
+    }
+
+    @Test
+    void unsignedV4WithoutDeclarationCannotRegainTrustFromMatchingNameLookup() throws Exception {
+        when(manager.isSignedForwarding()).thenReturn(false);
+        UUID premium = UUID.randomUUID();
+        configureWithLookup(new Profile(premium, null, null), premium);
+        assertNoPremiumGrant();
+        verify(core).getResolver();
+    }
+
+    @Test
+    void malformedOrDuplicateDeclarationsDoNotAuthorizeUnsignedAttestation() throws Exception {
+        when(manager.isSignedForwarding()).thenReturn(false);
+        UUID premium = UUID.randomUUID();
+        configureWithLookup(new Profile(premium, "malformed", premium), premium);
+        Profile duplicate = new Profile(premium, verifiedClaim(premium, proxy), premium);
+        duplicate.duplicate = true;
+        configureWithLookup(duplicate, premium);
+        assertNoPremiumGrant();
+    }
+
+    @Test
+    void disallowedAndWrongConnectionDeclarationsDoNotAuthorizeUnsignedAttestation() throws Exception {
+        when(manager.isSignedForwarding()).thenReturn(false);
+        UUID premium = UUID.randomUUID();
+        configureWithLookup(new Profile(premium, verifiedClaim(premium, null), premium), premium);
+        configureWithLookup(new Profile(premium, verifiedClaim(premium, UUID.randomUUID()), premium), premium);
+        configureWithLookup(new Profile(premium, verifiedClaim(UUID.randomUUID(), proxy), premium), premium);
+        configureWithLookup(new Profile(premium, new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                "OtherUser", premium, premium, facts(), proxy).encode(), premium), premium);
+        assertNoPremiumGrant();
+    }
+
+    @Test
+    void ordinaryPasswordAccountKeepsPasswordFlowWithAnUnverifiedTrustedClaim() throws Exception {
+        when(manager.isSignedForwarding()).thenReturn(false);
+        when(hook.inspectAccount("TestUser")).thenReturn(LoginMethodDecider.AccountState.PASSWORD_ACCOUNT);
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, "TestUser", uuid, null,
+                new IdentityClaim.Facts(false, true, IdentityClaim.Consent.NO, true, true, false), proxy);
+        configureWithLookup(new Profile(uuid, claim.encode(), UUID.randomUUID()), UUID.randomUUID());
+        assertNoPremiumGrant();
+        verify(core, never()).getResolver();
+    }
+
+    @Test
+    void noForgeryStillCannotPrecreateOnUnsignedForwarding() throws Exception {
+        when(manager.isSignedForwarding()).thenReturn(false);
+        configureWithLookup(new Profile(uuid, null, null), UUID.randomUUID());
+        assertNoPremiumGrant();
+    }
+
+    @Test
+    void trustedLegacyDeclarationKeepsBothAttestationShortcuts() throws Exception {
+        when(manager.isSignedForwarding()).thenReturn(false);
+        UUID premium = UUID.randomUUID();
+        when(integrator.isAuthMePremiumEnabled()).thenReturn(true);
+        String rewrittenClaim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                "TestUser", uuid, premium,
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, true, true, false), proxy).encode();
+        configureWithLookup(new Profile(uuid, rewrittenClaim, premium), premium);
+        configureWithLookup(new Profile(premium, verifiedClaim(premium, proxy), null), premium);
+        verify(integrator, times(2)).markPlayerAsPremium("TestUser", premium);
+        verify(core, never()).getResolver();
+    }
+
+    @Test
+    void signedForwardingStillAcceptsBothShortcutsWithoutADeclaration() throws Exception {
+        UUID premium = UUID.randomUUID();
+        when(plugin.getConfig().getBoolean("autoLogin")).thenReturn(true);
+        when(integrator.isAuthMePremiumEnabled()).thenReturn(true);
+        configureWithLookup(new Profile(uuid, null, premium), premium);
+        configureWithLookup(new Profile(premium, null, null), premium);
+        verify(integrator, times(2)).markPlayerAsPremium("TestUser", premium);
+        verify(core, never()).getResolver();
+    }
+
+    @Test
+    void emptyLegacyAllowlistWarningExplainsNetworkIsolationWithoutWarningOnSignedForwarding() {
+        Logger log = mock(Logger.class);
+        BungeeManager.warnIfUntrustedLegacy(true, log);
+        verifyNoInteractions(log);
+        BungeeManager.warnIfUntrustedLegacy(false, log);
+        ArgumentCaptor<String> message = ArgumentCaptor.forClass(String.class);
+        verify(log).warn(message.capture());
+        assertTrue(message.getValue().contains("backend port must be reachable only by your proxy"));
+        assertTrue(message.getValue().contains("direct connections can impersonate players"));
+        assertTrue(message.getValue().contains("plaintext"));
+    }
+
+    private String verifiedClaim(UUID connection, UUID source) {
+        return new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED, "TestUser", connection, connection,
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, true, true, false), source).encode();
+    }
+
+    private void configureWithLookup(Profile profile, UUID resolved) throws Exception {
+        com.github.games647.craftapi.resolver.MojangResolver resolver =
+                mock(com.github.games647.craftapi.resolver.MojangResolver.class);
+        when(core.getResolver()).thenReturn(resolver);
+        com.github.games647.craftapi.model.Profile result = mock(com.github.games647.craftapi.model.Profile.class);
+        when(result.getId()).thenReturn(resolved);
+        when(resolver.findProfile("TestUser")).thenReturn(java.util.Optional.of(result));
+        plugin.recordPreLoginAttestation("TestUser", profile);
+        BukkitScheduler scheduler = mock(BukkitScheduler.class);
+        doAnswer(invocation -> { ((Runnable) invocation.getArgument(1)).run(); return null; })
+                .when(scheduler).runTaskAsynchronously(eq(plugin), any(Runnable.class));
+        try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
+            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
+            Method configure = FastLoginBukkit.class.getDeclaredMethod("onPlayerConfigure", Object.class);
+            configure.setAccessible(true);
+            configure.invoke(plugin, new ConfigureEvent(new ConfigureConnection(profile)));
+        }
+    }
+
+    private void assertNoPremiumGrant() {
+        verify(integrator, never()).injectVerifiedUuid(anyString(), any());
+        verify(integrator, never()).markPlayerAsPremium(anyString(), any());
+        verify(plugin, never()).putSession(any(), any());
+        verify(hook, never()).forceLogin(any());
+        verify(hook, never()).forceRegister(any(), anyString());
+    }
+
     public static final class ConfigureEvent {
         private final ConfigureConnection connection;
         public ConfigureEvent(ConfigureConnection connection) { this.connection = connection; }
@@ -184,12 +394,24 @@ class UnverifiedDeclarationTest {
     public static final class Profile {
         private final UUID uuid;
         private final String claim;
-        public Profile(UUID uuid, String claim) { this.uuid = uuid; this.claim = claim; }
+        private final UUID premium;
+        private boolean duplicate;
+        public Profile(UUID uuid, String claim) { this(uuid, claim, UUID.randomUUID()); }
+        public Profile(UUID uuid, String claim, UUID premium) {
+            this.uuid = uuid; this.claim = claim; this.premium = premium;
+        }
         public String getName() { return "TestUser"; }
         public UUID getId() { return uuid; }
         public Collection<Property> getProperties() {
-            return Arrays.asList(new Property(IdentityClaim.PROPERTY_NAME, claim),
-                    new Property(ForwardingAttributes.PREMIUM_UUID, UUID.randomUUID().toString()));
+            java.util.List<Property> properties = new java.util.ArrayList<>();
+            if (claim != null) {
+                properties.add(new Property(IdentityClaim.PROPERTY_NAME, claim));
+                if (duplicate) { properties.add(new Property(IdentityClaim.PROPERTY_NAME, claim)); }
+            }
+            if (premium != null) {
+                properties.add(new Property(ForwardingAttributes.PREMIUM_UUID_LEGACY, premium.toString()));
+            }
+            return properties;
         }
     }
 

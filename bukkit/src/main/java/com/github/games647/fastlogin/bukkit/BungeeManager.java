@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.bukkit;
 
@@ -62,7 +43,7 @@ public class BungeeManager {
     private static final String LEGACY_FILE_NAME = "proxy-whitelist.txt";
     private static final String FILE_NAME = "allowed-proxies.txt";
 
-    //null if proxies allowed list is empty so bungeecord support is disabled
+    // Null before initialization; an empty allowlist never authenticates proxy messages.
     private Set<UUID> proxyIds;
 
     private final FastLoginBukkit plugin;
@@ -132,6 +113,7 @@ public class BungeeManager {
                 plugin.getLog().error("allowed-proxies.txt contains no valid proxy IDs"
                         + " — proxy (BungeeCord/Velocity) support cannot work."
                         + " Add the proxy ID printed by the proxy plugin to the file.");
+                warnIfUntrustedLegacy(isSignedForwarding(), plugin.getLog());
             }
 
             registerPluginChannels();
@@ -139,6 +121,16 @@ public class BungeeManager {
             plugin.getLog().info("Remember to follow the proxy guide to complete your setup");
         } else {
             plugin.getLog().warn("Disabling Minecraft proxy configuration. Assuming direct connections from now on.");
+        }
+    }
+
+    // Called only after startup loaded an empty effective proxy allowlist.
+    static void warnIfUntrustedLegacy(boolean signedForwarding, org.slf4j.Logger logger) {
+        if (!signedForwarding) {
+            logger.warn("Legacy proxy forwarding is unsigned and allowed-proxies.txt has no "
+                    + "valid proxy IDs. The backend port must be reachable only by your proxy; "
+                    + "otherwise direct connections can impersonate players. Proxy IDs are sent in "
+                    + "plaintext and do not replace backend network isolation.");
         }
     }
 

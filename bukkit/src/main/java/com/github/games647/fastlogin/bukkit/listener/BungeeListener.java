@@ -87,6 +87,15 @@ public class BungeeListener implements PluginMessageListener {
             return;
         }
 
+        UUID sourceId = loginMessage.getProxyId();
+        if (!plugin.getBungeeManager().isProxyAllowed(sourceId)) {
+            plugin.getLog().warn("Received proxy id: {} that doesn't exist in the proxy file", sourceId);
+            return;
+        }
+        // If the earlier live-profile claim was unavailable, an already authenticated carrier
+        // can deliver the first policy fact. That late fallback only protects later connections.
+        plugin.synchronizeAuthMePremiumPolicy(loginMessage.getFacts());
+
         // A player who is already authenticated is the normal case here, not a fault: on a Paper
         // backend the configure phase logs premium players in before the proxy's own message can
         // arrive, so that message is a redundant duplicate whose payload is ignored on purpose.
@@ -99,12 +108,7 @@ public class BungeeListener implements PluginMessageListener {
                         loginMessage, targetPlayer);
             }
         } else {
-            UUID sourceId = loginMessage.getProxyId();
-            if (plugin.getBungeeManager().isProxyAllowed(sourceId)) {
-                readMessage(targetPlayer, loginMessage);
-            } else {
-                plugin.getLog().warn("Received proxy id: {} that doesn't exist in the proxy file", sourceId);
-            }
+            readMessage(targetPlayer, loginMessage);
         }
     }
 

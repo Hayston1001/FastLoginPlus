@@ -403,7 +403,7 @@ final class EasyAuth344Bridge {
             player.sendSystemMessage(FabricMessages.text("binding-complete"));
             return;
         }
-        TransferTarget transfer = transferTarget(FabricConfig.readTransferSettings());
+        TransferTarget transfer = transferTarget(FabricConfig.readTransferSettings(), name);
         player.sendSystemMessage(FabricMessages.text("binding-checking"));
         // resolve the pinned premium UUID off the server thread, then finish on it
         CompletableFuture.supplyAsync(() -> premiumNames.resolve(name)).whenComplete((target, error) ->
@@ -415,10 +415,13 @@ final class EasyAuth344Bridge {
                                String passwordHash, Optional<UUID> target, TransferTarget transfer,
                                String proxyIds) {
         if (target == null || target.isEmpty()) {
+            BindingTransferDiagnostics.skipped(LOGGER, name, BindingTransferDiagnostics.Reason.NAME_UNAVAILABLE);
             player.sendSystemMessage(FabricMessages.text("binding-name-unavailable"));
             return;
         }
         if (!player.connection.isAcceptingMessages()) {
+            BindingTransferDiagnostics.skipped(LOGGER, name, BindingTransferDiagnostics.skipReason(
+                    true, true, false, player.hasDisconnected()));
             return;
         }
         Object db = field(easyAuth, null, "DB");
@@ -426,10 +429,12 @@ final class EasyAuth344Bridge {
         try {
             checkBindingEntry(current, name);
         } catch (RuntimeException changed) {
+            BindingTransferDiagnostics.skipped(LOGGER, name, BindingTransferDiagnostics.Reason.ACCOUNT_CHANGED);
             player.sendSystemMessage(FabricMessages.text("binding-account-changed"));
             return;
         }
         if (!passwordHash.equals(field(entryType, current, "password"))) {
+            BindingTransferDiagnostics.skipped(LOGGER, name, BindingTransferDiagnostics.Reason.ACCOUNT_CHANGED);
             player.sendSystemMessage(FabricMessages.text("binding-account-changed"));
             return;
         }
@@ -445,24 +450,28 @@ final class EasyAuth344Bridge {
 
     private void transferForBinding(ServerPlayer player, String name, PendingBinding pending,
                                     String host, int port) {
-        if (pendingBindings.get(name) == pending && pending.isLive()
-                && player.connection.isAcceptingMessages()) {
-            LOGGER.info("Transferring {} for verified premium binding", name);
-            player.connection.send(new ClientboundTransferPacket(host, port));
+        boolean current = pendingBindings.get(name) == pending;
+        boolean live = current && pending.isLive();
+        boolean accepting = live && player.connection.isAcceptingMessages();
+        BindingTransferDiagnostics.Reason reason = BindingTransferDiagnostics.skipReason(
+                current, live, accepting, live && !accepting && player.hasDisconnected());
+        if (reason != null) {
+            BindingTransferDiagnostics.skipped(LOGGER, name, reason);
+            return;
         }
+        LOGGER.info("Transferring {} for verified premium binding", name);
+        player.connection.send(new ClientboundTransferPacket(host, port));
     }
 
-    private TransferTarget transferTarget(FabricConfig.TransferSettings config) {
+    private TransferTarget transferTarget(FabricConfig.TransferSettings config, String name) {
+        BindingTransferDiagnostics.Reason problem =
+                BindingTransferDiagnostics.targetProblem(config.host(), config.port());
+        if (problem != null) {
+            BindingTransferDiagnostics.skipped(LOGGER, name, problem);
+            throw FabricMessages.failure("binding-transfer-unavailable");
+        }
         String host = config.host().trim();
-        int port;
-        try {
-            port = Integer.parseInt(config.port());
-        } catch (NumberFormatException error) {
-            throw FabricMessages.failure("binding-transfer-unavailable");
-        }
-        if (host.isEmpty() || port < 1 || port > 65535) {
-            throw FabricMessages.failure("binding-transfer-unavailable");
-        }
+        int port = Integer.parseInt(config.port());
         return new TransferTarget(host, port);
     }
 

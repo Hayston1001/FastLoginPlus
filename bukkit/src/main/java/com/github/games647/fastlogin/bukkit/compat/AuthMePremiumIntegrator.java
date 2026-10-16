@@ -37,6 +37,7 @@ import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
@@ -80,6 +81,16 @@ public final class AuthMePremiumIntegrator {
 
     private final FastLoginBukkit plugin;
     private final AuthMeVersionDetector versionDetector;
+    enum ProxyPremiumPolicy {
+        UNKNOWN,
+        ON,
+        OFF
+    }
+
+    private ProxyPremiumPolicy proxyPremiumPolicy = ProxyPremiumPolicy.UNKNOWN;
+    private boolean premiumConsumersNeedRefresh;
+    private boolean premiumSettingNeedsSave;
+    private final AtomicBoolean policyMismatchWarned = new AtomicBoolean();
 
     // Cached reflection handles (lazy-initialized)
     private Object authMeInjector;
@@ -1176,7 +1187,43 @@ public final class AuthMePremiumIntegrator {
      *
      * @return true if the operation succeeded
      */
-    public boolean forceEnablePremium() {
+    public synchronized boolean forceEnablePremium() {
+        return setPremiumEnabled(true, false);
+    }
+
+    /**
+     * Applies an explicitly declared proxy policy through the existing Settings/consumer mechanism.
+     *
+     * @param enabled the trusted proxy's autoLogin value, never a locally inferred value
+     * @return whether settings and the required consumer refresh succeeded
+     */
+    public synchronized boolean applyProxyAutoLogin(boolean enabled) {
+        proxyPremiumPolicy = enabled ? ProxyPremiumPolicy.ON : ProxyPremiumPolicy.OFF;
+        return setPremiumEnabled(enabled, false);
+    }
+
+    /**
+     * Reapplies the last declared policy after AuthMe's reload, including cached consumers.
+     * Unknown policy is a successful no-op, not an implicit request to enable premium.
+     *
+     * @return whether synchronization succeeded
+     */
+    public synchronized boolean reassertProxyAutoLogin() {
+        return proxyPremiumPolicy == ProxyPremiumPolicy.UNKNOWN
+                || setPremiumEnabled(proxyPremiumPolicy == ProxyPremiumPolicy.ON, true);
+    }
+
+    /**
+     * Whether a trusted proxy has supplied a policy that can be reasserted.
+     *
+     * @return false while startup policy is unknown
+     */
+    public synchronized boolean hasProxyAutoLoginPolicy() {
+        return proxyPremiumPolicy != ProxyPremiumPolicy.UNKNOWN;
+    }
+
+    // Package-visible to test remembered-policy/reload requests separately from AuthMe's private DI graph.
+    boolean setPremiumEnabled(boolean enabled, boolean refreshConsumers) {
         if (!versionDetector.isAuthMe6()) {
             return false;
         }
@@ -1208,31 +1255,48 @@ public final class AuthMePremiumIntegrator {
                 Class.forName("ch.jalu.configme.properties.Property"));
             boolean currentValue = (boolean) getProperty.invoke(settings, enablePremiumProperty);
 
-            if (currentValue) {
-                // Already enabled — nothing to do
+            warnIfPolicyDisabled(currentValue, enabled);
+            if (currentValue == enabled && !refreshConsumers && !premiumConsumersNeedRefresh) {
                 return true;
             }
 
-            // 3. setProperty + save (persist to disk so /authme reload keeps it)
-            Method setProperty = settings.getClass().getMethod("setProperty",
-                Class.forName("ch.jalu.configme.properties.Property"), Object.class);
-            setProperty.invoke(settings, enablePremiumProperty, true);
-
-            Method save = settings.getClass().getMethod("save");
-            save.invoke(settings);
-
-            plugin.getLog().info(
-                "FLP has forced AuthMe's enablePremium=true (was false). "
-                + "FLP handles Mojang verification; AuthMe's premium checks are now unlocked.");
+            premiumConsumersNeedRefresh = true;
+            boolean changed = currentValue != enabled;
+            if (changed) {
+                // Persist the same setting as the startup takeover; never alter player records/lists.
+                Method setProperty = settings.getClass().getMethod("setProperty",
+                    Class.forName("ch.jalu.configme.properties.Property"), Object.class);
+                premiumSettingNeedsSave = true;
+                setProperty.invoke(settings, enablePremiumProperty, enabled);
+            }
+            if (premiumSettingNeedsSave) {
+                settings.getClass().getMethod("save").invoke(settings);
+                premiumSettingNeedsSave = false;
+            }
+            if (changed && enabled) {
+                plugin.getLog().info(
+                    "FLP has forced AuthMe's enablePremium=true (was false). "
+                    + "FLP handles Mojang verification; AuthMe's premium checks are now unlocked.");
+            }
 
             // 4. Refresh every component that caches enablePremium, so the forced value takes
             //    effect without a restart or a manual /authme reload
             reloadEnablePremiumConsumers(injector, settings);
+            premiumConsumersNeedRefresh = false;
 
             return true;
         } catch (Exception e) {
-            plugin.getLog().error("Failed to force-enable AuthMe enablePremium: {}", e);
+            plugin.getLog().error("Failed to synchronize AuthMe enablePremium={}", enabled, e);
             return false;
+        }
+    }
+
+    void warnIfPolicyDisabled(boolean wasEnabled, boolean enabled) {
+        if (proxyPremiumPolicy == ProxyPremiumPolicy.OFF && wasEnabled && !enabled
+                && policyMismatchWarned.compareAndSet(false, true)) {
+            plugin.getLog().warn("Proxy declared autoLogin=false but AuthMe enablePremium was true; "
+                    + "synchronizing AuthMe premium mode to false. "
+                    + "FLP does not edit player records or proxy premium lists.");
         }
     }
 
@@ -1387,7 +1451,7 @@ public final class AuthMePremiumIntegrator {
     }
 
     /**
-     * Performs the full AuthMe 6.0 takeover: forces enablePremium=true and
+     * Performs standalone AuthMe 6.0 takeover: forces enablePremium=true and
      * unregisters AuthMe's redundant packet listener. Called once at startup after
      * AuthMe has fully initialized; the individual halves are what later re-assertions
      * use (see {@link #unregisterPremiumPacketListener()}).
@@ -1395,12 +1459,25 @@ public final class AuthMePremiumIntegrator {
      * @return true if both operations succeeded
      */
     public boolean enforceFlpPremiumControl() {
+        return enforceFlpPremiumControl(false);
+    }
+
+    /**
+     * Takes over verification without inventing a proxy policy at startup.
+     *
+     * @param proxyMode whether the initialized backend proxy manager is enabled
+     * @return whether required startup operations succeeded
+     */
+    public synchronized boolean enforceFlpPremiumControl(boolean proxyMode) {
         if (!versionDetector.isAuthMe6()) {
             return false;
         }
-        boolean forced = forceEnablePremium();
+        if (proxyMode) {
+            proxyPremiumPolicy = ProxyPremiumPolicy.UNKNOWN;
+        }
+        boolean forced = proxyMode || forceEnablePremium();
         boolean unregistered = unregisterPremiumPacketListener();
-        if (forced && !unregistered) {
+        if (!proxyMode && forced && !unregistered) {
             // half-applied state — enablePremium was persisted but
             // AuthMe's packet listener may still be registered, which would
             // double-intercept START/ENCRYPTION_RESPONSE

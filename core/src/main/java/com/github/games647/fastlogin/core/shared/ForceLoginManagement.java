@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.core.shared;
 
@@ -120,13 +101,21 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 // actually reached the game — because the login phase has no chat
                 // yet; it goes only to the password flow the observation caused,
                 // and only while the observation is still recorded.
-                if (core.consumeSameNameCrackedNotice(getName(player))
-                        && playerProfile.isSameNameCracked()) {
-                    core.sendLocaleMessage("same-name-cracked-recorded", player);
-                }
+                notifySameNameCracked(playerProfile);
             }
         } catch (Exception ex) {
             core.getPlugin().getLog().warn("ERROR ON FORCE LOGIN of {}", getName(player), ex);
+        }
+    }
+
+    /**
+     * Delivers a first-confirmation notice; proxies may negotiate backend-local rendering.
+     *
+     * @param profile the offline session's current stored observation
+     */
+    protected void notifySameNameCracked(StoredProfile profile) {
+        if (core.consumeSameNameCrackedNotice(getName(player)) && profile.isSameNameCracked()) {
+            core.sendLocaleMessage("same-name-cracked-recorded", player);
         }
     }
 

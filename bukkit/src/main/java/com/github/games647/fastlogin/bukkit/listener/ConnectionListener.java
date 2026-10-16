@@ -69,11 +69,16 @@ public class ConnectionListener implements Listener {
         if (loginEvent.getResult() == Result.ALLOWED && !plugin.isServerFullyStarted()) {
             loginEvent.disallow(Result.KICK_OTHER, plugin.getCore().getMessage("not-started"));
         }
+        if (loginEvent.getResult() == Result.ALLOWED) {
+            plugin.observeSpigotIdentity("PlayerLoginEvent", loginEvent.getPlayer().getName(),
+                    loginEvent.getPlayer(), true);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
     public void onPlayerJoin(PlayerJoinEvent joinEvent) {
         Player player = joinEvent.getPlayer();
+        plugin.observeSpigotIdentity("PlayerJoinEvent", player.getName(), player, false);
 
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
             delayForceLogin(player);

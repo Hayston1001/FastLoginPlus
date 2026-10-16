@@ -1,27 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
  * Copyright (c) 2026 Hayston1001
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
  */
 package com.github.hayston1001.fastloginplus.fabric;
 
@@ -55,6 +35,8 @@ public final class FastLoginFabric implements ModInitializer {
         LOGGER.info("FastLoginPlus Fabric {} | EasyAuth {}",
                 modVersion("fastloginplus_fabric"), modVersion("easyauth"));
         EasyAuth344Bridge bridge = new EasyAuth344Bridge();
+        FabricCrackedNotice crackedNotice = new FabricCrackedNotice();
+        crackedNotice.register();
         BindingConsentWriter.register();
         CommandRegistrationCallback.EVENT.register((dispatcher, dedicated, environment) ->
                 dispatcher.register(literal("flp")
@@ -86,6 +68,7 @@ public final class FastLoginFabric implements ModInitializer {
                 bridge.verifyPolicy();
                 IdentityClaim claim = parseClaim(profile);
                 bridge.beforeConfigure(server, claim);
+                crackedNotice.beforeConfigure(listener, claim);
                 LOGGER.info("Validated {} forwarding claim for {}; profile property names={}",
                         claim.getDecision(), profile.name(), profile.properties().keySet().size());
             } catch (IllegalArgumentException invalidClaim) {
@@ -99,7 +82,9 @@ public final class FastLoginFabric implements ModInitializer {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             try {
                 GameProfile profile = handler.player.getGameProfile();
-                bridge.onJoin(handler.player, parseClaim(profile));
+                IdentityClaim claim = parseClaim(profile);
+                bridge.onJoin(handler.player, claim);
+                crackedNotice.onJoin(handler.player, claim);
             } catch (RuntimeException rejected) {
                 LOGGER.warn("Rejecting Fabric player {}: {}", handler.player.getGameProfile().name(),
                         rejected.getMessage());
@@ -119,7 +104,7 @@ public final class FastLoginFabric implements ModInitializer {
         }
     }
 
-    private static IdentityClaim parseClaim(GameProfile profile) {
+    static IdentityClaim parseClaim(GameProfile profile) {
         List<String> values = new ArrayList<>();
         for (Property property : profile.properties().get(IdentityClaim.PROPERTY_NAME)) {
             values.add(property.value());
