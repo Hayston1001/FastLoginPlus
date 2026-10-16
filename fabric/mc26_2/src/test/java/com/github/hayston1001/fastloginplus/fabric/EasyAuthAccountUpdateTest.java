@@ -5,6 +5,7 @@
  */
 package com.github.hayston1001.fastloginplus.fabric;
 
+import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim;
 import org.junit.jupiter.api.Test;
 
 import java.time.ZonedDateTime;
@@ -12,6 +13,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EasyAuthAccountUpdateTest {
 
@@ -71,6 +73,31 @@ class EasyAuthAccountUpdateTest {
         assertThrows(FabricMessages.PlayerFailure.class, () -> BindingRequest.completeNow(
                 com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED,
                 true, AccountState.BOUND));
+    }
+
+    @Test
+    void unconsentedVerifiedPasswordFlowCanHandOffToImmediateBindingAfterAuthentication() {
+        for (IdentityClaim.Consent consent : new IdentityClaim.Consent[]{
+                IdentityClaim.Consent.NO, IdentityClaim.Consent.UNKNOWN}) {
+            Entry entry = new Entry();
+            IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                    "TestUser", VERIFIED, VERIFIED,
+                    new IdentityClaim.Facts(false, false, consent, true, true, false));
+            AccountState.Snapshot state = new AccountState.Snapshot(AccountState.PASSWORD, null);
+            assertEquals(PremiumGate.Action.PASSWORD_LOCK, PremiumGate.decideVerified(claim.getConsent(),
+                    state, claim.getVerifiedMojangUuid(), false, claim.isAutoLogin()));
+            assertEquals("binding-consent-required", EasyAuth344Bridge.passwordLockMessage(claim, state));
+            assertThrows(FabricMessages.PlayerFailure.class,
+                    () -> BindingRequest.completeNow(claim.getDecision(), false, state.state()));
+            assertOriginal(entry);
+
+            // EasyAuth has now authenticated the password holder on the same verified connection.
+            assertTrue(BindingRequest.completeNow(claim.getDecision(), true, state.state()));
+            EasyAuthAccountUpdate.bind(Entry.class, entry, claim.getVerifiedMojangUuid(), candidate -> true);
+            assertEquals("", entry.password);
+            assertEquals(Kind.TRUE, entry.onlineAccount);
+            assertEquals(VERIFIED, entry.uuid);
+        }
     }
 
     private static void assertOriginal(Entry entry) {

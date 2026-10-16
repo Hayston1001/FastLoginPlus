@@ -146,6 +146,11 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
     }
 
     @Override
+    protected void notifyPremiumPolicyDisabled() {
+        Bukkit.getScheduler().runTask(core.getPlugin(), () -> core.getPlugin().sendPremiumPolicyNotice(player));
+    }
+
+    @Override
     public boolean isOnline(Player player) {
         try {
             //the player-list isn't thread-safe

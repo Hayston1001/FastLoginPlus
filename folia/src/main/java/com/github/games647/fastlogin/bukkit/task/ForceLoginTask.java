@@ -151,6 +151,11 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
     }
 
     @Override
+    protected void notifyPremiumPolicyDisabled() {
+        player.getScheduler().run(core.getPlugin(), task -> core.getPlugin().sendPremiumPolicyNotice(player), null);
+    }
+
+    @Override
     public boolean isOnline(Player player) {
         // Folia: use Entity.getScheduler() + CompletableFuture instead of callSyncMethod
         CompletableFuture<Boolean> future = new CompletableFuture<>();

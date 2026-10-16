@@ -55,6 +55,76 @@ class LoginActionMessageTest {
     private static final UUID PREMIUM_UUID = UUID.fromString("272cb3e9-24d3-4dcd-b47c-4b786e7421f8");
 
     @Test
+    void explicitDeclarationsRoundTripOnAllThreeExistingTypes() {
+        UUID connection = UUID.randomUUID();
+        for (Type type : Type.values()) {
+            boolean offline = type == Type.CRACKED;
+            LoginActionMessage original = new LoginActionMessage(type, "Steve", PROXY_ID,
+                    offline ? null : PREMIUM_UUID);
+            original.setFacts(new IdentityClaim.Facts(false, true, IdentityClaim.Consent.YES, true, false, true));
+            original.setDeclaration(offline ? IdentityClaim.Decision.OFFLINE
+                    : IdentityClaim.Decision.PREMIUM_VERIFIED, connection);
+            ByteArrayDataOutput output = ByteStreams.newDataOutput();
+            original.writeTo(output);
+            LoginActionMessage decoded = new LoginActionMessage();
+            decoded.readFrom(ByteStreams.newDataInput(output.toByteArray()));
+            assertEquals(type, decoded.getType());
+            assertEquals(original.getIdentityDecision(), decoded.getIdentityDecision());
+            assertEquals(connection, decoded.getForwardedUuid());
+            assertEquals(IdentityClaim.Consent.YES, decoded.getConsent());
+        }
+    }
+
+    @Test
+    void unverifiedTypeCannotSmuggleAPremiumDecisionOrUuid() {
+        LoginActionMessage unverified = new LoginActionMessage(Type.CRACKED, "Steve", PROXY_ID, null);
+        assertThrows(IllegalArgumentException.class, () -> unverified.setDeclaration(
+                IdentityClaim.Decision.PREMIUM_VERIFIED, PREMIUM_UUID));
+        LoginActionMessage forged = new LoginActionMessage(Type.CRACKED, "Steve", PROXY_ID, PREMIUM_UUID);
+        assertThrows(IllegalArgumentException.class, () -> forged.writeTo(ByteStreams.newDataOutput()));
+    }
+
+    @Test
+    void truncatedNewSuffixIsNotTreatedAsALegacyGrant() {
+        LoginActionMessage original = new LoginActionMessage(Type.CRACKED, "Steve", PROXY_ID, null);
+        original.setDeclaration(IdentityClaim.Decision.OFFLINE, PREMIUM_UUID);
+        ByteArrayDataOutput output = ByteStreams.newDataOutput();
+        original.writeTo(output);
+        byte[] bytes = output.toByteArray();
+        assertThrows(IllegalArgumentException.class, () -> new LoginActionMessage().readFrom(
+                ByteStreams.newDataInput(java.util.Arrays.copyOf(bytes, bytes.length - 1))));
+    }
+
+    @Test
+    void oldReadersSeeUnverifiedTypeAndNoPremiumUuidBeforeTheNewSuffix() {
+        LoginActionMessage message = new LoginActionMessage(Type.CRACKED, "Steve", PROXY_ID, null);
+        message.setDeclaration(IdentityClaim.Decision.OFFLINE, PREMIUM_UUID);
+        ByteArrayDataOutput output = ByteStreams.newDataOutput();
+        message.writeTo(output);
+        ByteArrayDataInput legacy = ByteStreams.newDataInput(output.toByteArray());
+        assertEquals(Type.CRACKED.ordinal(), legacy.readByte());
+        assertEquals("Steve", legacy.readUTF());
+        assertEquals(PROXY_ID, new UUID(legacy.readLong(), legacy.readLong()));
+        // UUID-aware old readers also see only the absent UUID sentinel, never a grant.
+        assertEquals(0L, legacy.readLong());
+        assertEquals(0L, legacy.readLong());
+    }
+
+    @Test
+    void oldCrackedFramesStillDeclareUnverifiedRatherThanMissingAttestation() {
+        ByteArrayDataOutput output = ByteStreams.newDataOutput();
+        output.writeByte(Type.CRACKED.ordinal());
+        output.writeUTF("Steve");
+        output.writeLong(PROXY_ID.getMostSignificantBits());
+        output.writeLong(PROXY_ID.getLeastSignificantBits());
+        LoginActionMessage decoded = new LoginActionMessage();
+        decoded.readFrom(ByteStreams.newDataInput(output.toByteArray()));
+        assertEquals(IdentityClaim.Decision.OFFLINE, decoded.getIdentityDecision());
+        assertNull(decoded.getVerifiedPremiumUuid());
+        assertNull(decoded.getForwardedUuid());
+    }
+
+    @Test
     void roundTripPreservesVerifiedPremiumUuid() {
         LoginActionMessage original = new LoginActionMessage(Type.LOGIN, "Steve", PROXY_ID, PREMIUM_UUID);
 

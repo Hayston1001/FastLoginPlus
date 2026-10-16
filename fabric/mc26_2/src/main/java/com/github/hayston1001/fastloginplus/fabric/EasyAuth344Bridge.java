@@ -304,10 +304,9 @@ final class EasyAuth344Bridge {
                 claim.getVerifiedMojangUuid(), binding != null, claim.isAutoLogin(),
                 !claim.getFacts().policyDeclared() || claim.getFacts().autoRegisterUnknown());
         if (action == PremiumGate.Action.PASSWORD_LOCK) {
-            // no premium handling to do: the claim window expired, the entry was
-            // lost to a restart, the upgrade never finished, or the autoLogin
-            // policy is off. The password account keeps its password and
-            // /flp premium can be retried after logging in.
+            // No automatic conversion: consent or a claim window may be absent,
+            // or policy may keep the password/registration flow. Explain the
+            // actual branch; password holders can run /flp premium after login.
             LOGGER.info("Premium login not applied; the password lock stays for {}",
                     player.getGameProfile().name());
             player.sendSystemMessage(FabricMessages.text(passwordLockMessage(claim, state)));
@@ -331,7 +330,11 @@ final class EasyAuth344Bridge {
         if (!claim.isAutoLogin()) {
             return "premium-policy-disabled";
         }
-        return state.state() == AccountState.OPEN ? "registration-required" : "binding-window-unavailable";
+        if (state.state() == AccountState.OPEN) {
+            return "registration-required";
+        }
+        return claim.getConsent() == IdentityClaim.Consent.YES
+                ? "binding-window-unavailable" : "binding-consent-required";
     }
 
     private void completeAuthenticatedBinding(ServerPlayer player, IdentityClaim claim,

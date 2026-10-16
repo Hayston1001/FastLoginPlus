@@ -78,9 +78,10 @@ wait-on-proxy: '&6正在向代理发送请求. 若没有响应, 请联系管理�
 # 错误消息
 error-kick: '&4发生错误'
 database-error: '&4数据库错误，请联系管理员'
-ownership-conflict: '&4该名字下存在账号，但其所有者未将其升级为正版，已拒绝自动登录。请联系管理员。'
+ownership-conflict: '&4此连接不符合该账号的归属要求, 已拒绝登录. 请联系管理员.'
 account-state-unavailable: '&6暂时无法确认你的账号状态，已跳过正版自动登录，请使用密码登录。'
 premium-password-login: '&e此账号仍使用密码登录, 请先使用原密码登录. 想切换成正版免密登录, 请在登录后执行 &b/flp premium&e.'
+premium-policy-disabled: '&e服务器已关闭正版自动登录. 此已转正账号没有可用密码, 请联系管理员或按服务器策略重新设置密码.'
 invalid-verify-token: '&4无效的验证令牌，请确认你使用的服务器地址正确'
 invalid-session: '&4无效的会话'
 invalid-request: '&4无效的请求'

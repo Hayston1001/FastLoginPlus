@@ -690,6 +690,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // older proxy.
         UUID forwardedPremiumUuid = null;
         com.github.games647.fastlogin.protocol.IdentityClaim.Facts identityFacts = null;
+        com.github.games647.fastlogin.protocol.IdentityClaim identityDeclaration = null;
         try {
             connection = event.getClass().getMethod("getConnection").invoke(event);
             Object profile = connection.getClass().getMethod("getProfile").invoke(connection);
@@ -698,7 +699,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             address = (java.net.InetSocketAddress) connection.getClass()
                 .getMethod("getClientAddress").invoke(connection);
             forwardedPremiumUuid = readForwardedPremiumUuid(profile);
-            identityFacts = readIdentityFacts(profile, playerName, connectionUuid);
+            identityDeclaration = readIdentityDeclaration(profile, playerName, connectionUuid);
+            identityFacts = identityDeclaration == null ? null : identityDeclaration.getFacts();
             // an attestation only counts when this very login already carried it,
             // before Paper's profile cache could have supplied a stale profile.
             UUID configureAttestation = forwardedPremiumUuid;
@@ -711,6 +713,13 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             }
         } catch (Exception e) {
             logger.warn("Failed to extract player info from configure event", e);
+            return;
+        }
+
+        // Explicit OFFLINE wins over attestation, lookup and pending-toggle shortcuts.
+        if (identityDeclaration != null && identityDeclaration.getDecision()
+                == com.github.games647.fastlogin.protocol.IdentityClaim.Decision.OFFLINE) {
+            allowsIdentityLogin(playerName, false, identityFacts, connection, address);
             return;
         }
 
@@ -968,9 +977,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * @param profile        the forwarded profile
      * @param playerName     the logging-in player's name
      * @param connectionUuid the connection UUID the claim must bind to
-     * @return the declared facts, or null when nothing trustworthy was declared
+     * @return the full declaration, or null when nothing trustworthy was declared
      */
-    private com.github.games647.fastlogin.protocol.IdentityClaim.Facts readIdentityFacts(
+    private com.github.games647.fastlogin.protocol.IdentityClaim readIdentityDeclaration(
             Object profile, String playerName, java.util.UUID connectionUuid) {
         try {
             java.util.List<String> values = new java.util.ArrayList<>();
@@ -992,7 +1001,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     return null;
                 }
             }
-            return claim.getFacts();
+            return claim;
         } catch (Exception untrustworthy) {
             // no claim, a malformed one, or one bound to another profile: fail
             // closed to "no facts" and let the late message decide
@@ -1033,6 +1042,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private boolean allowsPremiumLogin(String playerName,
             com.github.games647.fastlogin.protocol.IdentityClaim.Facts facts,
             Object connection, java.net.InetSocketAddress address) {
+        return allowsIdentityLogin(playerName, true, facts, connection, address);
+    }
+
+    private boolean allowsIdentityLogin(String playerName, boolean verified,
+            com.github.games647.fastlogin.protocol.IdentityClaim.Facts facts,
+            Object connection, java.net.InetSocketAddress address) {
         com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState account;
         try {
             com.github.games647.fastlogin.core.hooks.AuthPlugin<Player> authPlugin = core.getAuthPluginHook();
@@ -1055,7 +1070,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                         () -> getConfig().getBoolean("auto-register-unknown"));
         com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome outcome =
                 com.github.games647.fastlogin.core.shared.LoginMethodDecider.decide(
-                        true, account, declared.consent(), autoLogin, autoRegisterUnknown);
+                        verified, account, declared.consent(), autoLogin, autoRegisterUnknown);
         if (outcome == com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.REJECT) {
             String reason = core.getMessage("ownership-conflict");
             if (connection != null) {
@@ -1069,11 +1084,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 && outcome != com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.AUTO_LOGIN) {
             logger.info("Keeping the auth plugin's own login flow for {} (decision {})",
                     playerName, outcome);
-            if (address != null
+            if (facts != null && address != null
                     && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
-                            .AccountState.PASSWORD_ACCOUNT
-                    && declared.consent() == com.github.games647.fastlogin.protocol.IdentityClaim.Consent.NO) {
-                passwordNotices.put(address, Boolean.TRUE);
+                            .AccountState.PASSWORD_ACCOUNT) {
+                passwordNotices.put(address, "premium-password-login");
+            } else if (facts != null && address != null && verified && !autoLogin
+                    && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
+                            .AccountState.PREMIUM_OWNED) {
+                passwordNotices.put(address, "premium-policy-disabled");
             }
             return false;
         }
@@ -1104,7 +1122,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         return pendingKicks.remove(playerName);
     }
 
-    private final com.google.common.cache.Cache<java.net.InetSocketAddress, Boolean> passwordNotices =
+    private final com.google.common.cache.Cache<java.net.InetSocketAddress, String> passwordNotices =
             com.google.common.cache.CacheBuilder.newBuilder().maximumSize(10000)
                     .expireAfterWrite(2, java.util.concurrent.TimeUnit.MINUTES).build();
 
@@ -1122,6 +1140,19 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     /**
+     * Explains policy-disabled premium recovery at most once per connection.
+     *
+     * @param player the player on its owning thread
+     */
+    public void sendPremiumPolicyNotice(Player player) {
+        String key = "flp-premium-policy-notice";
+        if (!player.hasMetadata(key)) {
+            player.setMetadata(key, new org.bukkit.metadata.FixedMetadataValue(this, true));
+            core.sendLocaleMessage("premium-policy-disabled", player);
+        }
+    }
+
+    /**
      * Consumes configure-phase work on the joining player's owning thread.
      *
      * @param player the joining player
@@ -1133,7 +1164,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             player.kickPlayer(denied);
             return false;
         }
-        if (passwordNotices.asMap().remove(player.getAddress()) != null) {
+        String notice = passwordNotices.asMap().remove(player.getAddress());
+        if ("premium-policy-disabled".equals(notice)) {
+            sendPremiumPolicyNotice(player);
+        } else if (notice != null) {
             sendPasswordNotice(player);
         }
         return true;

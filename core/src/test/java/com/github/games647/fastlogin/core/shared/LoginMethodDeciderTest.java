@@ -61,15 +61,13 @@ class LoginMethodDeciderTest {
     }
 
     @Test
-    void convertedAccountWithoutConsentIsRejectedOnEveryReconnect() {
-        for (int reconnect = 0; reconnect < 3; reconnect++) {
+    void convertedAccountCountsAsConsentForEveryVerifiedReconnect() {
+        for (Consent consent : Consent.values()) {
+            assertEquals(Outcome.AUTO_LOGIN,
+                    LoginMethodDecider.decide(true, AccountState.PREMIUM_OWNED, consent));
             assertEquals(Outcome.REJECT,
-                    LoginMethodDecider.decide(true, AccountState.PREMIUM_OWNED, Consent.NO));
+                    LoginMethodDecider.decide(false, AccountState.PREMIUM_OWNED, consent));
         }
-        assertEquals(Outcome.AUTO_LOGIN,
-                LoginMethodDecider.decide(true, AccountState.PREMIUM_OWNED, Consent.YES));
-        assertEquals(Outcome.REJECT,
-                LoginMethodDecider.decide(false, AccountState.PREMIUM_OWNED, Consent.NO));
     }
 
     @Test
@@ -110,14 +108,33 @@ class LoginMethodDeciderTest {
     }
 
     @Test
-    void autoLoginOffKeepsEveryoneOnThePasswordFlow() {
-        // D-06 #1: no premium handling at all when the proxy policy is off
+    void autoLoginOffKeepsUnconvertedAccountsOnThePasswordFlow() {
+        // D-06 #1: policy prevents new claiming/registration, not established ownership.
         assertEquals(Outcome.PASSWORD,
                 LoginMethodDecider.decide(true, AccountState.PASSWORD_ACCOUNT, Consent.YES, false));
         assertEquals(Outcome.GUIDE_REGISTER,
                 LoginMethodDecider.decide(true, AccountState.NONE, Consent.UNKNOWN, false));
         assertEquals(Outcome.PASSWORD,
                 LoginMethodDecider.decide(false, AccountState.PASSWORD_ACCOUNT, Consent.YES, false));
+    }
+
+    @Test
+    void policyOffMatrixPreservesOwnershipAndReadFailureBeforePolicy() {
+        for (Consent consent : Consent.values()) {
+            for (boolean autoRegister : new boolean[]{false, true}) {
+                for (boolean verified : new boolean[]{false, true}) {
+                    assertEquals(verified ? Outcome.PASSWORD : Outcome.REJECT,
+                            LoginMethodDecider.decide(verified, AccountState.PREMIUM_OWNED,
+                                    consent, false, autoRegister));
+                    assertEquals(Outcome.PASSWORD, LoginMethodDecider.decide(verified,
+                            AccountState.PASSWORD_ACCOUNT, consent, false, autoRegister));
+                    assertEquals(Outcome.GUIDE_REGISTER, LoginMethodDecider.decide(verified,
+                            AccountState.NONE, consent, false, autoRegister));
+                    assertEquals(Outcome.PASSWORD, LoginMethodDecider.decide(verified,
+                            AccountState.READ_FAILURE, consent, false, autoRegister));
+                }
+            }
+        }
     }
 
     @Test

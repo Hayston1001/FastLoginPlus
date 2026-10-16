@@ -75,6 +75,10 @@ public class ForceLoginTask
 
         if (!isOnlineMode()) {
             session.setAlreadySaved(true);
+            if (session.getIdentityDecision()
+                    == com.github.games647.fastlogin.protocol.IdentityClaim.Decision.OFFLINE && isOnline(player)) {
+                sendDeclaration(Type.CRACKED, session);
+            }
         }
     }
 
@@ -106,6 +110,10 @@ public class ForceLoginTask
         if (session.needsRegistration()) {
             type = Type.REGISTER;
         }
+        sendDeclaration(type, session);
+    }
+
+    private void sendDeclaration(Type type, LoginSession session) {
 
         UUID proxyId = UUID.fromString(ProxyServer.getInstance().getConfig().getUuid());
         // also hand over the Mojang UUID verified at LoginEvent. The backend needs it
@@ -115,9 +123,13 @@ public class ForceLoginTask
         // The trailing facts are the proxy's observations plus the recorded upgrade
         // consent; the backend decides the login method from them.
         session.computeFacts(core);
-        LoginActionMessage loginMessage = new LoginActionMessage(type, player.getName(), proxyId,
-                session.getUuid());
+        UUID verified = type == Type.CRACKED ? null : session.getUuid();
+        LoginActionMessage loginMessage = new LoginActionMessage(type, player.getName(), proxyId, verified);
         loginMessage.setFacts(session.getFacts());
+        loginMessage.setDeclaration(type == Type.CRACKED
+                ? com.github.games647.fastlogin.protocol.IdentityClaim.Decision.OFFLINE
+                : verified == null ? com.github.games647.fastlogin.protocol.IdentityClaim.Decision.UNDECIDED
+                : com.github.games647.fastlogin.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED, player.getUniqueId());
 
         core.getPlugin().sendPluginMessage(server, loginMessage);
     }

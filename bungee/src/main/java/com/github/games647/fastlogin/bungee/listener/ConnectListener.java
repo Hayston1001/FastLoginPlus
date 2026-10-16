@@ -113,7 +113,7 @@ public class ConnectListener implements Listener {
                         "Rewrite field not found. Setting only legacy BungeeCord field"
                 );
             }
-        } catch (ReflectiveOperationException reflectiveOperationException) {
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError reflectiveOperationException) {
             Logger logger = LoggerFactory.getLogger(ConnectListener.class);
             logger.error(
                     "Cannot find Bungee UUID field implementation; Disabling premium UUID and skin won't work.",
@@ -147,7 +147,7 @@ public class ConnectListener implements Listener {
 
         try {
             return handlerClass.getMethod(LOGIN_PROFILE_GETTER_NAME);
-        } catch (NoSuchMethodException noSuchMethodEx) {
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError noSuchMethodEx) {
             LoggerFactory.getLogger(ConnectListener.class).error(
                     "Cannot find {}.{}(); forwardSkin and the premium UUID attestation are"
                     + " disabled on this proxy build.",
@@ -158,10 +158,12 @@ public class ConnectListener implements Listener {
 
     private final FastLoginBungee plugin;
     private final AntiBotService antiBotService;
+    private final EarlyDeclarationSupport earlyDeclarations;
 
     public ConnectListener(FastLoginBungee plugin, AntiBotService antiBotService) {
         this.plugin = plugin;
         this.antiBotService = antiBotService;
+        this.earlyDeclarations = new EarlyDeclarationSupport(HANDLER_CLASS, plugin.getLog());
     }
 
     /**
@@ -289,6 +291,20 @@ public class ConnectListener implements Listener {
                 plugin.getLog().warn("Unexpected connection type {} — cannot update the login"
                         + " profile for {}", connection.getClass().getName(), verifiedUsername);
             }
+        } else {
+            LoginSession session = plugin.getSession().get(connection);
+            boolean bedrock = plugin.getFloodgateService() != null
+                    && plugin.getFloodgateService().isBedrockPlayer(connection.getUniqueId());
+            if (!bedrock && session != null
+                    && session.getIdentityDecision() == IdentityClaim.Decision.OFFLINE) {
+                session.computeFacts(plugin.getCore());
+                IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, connection.getName(),
+                        connection.getUniqueId(), null, session.getFacts(),
+                        UUID.fromString(ProxyServer.getInstance().getConfig().getUuid()));
+                // D-23: try early, warn once on failure, keep admission and the
+                // onServerConnected late sender intact. Never reject all offline players.
+                earlyDeclarations.attach(connection, claim);
+            }
         }
     }
 
@@ -351,7 +367,8 @@ public class ConnectListener implements Listener {
     private void attachIdentityFacts(PendingConnection connection, String username,
                                      UUID verifiedUUID, LoginSession session) {
         session.computeFacts(plugin.getCore());
-        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+        IdentityClaim claim = new IdentityClaim(verifiedUUID == null ? IdentityClaim.Decision.OFFLINE
+                : IdentityClaim.Decision.PREMIUM_VERIFIED,
                 username, connection.getUniqueId(), verifiedUUID, session.getFacts(),
                 UUID.fromString(ProxyServer.getInstance().getConfig().getUuid()));
         boolean attached = LoginProfileProperties.attach(loginProfile(connection),

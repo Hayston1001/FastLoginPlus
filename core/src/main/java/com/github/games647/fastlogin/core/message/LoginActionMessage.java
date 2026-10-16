@@ -26,6 +26,7 @@
 package com.github.games647.fastlogin.core.message;
 
 import com.github.games647.fastlogin.protocol.IdentityClaim;
+import com.github.games647.fastlogin.protocol.ConnectionDeclaration;
 import com.google.common.io.ByteArrayDataInput;
 import com.google.common.io.ByteArrayDataOutput;
 
@@ -57,6 +58,38 @@ public class LoginActionMessage implements ChannelMessage {
 
     /** Everything the proxy declared about this connection (facts + policy). */
     private IdentityClaim.Facts facts = IdentityClaim.Facts.defaults();
+    private ConnectionDeclaration declaration;
+
+    public void setDeclaration(IdentityClaim.Decision decision, UUID forwardedUuid) {
+        this.declaration = new ConnectionDeclaration(decision, forwardedUuid);
+        validateDeclaration();
+    }
+
+    public IdentityClaim.Decision getIdentityDecision() {
+        if (type == Type.CRACKED) {
+            return IdentityClaim.Decision.OFFLINE;
+        }
+        return declaration == null ? (verifiedPremiumUuid == null ? IdentityClaim.Decision.UNDECIDED
+                : IdentityClaim.Decision.PREMIUM_VERIFIED) : declaration.getDecision();
+    }
+
+    public UUID getForwardedUuid() {
+        return declaration == null ? null : declaration.getForwardedUuid();
+    }
+
+    private void validateDeclaration() {
+        if (type == Type.CRACKED && verifiedPremiumUuid != null) {
+            throw new IllegalArgumentException("Unverified declaration cannot carry a premium UUID");
+        }
+        if (declaration != null) {
+            IdentityClaim.Decision decision = declaration.getDecision();
+            if ((type == Type.CRACKED) != (decision == IdentityClaim.Decision.OFFLINE)
+                    || (decision == IdentityClaim.Decision.PREMIUM_VERIFIED && verifiedPremiumUuid == null)
+                    || (decision != IdentityClaim.Decision.PREMIUM_VERIFIED && verifiedPremiumUuid != null)) {
+                throw new IllegalArgumentException("Contradictory login identity declaration");
+            }
+        }
+    }
 
     public LoginActionMessage(Type type, String playerName, UUID proxyId, UUID verifiedPremiumUuid) {
         this.type = type;
@@ -216,10 +249,30 @@ public class LoginActionMessage implements ChannelMessage {
         } catch (IllegalStateException truncated) {
             this.facts = IdentityClaim.Facts.defaults();
         }
+        // Backends must be upgraded first. Older readers ignore this complete
+        // suffix; CRACKED remains their status-only operation, never a grant.
+        int marker;
+        try {
+            marker = input.readUnsignedByte();
+        } catch (IllegalStateException absent) {
+            declaration = null;
+            validateDeclaration();
+            return;
+        }
+        if (marker != ConnectionDeclaration.MARKER) {
+            throw new IllegalArgumentException("Invalid connection declaration marker");
+        }
+        try {
+            declaration = ConnectionDeclaration.readPayload(input);
+        } catch (java.io.IOException | IllegalStateException truncated) {
+            throw new IllegalArgumentException("Truncated connection declaration", truncated);
+        }
+        validateDeclaration();
     }
 
     @Override
     public void writeTo(ByteArrayDataOutput output) {
+        validateDeclaration();
         output.writeByte(type.ordinal());
 
         //Data is sent through a random player. We have to tell the Bukkit version of this plugin the target
@@ -250,6 +303,13 @@ public class LoginActionMessage implements ChannelMessage {
         output.writeBoolean(facts.autoLogin());
         output.writeBoolean(facts.autoRegisterUnknown());
         output.writeBoolean(facts.offlineWhitelist());
+        if (declaration != null) {
+            try {
+                declaration.write(output);
+            } catch (java.io.IOException impossible) {
+                throw new IllegalStateException("Cannot encode connection declaration", impossible);
+            }
+        }
     }
 
     private static byte consentCode(IdentityClaim.Consent consent) {
@@ -293,6 +353,7 @@ public class LoginActionMessage implements ChannelMessage {
 
         REGISTER,
 
+        /** Unverified connection declaration; never a request to authenticate. */
         CRACKED
     }
 }

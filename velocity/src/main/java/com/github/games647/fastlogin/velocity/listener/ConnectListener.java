@@ -77,10 +77,12 @@ public class ConnectListener {
 
     private final FastLoginVelocity plugin;
     private final AntiBotService antiBotService;
+    private final EarlyDeclarationSupport earlyDeclarations;
 
     public ConnectListener(FastLoginVelocity plugin, AntiBotService antiBotService) {
         this.plugin = plugin;
         this.antiBotService = antiBotService;
+        this.earlyDeclarations = new EarlyDeclarationSupport(plugin.getLog());
     }
 
     @Subscribe
@@ -235,7 +237,8 @@ public class ConnectListener {
             LoginSession session = plugin.getSession().get(event.getConnection().getRemoteAddress());
             if (session == null) {
                 plugin.getLog().error("No active login session found for onlinemode player {}", event.getUsername());
-                attachIdentityClaim(event, null);
+                earlyDeclarations.attempt(EarlyDeclarationSupport.FailureKind.PREMIUM_CLAIM,
+                        () -> attachIdentityClaim(event, null));
                 return;
             }
 
@@ -285,16 +288,17 @@ public class ConnectListener {
                 event.setGameProfile(event.getGameProfile().withProperties(newProp));
             }
         }
-        attachIdentityClaim(event, claimSession);
+        // Best effort: early failure is visible, but never disables the late sender.
+        earlyDeclarations.attempt(event.isOnlineMode() ? EarlyDeclarationSupport.FailureKind.PREMIUM_CLAIM
+                : EarlyDeclarationSupport.FailureKind.UNVERIFIED_DECLARATION,
+                () -> attachIdentityClaim(event, claimSession));
     }
 
     private void attachIdentityClaim(GameProfileRequestEvent event, LoginSession session) {
         GameProfile profile = event.getGameProfile();
         UUID forwardedUuid = profile.getId();
         if (forwardedUuid == null) {
-            plugin.getLog().error("Cannot attach Fabric identity claim without a forwarded UUID for {}",
-                    event.getUsername());
-            return;
+            throw new IllegalArgumentException("Cannot attach identity claim without a forwarded UUID");
         }
 
         // Clear any profile property with our reserved name. Exactly one value may be
@@ -317,8 +321,7 @@ public class ConnectListener {
             claim = IdentityDecisionPolicy.decide(session, event.isOnlineMode(), bedrock,
                     profile.getName(), forwardedUuid);
         } catch (IllegalArgumentException invalidProfile) {
-            plugin.getLog().error("Cannot attach Fabric identity claim for an invalid profile name");
-            return;
+            throw new IllegalArgumentException("Cannot attach identity claim for an invalid profile", invalidProfile);
         }
         event.setGameProfile(profile.withProperties(properties).addProperty(
                 new Property(ForwardingAttributes.IDENTITY, claim.encode(), "")));

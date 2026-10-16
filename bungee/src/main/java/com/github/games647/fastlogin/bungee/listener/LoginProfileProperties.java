@@ -29,6 +29,7 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.function.Consumer;
+import java.util.UUID;
 
 /**
  * Shape-independent access to the property array of a BungeeCord login profile
@@ -61,6 +62,77 @@ final class LoginProfileProperties {
     private static final String NAME_GETTER = "getName";
 
     private LoginProfileProperties() {
+    }
+
+    /**
+     * Checks the offline forwarding carrier without creating a live player profile.
+     *
+     * @param handlerClass the loaded proxy connection implementation, or null if missing
+     * @param onFailure receives the capability failure
+     * @return whether the required members are accessible
+     */
+    static boolean probeOfflineCarrier(Class<?> handlerClass, Consumer<Throwable> onFailure) {
+        try {
+            if (handlerClass == null) {
+                throw new ClassNotFoundException("Bungee login handler unavailable");
+            }
+            Field profile = loginProfileField(handlerClass);
+            Class<?> type = profile.getType();
+            java.lang.reflect.Method getter = handlerClass.getMethod("getLoginProfile");
+            if (!type.isAssignableFrom(getter.getReturnType())) {
+                throw new NoSuchMethodException("Unexpected login profile return type");
+            }
+            Field properties = type.getDeclaredField(PROPERTIES_FIELD);
+            properties.setAccessible(true);
+            Class<?> array = properties.getType();
+            Class<?> property = array.getComponentType();
+            type.getConstructor(String.class, String.class, array);
+            property.getConstructor(String.class, String.class);
+            property.getMethod(NAME_GETTER);
+            return true;
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException failure) {
+            onFailure.accept(failure);
+            return false;
+        }
+    }
+
+    /**
+     * Creates the offline carrier without changing authentication or connection UUID.
+     *
+     * @param connection the login connection
+     * @param name the forwarded name
+     * @param uuid the forwarded connection UUID
+     * @param onFailure receives the injection failure
+     * @return whether a profile is available
+     */
+    static boolean ensureOfflineProfile(Object connection, String name, UUID uuid, Consumer<Throwable> onFailure) {
+        try {
+            Field profile = loginProfileField(connection.getClass());
+            if (profile.get(connection) == null) {
+                Class<?> type = profile.getType();
+                Class<?> array = type.getDeclaredField(PROPERTIES_FIELD).getType();
+                Object empty = Array.newInstance(array.getComponentType(), 0);
+                profile.set(connection, type.getConstructor(String.class, String.class, array)
+                        .newInstance(uuid.toString().replace("-", ""), name, empty));
+            }
+            return true;
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException failure) {
+            onFailure.accept(failure);
+            return false;
+        }
+    }
+
+    private static Field loginProfileField(Class<?> owner) throws NoSuchFieldException {
+        while (owner != null) {
+            try {
+                Field field = owner.getDeclaredField("loginProfile");
+                field.setAccessible(true);
+                return field;
+            } catch (NoSuchFieldException absent) {
+                owner = owner.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException("loginProfile");
     }
 
     /**

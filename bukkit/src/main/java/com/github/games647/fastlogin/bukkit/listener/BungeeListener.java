@@ -60,7 +60,12 @@ public class BungeeListener implements PluginMessageListener {
         ByteArrayDataInput dataInput = ByteStreams.newDataInput(message);
 
         LoginActionMessage loginMessage = new LoginActionMessage();
-        loginMessage.readFrom(dataInput);
+        try {
+            loginMessage.readFrom(dataInput);
+        } catch (IllegalArgumentException | IllegalStateException malformed) {
+            plugin.getLog().warn("Ignoring malformed identity declaration", malformed);
+            return;
+        }
 
         if (plugin.getCore().isDebug()) {
             plugin.getLog().info("Received plugin message {}", loginMessage);
@@ -73,6 +78,12 @@ public class BungeeListener implements PluginMessageListener {
 
         if (targetPlayer == null) {
             plugin.getLog().warn("Force action player {} not found", loginMessage.getPlayerName());
+            return;
+        }
+        if (loginMessage.getForwardedUuid() != null
+                && !loginMessage.getForwardedUuid().equals(targetPlayer.getUniqueId())) {
+            plugin.getLog().warn("Ignoring identity declaration for {}: forwarded connection UUID mismatch",
+                    loginMessage.getPlayerName());
             return;
         }
 
@@ -109,8 +120,12 @@ public class BungeeListener implements PluginMessageListener {
         } else if (type == Type.REGISTER) {
             onRegisterMessage(player, playerName, message);
         } else if (type == Type.CRACKED) {
-            //we don't start a force login task here so update it manually
             plugin.getPremiumPlayers().put(player.getUniqueId(), PremiumStatus.CRACKED);
+            BukkitLoginSession session = new BukkitLoginSession(playerName, false);
+            session.setFacts(message.getFacts());
+            session.setIdentityDecision(com.github.games647.fastlogin.protocol.IdentityClaim.Decision.OFFLINE);
+            session.setVerifiedPremium(false);
+            startLoginTaskIfReady(player, session);
         }
     }
 
@@ -123,6 +138,7 @@ public class BungeeListener implements PluginMessageListener {
         // only omits it when it verified nothing, and resolvePremiumUuid rejects non-v4 values.
         playerSession.setUuid(message.getVerifiedPremiumUuid());
         playerSession.setFacts(message.getFacts());
+        playerSession.setVerifiedPremium(true);
         startLoginTaskIfReady(player, playerSession);
     }
 
@@ -131,10 +147,15 @@ public class BungeeListener implements PluginMessageListener {
             AuthPlugin<Player> authPlugin = plugin.getCore().getAuthPluginHook();
             try {
                 //we need to check if the player is registered on Bukkit too
-                if (authPlugin == null || !authPlugin.isRegistered(playerName)) {
-                    BukkitLoginSession playerSession = new BukkitLoginSession(playerName, false);
+                boolean registered = authPlugin != null && authPlugin.isRegistered(playerName);
+                // R-7 recovery also needs a task when the proxy has no account yet:
+                // the confirmed login acknowledges premium ownership back to it.
+                if (!registered || authPlugin.inspectAccount(playerName)
+                        == com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.PREMIUM_OWNED) {
+                    BukkitLoginSession playerSession = new BukkitLoginSession(playerName, registered);
                     playerSession.setUuid(message.getVerifiedPremiumUuid());
                     playerSession.setFacts(message.getFacts());
+                    playerSession.setVerifiedPremium(true);
                     startLoginTaskIfReady(player, playerSession);
                 }
             } catch (Exception ex) {
@@ -144,7 +165,6 @@ public class BungeeListener implements PluginMessageListener {
     }
 
     private void startLoginTaskIfReady(Player player, BukkitLoginSession session) {
-        session.setVerifiedPremium(true);
         plugin.putSession(player.spigot().getRawAddress(), session);
 
         // only start a new login task if the join event fired earlier. This event then didn't

@@ -78,9 +78,10 @@ wait-on-proxy: '&6Sending the request to your proxy. If there is no response, as
 # Error messages
 error-kick: '&4Error occurred'
 database-error: '&4Database error. Please contact an admin.'
-ownership-conflict: '&4This name has an account whose owner has not upgraded it to premium, so automatic login is refused. Please contact an admin.'
+ownership-conflict: '&4Account ownership does not match this connection. Login refused. Please contact an admin.'
 account-state-unavailable: '&6Your account state could not be confirmed, so the automatic premium login was skipped. Use your password to log in.'
 premium-password-login: '&eThis account still uses a password. Log in with your existing password first. To switch to passwordless premium login, run &b/flp premium&e after logging in.'
+premium-policy-disabled: '&eThe server has disabled automatic premium login. This premium-owned account has no usable password. Contact an administrator or reset the password according to the server policy.'
 invalid-verify-token: '&4Invalid nonce token. Please verify you are using the correct server address'
 invalid-session: '&4Invalid session'
 invalid-request: '&4Invalid request'

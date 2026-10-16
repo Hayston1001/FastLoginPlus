@@ -34,15 +34,23 @@ import com.github.games647.fastlogin.protocol.IdentityClaim.Consent;
  * <p>Decision table (D-03): a verified premium identity without an account is
  * auto-registered and logged in; with an account it needs the upgrade consent
  * (password = ownership, an account never follows a name alone); without the
- * consent a password account keeps its password flow; an already converted
- * account is rejected because it has no usable password. An unverified connection
+ * consent a password account keeps its password flow. The auth plugin's own
+ * premium account counts as consent (R-7), allowing verified owners to recover
+ * when the proxy record disagrees. An unverified connection
  * keeps the password lock; with a consent it means the account switched
  * ownership behind the consent and is rejected symmetrically. Unknown consent
- * (facts that never arrived) never unlocks anything.
+ * (facts that never arrived) never unlocks a password account.
  *
  * <p>The account state {@link AccountState#READ_FAILURE} must fail closed to the
  * password lock; callers log it (a database that cannot be read is never a
  * reason to hand out passwordless login).
+ *
+ * <p>Disabling auto-login prevents all passwordless login, claiming and registration,
+ * including R-7 recovery of an already premium-owned account. Only the rejection
+ * of an unverified connection onto such an account is policy-independent: that
+ * ownership guardrail grants nothing. Verified owners retain the auth plugin's
+ * own flow and need an explanation that their converted account has no usable
+ * password. Read failure still takes precedence over the guardrail.
  *
  * <p>{@code auto-register-unknown} (the repair for a verified premium player
  * whose local account went missing — deleted, or the databases drifted apart)
@@ -134,8 +142,10 @@ public final class LoginMethodDecider {
     /**
      * Applies the decision table to one login. The policy keys live on the proxy
      * (R-10) and arrive with the identity facts; this backend only enforces them.
-     * With auto-login off no premium handling happens at all (D-06 #1), so the
-     * rows collapse to the password lock or the registration flow. Admission
+     * With auto-login off other rows collapse to the password lock or registration
+     * flow; only the unverified premium-owned rejection precedes policy. R-7
+     * recovery requires auto-login to be enabled.
+     * Admission
      * (offline-whitelist) is the caller's check: it needs the proxy's known list.
      *
      * <p>{@code autoRegisterUnknown} gates the "verified premium identity without
@@ -157,21 +167,25 @@ public final class LoginMethodDecider {
         if (account == AccountState.READ_FAILURE) {
             return Outcome.PASSWORD;
         }
+        if (!verifiedPremium && account == AccountState.PREMIUM_OWNED) {
+            // This guardrail grants nothing and must survive policy changes.
+            return Outcome.REJECT;
+        }
 
         boolean registered = account != AccountState.NONE;
-        // R-7 supplies missing consent, but never overrides an explicit refusal.
-        Consent effective = account == AccountState.PREMIUM_OWNED && consent == Consent.UNKNOWN
-                ? Consent.YES : consent;
 
         if (!autoLogin) {
             return registered ? Outcome.PASSWORD : Outcome.GUIDE_REGISTER;
+        }
+        if (account == AccountState.PREMIUM_OWNED) {
+            return Outcome.AUTO_LOGIN;
         }
 
         if (verifiedPremium) {
             if (!registered) {
                 return autoRegisterUnknown ? Outcome.AUTO_REGISTER_LOGIN : Outcome.GUIDE_REGISTER;
             }
-            if (effective == Consent.YES) {
+            if (consent == Consent.YES) {
                 return Outcome.AUTO_LOGIN;
             }
             return account == AccountState.PASSWORD_ACCOUNT ? Outcome.PASSWORD : Outcome.REJECT;
@@ -182,7 +196,6 @@ public final class LoginMethodDecider {
         }
         // rule 8, the symmetric row: a cracked connection onto a consented
         // premium name means the account moved behind the consent
-        return account == AccountState.PREMIUM_OWNED || effective == Consent.YES
-                ? Outcome.REJECT : Outcome.PASSWORD;
+        return consent == Consent.YES ? Outcome.REJECT : Outcome.PASSWORD;
     }
 }

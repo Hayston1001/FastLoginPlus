@@ -101,6 +101,25 @@ class LanguageMessagesTest {
     }
 
     @Test
+    void premiumPolicyNoticeExistsInBothLanguagesAndOldOverridesFallBackToEnglish() throws Exception {
+        ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
+        try (InputStreamReader english = new InputStreamReader(getClass().getResourceAsStream(
+                "/messages_en.yml"), StandardCharsets.UTF_8);
+             InputStreamReader chinese = new InputStreamReader(getClass().getResourceAsStream(
+                     "/messages_zh.yml"), StandardCharsets.UTF_8)) {
+            Configuration defaults = provider.load(english);
+            String explanation = defaults.getString("premium-policy-disabled");
+            assertTrue(explanation.contains("no usable password"));
+            assertFalse(provider.load(chinese).getString("premium-policy-disabled").isEmpty());
+            Path file = folder.resolve("messages_zh.yml");
+            Files.write(file, "premium-password-login: Existing translation\n".getBytes(StandardCharsets.UTF_8));
+            Configuration loaded = LanguageMessages.load(file, defaults, FastLoginCore.configurationLoader(provider));
+            assertEquals(explanation, loaded.getString("premium-policy-disabled"));
+            assertEquals("Existing translation", loaded.getString("premium-password-login"));
+        }
+    }
+
+    @Test
     void absentLanguageFileUsesEnglishWithoutCreatingAFile() throws Exception {
         ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
         Configuration defaults = provider.load("missing: English fallback\n");

@@ -95,34 +95,84 @@ class PremiumGateTest {
     }
 
     @Test
-    void unconsentedPasswordAccountIsStillRefused() {
-        // rule 7: the verified owner of someone else's password account gets a
-        // clear refusal, not a password prompt they can never pass
-        assertEquals(Action.REJECT, PremiumGate.decideVerified(
-                Consent.NO, PASSWORD_ACCOUNT, PINNED, false, true));
-        assertEquals(Action.REJECT, PremiumGate.decideVerified(
-                Consent.UNKNOWN, PASSWORD_ACCOUNT, PINNED, false, true));
+    void passwordAccountsWithoutClaimableEntriesKeepPasswordLoginRegardlessOfConsent() {
+        for (AccountState state : new AccountState[]{AccountState.PASSWORD, AccountState.BIND_PENDING}) {
+            for (Consent consent : Consent.values()) {
+                assertEquals(Action.PASSWORD_LOCK, PremiumGate.decideVerified(
+                        consent, new AccountState.Snapshot(state, null), PINNED, false, true));
+            }
+        }
     }
 
     @Test
     void liveClaimConvertsTheAccount() {
-        assertEquals(Action.CLAIM_AND_LOGIN, PremiumGate.decideVerified(
-                Consent.YES, PASSWORD_ACCOUNT, PINNED, true, true));
+        for (Consent consent : Consent.values()) {
+            assertEquals(Action.CLAIM_AND_LOGIN, PremiumGate.decideVerified(
+                    consent, PASSWORD_ACCOUNT, PINNED, true, true));
+            assertEquals(Action.CLAIM_AND_LOGIN, PremiumGate.decideVerified(
+                    consent, new AccountState.Snapshot(AccountState.BIND_PENDING, null), PINNED, true, true));
+        }
     }
 
     @Test
     void convertedAccountsOnlyLogInWithoutPassword() {
-        assertEquals(Action.FREE_LOGIN, PremiumGate.decideVerified(
-                Consent.YES, CONVERTED, PINNED, false, true));
-        // rule 8: a different verified identity never gets the converted account
-        assertEquals(Action.REJECT, PremiumGate.decideVerified(
-                Consent.YES, CONVERTED, OTHER, false, true));
+        for (Consent consent : Consent.values()) {
+            assertEquals(Action.FREE_LOGIN, PremiumGate.decideVerified(
+                    consent, CONVERTED, PINNED, false, true));
+            // rule 8: a different verified identity never gets the converted account
+            assertEquals(Action.REJECT, PremiumGate.decideVerified(
+                    consent, CONVERTED, OTHER, false, true));
+        }
+    }
+
+    @Test
+    void conflictedAccountsStillRejectEveryIdentity() {
+        AccountState.Snapshot conflict = new AccountState.Snapshot(AccountState.CONFLICT, null);
+        for (Consent consent : Consent.values()) {
+            assertEquals(Action.REJECT, PremiumGate.decideVerified(consent, conflict, PINNED, false, true));
+            assertEquals(Action.REJECT, PremiumGate.decideVerified(consent, conflict, PINNED, true, false));
+        }
+        assertEquals(Action.REJECT, PremiumGate.decideUnverified(conflict));
     }
 
     @Test
     void autoLoginOffKeepsThePasswordFlow() {
         assertEquals(Action.PASSWORD_LOCK, PremiumGate.decideVerified(
                 Consent.YES, PASSWORD_ACCOUNT, PINNED, true, false));
+    }
+
+    @Test
+    void policyOffMatrixPreservesBoundOwnershipAndNeverClaimsOtherAccounts() {
+        for (Consent consent : Consent.values()) {
+            for (boolean autoRegister : new boolean[]{false, true}) {
+                for (boolean claimMatches : new boolean[]{false, true}) {
+                    assertEquals(Action.PASSWORD_LOCK, PremiumGate.decideVerified(
+                            consent, CONVERTED, PINNED, claimMatches, false, autoRegister));
+                    assertEquals(Action.FREE_LOGIN, PremiumGate.decideVerified(
+                            consent, CONVERTED, PINNED, claimMatches, true, autoRegister));
+                    var disabled = new com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim(
+                            com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED,
+                            "TestUser", PINNED, PINNED,
+                            new com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Facts(
+                                    false, false, consent, false, autoRegister, false));
+                    assertEquals("premium-policy-disabled", EasyAuth344Bridge.passwordLockMessage(
+                            disabled, CONVERTED));
+                    assertEquals(Action.REJECT, PremiumGate.decideVerified(
+                            consent, CONVERTED, OTHER, claimMatches, false, autoRegister));
+                    assertEquals(Action.REJECT, PremiumGate.decideVerified(
+                            consent, CONVERTED, null, claimMatches, false, autoRegister));
+                    assertEquals(Action.REJECT, PremiumGate.decideUnverified(CONVERTED));
+                    for (AccountState state : new AccountState[]{AccountState.PASSWORD,
+                            AccountState.BIND_PENDING, AccountState.OPEN}) {
+                        AccountState.Snapshot account = new AccountState.Snapshot(state, null);
+                        assertEquals(Action.PASSWORD_LOCK, PremiumGate.decideVerified(
+                                consent, account, PINNED, claimMatches, false, autoRegister));
+                        // No policy parameter exists on the unverified path: it cannot grant access.
+                        assertEquals(Action.PASSWORD_LOCK, PremiumGate.decideUnverified(account));
+                    }
+                }
+            }
+        }
     }
 
     @Test

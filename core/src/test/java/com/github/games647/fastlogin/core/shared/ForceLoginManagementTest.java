@@ -30,9 +30,12 @@ import com.github.games647.fastlogin.core.hooks.DefaultPasswordGenerator;
 import com.github.games647.fastlogin.core.shared.event.FastLoginAutoLoginEvent;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.protocol.IdentityClaim;
 import net.md_5.bungee.config.Configuration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.slf4j.Logger;
 
 import java.util.UUID;
@@ -54,6 +57,37 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ForceLoginManagementTest {
+
+    @ParameterizedTest
+    @EnumSource(LoginMethodDecider.AccountState.class)
+    void unverifiedFactsNeverAuthenticateAcrossPolicyAndConsentMatrix(
+            LoginMethodDecider.AccountState account) throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(authPlugin.inspectAccount("TestUser")).thenReturn(account);
+        when(core.getMessage("ownership-conflict")).thenReturn("ownership-conflict");
+        for (IdentityClaim.Consent consent : IdentityClaim.Consent.values()) {
+            for (boolean autoLogin : new boolean[]{false, true}) {
+                TestLoginSession session = new TestLoginSession("TestUser", true, null);
+                session.setUuid(UUID.randomUUID()); // even an injected UUID is not verification
+                session.setFacts(new IdentityClaim.Facts(false, false, consent, autoLogin, true, false));
+                TestForceLoginManagement management = createManagement(session, false);
+                management.run();
+                assertFalse(management.premiumHandlingAllowed);
+                assertEquals(0, management.ackCount);
+                if (account == LoginMethodDecider.AccountState.PREMIUM_OWNED
+                        || autoLogin && account == LoginMethodDecider.AccountState.PASSWORD_ACCOUNT
+                        && consent == IdentityClaim.Consent.YES) {
+                    assertEquals("ownership-conflict", management.denied);
+                } else {
+                    assertNull(management.denied);
+                }
+            }
+        }
+        verify(authPlugin, never()).forceLogin(any());
+        verify(authPlugin, never()).forceRegister(any(), anyString());
+        verify(storage, never()).save(any());
+        verify(core, never()).resetVerificationState(anyString());
+    }
 
     private FastLoginCore<Object, Object, PlatformPlugin<Object>> core;
     private PlatformPlugin<Object> plugin;
@@ -184,47 +218,106 @@ class ForceLoginManagementTest {
         assertEquals(1, mgmt.ackCount);
     }
 
-    // ---- the decision table's REJECT must converge the record, not flip it ----
+    // ---- R-7 recovery confirms premium ownership and converges the proxy record ----
 
     @Test
-    void rejectedOwnershipConflictLeavesTheRecordUntouched() throws Exception {
-        // D-19: verified identity + converted account + explicit no consent.
-        // The record must keep its "observed, not consented" shape, so a later
-        // reconnect reproduces the same outcome instead of an auto-login takeover.
+    void premiumOwnedAccountRecoversExplicitNoConsentAndWarns() throws Exception {
+        assertPremiumRecovery(IdentityClaim.Consent.NO, true, true);
+    }
+
+    @Test
+    void premiumOwnedAccountRecoversUnknownConsentAndWarns() throws Exception {
+        assertPremiumRecovery(IdentityClaim.Consent.UNKNOWN, true, true);
+    }
+
+    @Test
+    void alreadyAuthenticatedPremiumRecoveryStillAcknowledgesTheProxy() throws Exception {
+        assertPremiumRecovery(IdentityClaim.Consent.NO, false, false);
+    }
+
+    @Test
+    void consistentPremiumOwnershipDoesNotEmitARecoveryWarning() throws Exception {
+        assertPremiumRecovery(IdentityClaim.Consent.YES, true, true);
+    }
+
+    @ParameterizedTest
+    @EnumSource(IdentityClaim.Consent.class)
+    void policyOffDoesNotRecoverPremiumOwnerAndExplainsMissingPassword(IdentityClaim.Consent consent)
+            throws Exception {
         when(core.getAuthPluginHook()).thenReturn(authPlugin);
-        when(core.getMessage("ownership-conflict")).thenReturn("ownership-conflict");
         when(authPlugin.inspectAccount("TestUser"))
                 .thenReturn(LoginMethodDecider.AccountState.PREMIUM_OWNED);
+        TestLoginSession session = new TestLoginSession("TestUser", true, null);
+        session.setUuid(UUID.randomUUID());
+        session.setFacts(new IdentityClaim.Facts(false, false, consent, false, true, false));
+        TestForceLoginManagement management = createManagement(session, true);
+        management.run();
+        assertNull(management.denied);
+        assertFalse(management.premiumHandlingAllowed);
+        assertEquals(0, management.ackCount);
+        verify(authPlugin, never()).forceLogin(any());
+        verify(authPlugin, never()).forceRegister(any(), anyString());
+        verify(storage, never()).save(any());
+        verify(core).sendLocaleMessage("premium-policy-disabled", management.player);
+        verify(core, never()).sendLocaleMessage(org.mockito.ArgumentMatchers.eq("premium-password-login"), any());
+    }
 
-        StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
+    private void assertPremiumRecovery(IdentityClaim.Consent consent, boolean loginResult,
+                                        boolean localProfile) throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(authPlugin.inspectAccount("TestUser"))
+                .thenReturn(LoginMethodDecider.AccountState.PREMIUM_OWNED);
+        when(authPlugin.forceLogin(any())).thenReturn(loginResult);
+
+        StoredProfile profile = localProfile
+                ? new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1") : null;
         TestLoginSession session = new TestLoginSession("TestUser", true, profile);
         session.setUuid(UUID.randomUUID());
-        session.setFacts(new com.github.games647.fastlogin.protocol.IdentityClaim.Facts(
-                false, false, com.github.games647.fastlogin.protocol.IdentityClaim.Consent.NO,
-                true, false, false));
+        session.setFacts(new IdentityClaim.Facts(false, false, consent, true, false, false));
 
         TestForceLoginManagement mgmt = createManagement(session, true);
         mgmt.run();
 
-        assertEquals("ownership-conflict", mgmt.denied, "the ownership conflict must be rejected");
-        assertFalse(profile.isOnlinemodePreferred(), "a rejected login must not record consent");
-        verify(storage, never()).save(any());
-        assertEquals(0, mgmt.ackCount, "a rejected login must not be acked");
+        assertNull(mgmt.denied);
+        assertTrue(mgmt.premiumHandlingAllowed);
+        verify(authPlugin).forceLogin(mgmt.player);
+        if (profile != null) {
+            assertTrue(profile.isOnlinemodePreferred(), "R-7 confirms premium ownership");
+            assertEquals(session.getUuid(), profile.getId());
+            verify(storage).save(profile);
+        } else {
+            verify(storage, never()).save(any());
+        }
+        assertEquals(1, mgmt.ackCount, "the backend must acknowledge the premium outcome to its proxy");
+        String warning = "Recovered verified premium login for {} from the auth plugin's premium account "
+                + "despite proxy consent {}; requested proxy resynchronization";
+        if (consent != IdentityClaim.Consent.YES) {
+            verify(logger).warn(warning, "TestUser", consent);
+        } else {
+            verify(logger, never()).warn(org.mockito.ArgumentMatchers.eq(warning), any(), any());
+        }
     }
 
     // ---- a cracked join is not an identity reset ----
 
     @Test
     void passwordFallbackDoesNotMarkPremiumOrAcknowledgeConsent() throws Exception {
+        assertPasswordFallback(IdentityClaim.Consent.NO);
+    }
+
+    @Test
+    void unknownConsentPasswordFallbackAlsoExplainsHowToUpgrade() throws Exception {
+        assertPasswordFallback(IdentityClaim.Consent.UNKNOWN);
+    }
+
+    private void assertPasswordFallback(IdentityClaim.Consent consent) throws Exception {
         when(core.getAuthPluginHook()).thenReturn(authPlugin);
         when(authPlugin.inspectAccount("TestUser"))
                 .thenReturn(LoginMethodDecider.AccountState.PASSWORD_ACCOUNT);
         StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
         TestLoginSession session = new TestLoginSession("TestUser", true, profile);
         session.setUuid(UUID.randomUUID());
-        session.setFacts(new com.github.games647.fastlogin.protocol.IdentityClaim.Facts(
-                false, false, com.github.games647.fastlogin.protocol.IdentityClaim.Consent.NO,
-                true, false, false));
+        session.setFacts(new IdentityClaim.Facts(false, false, consent, true, false, false));
         TestForceLoginManagement mgmt = createManagement(session, true);
         mgmt.run();
         assertNull(mgmt.denied);
@@ -235,6 +328,36 @@ class ForceLoginManagementTest {
         verify(authPlugin, never()).forceLogin(any());
         verify(authPlugin, never()).forceRegister(any(), anyString());
         verify(core).sendLocaleMessage("premium-password-login", mgmt.player);
+    }
+
+    @Test
+    void standaloneWithoutFactsDoesNotSendProxyPasswordExplanation() throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(config.get("autoLogin")).thenReturn(true);
+        when(config.get("auto-register-unknown")).thenReturn(true);
+        when(authPlugin.isRegistered("TestUser")).thenReturn(true);
+        when(authPlugin.forceLogin(any())).thenReturn(true);
+        TestLoginSession session = new TestLoginSession("TestUser", true, null);
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.run();
+        assertFalse(session.isFactsPresent());
+        verify(core, never()).sendLocaleMessage(org.mockito.ArgumentMatchers.eq("premium-password-login"), any());
+        verify(authPlugin, never()).inspectAccount(anyString());
+    }
+
+    @Test
+    void unreadableAccountKeepsItsOwnExplanationInsteadOfPasswordUpgradeNotice() throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(authPlugin.inspectAccount("TestUser")).thenThrow(new IllegalStateException("database unavailable"));
+        when(core.getMessage("account-state-unavailable")).thenReturn("account-state-unavailable");
+        TestLoginSession session = new TestLoginSession("TestUser", true, null);
+        session.setFacts(new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false));
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.run();
+        verify(plugin).sendMessage(mgmt.player, "account-state-unavailable");
+        verify(core, never()).sendLocaleMessage(org.mockito.ArgumentMatchers.eq("premium-password-login"), any());
+        verify(authPlugin, never()).forceLogin(any());
+        assertEquals(0, mgmt.ackCount);
     }
 
     @Test

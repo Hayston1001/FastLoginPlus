@@ -49,6 +49,27 @@ class LoginProfilePropertiesTest {
     private final List<Throwable> failures = new ArrayList<>();
 
     @Test
+    void offlineProfilesCanCarryAnExplicitUnverifiedEarlyClaimInBothShapes() {
+        java.util.UUID uuid = java.util.UUID.randomUUID();
+        LegacyConnection legacy = new LegacyConnection();
+        ModernConnection modern = new ModernConnection();
+        assertTrue(LoginProfileProperties.ensureOfflineProfile(legacy, "TestUser", uuid, failures::add));
+        assertTrue(LoginProfileProperties.ensureOfflineProfile(modern, "TestUser", uuid, failures::add));
+        com.github.games647.fastlogin.protocol.IdentityClaim claim =
+                new com.github.games647.fastlogin.protocol.IdentityClaim(
+                        com.github.games647.fastlogin.protocol.IdentityClaim.Decision.OFFLINE,
+                        "TestUser", uuid, null);
+        assertTrue(LoginProfileProperties.attach(legacy.loginProfile, "flp_identity", claim.encode(), failures::add));
+        assertTrue(LoginProfileProperties.attach(modern.loginProfile, "flp_identity", claim.encode(), failures::add));
+        assertEquals(claim.encode(), legacy.loginProfile.properties[0].getValue());
+        assertEquals(claim.encode(), modern.loginProfile.properties[0].getValue());
+        assertTrue(failures.isEmpty());
+    }
+
+    static final class LegacyConnection { private LegacyProfile loginProfile; }
+    static final class ModernConnection { private ModernProfile loginProfile; }
+
+    @Test
     void attachesToTheOldShape() {
         LegacyProfile profile = new LegacyProfile(new LegacyProperty[]{
             new LegacyProperty("textures", "skin-data")
@@ -185,6 +206,7 @@ class LoginProfilePropertiesTest {
         LegacyProfile(LegacyProperty[] properties) {
             this.properties = properties;
         }
+        public LegacyProfile(String id, String name, LegacyProperty[] properties) { this.properties = properties; }
     }
 
     /** Stand-in for a login profile that carries the new property type. */
@@ -195,5 +217,6 @@ class LoginProfilePropertiesTest {
         ModernProfile(ModernProperty[] properties) {
             this.properties = properties;
         }
+        public ModernProfile(String id, String name, ModernProperty[] properties) { this.properties = properties; }
     }
 }

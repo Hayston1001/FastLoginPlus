@@ -63,6 +63,12 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
         SQLStorage storage = core.getStorage();
         StoredProfile playerProfile = session.getProfile();
         try {
+            if (!isOnlineMode() && session.isFactsPresent() && core.getAuthPluginHook() != null) {
+                // Only a proxy-facts session takes this new path. Standalone
+                // offline bookkeeping and premium verification remain unchanged.
+                runAuthPluginFlow(storage, playerProfile, core.getAuthPluginHook());
+                return;
+            }
             if (isOnlineMode()) {
                 //premium player
                 // a passing verification refutes the same-name cracked observation
@@ -138,6 +144,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
             throws Exception {
         String playerName = getName(player);
         boolean success = true;
+        boolean recoveringPremiumAccount = false;
         if (session.isFactsPresent()) {
             // The message path: a proxy exists, so the decision table
             // (D-03) decides from the account state plus its facts.
@@ -147,8 +154,9 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                         "Proxy did not declare identity facts for {}; falling back to "
                                 + "conservative behaviour", playerName);
             }
-            LoginMethodDecider.Outcome outcome = LoginMethodDecider.decide(true, account,
-                    session.getFacts().consent(), resolveAutoLogin(session),
+            boolean autoLogin = resolveAutoLogin(session);
+            LoginMethodDecider.Outcome outcome = LoginMethodDecider.decide(isOnlineMode(), account,
+                    session.getFacts().consent(), autoLogin,
                     resolveAutoRegisterUnknown(session));
             switch (outcome) {
                 case AUTO_REGISTER_LOGIN:
@@ -157,8 +165,12 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     break;
                 case AUTO_LOGIN:
                     premiumHandlingAllowed = true;
-                    success = !callFastLoginAutoLoginEvent(session, playerProfile).isCancelled()
-                            && forceLogin(player);
+                    boolean cancelled = callFastLoginAutoLoginEvent(session, playerProfile).isCancelled();
+                    success = !cancelled && forceLogin(player);
+                    recoveringPremiumAccount = !cancelled
+                            && account == LoginMethodDecider.AccountState.PREMIUM_OWNED
+                            && session.getConsent()
+                            != com.github.games647.fastlogin.protocol.IdentityClaim.Consent.YES;
                     break;
                 case REJECT:
                     denyLogin(player, core.getMessage("ownership-conflict"));
@@ -175,9 +187,10 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     if (account == LoginMethodDecider.AccountState.READ_FAILURE) {
                         core.getPlugin().sendMessage(player,
                                 core.getMessage("account-state-unavailable"));
-                    } else if (account == LoginMethodDecider.AccountState.PASSWORD_ACCOUNT
-                            && session.getFacts().consent()
-                            == com.github.games647.fastlogin.protocol.IdentityClaim.Consent.NO) {
+                    } else if (isOnlineMode() && !autoLogin
+                            && account == LoginMethodDecider.AccountState.PREMIUM_OWNED) {
+                        notifyPremiumPolicyDisabled();
+                    } else if (account == LoginMethodDecider.AccountState.PASSWORD_ACCOUNT) {
                         notifyPasswordLogin();
                     }
                     return;
@@ -256,6 +269,12 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
             // session expiry.
             onForceActionSuccess(session);
         }
+        if (recoveringPremiumAccount) {
+            core.getPlugin().getLog().warn(
+                    "Recovered verified premium login for {} from the auth plugin's premium account "
+                            + "despite proxy consent {}; requested proxy resynchronization",
+                    playerName, session.getConsent());
+        }
     }
 
     public boolean forceRegister(P player) {
@@ -300,6 +319,11 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     /** Explains the password flow; platforms may deduplicate against configure-time delivery. */
     protected void notifyPasswordLogin() {
         core.sendLocaleMessage("premium-password-login", player);
+    }
+
+    /** Explains why an existing premium account cannot use passwordless recovery. */
+    protected void notifyPremiumPolicyDisabled() {
+        core.sendLocaleMessage("premium-policy-disabled", player);
     }
 
     public abstract void onForceActionSuccess(LoginSession session);

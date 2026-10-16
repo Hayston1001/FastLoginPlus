@@ -63,4 +63,24 @@ class BindingRequestTest {
         assertEquals("premium-policy-disabled", EasyAuth344Bridge.passwordLockMessage(disabled,
                 new AccountState.Snapshot(AccountState.PASSWORD, null)));
     }
+
+    @Test
+    void missingConsentHasItsOwnExplanationWithoutOverridingPolicyOrRegistration() {
+        UUID uuid = UUID.randomUUID();
+        for (IdentityClaim.Consent consent : new IdentityClaim.Consent[]{
+                IdentityClaim.Consent.NO, IdentityClaim.Consent.UNKNOWN}) {
+            IdentityClaim claim = new IdentityClaim(Decision.PREMIUM_VERIFIED, "TestUser", uuid, uuid,
+                    new IdentityClaim.Facts(false, false, consent, true, false, false));
+            for (AccountState state : new AccountState[]{AccountState.PASSWORD, AccountState.BIND_PENDING}) {
+                assertEquals("binding-consent-required", EasyAuth344Bridge.passwordLockMessage(claim,
+                        new AccountState.Snapshot(state, null)));
+            }
+            assertEquals("registration-required", EasyAuth344Bridge.passwordLockMessage(claim,
+                    new AccountState.Snapshot(AccountState.OPEN, null)));
+            IdentityClaim disabled = new IdentityClaim(Decision.PREMIUM_VERIFIED, "TestUser", uuid, uuid,
+                    new IdentityClaim.Facts(false, false, consent, false, false, false));
+            assertEquals("premium-policy-disabled", EasyAuth344Bridge.passwordLockMessage(disabled,
+                    new AccountState.Snapshot(AccountState.PASSWORD, null)));
+        }
+    }
 }

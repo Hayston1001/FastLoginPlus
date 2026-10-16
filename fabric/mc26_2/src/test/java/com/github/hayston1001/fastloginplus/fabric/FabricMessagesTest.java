@@ -30,18 +30,31 @@ class FabricMessagesTest {
                 chinese.getProperty("binding-window-unavailable"));
         assertEquals(chinese.getProperty("binding-window-unavailable"),
                 FabricMessages.load("zh", directory).getProperty("binding-window-unavailable"));
+        assertNotEquals(english.getProperty("binding-consent-required"),
+                chinese.getProperty("binding-consent-required"));
+        assertEquals(chinese.getProperty("binding-consent-required"),
+                FabricMessages.load("zh", directory).getProperty("binding-consent-required"));
+        org.junit.jupiter.api.Assertions.assertTrue(english.getProperty("premium-policy-disabled")
+                .contains("no usable password"));
+        assertNotEquals(english.getProperty("premium-policy-disabled"),
+                chinese.getProperty("premium-policy-disabled"));
     }
 
     @Test
     void missingAndBlankOverrideKeysFallBack() throws Exception {
         Files.writeString(directory.resolve("messages_en.properties"),
-                "binding-checking=Custom message\nbinding-login-required=\n", StandardCharsets.UTF_8);
+                "binding-checking=Custom message\nbinding-login-required=\nbinding-consent-required=\n",
+                StandardCharsets.UTF_8);
         Properties messages = FabricMessages.load("en", directory);
         assertEquals("Custom message", messages.getProperty("binding-checking"));
         assertEquals(bundled("en").getProperty("binding-window-unavailable"),
                 messages.getProperty("binding-window-unavailable"));
         assertEquals(bundled("en").getProperty("binding-login-required"),
                 messages.getProperty("binding-login-required"));
+        assertEquals(bundled("en").getProperty("binding-consent-required"),
+                messages.getProperty("binding-consent-required"));
+        assertEquals(bundled("en").getProperty("premium-policy-disabled"),
+                messages.getProperty("premium-policy-disabled"));
     }
 
     @Test
@@ -57,6 +70,8 @@ class FabricMessagesTest {
         assertEquals("Selected translation", messages.getProperty("binding-checking"));
         assertEquals(bundled("en").getProperty("binding-window-unavailable"),
                 messages.getProperty("binding-window-unavailable"));
+        assertEquals(bundled("en").getProperty("binding-consent-required"),
+                messages.getProperty("binding-consent-required"));
     }
 
     private Properties bundled(String language) throws Exception {

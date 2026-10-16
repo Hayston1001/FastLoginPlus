@@ -53,10 +53,10 @@ final class PremiumGate {
 
     /**
      * Decides for a Mojang-verified premium connection. A queued claim (live
-     * entry whose pinned UUID matches) is the only path that converts a password
-     * account; without one, a consented name falls back to its password (the
-     * upgrade can be retried), and an unconsented one is an ownership conflict
-     * to refuse (rule 7). A name without an account has no ownership question
+     * entry whose pinned UUID matches) converts a password account during login;
+     * without one, the account keeps its password flow regardless of consent.
+     * Its authenticated holder can explicitly bind with /flp premium afterward.
+     * A name without an account has no ownership question
      * (rule 1 row 1): it is auto-registered and logged in — unless the
      * auto-register-unknown policy is off (F-15 A), which keeps the player in
      * the register dialog instead. Converted accounts only ever log in without
@@ -93,13 +93,16 @@ final class PremiumGate {
         if (state.state() == AccountState.CONFLICT) {
             return Action.REJECT;
         }
-        if (state.state() == AccountState.BOUND) {
-            return verifiedUuid != null && verifiedUuid.equals(state.uuid())
-                    ? Action.FREE_LOGIN : Action.REJECT;
+        if (state.state() == AccountState.BOUND
+                && (verifiedUuid == null || !verifiedUuid.equals(state.uuid()))) {
+            return Action.REJECT;
         }
         if (!autoLogin) {
-            // policy keeps every password account behind its password (D-06 #1)
+            // Policy disables all passwordless login, including an already bound account.
             return Action.PASSWORD_LOCK;
+        }
+        if (state.state() == AccountState.BOUND) {
+            return Action.FREE_LOGIN;
         }
         if (state.state() == AccountState.OPEN) {
             // decision table row 1: no account, no ownership question. On
@@ -111,10 +114,9 @@ final class PremiumGate {
         if (claimEntryMatches) {
             return Action.CLAIM_AND_LOGIN;
         }
-        // no claim to make: the queued entry expired, was lost with a restart,
-        // or the upgrade never finished. A consented name keeps its password
-        // flow (retriable), an unconsented one is a refused ownership conflict.
-        return consent == IdentityClaim.Consent.YES ? Action.PASSWORD_LOCK : Action.REJECT;
+        // No claim to make: consent alone never converts a password account,
+        // and missing consent must not prevent its holder from logging in.
+        return Action.PASSWORD_LOCK;
     }
 
     /**
