@@ -2,24 +2,6 @@
  * SPDX-License-Identifier: MIT
  *
  * Copyright (c) 2026 Hayston1001
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
  */
 package com.github.games647.fastlogin.core.shared;
 
@@ -81,6 +63,32 @@ class LanguageMessagesTest {
                      "/messages_zh.yml"), StandardCharsets.UTF_8)) {
             assertEquals(new java.util.HashSet<>(provider.load(english).getKeys()),
                     new java.util.HashSet<>(provider.load(chinese).getKeys()));
+        }
+    }
+
+    @Test
+    void passwordExplanationAndPolicyDefaultsMatchTheApprovedText() throws Exception {
+        ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
+        String[] languages = {"en", "zh"};
+        String[] passwordMessages = {
+                "&eYour premium identity was verified, but this name already has a password account, "
+                        + "so passwordless login is skipped. Log in with your existing password; "
+                        + "to switch to passwordless premium login, run &b/flp premium&e after joining.",
+                "&e你的正版身份已验证, 但该名字的账号已存在密码, 所以本次不自动免密. "
+                        + "请用原密码登录; 想改成正版免密, 请在登录后执行 &b/flp premium&e."
+        };
+        String[] policyMessages = {
+                "&eThe server has disabled automatic premium login. This premium-owned account has no usable "
+                        + "password. Contact an administrator or reset the password according to the server policy.",
+                "&e服务器已关闭正版自动登录. 此已转正账号没有可用密码, 请联系管理员或按服务器策略重新设置密码."
+        };
+        for (int index = 0; index < languages.length; index++) {
+            try (InputStreamReader reader = new InputStreamReader(getClass().getResourceAsStream(
+                    "/messages_" + languages[index] + ".yml"), StandardCharsets.UTF_8)) {
+                Configuration messages = provider.load(reader);
+                assertEquals(passwordMessages[index], messages.getString("premium-password-login"));
+                assertEquals(policyMessages[index], messages.getString("premium-policy-disabled"));
+            }
         }
     }
 

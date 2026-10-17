@@ -67,17 +67,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     private static final long MAX_EXPIRE_RATE = 1_000_000;
 
-    /**
-     * Δ (F-13): how long a requested premium verification may stay unverified
-     * before the attempt is judged failed. 12 seconds is ~12x a normal
-     * verification (well under a second), so "not yet verified" is effectively
-     * "already failed", while staying inside the login read-timeouts of both
-     * proxies (30s+) and typical reconnect loops: a quick retry neither resets
-     * nor races the settlement, which always lands at the first attempt + Δ.
-     */
-    static final long PENDING_VERIFICATION_GRACE_MS = 12_000L;
-
-    /** How often the settlement sweep looks for due pending verifications. */
+    /** How often the settlement sweep looks for pending verifications. */
     private static final Duration VERIFICATION_SETTLEMENT_SWEEP = Duration.ofSeconds(5);
 
     /** How long one session-server reachability answer is reused (F-13). */
@@ -85,13 +75,9 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     private final Map<String, String> localeMessages = new ConcurrentHashMap<>();
 
-    // F-13 (R2): one "pending verification" mark per name — set when the
-    // premium verification is requested, timestamped, never refreshed while one
-    // is pending (an earlier unresolved attempt governs its own settlement),
-    // cleared by a passing verification, by an explicit verdict, or by the
-    // settlement itself. Key = lower-cased name (Minecraft names are
-    // case-insensitive).
-    private final ConcurrentMap<String, Long> pendingVerifications = new ConcurrentHashMap<>();
+    // One pending mark per case-insensitive name. Per-key compute operations
+    // serialize settlement and success so a late success clears counted failures.
+    private final ConcurrentMap<String, Boolean> pendingVerifications = new ConcurrentHashMap<>();
 
     // F-13 (R2): settled definitive "not premium" verdicts — the only thing
     // that counts towards the same-name cracked observation. Bounded with a
@@ -559,26 +545,13 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Records that a premium verification was requested for the name (F-13):
-     * one timestamped "pending verification" mark. It is never refreshed while
-     * one is pending, so a quick retry cannot push its own settlement away.
+     * Records a requested verification for settlement on the next sweep or reconnect.
+     * Repeated requests before settlement share one pending mark.
      *
      * @param username exact login name of the attempt
      */
     public void markPendingVerification(String username) {
-        markPendingVerification(username, System.currentTimeMillis());
-    }
-
-    /**
-     * Timestamped variant of {@link #markPendingVerification(String)}, split
-     * out so the "a quick retry never pushes the settlement away" contract is
-     * unit-testable.
-     *
-     * @param username exact login name of the attempt
-     * @param when the request time in milliseconds
-     */
-    void markPendingVerification(String username, long when) {
-        pendingVerifications.putIfAbsent(attemptKey(username), when);
+        pendingVerifications.putIfAbsent(attemptKey(username), Boolean.TRUE);
     }
 
     /**
@@ -589,8 +562,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      * @param username exact login name that failed the verification
      */
     public void recordDefiniteFailure(String username) {
-        pendingVerifications.remove(attemptKey(username));
-        definiteFailures.merge(attemptKey(username), 1, Integer::sum);
+        pendingVerifications.compute(attemptKey(username), (key, pending) -> {
+            definiteFailures.merge(key, 1, Integer::sum);
+            return null;
+        });
     }
 
     /**
@@ -611,8 +586,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      * @param username exact login name that verified
      */
     public void resetVerificationState(String username) {
-        pendingVerifications.remove(attemptKey(username));
-        definiteFailures.remove(attemptKey(username));
+        pendingVerifications.compute(attemptKey(username), (key, pending) -> {
+            definiteFailures.remove(key);
+            return null;
+        });
     }
 
     /**
@@ -628,9 +605,8 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Settles the pending verifications that never turned into a verified login
-     * in time (F-13, R2). The settlement is the moment the attempt is judged
-     * failed — not the player's next connection, and not the request time — and
+     * Settles pending verifications on the next sweep, without a grace period.
+     * The settlement is the moment the attempt is judged failed, and
      * it decides with a session-server reachability probe of that moment: the
      * server answers (the client itself could not verify) -> count one
      * definitive failure; it cannot be reached (an authentication outage) ->
@@ -641,37 +617,46 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             return;
         }
 
-        settlePendingVerifications(System.currentTimeMillis(), sessionProbe.isReachable());
+        settlePendingVerifications(sessionProbe.isReachable());
+    }
+
+    /**
+     * Settles only this name's previous attempt before routing a new connection.
+     * The new attempt is marked later, only if routing requests verification.
+     *
+     * @param username exact login name of the returning player
+     */
+    public void settlePendingVerification(String username) {
+        String key = attemptKey(username);
+        if (sessionProbe != null && pendingVerifications.containsKey(key)) {
+            settlePendingVerification(key, sessionProbe.isReachable());
+        }
     }
 
     /**
      * Decision half of {@link #settlePendingVerifications()}, split out so the
      * counting rules are unit-testable without waiting for real time.
      *
-     * @param now the current time in milliseconds
      * @param sessionServerReachable whether the session server answered the probe
      */
-    void settlePendingVerifications(long now, boolean sessionServerReachable) {
-        for (Map.Entry<String, Long> entry : pendingVerifications.entrySet()) {
-            if (now - entry.getValue() < PENDING_VERIFICATION_GRACE_MS) {
-                continue;
-            }
+    void settlePendingVerifications(boolean sessionServerReachable) {
+        for (String username : pendingVerifications.keySet()) {
+            settlePendingVerification(username, sessionServerReachable);
+        }
+    }
 
-            // remove-if-present: a concurrent success/verdict wins over the settlement
-            if (!pendingVerifications.remove(entry.getKey(), entry.getValue())) {
-                continue;
-            }
-
+    private void settlePendingVerification(String username, boolean sessionServerReachable) {
+        pendingVerifications.computeIfPresent(username, (key, pending) -> {
             if (sessionServerReachable) {
-                definiteFailures.merge(entry.getKey(), 1, Integer::sum);
+                definiteFailures.merge(key, 1, Integer::sum);
                 plugin.getLog().info("Premium verification for {} never completed while the session "
-                        + "server answers: counted as a failed verification", entry.getKey());
+                        + "server answers: counted as a failed verification", key);
             } else {
                 plugin.getLog().info("Premium verification for {} never completed and the session "
-                        + "server is unreachable: treated as an authentication outage, nothing recorded",
-                        entry.getKey());
+                        + "server is unreachable: treated as an authentication outage, nothing recorded", key);
             }
-        }
+            return null;
+        });
     }
 
     /**
