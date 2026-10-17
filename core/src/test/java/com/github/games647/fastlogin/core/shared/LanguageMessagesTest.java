@@ -71,11 +71,11 @@ class LanguageMessagesTest {
         ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
         String[] languages = {"en", "zh"};
         String[] passwordMessages = {
-                "&eYour premium identity was verified, but this name already has a password account, "
-                        + "so passwordless login is skipped. Log in with your existing password; "
-                        + "to switch to passwordless premium login, run &b/flp premium&e after joining.",
-                "&e你的正版身份已验证, 但该名字的账号已存在密码, 所以本次不自动免密. "
-                        + "请用原密码登录; 想改成正版免密, 请在登录后执行 &b/flp premium&e."
+                "&eYour premium identity was verified. This account already has a password, "
+                        + "so passwordless login is skipped for this session. After logging in you may run "
+                        + "&b/flp premium&e to enable passwordless login.",
+                "&e正版身份已验证. 该账号已存在密码, 本次不进行免密登录. "
+                        + "可选择登录后执行 &b/flp premium&e 以启用免密登录"
         };
         String[] policyMessages = {
                 "&eThe server has disabled automatic premium login. This premium-owned account has no usable "
