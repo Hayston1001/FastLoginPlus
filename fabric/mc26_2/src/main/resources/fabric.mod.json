@@ -15,7 +15,7 @@
     "java": ">=25",
     "fabric-api": "*",
     "fabricproxy-lite": "*",
-    "easyauth": "3.4.4"
+    "easyauth": ">=3.4.0 <3.5.0"
   },
   "breaks": {
     "fabricproxy": "*"

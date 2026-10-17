@@ -8,6 +8,7 @@ package com.github.hayston1001.fastloginplus.fabric;
 import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim;
 import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision;
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.metadata.ModOrigin;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
@@ -38,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.LongSupplier;
 
-/** Fixed-version bridge for EasyAuth 3.4.4's account and login lifecycle. */
+/** EasyAuth 3.4.x bridge using the account and login API verified against 3.4.4. */
 final class EasyAuth344Bridge {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("fastloginplus_fabric");
@@ -61,12 +62,11 @@ final class EasyAuth344Bridge {
 
     EasyAuth344Bridge() {
         var mod = FabricLoader.getInstance().getModContainer("easyauth")
-                .orElseThrow(() -> new IllegalStateException("EasyAuth 3.4.4 is required"));
+                .orElseThrow(() -> new IllegalStateException("EasyAuth 3.4.x is required"));
         String version = mod.getMetadata().getVersion().getFriendlyString();
-        if (!"3.4.4".equals(version)) {
+        if (!EasyAuthVersionPolicy.supports(version)) {
             throw new IllegalStateException("Unsupported EasyAuth version: " + version);
         }
-        verifyReleaseJar(mod.getOrigin());
         try {
             easyAuth = Class.forName(EASY_AUTH);
             playerAuth = Class.forName(PLAYER_AUTH);
@@ -92,29 +92,36 @@ final class EasyAuth344Bridge {
             entryType.getField("lastIp");
             entryType.getField("username");
         } catch (ReflectiveOperationException missingMember) {
-            throw new IllegalStateException("EasyAuth 3.4.4 API does not match the verified release", missingMember);
+            throw new IllegalStateException("EasyAuth " + version + " API member is unavailable: "
+                    + missingMember.getMessage(), missingMember);
         }
+        warnReleaseJar(mod, LOGGER);
     }
 
-    private static void verifyReleaseJar(ModOrigin origin) {
-        if (origin.getKind() != ModOrigin.Kind.PATH || origin.getPaths().size() != 1) {
-            throw new IllegalStateException("EasyAuth must be the verified standalone 26.2 release JAR");
+    static void warnReleaseJar(ModContainer mod, Logger logger) {
+        String actual = null;
+        try {
+            ModOrigin origin = mod.getOrigin();
+            if (origin.getKind() == ModOrigin.Kind.PATH && origin.getPaths().size() == 1) {
+                Path jar = origin.getPaths().get(0);
+                if (Files.isRegularFile(jar) && jar.getFileName().toString().endsWith(".jar")) {
+                    actual = fingerprint(jar);
+                }
+            }
+        } catch (IOException | NoSuchAlgorithmException | RuntimeException unavailable) {
+            // A missing or unreadable fingerprint is advisory, including development origins.
         }
-        Path jar = origin.getPaths().get(0);
-        if (!Files.isRegularFile(jar)) {
-            throw new IllegalStateException("EasyAuth release JAR path is unavailable");
-        }
+        EasyAuthVersionPolicy.fingerprintWarning(EASY_AUTH_SHA256, actual).ifPresent(logger::warn);
+    }
+
+    private static String fingerprint(Path jar) throws IOException, NoSuchAlgorithmException {
         try (InputStream stream = Files.newInputStream(jar)) {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] buffer = new byte[16 * 1024];
             for (int read; (read = stream.read(buffer)) != -1;) {
                 digest.update(buffer, 0, read);
             }
-            if (!EASY_AUTH_SHA256.equals(HexFormat.of().formatHex(digest.digest()))) {
-                throw new IllegalStateException("EasyAuth JAR differs from the verified 26.2 release");
-            }
-        } catch (IOException | NoSuchAlgorithmException error) {
-            throw new IllegalStateException("Could not verify the EasyAuth 26.2 release JAR", error);
+            return HexFormat.of().formatHex(digest.digest());
         }
     }
 
