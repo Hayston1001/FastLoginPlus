@@ -61,6 +61,19 @@ class FabricMessagesTest {
     }
 
     @Test
+    void bedrockRefusalIsPresentAndHasNoPlaceholdersInBothLanguages() throws Exception {
+        String english = bundled("en").getProperty("bedrock-unsupported");
+        String chinese = bundled("zh").getProperty("bedrock-unsupported");
+        assertTrue(english.contains("Fabric mode does not support Bedrock/Floodgate"));
+        assertTrue(english.contains("Java Edition"));
+        assertTrue(chinese.contains("Fabric 模式不支持基岩版/Floodgate"));
+        assertTrue(chinese.contains("Java 版"));
+        for (String message : new String[]{english, chinese}) {
+            assertTrue(!message.contains("{") && !message.contains("}") && !message.contains("%"));
+        }
+    }
+
+    @Test
     void queuedBindingTellsThePlayerToReconnectManuallyInBothLanguages() throws Exception {
         String english = bundled("en").getProperty("binding-queued");
         String chinese = bundled("zh").getProperty("binding-queued");

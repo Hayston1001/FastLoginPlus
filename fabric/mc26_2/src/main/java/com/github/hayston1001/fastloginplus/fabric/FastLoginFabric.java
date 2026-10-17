@@ -14,6 +14,9 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,7 +27,7 @@ import static net.minecraft.commands.Commands.literal;
 
 /**
  * Validates an authenticated forwarding claim before configuration and applies
- * the fixed EasyAuth 3.4.4 account policy at the start of play.
+ * the verified EasyAuth 3.4.x account API at the start of play.
  */
 public final class FastLoginFabric implements ModInitializer {
 
@@ -35,6 +38,7 @@ public final class FastLoginFabric implements ModInitializer {
         LOGGER.info("FastLoginPlus Fabric {} | EasyAuth {}",
                 modVersion("fastloginplus_fabric"), modVersion("easyauth"));
         EasyAuth344Bridge bridge = new EasyAuth344Bridge();
+        LOGGER.info("Fabric mode supports Java identities only; Bedrock/Floodgate connections will be rejected.");
         FabricCrackedNotice crackedNotice = new FabricCrackedNotice();
         crackedNotice.register();
         BindingConsentWriter.register();
@@ -62,35 +66,54 @@ public final class FastLoginFabric implements ModInitializer {
                 LOGGER.warn("Fabric configuration could not be read: {}", unreadable.getMessage());
             }
         });
-        ServerConfigurationConnectionEvents.BEFORE_CONFIGURE.register((listener, server) -> {
-            GameProfile profile = listener.getOwner();
-            try {
-                bridge.verifyPolicy();
-                IdentityClaim claim = parseClaim(profile);
-                bridge.beforeConfigure(server, claim);
-                crackedNotice.beforeConfigure(listener, claim);
-                LOGGER.info("Validated {} forwarding claim for {}; profile property names={}",
-                        claim.getDecision(), profile.name(), profile.properties().keySet().size());
-            } catch (IllegalArgumentException invalidClaim) {
-                LOGGER.warn("Invalid forwarding identity for {}: {}", profile.name(), invalidClaim.getMessage());
-                listener.disconnect(FabricMessages.text("invalid-identity"));
-            } catch (RuntimeException invalidEnvironment) {
-                LOGGER.error("EasyAuth policy rejected the connection", invalidEnvironment);
-                listener.disconnect(FabricMessages.reason(invalidEnvironment, "auth-unavailable"));
-            }
-        });
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            try {
-                GameProfile profile = handler.player.getGameProfile();
-                IdentityClaim claim = parseClaim(profile);
-                bridge.onJoin(handler.player, claim);
-                crackedNotice.onJoin(handler.player, claim);
-            } catch (RuntimeException rejected) {
-                LOGGER.warn("Rejecting Fabric player {}: {}", handler.player.getGameProfile().name(),
-                        rejected.getMessage());
-                handler.disconnect(FabricMessages.reason(rejected, "auth-unavailable"));
-            }
-        });
+        ServerConfigurationConnectionEvents.BEFORE_CONFIGURE.register((listener, server) ->
+                beforeConfigure(listener, server, bridge, crackedNotice));
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
+                onJoin(handler, bridge, crackedNotice));
+    }
+
+    static void beforeConfigure(ServerConfigurationPacketListenerImpl listener, MinecraftServer server,
+                                EasyAuth344Bridge bridge, FabricCrackedNotice crackedNotice) {
+        GameProfile profile = listener.getOwner();
+        if (BedrockBoundary.isBedrock(profile.name(), profile.id())) {
+            LOGGER.info("Rejecting unsupported Bedrock/Floodgate identity: name={} uuid={}",
+                    profile.name(), profile.id());
+            listener.disconnect(FabricMessages.text("bedrock-unsupported"));
+            return;
+        }
+        try {
+            bridge.verifyPolicy();
+            IdentityClaim claim = parseClaim(profile);
+            bridge.beforeConfigure(server, claim);
+            crackedNotice.beforeConfigure(listener, claim);
+            LOGGER.info("Validated {} forwarding claim for {}; profile property names={}",
+                    claim.getDecision(), profile.name(), profile.properties().keySet().size());
+        } catch (IllegalArgumentException invalidClaim) {
+            LOGGER.warn("Invalid forwarding identity for {}: {}", profile.name(), invalidClaim.getMessage());
+            listener.disconnect(FabricMessages.text("invalid-identity"));
+        } catch (RuntimeException invalidEnvironment) {
+            LOGGER.error("EasyAuth policy rejected the connection", invalidEnvironment);
+            listener.disconnect(FabricMessages.reason(invalidEnvironment, "auth-unavailable"));
+        }
+    }
+
+    static void onJoin(ServerGamePacketListenerImpl handler, EasyAuth344Bridge bridge,
+                       FabricCrackedNotice crackedNotice) {
+        GameProfile profile = handler.player.getGameProfile();
+        if (BedrockBoundary.isBedrock(profile.name(), profile.id())) {
+            LOGGER.info("Rejecting unsupported Bedrock/Floodgate identity: name={} uuid={}",
+                    profile.name(), profile.id());
+            handler.disconnect(FabricMessages.text("bedrock-unsupported"));
+            return;
+        }
+        try {
+            IdentityClaim claim = parseClaim(profile);
+            bridge.onJoin(handler.player, claim);
+            crackedNotice.onJoin(handler.player, claim);
+        } catch (RuntimeException rejected) {
+            LOGGER.warn("Rejecting Fabric player {}: {}", profile.name(), rejected.getMessage());
+            handler.disconnect(FabricMessages.reason(rejected, "auth-unavailable"));
+        }
     }
 
     private static String modVersion(String id) {
