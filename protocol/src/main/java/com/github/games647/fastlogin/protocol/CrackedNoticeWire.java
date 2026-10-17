@@ -14,14 +14,14 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
-/** Backend capability and one-time handoff for the same-name cracked notice only. */
+/** Notification rendering marker and acknowledgement; neither is an authentication grant. */
 public final class CrackedNoticeWire {
     public static final String CHANNEL = "cracked_notice";
     public static final int MAX_BYTES = 1088;
     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_]{3,16}");
 
     public enum Kind {
-        CAPABLE, DELIVER
+        CAPABLE, ACK
     }
 
     private final Kind kind;
@@ -77,7 +77,8 @@ public final class CrackedNoticeWire {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (DataOutputStream output = new DataOutputStream(bytes)) {
             output.writeByte(1);
-            output.writeByte(kind.ordinal());
+            // Preserve the legacy rendering announcement code; ACK remains explicitly code 3.
+            output.writeByte(kind == Kind.CAPABLE ? 0 : 3);
             output.writeUTF(name);
             writeUuid(output, playerId);
             output.writeUTF(sourceProxyIds);
@@ -99,10 +100,10 @@ public final class CrackedNoticeWire {
         try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(bytes))) {
             int version = input.readUnsignedByte();
             int kind = input.readUnsignedByte();
-            if (version != 1 || kind >= Kind.values().length) {
+            if (version != 1 || (kind != 0 && kind != 3)) {
                 throw new IOException("Unsupported cracked notice");
             }
-            CrackedNoticeWire notice = new CrackedNoticeWire(Kind.values()[kind], input.readUTF(),
+            CrackedNoticeWire notice = new CrackedNoticeWire(kind == 0 ? Kind.CAPABLE : Kind.ACK, input.readUTF(),
                     readUuid(input), input.readUTF(), readUuid(input));
             if (input.available() != 0) {
                 throw new IOException("Trailing cracked notice bytes");

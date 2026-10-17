@@ -1,12 +1,13 @@
 /*
  * SPDX-License-Identifier: MIT
- *
  * Copyright (c) 2026 Hayston1001
  */
 package com.github.hayston1001.fastloginplus.fabric;
 
+import com.github.hayston1001.fastloginplus.fabric.protocol.CrackedNoticeClaim;
 import com.github.hayston1001.fastloginplus.fabric.protocol.CrackedNoticeWire;
 import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim;
+import com.mojang.authlib.GameProfile;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationNetworking;
@@ -21,12 +22,12 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerConfigurationPacketListenerImpl;
 
-import java.io.IOException;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.UUID;
+import java.util.function.Consumer;
 
-/** Announces backend-local rendering first; only a proxy handoff queues the chat. */
+/** Renders forwarded notices locally and announces server rendering independently of notification debt. */
 final class FabricCrackedNotice {
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("fastloginplus_fabric");
     private final ConcurrentMap<Connection, CrackedNoticeQueue> queues = new ConcurrentHashMap<>();
@@ -54,74 +55,63 @@ final class FabricCrackedNotice {
 
     void register() {
         PayloadTypeRegistry.clientboundConfiguration().register(Payload.TYPE, Payload.CODEC);
-        PayloadTypeRegistry.serverboundConfiguration().register(Payload.TYPE, Payload.CODEC);
-        PayloadTypeRegistry.serverboundPlay().register(Payload.TYPE, Payload.CODEC);
-        ServerConfigurationNetworking.registerGlobalReceiver(Payload.TYPE, (payload, context) -> {
-            Connection connection = context.packetContext().orElseThrow(PacketContext.CONNECTION);
-            context.server().execute(() -> receive(connection, context.packetListener().getOwner(), payload));
-        });
-        ServerPlayNetworking.registerGlobalReceiver(Payload.TYPE, (payload, context) -> {
-            ServerPlayer player = context.player();
-            Connection connection = context.packetContext().orElseThrow(PacketContext.CONNECTION);
-            context.server().execute(() -> {
-                receive(connection, player.getGameProfile(), payload);
-                drain(player, queues.get(connection));
-            });
-        });
+        PayloadTypeRegistry.clientboundPlay().register(Payload.TYPE, Payload.CODEC);
         ServerConfigurationConnectionEvents.DISCONNECT.register((listener, server) ->
                 queues.remove(listener.getPacketContext().orElseThrow(PacketContext.CONNECTION)));
         ServerPlayConnectionEvents.DISCONNECT.register((listener, server) ->
                 queues.remove(listener.getPacketContext().orElseThrow(PacketContext.CONNECTION)));
     }
 
-    void beforeConfigure(ServerConfigurationPacketListenerImpl listener, IdentityClaim claim) {
-        if (claim.getDecision() != IdentityClaim.Decision.OFFLINE || !claim.isSameNameCracked()) {
-            return;
-        }
+    static CrackedNoticeClaim readNotice(GameProfile profile) {
+        return CrackedNoticeClaim.parse(profile.properties().get(CrackedNoticeClaim.PROPERTY_NAME).stream()
+                .map(com.mojang.authlib.properties.Property::value).toList(), profile.name(), profile.id());
+    }
+
+    void beforeConfigure(ServerConfigurationPacketListenerImpl listener, IdentityClaim identity) {
         try {
-            Connection connection = listener.getPacketContext().orElseThrow(PacketContext.CONNECTION);
-            CrackedNoticeQueue queue = new CrackedNoticeQueue(new CrackedNoticeWire(CrackedNoticeWire.Kind.CAPABLE,
-                    claim.getPlayerName(), claim.getForwardedUuid(), FabricConfig.startup().allowedProxyIds(),
-                    UUID.randomUUID()));
-            queues.put(connection, queue);
-            ServerConfigurationNetworking.send(listener, new Payload(queue.capability().encode()));
+            // Every validated connection refreshes the proxy's server marker, even without a pending notice.
+            announce(identity, bytes -> ServerConfigurationNetworking.send(listener, new Payload(bytes)),
+                    FabricConfig.startup().allowedProxyIds());
         } catch (RuntimeException unavailable) {
-            LOGGER.warn("Could not announce backend-local cracked notice support for {}", claim.getPlayerName());
-        }
-    }
-
-    private void receive(Connection connection, com.mojang.authlib.GameProfile profile, Payload payload) {
-        CrackedNoticeQueue queue = queues.get(connection);
-        if (queue == null) {
-            return;
+            LOGGER.warn("Could not announce backend-local notice rendering for {}", identity.getPlayerName());
         }
         try {
-            queue.accept(CrackedNoticeWire.decode(payload.data()), FastLoginFabric.parseClaim(profile));
-        } catch (IOException | IllegalArgumentException malformed) {
-            // Notification-only input never changes authentication or rejects a player.
+            CrackedNoticeClaim notice = readNotice(listener.getOwner());
+            if (notice != null && notice.accepts(identity)) {
+                queues.putIfAbsent(listener.getPacketContext().orElseThrow(PacketContext.CONNECTION),
+                        new CrackedNoticeQueue(notice));
+            }
+        } catch (RuntimeException unavailable) {
+            // Optional notification data must never reject or authenticate a connection.
+            LOGGER.warn("Could not read backend-local cracked notice for {}", identity.getPlayerName());
         }
     }
 
-    void onJoin(ServerPlayer player, IdentityClaim claim) {
+    static void announce(IdentityClaim identity, Consumer<byte[]> send, String proxyIds) {
+        send.accept(new CrackedNoticeWire(CrackedNoticeWire.Kind.CAPABLE, identity.getPlayerName(),
+                identity.getForwardedUuid(), proxyIds, UUID.randomUUID()).encode());
+    }
+
+    void onJoin(ServerPlayer player, IdentityClaim identity) {
         try {
             CrackedNoticeQueue queue = queues.get(player.connection.getPacketContext()
                     .orElseThrow(PacketContext.CONNECTION));
-            if (queue != null) {
-                queue.joined(claim);
-                drain(player, queue);
+            if (queue != null && player.connection.isAcceptingMessages()) {
+                renderAfterJoin(queue, identity, player::sendSystemMessage,
+                        bytes -> ServerPlayNetworking.send(player, new Payload(bytes)),
+                        FabricConfig.startup().allowedProxyIds());
             }
         } catch (RuntimeException unavailable) {
-            LOGGER.warn("Could not deliver backend-local cracked notice for {}", claim.getPlayerName());
+            LOGGER.warn("Could not deliver or acknowledge backend-local cracked notice for {}",
+                    identity.getPlayerName());
         }
     }
 
-    private void drain(ServerPlayer player, CrackedNoticeQueue queue) {
-        if (player.connection.isAcceptingMessages() && queue != null && queue.take()) {
-            try {
-                player.sendSystemMessage(FabricMessages.text("same-name-cracked-recorded"));
-            } catch (RuntimeException unavailable) {
-                LOGGER.warn("Could not send backend-local cracked notice for {}", player.getGameProfile().name());
-            }
-        }
+    static void renderAfterJoin(CrackedNoticeQueue queue, IdentityClaim identity,
+                                Consumer<net.minecraft.network.chat.Component> render,
+                                Consumer<byte[]> acknowledge, String proxyIds) {
+        queue.renderAfterJoin(identity,
+                () -> render.accept(FabricMessages.text("same-name-cracked-recorded")),
+                () -> acknowledge.accept(queue.acknowledgement(proxyIds).encode()));
     }
 }

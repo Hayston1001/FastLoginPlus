@@ -16,6 +16,7 @@ import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.github.games647.fastlogin.protocol.IdentityClaim;
+import com.github.games647.fastlogin.protocol.CrackedNoticeClaim;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
 import com.github.games647.fastlogin.velocity.VelocityLoginSession;
 import com.github.games647.fastlogin.velocity.task.AsyncPremiumCheck;
@@ -286,7 +287,8 @@ public class ConnectListener {
         // forwarded; malformed or repeated values must never survive as an alternate claim.
         List<Property> properties = new ArrayList<>(profile.getProperties().size());
         for (Property property : profile.getProperties()) {
-            if (!ForwardingAttributes.IDENTITY.equals(property.getName())) {
+            if (!ForwardingAttributes.IDENTITY.equals(property.getName())
+                    && !CrackedNoticeClaim.PROPERTY_NAME.equals(property.getName())) {
                 properties.add(property);
             }
         }
@@ -304,8 +306,20 @@ public class ConnectListener {
         } catch (IllegalArgumentException invalidProfile) {
             throw new IllegalArgumentException("Cannot attach identity claim for an invalid profile", invalidProfile);
         }
-        event.setGameProfile(profile.withProperties(properties).addProperty(
-                new Property(ForwardingAttributes.IDENTITY, claim.encode(), "")));
+        properties.add(new Property(ForwardingAttributes.IDENTITY, claim.encode(), ""));
+        if (claim.getDecision() == IdentityClaim.Decision.OFFLINE && claim.isSameNameCracked()) {
+            try {
+                CrackedNoticeClaim notice = plugin.getCrackedNoticeDelivery().prepare(
+                        event.getConnection(), profile.getName(), forwardedUuid);
+                if (notice != null) {
+                    properties.add(new Property(CrackedNoticeClaim.PROPERTY_NAME, notice.encode(), ""));
+                }
+            } catch (RuntimeException unavailable) {
+                // Notification failures must not interfere with the identity claim or authentication.
+                plugin.getLog().warn("Could not attach the optional cracked notice for {}", profile.getName());
+            }
+        }
+        event.setGameProfile(profile.withProperties(properties));
     }
 
     private List<GameProfile.Property> removeSkin(Collection<Property> oldProperties) {
@@ -339,6 +353,9 @@ public class ConnectListener {
         if (session == null) {
             plugin.getLog().info("No active login session found on server connect for {}", player);
             return;
+        }
+        if (!player.isOnlineMode() && session.getIdentityDecision() == IdentityClaim.Decision.OFFLINE) {
+            plugin.getScheduler().runAsync(() -> plugin.getCrackedNoticeDelivery().deliver(player, server));
         }
 
         // delay sending force command, because Paper will process the login event asynchronously
