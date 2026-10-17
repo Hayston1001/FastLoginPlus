@@ -109,7 +109,15 @@ public class ForceLoginTask
     }
 
     private void sendDeclaration(Type type, LoginSession session) {
-
+        session.computeFacts(core);
+        if (type != Type.CRACKED && !session.getFacts().autoLogin()) {
+            // The unchanged profile claim still carries identity and policy. Old backends must see no force intent.
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("Not sending force {} for {}: proxy auto-login policy is disabled",
+                        type, player.getUsername());
+            }
+            return;
+        }
         core.getPlugin().getLog().info("Sending force {} for {} towards server {}", type, player.getUsername(), server);
 
         UUID proxyId = core.getPlugin().getProxyId();
@@ -119,7 +127,6 @@ public class ForceLoginTask
         // premium signal at all. Null when this connection was not verified as premium.
         // The trailing facts are the proxy's observations plus the recorded upgrade
         // consent; the backend decides the login method from them.
-        session.computeFacts(core);
         UUID verified = type == Type.CRACKED ? null : session.getUuid();
         LoginActionMessage loginMessage = new LoginActionMessage(type, player.getUsername(), proxyId, verified);
         loginMessage.setFacts(session.getFacts());

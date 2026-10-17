@@ -94,6 +94,18 @@ public class BungeeListener implements PluginMessageListener {
         // If the earlier live-profile claim was unavailable, an already authenticated carrier
         // can deliver the first policy fact. That late fallback only protects later connections.
         plugin.synchronizeAuthMePremiumPolicy(loginMessage.getFacts());
+        if (loginMessage.getType() != Type.CRACKED) {
+            if (loginMessage.getFacts().policyDeclared() && !loginMessage.isAutoLogin()) {
+                plugin.getLog().warn("Proxy force {} for {} contradicts its disabled auto-login policy; "
+                        + "applying declared policy instead", loginMessage.getType(), loginMessage.getPlayerName());
+            } else if (!loginMessage.getFacts().policyDeclared()
+                    && plugin.getCore().getConfig().getBoolean("require-declared-proxy-policy")) {
+                plugin.getLog().warn("Ignoring proxy force {} for {}: policy facts are missing and "
+                        + "require-declared-proxy-policy is enabled; keeping the auth plugin's own login flow",
+                        loginMessage.getType(), loginMessage.getPlayerName());
+                return;
+            }
+        }
 
         // A player who is already authenticated is the normal case here, not a fault: on a Paper
         // backend the configure phase logs premium players in before the proxy's own message can
@@ -118,7 +130,10 @@ public class BungeeListener implements PluginMessageListener {
         if (plugin.getCore().isDebug()) {
             plugin.getLog().info("Player info {} command for {} from proxy", type, playerName);
         }
-        if (type == Type.LOGIN) {
+        if (type != Type.CRACKED && message.getFacts().policyDeclared() && !message.isAutoLogin()) {
+            // REGISTER must also reach the policy decision for existing password accounts.
+            onLoginMessage(player, playerName, message);
+        } else if (type == Type.LOGIN) {
             onLoginMessage(player, playerName, message);
         } else if (type == Type.REGISTER) {
             onRegisterMessage(player, playerName, message);

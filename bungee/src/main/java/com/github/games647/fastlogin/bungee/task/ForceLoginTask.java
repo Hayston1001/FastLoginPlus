@@ -114,7 +114,15 @@ public class ForceLoginTask
     }
 
     private void sendDeclaration(Type type, LoginSession session) {
-
+        session.computeFacts(core);
+        if (type != Type.CRACKED && !session.getFacts().autoLogin()) {
+            // The unchanged profile claim still carries identity and policy. Old backends must see no force intent.
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("Not sending force {} for {}: proxy auto-login policy is disabled",
+                        type, player.getName());
+            }
+            return;
+        }
         UUID proxyId = UUID.fromString(ProxyServer.getInstance().getConfig().getUuid());
         // also hand over the Mojang UUID verified at LoginEvent. The backend needs it
         // to stamp AuthMe's premium_uuid when premiumUuid:false, where the forwarded connection
@@ -122,7 +130,6 @@ public class ForceLoginTask
         // Null when this connection was not verified as premium.
         // The trailing facts are the proxy's observations plus the recorded upgrade
         // consent; the backend decides the login method from them.
-        session.computeFacts(core);
         UUID verified = type == Type.CRACKED ? null : session.getUuid();
         LoginActionMessage loginMessage = new LoginActionMessage(type, player.getName(), proxyId, verified);
         loginMessage.setFacts(session.getFacts());

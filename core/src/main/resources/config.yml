@@ -146,6 +146,15 @@ autoRegister: true
 # facts and is enforced here; this copy only applies in standalone mode
 autoLogin: true
 
+# Proxy backends only: require declared policy facts before accepting a force
+# LOGIN/REGISTER plugin message. Default false preserves older proxy compatibility.
+# Enabling this rejects force requests from proxies without policy facts: their
+# players keep the auth plugin's own password/registration flow and may lose
+# passwordless access. Upgrade proxies before enabling. This does not authenticate
+# messages or replace the proxy allowlist. Explicit autoLogin:false facts always
+# override a contradictory force intent, regardless of this switch.
+require-declared-proxy-policy: false
+
 # Whether to use the premium UUID after premium verification (does not decide
 # whether premium verification is enabled).
 # In standalone mode, true = inject the premium UUID into the offline-mode

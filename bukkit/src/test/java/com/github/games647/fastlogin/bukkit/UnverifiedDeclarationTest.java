@@ -244,6 +244,84 @@ class UnverifiedDeclarationTest {
         field.set(plugin, value);
     }
 
+    private byte[] forceMessage(LoginActionMessage.Type type, boolean declared, boolean enabled) {
+        com.google.common.io.ByteArrayDataOutput output = ByteStreams.newDataOutput();
+        if (!declared) {
+            output.writeByte(type.ordinal());
+            output.writeUTF("TestUser");
+            output.writeLong(proxy.getMostSignificantBits());
+            output.writeLong(proxy.getLeastSignificantBits());
+        } else {
+            LoginActionMessage message = new LoginActionMessage(type, "TestUser", proxy, UUID.randomUUID());
+            message.setFacts(new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, enabled, true, false));
+            output = ByteStreams.newDataOutput();
+            message.writeTo(output);
+        }
+        return output.toByteArray();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = LoginActionMessage.Type.class, names = {"LOGIN", "REGISTER"})
+    void contradictoryForceAlwaysWarnsAndAppliesDisabledFacts(LoginActionMessage.Type type) {
+        for (boolean strict : new boolean[]{false, true}) {
+            when(core.getConfig()).thenReturn(new net.md_5.bungee.config.Configuration());
+            core.getConfig().set("require-declared-proxy-policy", strict);
+            new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player,
+                    forceMessage(type, true, false));
+        }
+        ArgumentCaptor<BukkitLoginSession> captured = ArgumentCaptor.forClass(BukkitLoginSession.class);
+        verify(plugin, times(2)).putSession(eq(address), captured.capture());
+        for (BukkitLoginSession session : captured.getAllValues()) {
+            assertFalse(session.getFacts().autoLogin());
+            assertTrue(session.isVerifiedPremium());
+            assertTrue(session.isFactsPresent());
+        }
+        verify(plugin.getLog(), times(2)).warn(contains("contradicts"), eq(type), eq("TestUser"));
+        verify(hook, never()).forceLogin(any());
+        verify(hook, never()).forceRegister(any(), anyString());
+    }
+
+    @Test
+    void strictGateBlocksLegacyForceButDefaultOffKeepsLegacyDispatch() {
+        net.md_5.bungee.config.Configuration config = new net.md_5.bungee.config.Configuration();
+        when(core.getConfig()).thenReturn(config);
+        config.set("require-declared-proxy-policy", true);
+        for (LoginActionMessage.Type type : new LoginActionMessage.Type[]{
+                LoginActionMessage.Type.LOGIN, LoginActionMessage.Type.REGISTER}) {
+            new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player,
+                    forceMessage(type, false, true));
+        }
+        verify(plugin, never()).putSession(any(), any());
+        config.set("require-declared-proxy-policy", false);
+        new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player,
+                forceMessage(LoginActionMessage.Type.LOGIN, false, true));
+        ArgumentCaptor<BukkitLoginSession> captured = ArgumentCaptor.forClass(BukkitLoginSession.class);
+        verify(plugin).putSession(eq(address), captured.capture());
+        assertFalse(captured.getValue().getFacts().policyDeclared());
+        assertTrue(captured.getValue().isVerifiedPremium());
+        verify(plugin.getLog(), times(2)).warn(contains("policy facts are missing"), any(), eq("TestUser"));
+    }
+
+    @Test
+    void strictGateAcceptsDeclaredEnabledPolicyAndDoesNotFilterOfflineGuardrail() {
+        net.md_5.bungee.config.Configuration config = new net.md_5.bungee.config.Configuration();
+        config.set("require-declared-proxy-policy", true);
+        when(core.getConfig()).thenReturn(config);
+        new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player,
+                forceMessage(LoginActionMessage.Type.LOGIN, true, true));
+        new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player, message(uuid));
+        verify(plugin, times(2)).putSession(eq(address), any());
+    }
+
+    @Test
+    void contradictoryDuplicateStillWarnsWithoutReplayingAction() {
+        when(player.hasMetadata("FastLoginPlus")).thenReturn(true);
+        new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player,
+                forceMessage(LoginActionMessage.Type.LOGIN, true, false));
+        verify(plugin.getLog()).warn(contains("contradicts"), eq(LoginActionMessage.Type.LOGIN), eq("TestUser"));
+        verify(plugin, never()).putSession(any(), any());
+    }
+
     @Test
     void unsignedPropertyWithoutDeclarationCannotPrecreate() throws Exception {
         when(manager.isSignedForwarding()).thenReturn(false);
