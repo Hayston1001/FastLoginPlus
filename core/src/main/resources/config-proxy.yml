@@ -1,27 +1,8 @@
 #
 # SPDX-License-Identifier: MIT
 #
-# The MIT License (MIT)
-#
-# Copyright (c) 2015-2026 games647, Hayston and contributors
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+# Copyright (c) 2026 games647 and contributors
+# Copyright (c) 2026 Hayston1001
 #
 
 # Project: https://github.com/Hayston1001/FastLoginPlus
@@ -40,6 +21,15 @@
 #   [distributed] policy decided here, sent to the backends with the identity
 #                 facts and enforced there; a backend's same-named key only
 #                 applies in standalone (no-proxy) deployments
+#
+# Fabric mode: configure policies here; declared login policies travel with the
+# identity facts. Backend-local language and allowed-proxy-ids belong in the
+# backend's fastloginplus-fabric.properties.
+# kick-toggle only kicks or keeps the session; the player reconnects manually.
+# auto-register-unknown: false leaves a verified player without an account in
+# the registration flow. Use anti-bot.action: 'block' when anti-bot is enabled:
+# 'ignore' skips the decision and Fabric rejects the unresolved identity.
+# This is configuration guidance, not a proxy startup gate.
 
 # ========================================
 # Language
@@ -71,7 +61,7 @@ anti-bot:
   # Action when limit is hit: 'ignore' (FastLogin stops handling the connection —
   # login continues as a normal cracked login, no Mojang/DB requests) or 'block'
   # (reject the connection with the kick-antibot message)
-  # Fabric native auth requires 'block' when anti-bot is enabled.
+  # For Fabric backends use 'block'; 'ignore' leaves an unresolved identity.
   action: 'ignore'
 
   # --- Per-IP rate limiting ---
@@ -104,8 +94,9 @@ anti-bot:
 # here; the backend only executes forceLogin/forceRegister through its auth
 # plugin on Bukkit/Folia. Fabric checks account ownership first, then binds an
 # unclaimed EasyAuth account after a verified online login.
-# [distributed] the proxy only verifies unknown paid names when this is on, so
-# a verified premium name reaching a backend already carries this policy.
+# [proxy] controls the new-premium-player route here. Name-change checks and
+# offline-whitelist can also request premium verification. Backend account
+# creation still depends on the declared login policies and account ownership.
 autoRegister: true
 
 # Enable auto-login for premium players
@@ -128,7 +119,7 @@ premiumUuid: true
 # Query Mojang API for new players and detect name changes by UUID
 # If a player's name is not in the database but their UUID is (under an old name),
 # the old record is updated with the new name and they log in as premium
-# [distributed] the rename is decided and booked here; backends apply the result.
+# [proxy] updates the proxy's FLP record, not the backend's auth-plugin records.
 nameChangeCheck: true
 
 # If an offline player uses a premium username but fails authentication, 
@@ -169,14 +160,14 @@ verify-backend-messages: true
 # Command Behavior
 # ========================================
 # Show warning before /flp premium command takes effect
-# The proxy asks for confirmation when a backend forwards the toggle.
+# The proxy asks for confirmation for self-invoked toggles from classic backends.
+# Fabric binding consent does not currently enter this confirmation gate.
 # [proxy] the confirmation gate lives here.
 premium-warning: true
 
-# Kick the player from the server after they confirm /flp premium, forcing them to reconnect
-# The proxy kicks the player after a toggle.
-# [proxy] the kick lives here; a Fabric backend's transfer is its own reconnect
-# helper and does not read this key.
+# [proxy] After a toggle, true kicks the player; false keeps the current session.
+# The player reconnects manually to apply the change. Neither the classic nor
+# the Fabric chain uses transfer or automatically reconnects the player.
 kick-toggle: true
 
 # ========================================
@@ -225,6 +216,8 @@ mojang-request-limit: 600
 # ========================================
 # Floodgate / Bedrock
 # ========================================
+# These three keys apply only to classic backends. Fabric mode does not support
+# Bedrock/Floodgate; such connections are rejected regardless of these values.
 # Auto-login for Floodgate (Bedrock) players. Values: false / true / linked / no-conflict
 # The proxy handles Bedrock players.
 autoLoginFloodgate: false

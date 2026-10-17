@@ -24,7 +24,7 @@ class FabricMessagesTest {
 
     @Test
     void startupReportsEffectiveLanguageAndTheSettingToChange() throws Exception {
-        for (String requested : new String[]{"en", "zh", "ZH", "unsupported"}) {
+        for (String requested : new String[]{"en", "EN", "zh", "ZH", "", null}) {
             String effective = "zh".equalsIgnoreCase(requested) ? "zh" : "en";
             org.slf4j.Logger logger = org.mockito.Mockito.mock(org.slf4j.Logger.class);
             Properties loaded = FabricMessages.loadAndReportLanguage(requested, directory, logger);
@@ -35,6 +35,30 @@ class FabricMessagesTest {
                     effective);
             org.mockito.Mockito.verifyNoMoreInteractions(logger);
         }
+    }
+
+    @Test
+    void unknownLanguageWarnsOnceAndLoadsEnglishMessages() throws Exception {
+        org.slf4j.Logger logger = org.mockito.Mockito.mock(org.slf4j.Logger.class);
+        Properties loaded = FabricMessages.loadAndReportLanguage("unsupported", directory, logger);
+        assertEquals(bundled("en"), loaded);
+        org.mockito.Mockito.verify(logger).warn(
+                "Unknown Fabric message language='{}'; effective language={}", "unsupported", "en");
+        org.mockito.Mockito.verify(logger).info("Fabric message language={} "
+                + "(set language in fastloginplus-fabric.properties; restart the backend to apply changes)", "en");
+        org.mockito.Mockito.verifyNoMoreInteractions(logger);
+    }
+
+    @Test
+    void bundledConfigurationParsesWithUnchangedLocalDefaults() throws Exception {
+        Properties configuration = new Properties();
+        try (var reader = new InputStreamReader(getClass().getResourceAsStream(
+                "/fastloginplus-fabric.properties"), StandardCharsets.UTF_8)) {
+            configuration.load(reader);
+        }
+        assertEquals(java.util.Set.of("language", "allowed-proxy-ids"), configuration.stringPropertyNames());
+        assertEquals("en", configuration.getProperty("language"));
+        assertEquals("", configuration.getProperty("allowed-proxy-ids"));
     }
 
     @Test

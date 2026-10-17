@@ -36,6 +36,11 @@ final class FabricMessages {
 
     static Properties loadAndReportLanguage(String language, Path directory, org.slf4j.Logger logger) {
         Properties loaded = load(language, directory);
+        if (language != null && !language.isEmpty()
+                && !"en".equalsIgnoreCase(language) && !"zh".equalsIgnoreCase(language)) {
+            logger.warn("Unknown Fabric message language='{}'; effective language={}",
+                    language, effectiveLanguage(language));
+        }
         logger.info("Fabric message language={} (set language in fastloginplus-fabric.properties; "
                 + "restart the backend to apply changes)", effectiveLanguage(language));
         return loaded;
