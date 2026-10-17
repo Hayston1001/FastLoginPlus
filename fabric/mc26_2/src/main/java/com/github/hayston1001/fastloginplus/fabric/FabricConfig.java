@@ -1,27 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
  * Copyright (c) 2026 Hayston1001
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
  */
 package com.github.hayston1001.fastloginplus.fabric;
 
@@ -81,17 +61,6 @@ final class FabricConfig {
         return startupSettings;
     }
 
-    /**
-     * Only these two fields are reread for each binding command.
-     *
-     * @return the command-time transfer target settings
-     */
-    static TransferSettings readTransferSettings() {
-        Properties config = readFile();
-        return new TransferSettings(config.getProperty("binding-transfer-host", ""),
-                config.getProperty("binding-transfer-port", ""));
-    }
-
     private static Properties readFile() {
         Path file = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
         writeDefaultOnce(file);
@@ -119,10 +88,6 @@ final class FabricConfig {
 
     /** Frozen at SERVER_STARTED; file edits require a backend restart. */
     record StartupSettings(String allowedProxyIds) {
-    }
-
-    /** Command-time exceptions, not a reload of startup settings. */
-    record TransferSettings(String host, String port) {
     }
 
     private static void writeDefaultOnce(Path file) {

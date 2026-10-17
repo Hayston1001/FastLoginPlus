@@ -16,6 +16,7 @@ import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FabricMessagesTest {
     @TempDir
@@ -57,6 +58,16 @@ class FabricMessagesTest {
                 chinese.getProperty("same-name-cracked-recorded"));
         org.junit.jupiter.api.Assertions.assertTrue(english.getProperty("same-name-cracked-recorded")
                 .contains("/flp premium"));
+    }
+
+    @Test
+    void queuedBindingTellsThePlayerToReconnectManuallyInBothLanguages() throws Exception {
+        String english = bundled("en").getProperty("binding-queued");
+        String chinese = bundled("zh").getProperty("binding-queued");
+        assertTrue(english.contains("consent recorded for UUID {uuid}. Please reconnect"));
+        assertTrue(chinese.contains("同意已记录, 目标 UUID 为 {uuid}. 请重新连接"));
+        assertTrue(english.contains("Your password stays unchanged until success."));
+        assertTrue(chinese.contains("成功前原密码不变."));
     }
 
     @Test

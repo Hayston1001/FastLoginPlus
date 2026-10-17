@@ -1,27 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
  * Copyright (c) 2026 Hayston1001
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
  */
 package com.github.hayston1001.fastloginplus.fabric;
 
@@ -29,7 +9,6 @@ import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim;
 import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.metadata.ModOrigin;
-import net.minecraft.network.protocol.common.ClientboundTransferPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
@@ -78,8 +57,6 @@ final class EasyAuth344Bridge {
     private final Class<?> playersCache;
     private final ConcurrentHashMap<String, PendingBinding> pendingBindings = new ConcurrentHashMap<>();
     private static final long BIND_WINDOW_NANOS = TimeUnit.MINUTES.toNanos(10);
-    /** The proxy needs a moment to record the consent before the reconnect asks for verification. */
-    private static final long CONSENT_SETTLE_DELAY_MILLIS = 1000;
     private final PremiumNameResolver premiumNames = PremiumNameResolver.mojang();
 
     EasyAuth344Bridge() {
@@ -403,25 +380,19 @@ final class EasyAuth344Bridge {
             player.sendSystemMessage(FabricMessages.text("binding-complete"));
             return;
         }
-        TransferTarget transfer = transferTarget(FabricConfig.readTransferSettings(), name);
         player.sendSystemMessage(FabricMessages.text("binding-checking"));
         // resolve the pinned premium UUID off the server thread, then finish on it
         CompletableFuture.supplyAsync(() -> premiumNames.resolve(name)).whenComplete((target, error) ->
-                server.execute(() -> finishBinding(server, player, name, passwordHash, target,
-                        transfer, proxyIds)));
+                server.execute(() -> finishBinding(player, name, passwordHash, target, proxyIds)));
     }
 
-    private void finishBinding(MinecraftServer server, ServerPlayer player, String name,
-                               String passwordHash, Optional<UUID> target, TransferTarget transfer,
-                               String proxyIds) {
+    private void finishBinding(ServerPlayer player, String name, String passwordHash,
+                               Optional<UUID> target, String proxyIds) {
         if (target == null || target.isEmpty()) {
-            BindingTransferDiagnostics.skipped(LOGGER, name, BindingTransferDiagnostics.Reason.NAME_UNAVAILABLE);
             player.sendSystemMessage(FabricMessages.text("binding-name-unavailable"));
             return;
         }
         if (!player.connection.isAcceptingMessages()) {
-            BindingTransferDiagnostics.skipped(LOGGER, name, BindingTransferDiagnostics.skipReason(
-                    true, true, false, player.hasDisconnected()));
             return;
         }
         Object db = field(easyAuth, null, "DB");
@@ -429,12 +400,10 @@ final class EasyAuth344Bridge {
         try {
             checkBindingEntry(current, name);
         } catch (RuntimeException changed) {
-            BindingTransferDiagnostics.skipped(LOGGER, name, BindingTransferDiagnostics.Reason.ACCOUNT_CHANGED);
             player.sendSystemMessage(FabricMessages.text("binding-account-changed"));
             return;
         }
         if (!passwordHash.equals(field(entryType, current, "password"))) {
-            BindingTransferDiagnostics.skipped(LOGGER, name, BindingTransferDiagnostics.Reason.ACCOUNT_CHANGED);
             player.sendSystemMessage(FabricMessages.text("binding-account-changed"));
             return;
         }
@@ -444,38 +413,6 @@ final class EasyAuth344Bridge {
         // preference) is set here, the EasyAuth account stays a password account
         BindingConsentWriter.send(player, name, proxyIds);
         player.sendSystemMessage(FabricMessages.text("binding-queued", "{uuid}", target.get().toString()));
-        CompletableFuture.delayedExecutor(CONSENT_SETTLE_DELAY_MILLIS, TimeUnit.MILLISECONDS).execute(() ->
-                server.execute(() -> transferForBinding(player, name, pending, transfer.host, transfer.port)));
-    }
-
-    private void transferForBinding(ServerPlayer player, String name, PendingBinding pending,
-                                    String host, int port) {
-        boolean current = pendingBindings.get(name) == pending;
-        boolean live = current && pending.isLive();
-        boolean accepting = live && player.connection.isAcceptingMessages();
-        BindingTransferDiagnostics.Reason reason = BindingTransferDiagnostics.skipReason(
-                current, live, accepting, live && !accepting && player.hasDisconnected());
-        if (reason != null) {
-            BindingTransferDiagnostics.skipped(LOGGER, name, reason);
-            return;
-        }
-        LOGGER.info("Transferring {} for verified premium binding", name);
-        player.connection.send(new ClientboundTransferPacket(host, port));
-    }
-
-    private TransferTarget transferTarget(FabricConfig.TransferSettings config, String name) {
-        BindingTransferDiagnostics.Reason problem =
-                BindingTransferDiagnostics.targetProblem(config.host(), config.port());
-        if (problem != null) {
-            BindingTransferDiagnostics.skipped(LOGGER, name, problem);
-            throw FabricMessages.failure("binding-transfer-unavailable");
-        }
-        String host = config.host().trim();
-        int port = Integer.parseInt(config.port());
-        return new TransferTarget(host, port);
-    }
-
-    private record TransferTarget(String host, int port) {
     }
 
     /**
