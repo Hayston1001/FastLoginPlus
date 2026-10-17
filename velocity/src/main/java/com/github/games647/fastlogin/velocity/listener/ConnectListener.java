@@ -27,6 +27,7 @@ import com.google.common.collect.ListMultimap;
 import com.velocitypowered.api.event.Continuation;
 import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.EventTask;
+import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.DisconnectEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
@@ -67,7 +68,9 @@ public class ConnectListener {
         this.earlyDeclarations = new EarlyDeclarationSupport(plugin.getLog());
     }
 
-    @Subscribe
+    // Later than the reviewed AuthMe NORMAL handler. Other plugins can still run later;
+    // this is a guarantee for the reviewed combination, not exclusive event ownership.
+    @Subscribe(order = PostOrder.LAST)
     public EventTask onPreLogin(PreLoginEvent preLoginEvent) {
         if (!preLoginEvent.getResult().isAllowed()) {
             return null;
@@ -105,6 +108,8 @@ public class ConnectListener {
                     plugin.getProxy().getEventManager().fire(antiBotEvent).whenComplete((unused, ex) -> {
                         if (ex != null) {
                             plugin.getLog().error("Error firing anti-bot event", ex);
+                            resumeOnce(continuation, resumed);
+                            return;
                         }
                         Action effective = antiBotEvent.isCancelled() ? Action.Continue : action;
                         applyDecisionSafely(preLoginEvent, connection, checkedUsername, effective,
@@ -145,8 +150,7 @@ public class ConnectListener {
                                       AtomicBoolean resumed) {
         switch (action) {
             case Ignore:
-                // FastLogin stops handling the connection — login continues as
-                // a normal cracked login without premium handling
+                // No FLP decision: leave any other handler's result untouched.
                 resumeOnce(continuation, resumed);
                 break;
             case Block:

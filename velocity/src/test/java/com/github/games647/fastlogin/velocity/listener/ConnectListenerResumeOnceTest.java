@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.velocity.listener;
 
@@ -30,9 +11,12 @@ import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
+import com.github.games647.fastlogin.velocity.event.VelocityFastLoginAntiBotEvent;
 import com.velocitypowered.api.event.Continuation;
+import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.proxy.InboundConnection;
+import com.velocitypowered.api.proxy.ProxyServer;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 
@@ -45,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -85,11 +70,56 @@ class ConnectListenerResumeOnceTest {
         Continuation continuation = mock(Continuation.class);
         AtomicBoolean resumed = new AtomicBoolean(false);
 
-        listener.applyDecisionSafely(mock(PreLoginEvent.class), mock(InboundConnection.class),
+        PreLoginEvent event = new PreLoginEvent(mock(InboundConnection.class), "Steve");
+        event.setResult(PreLoginEvent.PreLoginComponentResult.forceOnlineMode());
+        Object prior = event.getResult();
+        listener.applyDecisionSafely(event, mock(InboundConnection.class),
                 "Steve", Action.Ignore, continuation, resumed);
 
+        assertSame(prior, event.getResult(), "ignore is not an FLP offline decision");
         verify(continuation, times(1)).resume();
         assertTrue(resumed.get());
+    }
+
+    @Test
+    void explicitAntiBotBlockRemainsDeniedInsteadOfOffline() {
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        FastLoginCore<?, ?, ?> core = mock(FastLoginCore.class);
+        doReturn(core).when(plugin).getCore();
+        when(plugin.getLog()).thenReturn(mock(Logger.class));
+        when(core.getMessage("kick-antibot")).thenReturn("Blocked");
+        ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
+        PreLoginEvent event = new PreLoginEvent(mock(InboundConnection.class), "Steve");
+        event.setResult(PreLoginEvent.PreLoginComponentResult.forceOnlineMode());
+        Continuation continuation = mock(Continuation.class);
+        listener.applyDecisionSafely(event, mock(InboundConnection.class), "Steve", Action.Block,
+                continuation, new AtomicBoolean(false));
+        assertFalse(event.getResult().isAllowed());
+        assertFalse(event.getResult().isForceOfflineMode());
+        verify(continuation).resume();
+    }
+
+    @Test
+    void failedAntiBotCallbackDoesNotGuessADenialOrOfflineDecision() {
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        when(plugin.getLog()).thenReturn(mock(Logger.class));
+        ProxyServer proxy = mock(ProxyServer.class);
+        EventManager manager = mock(EventManager.class);
+        when(plugin.getProxy()).thenReturn(proxy);
+        when(proxy.getEventManager()).thenReturn(manager);
+        AntiBotService antiBot = mock(AntiBotService.class);
+        when(antiBot.onIncomingConnection(any(), anyString())).thenReturn(Action.Block);
+        CompletableFuture<VelocityFastLoginAntiBotEvent> failed = new CompletableFuture<>();
+        failed.completeExceptionally(new IllegalStateException("anti-bot handler failed"));
+        when(manager.fire(any(VelocityFastLoginAntiBotEvent.class))).thenReturn(failed);
+        PreLoginEvent event = new PreLoginEvent(mock(InboundConnection.class), "Steve");
+        event.setResult(PreLoginEvent.PreLoginComponentResult.forceOnlineMode());
+        Object prior = event.getResult();
+        Continuation continuation = mock(Continuation.class);
+        new ConnectListener(plugin, antiBot).onPreLogin(event).execute(continuation);
+        assertSame(prior, event.getResult());
+        verify(continuation).resume();
+        verify(plugin, never()).getCore();
     }
 
     @Test
