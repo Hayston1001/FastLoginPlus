@@ -718,7 +718,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // Explicit OFFLINE wins over attestation, lookup and pending-toggle shortcuts.
         if (identityDeclaration != null && identityDeclaration.getDecision()
                 == com.github.games647.fastlogin.protocol.IdentityClaim.Decision.OFFLINE) {
-            allowsIdentityLogin(playerName, false, identityFacts, connection, address);
+            allowsIdentityLogin(playerName, false, identityFacts, connection, address, null, connectionUuid);
             return;
         }
 
@@ -915,7 +915,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // Login-method decision (D-03): the account state plus the declared facts
         // decide, never the attestation alone. A missing or untrusted declaration
         // leaves the consent unknown, which never unlocks a password account.
-        if (!allowsPremiumLogin(playerName, facts, connection, address)) {
+        if (!allowsPremiumLogin(playerName, facts, connection, address, premiumUuid, connectionUuid)) {
             return;
         }
 
@@ -1060,7 +1060,13 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private boolean allowsPremiumLogin(String playerName,
             com.github.games647.fastlogin.protocol.IdentityClaim.Facts facts,
             Object connection, java.net.InetSocketAddress address) {
-        return allowsIdentityLogin(playerName, true, facts, connection, address);
+        return allowsPremiumLogin(playerName, facts, connection, address, null, null);
+    }
+
+    private boolean allowsPremiumLogin(String playerName,
+            com.github.games647.fastlogin.protocol.IdentityClaim.Facts facts,
+            Object connection, java.net.InetSocketAddress address, UUID verifiedPremiumUuid, UUID connectionUuid) {
+        return allowsIdentityLogin(playerName, true, facts, connection, address, verifiedPremiumUuid, connectionUuid);
     }
 
     /**
@@ -1080,7 +1086,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     private boolean allowsIdentityLogin(String playerName, boolean verified,
             com.github.games647.fastlogin.protocol.IdentityClaim.Facts facts,
-            Object connection, java.net.InetSocketAddress address) {
+            Object connection, java.net.InetSocketAddress address, UUID verifiedPremiumUuid, UUID connectionUuid) {
         com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState account;
         try {
             com.github.games647.fastlogin.core.hooks.AuthPlugin<Player> authPlugin = core.getAuthPluginHook();
@@ -1121,10 +1127,26 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
                             .AccountState.PASSWORD_ACCOUNT) {
                 passwordNotices.put(address, "premium-password-login");
-            } else if (facts != null && address != null && verified && !autoLogin
+            } else if (outcome == com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.PASSWORD
+                    && verified && !autoLogin
                     && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
                             .AccountState.PREMIUM_OWNED) {
-                passwordNotices.put(address, "premium-policy-disabled");
+                logger.info("AuthMe placeholder release policy for {}: source={} autoLogin=false",
+                        playerName, declared.policyDeclared() ? "proxy declaration" : "local configuration");
+                AuthMePremiumIntegrator integrator = getAuthMePremiumIntegrator();
+                AuthMePremiumIntegrator.ReleaseOutcome release = integrator == null
+                        ? AuthMePremiumIntegrator.ReleaseOutcome.UNSUPPORTED
+                        : integrator.releaseUnusablePlaceholder(playerName, verifiedPremiumUuid);
+                if (release == AuthMePremiumIntegrator.ReleaseOutcome.RELEASED
+                        || release == AuthMePremiumIntegrator.ReleaseOutcome.ALREADY_ABSENT) {
+                    if (address != null) {
+                        passwordNotices.invalidate(address);
+                    }
+                    integrator.closePreJoinRegisterDialog(connectionUuid, connection);
+                    integrator.closePreJoinLoginDialog(connectionUuid, connection);
+                } else if (facts != null && address != null) {
+                    passwordNotices.put(address, "premium-policy-disabled");
+                }
             }
             return false;
         }

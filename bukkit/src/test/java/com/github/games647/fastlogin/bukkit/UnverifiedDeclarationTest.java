@@ -175,6 +175,25 @@ class UnverifiedDeclarationTest {
     }
 
     @Test
+    void configurePolicyOffPassesVerifiedUuidAndReleasesOnlyOnce() throws Exception {
+        UUID mojang = UUID.randomUUID();
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                "TestUser", uuid, mojang, facts(), proxy);
+        ConfigureConnection connection = new ConfigureConnection(new Profile(uuid, claim.encode(), mojang));
+        plugin.recordPreLoginAttestation("TestUser", connection.getProfile());
+        when(integrator.releaseUnusablePlaceholder("TestUser", mojang)).thenReturn(
+                com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator.ReleaseOutcome.RELEASED);
+        Method configure = FastLoginBukkit.class.getDeclaredMethod("onPlayerConfigure", Object.class);
+        configure.setAccessible(true);
+        configure.invoke(plugin, new ConfigureEvent(connection));
+        verify(integrator, times(1)).releaseUnusablePlaceholder("TestUser", mojang);
+        verify(integrator).closePreJoinRegisterDialog(uuid, connection);
+        verify(integrator).closePreJoinLoginDialog(uuid, connection);
+        verify(integrator, never()).markPlayerAsPremium(anyString(), any());
+        verify(plugin, never()).putSession(any(), any());
+    }
+
+    @Test
     void lateFactSynchronizesEvenWhenTheCarrierWasAlreadyAuthenticated() {
         when(player.hasMetadata("FastLoginPlus")).thenReturn(true);
         new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player, message(uuid));

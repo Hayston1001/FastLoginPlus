@@ -8,6 +8,7 @@ package com.github.games647.fastlogin.bukkit.compat;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.core.shared.AuthMeProxyPin;
+import com.google.common.util.concurrent.Striped;
 
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -19,6 +20,7 @@ import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.UUID;
+import java.util.concurrent.locks.Lock;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -74,6 +76,12 @@ public final class AuthMePremiumIntegrator {
     private boolean premiumSettingNeedsSave;
     private boolean proxyReceiverPinLogged;
     private final AtomicBoolean policyMismatchWarned = new AtomicBoolean();
+    private final AtomicBoolean releaseUnsupportedLogged = new AtomicBoolean();
+    private final Striped<Lock> placeholderLocks = Striped.lazyWeakLock(256);
+
+    public enum ReleaseOutcome {
+        RELEASED, ALREADY_ABSENT, NOT_APPLICABLE, UNSUPPORTED, FAILED
+    }
 
     // Cached reflection handles (lazy-initialized)
     private Object authMeInjector;
@@ -496,6 +504,94 @@ public final class AuthMePremiumIntegrator {
             return com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.PREMIUM_OWNED;
         }
         return com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.PASSWORD_ACCOUNT;
+    }
+
+    /**
+     * Releases only an unusable placeholder for a connection the caller has verified.
+     * All operations stay on this thread. AuthMe's unregister API queues work and must
+     * not be used here: a queued delete would outlive the lock and could delete a new password.
+     *
+     * @param playerName the verified player's name
+     * @param verifiedUuid the connection's verified Mojang UUID, or null when unavailable
+     * @return the synchronous release result, never an optimistic queued result
+     */
+    public ReleaseOutcome releaseUnusablePlaceholder(String playerName, UUID verifiedUuid) {
+        if (verifiedUuid == null) {
+            return ReleaseOutcome.NOT_APPLICABLE;
+        }
+        if (!versionDetector.isAuthMe6()) {
+            if (releaseUnsupportedLogged.compareAndSet(false, true)) {
+                plugin.getLog().info("AuthMe placeholder release unsupported: AuthMe 6 is required");
+            }
+            return ReleaseOutcome.UNSUPPORTED;
+        }
+        String lowerName = playerName.toLowerCase(java.util.Locale.ROOT);
+        synchronized (placeholderLocks.get(lowerName)) {
+            UUID originalUuid = null;
+            ReleaseOutcome outcome;
+            try {
+                Object ds = getDataSource();
+                if (ds == null) {
+                    throw new IllegalStateException("AuthMe DataSource unavailable");
+                }
+                Method getAuth = ds.getClass().getMethod("getAuth", String.class);
+                Object auth = getAuth.invoke(ds, lowerName);
+                if (auth == null) {
+                    outcome = ReleaseOutcome.ALREADY_ABSENT;
+                } else {
+                    originalUuid = (UUID) auth.getClass().getMethod("getPremiumUuid").invoke(auth);
+                    Object password = auth.getClass().getMethod("getPassword").invoke(auth);
+                    String hash = password == null ? null
+                            : (String) password.getClass().getMethod("getHash").invoke(password);
+                    if ((hash != null && !hash.isEmpty())
+                            || (originalUuid != null && !originalUuid.equals(verifiedUuid))) {
+                        outcome = ReleaseOutcome.NOT_APPLICABLE;
+                    } else {
+                        // Resolve every handle before deleting. Missing integration must not
+                        // delete a row and only then discover that its caches cannot be cleared.
+                        Method removeAuth = ds.getClass().getMethod("removeAuth", String.class);
+                        Object pending = getPendingPremiumCache();
+                        Object verifier = getPremiumLoginVerifier();
+                        if (pending == null || verifier == null) {
+                            throw new IllegalStateException("AuthMe premium caches unavailable");
+                        }
+                        Method removePending = pending.getClass().getMethod("removePending", String.class);
+                        Field verifiedField = verifier.getClass().getDeclaredField("verified");
+                        verifiedField.setAccessible(true);
+                        java.util.Map<?, ?> verified = (java.util.Map<?, ?>) verifiedField.get(verifier);
+                        if (verified == null) {
+                            throw new IllegalStateException("AuthMe verified cache unavailable");
+                        }
+                        auditPlaceholderRelease(playerName, verifiedUuid, originalUuid, "ATTEMPT");
+                        boolean removed = (boolean) removeAuth.invoke(ds, lowerName);
+                        removePending.invoke(pending, lowerName);
+                        verified.remove(lowerName);
+                        if (getAuth.invoke(ds, lowerName) != null) {
+                            outcome = ReleaseOutcome.FAILED;
+                            plugin.getLog().error("AuthMe placeholder release readback still found a row for {}",
+                                    playerName);
+                        } else {
+                            outcome = removed ? ReleaseOutcome.RELEASED : ReleaseOutcome.ALREADY_ABSENT;
+                        }
+                    }
+                }
+            } catch (Exception | LinkageError error) {
+                outcome = error instanceof ClassNotFoundException || error instanceof NoSuchMethodException
+                        || error instanceof NoSuchFieldException || error instanceof LinkageError
+                        ? ReleaseOutcome.UNSUPPORTED : ReleaseOutcome.FAILED;
+                // Exceptions from external code can contain credentials. Log only the type.
+                plugin.getLog().error("AuthMe placeholder release failed for {} (errorType={})",
+                        playerName, error.getClass().getSimpleName());
+            }
+            auditPlaceholderRelease(playerName, verifiedUuid, originalUuid, outcome.name());
+            return outcome;
+        }
+    }
+
+    private void auditPlaceholderRelease(String playerName, UUID verifiedUuid, UUID originalUuid, String result) {
+        plugin.getLog().info("AuthMe placeholder release: name={} verifiedUuid={} originalPremiumUuid={} "
+                + "reason=auto-login policy disabled and no usable password result={}",
+                playerName, verifiedUuid, originalUuid, result);
     }
 
     /**

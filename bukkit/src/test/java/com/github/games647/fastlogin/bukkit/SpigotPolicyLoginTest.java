@@ -118,6 +118,17 @@ class SpigotPolicyLoginTest {
     }
 
     @Test
+    void disabledPolicyReleasesUsingTheLiveConnectionUuid() throws Exception {
+        giveClaim(false, proxy, uuid);
+        when(integrator.releaseUnusablePlaceholder(NAME, uuid)).thenReturn(
+                AuthMePremiumIntegrator.ReleaseOutcome.RELEASED);
+        new ConnectionListener(plugin).onPlayerLogin(login());
+        verify(integrator, times(1)).releaseUnusablePlaceholder(NAME, uuid);
+        verify(integrator, never()).markPlayerAsPremium(anyString(), any());
+        verify(integrator, never()).injectVerifiedUuid(anyString(), any());
+    }
+
+    @Test
     void untrustedOrWrongConnectionClaimsCannotSetTheGlobalPolicy() throws Exception {
         giveClaim(false, UUID.randomUUID(), uuid);
         new ConnectionListener(plugin).onPlayerLogin(login());
