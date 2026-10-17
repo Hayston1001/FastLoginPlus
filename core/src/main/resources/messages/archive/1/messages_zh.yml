@@ -1,0 +1,104 @@
+_messages-version: 1
+#
+# SPDX-License-Identifier: MIT
+#
+# The MIT License (MIT)
+#
+# Copyright (c) 2015-2026 games647, Hayston and contributors
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+
+# FastLoginPlus - 中文语言文件
+# 此文件自动生成，缺失的键值会在启动时自动补全。
+
+# ====== 通用 (BungeeCord & Bukkit) ======
+
+# 离线白名单：未注册的离线玩家被踢出
+offline-whitelist-kick-message: '&4本服务器仅允许已注册的玩家加入，请联系管理员'
+
+# Premium 激活
+add-premium: '&2已将你添加到正版玩家列表'
+add-premium-other: '&2已将该玩家添加到正版玩家列表'
+
+# 已经是 Premium
+already-exists: '&4你已经在正版玩家列表中'
+already-exists-other: '&4该玩家已在正版玩家列表中'
+
+# 移除 Premium
+remove-premium: '&2已将你从正版玩家列表中移除'
+remove-premium-other: '&2已将该玩家从正版玩家列表中移除'
+not-premium: '&4你不在正版玩家列表中'
+not-premium-other: '&4该玩家不在正版玩家列表中'
+
+# 反机器人
+kick-antibot: '&4请稍等片刻！'
+
+# 删除命令
+delete-specify-player: '&4用法: /flp delete <玩家名>'
+delete-not-found: '&4数据库中未找到该玩家'
+delete-success: '&2已从数据库中删除该玩家记录'
+delete-fail: '&4删除玩家记录失败'
+delete-premium-denied: '&4不能删除正版玩家的记录'
+
+# ====== Bukkit/Spigot ======
+
+# 自动登录
+auto-login: '&2已自动登录'
+
+# 自动注册（密码自动生成）
+auto-register: '&2密码: &7%password&2 &2（仅作手动 /login 的备用密码，正版登录不会用到它）'
+
+# 权限
+no-permission: '&4权限不足'
+no-console: '&4你不是玩家，无法在控制台中为自己切换 Premium 状态'
+
+# AuthMe 命令拦截（FLP 已接管 Premium，参见 AuthMe 兼容性说明）
+authme-premium-blocked: '&c请使用 /flp premium'
+authme-freemium-blocked: '&c请使用 /flp cracked'
+
+# 代理通信
+wait-on-proxy: '&6正在向代理发送请求. 若没有响应, 请联系管理员检查代理与后端的通信配置.'
+
+# 错误消息
+error-kick: '&4发生错误'
+database-error: '&4数据库错误，请联系管理员'
+ownership-conflict: '&4此连接不符合该账号的归属要求, 已拒绝登录. 请联系管理员.'
+account-state-unavailable: '&6暂时无法确认你的账号状态，已跳过正版自动登录，请使用密码登录。'
+premium-password-login: '&e正版身份已验证. 该账号已存在密码, 本次不进行免密登录. 可选择登录后执行 &b/flp premium&e 以启用免密登录'
+premium-policy-disabled: '&e服务器已关闭正版自动登录. 此已转正账号没有可用密码, 请联系管理员或按服务器策略重新设置密码.'
+invalid-verify-token: '&4无效的验证令牌，请确认你使用的服务器地址正确'
+invalid-session: '&4无效的会话'
+invalid-request: '&4无效的请求'
+auth-server-unreachable: '&6认证服务器暂时无法连接，无法确认你的正版身份，请稍后重连。'
+
+# 同名盗版观察（首次确认时提示一次）
+same-name-cracked-recorded: '&e你的账号已被记录为盗版. 你是正版玩家吗? 如被误判可使用 &b/flp premium&e 重新发起验证'
+
+# 服务器未就绪
+not-started: '&c服务器尚未完全启动，请稍后重试'
+
+# Premium 确认警告（二次确认）
+premium-warning: '&c&l警告: &6此命令&l仅&6应在你是该正版账号的拥有者时使用\n再次输入 &a/flp premium&6 以确认'
+
+# 客户端密钥验证
+invalid-public-key: '&c客户端公钥无效，请尝试重启游戏'
+
+# 更新通知
+update-available: '&e[FastLoginPlus] &a发现新版本: &f%new% &a(当前: &f%current%&a). 下载: &fhttps://github.com/Hayston1001/FastLoginPlus/releases'

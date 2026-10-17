@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 
 // Lowest JRE that can load this artifact - keep in sync with the module table in
@@ -65,3 +46,42 @@ tasks.named('test') {
 
 // The SQLite floor test and its pinned driver version: see gradle/sqlite-floor.gradle.
 apply from: rootProject.file('gradle/sqlite-floor.gradle')
+
+// Run explicitly during release preparation, before building release artifacts.
+// Increment both markers whenever message values change; commit the resulting snapshot.
+// This task is deliberately not a dependency of build or processResources.
+tasks.register('archiveMessages') {
+    group = 'release'
+    description = 'Archives bundled message defaults for release preparation, without rewriting history.'
+    doLast {
+        def resources = file('src/main/resources')
+        def sources = ['en', 'zh'].collect { new File(resources, "messages_${it}.yml") }
+        def versions = sources.collect { source ->
+            def marker = source.getText('UTF-8') =~ /(?m)^_messages-version: ([0-9]+)\r?$/
+            if (!marker.find()) {
+                throw new GradleException("Missing integer _messages-version in ${source}")
+            }
+            Integer.parseInt(marker.group(1))
+        }
+        if (versions.toSet().size() != 1) {
+            throw new GradleException('Bundled message versions must match in English and Chinese')
+        }
+        def archive = new File(resources, "messages/archive/${versions[0]}")
+        if (archive.exists()) {
+            if (!sources.every { source ->
+                def snapshot = new File(archive, source.name)
+                snapshot.isFile() && java.util.Arrays.equals(source.bytes, snapshot.bytes)
+            }) {
+                throw new GradleException("Message archive ${archive} differs from bundled defaults. "
+                        + 'Do not overwrite history; increment both _messages-version markers and run archiveMessages.')
+            }
+            logger.lifecycle("Message archive v${versions[0]} is already identical; no changes")
+            return
+        }
+        java.nio.file.Files.createDirectories(archive.toPath())
+        sources.each { source ->
+            java.nio.file.Files.copy(source.toPath(), new File(archive, source.name).toPath())
+        }
+        logger.lifecycle("Archived bundled messages as v${versions[0]}")
+    }
+}

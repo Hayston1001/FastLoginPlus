@@ -23,10 +23,18 @@ import java.util.Set;
 
 /** Repairs language upgrades without replacing customized or unknown message values. */
 final class LanguageFileUpdater {
+    static final String VERSION_KEY = "_messages-version";
+
     private LanguageFileUpdater() {
     }
 
-    static Result update(Path file, Configuration english, Configuration localized) throws IOException {
+    static int version(Configuration messages) {
+        Object value = messages.get(VERSION_KEY);
+        return value instanceof Integer ? (Integer) value : 0;
+    }
+
+    static Result update(Path file, Configuration english, Configuration localized,
+                         int currentVersion, Configuration previousLocalized) throws IOException {
         if (!Files.exists(file)) {
             return new Result(0, 0);
         }
@@ -35,14 +43,19 @@ final class LanguageFileUpdater {
         try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             user = provider.load(reader);
         }
+        int userVersion = version(user);
+        boolean upgrading = currentVersion > userVersion;
         Set<String> userKeys = new LinkedHashSet<>(user.getKeys());
         Set<String> localKeys = new LinkedHashSet<>(localized.getKeys());
         Set<String> defaults = new LinkedHashSet<>(english.getKeys());
         defaults.addAll(localKeys);
         int added = 0;
-        int migrated = 0;
+        int refreshed = 0;
         Configuration additions = new Configuration();
         for (String key : defaults) {
+            if (key.startsWith("_")) {
+                continue;
+            }
             Object translated = localKeys.contains(key) ? localized.get(key) : english.get(key);
             if (translated == null) {
                 continue;
@@ -51,24 +64,29 @@ final class LanguageFileUpdater {
                 user.set(key, translated);
                 additions.set(key, translated);
                 added++;
-            } else if (translated instanceof String && english.get(key) instanceof String
-                    && !Objects.equals(translated, english.get(key))
-                    && Objects.equals(user.get(key), english.get(key))) {
+            } else if (upgrading && previousLocalized != null && translated instanceof String
+                    && user.get(key) instanceof String
+                    && !Objects.equals(user.get(key), translated)
+                    && (Objects.equals(user.get(key), previousLocalized.get(key))
+                    || (userVersion == 0 && Objects.equals(user.get(key), english.get(key))))) {
                 user.set(key, translated);
-                migrated++;
+                refreshed++;
             }
         }
-        if (added == 0 && migrated == 0) {
+        if (added == 0 && refreshed == 0 && !upgrading) {
             return new Result(0, 0);
         }
         String output;
-        if (migrated == 0) {
+        if (refreshed == 0 && !upgrading) {
             // Ordinary upgrades remain append-only, retaining the user's formatting/comments.
             StringWriter appended = new StringWriter();
             provider.save(additions, appended);
             output = new String(Files.readAllBytes(file), StandardCharsets.UTF_8)
                     + "\n# === Keys below are auto-added by FastLoginPlus ===\n" + appended;
         } else {
+            if (upgrading) {
+                user.set(VERSION_KEY, currentVersion);
+            }
             // Let the YAML serializer preserve customized values, including multiline scalars,
             // rather than trying to replace quoted text with a regex. This may reformat YAML.
             StringWriter writer = new StringWriter();
@@ -86,16 +104,16 @@ final class LanguageFileUpdater {
         } finally {
             Files.deleteIfExists(temporary);
         }
-        return new Result(added, migrated);
+        return new Result(added, refreshed);
     }
 
     static final class Result {
         final int added;
-        final int migrated;
+        final int refreshed;
 
-        private Result(int added, int migrated) {
+        private Result(int added, int refreshed) {
             this.added = added;
-            this.migrated = migrated;
+            this.refreshed = refreshed;
         }
     }
 }

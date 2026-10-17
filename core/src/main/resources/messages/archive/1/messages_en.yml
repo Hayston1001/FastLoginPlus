@@ -1,0 +1,104 @@
+_messages-version: 1
+#
+# SPDX-License-Identifier: MIT
+#
+# The MIT License (MIT)
+#
+# Copyright (c) 2015-2026 games647, Hayston and contributors
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+
+# FastLoginPlus - English Language File
+# This file is auto-generated. Missing keys will be filled automatically on startup.
+
+# ====== Shared (BungeeCord & Bukkit) ======
+
+# Offline whitelist: kicked when an unknown cracked player tries to join
+offline-whitelist-kick-message: '&4Only registered players are allowed to join this server. Please contact an admin.'
+
+# Premium activation
+add-premium: '&2Added to the list of premium players'
+add-premium-other: '&2Player has been added to the premium list'
+
+# Already premium
+already-exists: '&4You are already on the premium list'
+already-exists-other: '&4Player is already on the premium list'
+
+# Premium removal
+remove-premium: '&2Removed from the list of premium players'
+remove-premium-other: '&2Player has been removed from the premium list'
+not-premium: '&4You are not in the premium list'
+not-premium-other: '&4Player is not in the premium list'
+
+# Anti-bot
+kick-antibot: '&4Please wait a moment!'
+
+# Delete command
+delete-specify-player: '&4Usage: /flp delete <player>'
+delete-not-found: '&4Player not found in the database'
+delete-success: '&2Player record has been deleted from the database'
+delete-fail: '&4Failed to delete player record'
+delete-premium-denied: '&4Cannot delete a premium player record'
+
+# ====== Bukkit/Spigot ======
+
+# Auto login
+auto-login: '&2Auto logged in'
+
+# Auto register (password is auto-generated)
+auto-register: '&2Password: &7%password&2 &2(backup for a manual /login only — premium logins skip it)'
+
+# Permissions
+no-permission: '&4Not enough permissions'
+no-console: '&4You are not a player. You cannot toggle the premium state for YOURSELF as a console'
+
+# AuthMe command guard (FLP owns premium — see the AuthMe compatibility section)
+authme-premium-blocked: '&cPlease use /flp premium'
+authme-freemium-blocked: '&cPlease use /flp cracked'
+
+# Proxy communication
+wait-on-proxy: '&6Sending the request to your proxy. If there is no response, ask an admin to check proxy-backend communication.'
+
+# Error messages
+error-kick: '&4Error occurred'
+database-error: '&4Database error. Please contact an admin.'
+ownership-conflict: '&4Account ownership does not match this connection. Login refused. Please contact an admin.'
+account-state-unavailable: '&6Your account state could not be confirmed, so the automatic premium login was skipped. Use your password to log in.'
+premium-password-login: '&eYour premium identity was verified. This account already has a password, so passwordless login is skipped for this session. After logging in you may run &b/flp premium&e to enable passwordless login.'
+premium-policy-disabled: '&eThe server has disabled automatic premium login. This premium-owned account has no usable password. Contact an administrator or reset the password according to the server policy.'
+invalid-verify-token: '&4Invalid nonce token. Please verify you are using the correct server address'
+invalid-session: '&4Invalid session'
+invalid-request: '&4Invalid request'
+auth-server-unreachable: '&6The authentication servers are unreachable right now, so your premium identity could not be confirmed. Please reconnect later.'
+
+# Same-name cracked observation (first confirmation, shown once)
+same-name-cracked-recorded: '&eYour account has been recorded as cracked. Are you a premium player? If you were misjudged, use &b/flp premium&e to start the verification again'
+
+# Server not ready
+not-started: '&cServer is not fully started yet. Please retry'
+
+# Premium warning (double-confirm)
+premium-warning: '&c&lWARNING: &6This command should&l only&6 be invoked if you are the owner of this paid Minecraft account\nType &a/flp premium&6 again to confirm'
+
+# Client key verification
+invalid-public-key: '&cInvalid client public key. Please try to restart your game.'
+
+# Update notification
+update-available: '&e[FastLoginPlus] &aNew version available: &f%new% &a(current: &f%current%&a). Download: &fhttps://github.com/Hayston1001/FastLoginPlus/releases'

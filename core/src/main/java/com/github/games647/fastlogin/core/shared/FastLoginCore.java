@@ -800,11 +800,15 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Appends localized missing keys and migrates untouched English defaults to their translations.
+     * Appends localized missing keys and refreshes untouched defaults from older message versions.
      * @param userFile the user's language file in the plugin folder (e.g. messages_zh.yml)
      * @param defaultFile the English fallback resource in the jar
      */
     private void appendMissingKeys(String userFile, String defaultFile) {
+        Path file = plugin.getPluginFolder().resolve(userFile);
+        if (!Files.exists(file)) {
+            return;
+        }
         ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
         try (InputStream english = getClass().getClassLoader().getResourceAsStream(defaultFile);
              InputStream selected = getClass().getClassLoader().getResourceAsStream(userFile)) {
@@ -814,17 +818,49 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             Configuration defaults = provider.load(new InputStreamReader(english, StandardCharsets.UTF_8));
             Configuration localized = selected == null ? defaults
                     : provider.load(new InputStreamReader(selected, StandardCharsets.UTF_8));
-            LanguageFileUpdater.Result result = LanguageFileUpdater.update(
-                    plugin.getPluginFolder().resolve(userFile), defaults, localized);
-            if (result.added > 0) {
-                plugin.getLog().info("Appended {} missing keys to {}", result.added, userFile);
-            }
-            if (result.migrated > 0) {
-                plugin.getLog().info("Migrated {} unchanged English message values to bundled translations in {}",
-                        result.migrated, userFile);
-            }
+            updateLanguageFile(userFile, defaultFile, defaults, localized);
         } catch (IOException ioEx) {
             plugin.getLog().error("Cannot upgrade language file {}", userFile, ioEx);
+        }
+    }
+
+    private void updateLanguageFile(String userFile, String defaultFile, Configuration defaults,
+                                    Configuration localized) throws IOException {
+        Path file = plugin.getPluginFolder().resolve(userFile);
+        ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
+        int userVersion;
+        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            userVersion = LanguageFileUpdater.version(provider.load(reader));
+        }
+        int currentVersion = LanguageFileUpdater.version(localized);
+        Configuration previous = null;
+        if (currentVersion > userVersion) {
+            previous = loadMessageSnapshot(provider, userVersion, userFile, defaultFile);
+            if (userVersion > 0 && previous == null) {
+                plugin.getLog().warn("Cannot refresh {}: no snapshot for messages v{}", userFile, userVersion);
+            }
+        }
+        LanguageFileUpdater.Result result = LanguageFileUpdater.update(
+                file, defaults, localized, currentVersion, previous);
+        if (result.added > 0) {
+            plugin.getLog().info("Appended {} missing keys to {}", result.added, userFile);
+        }
+        if (result.refreshed > 0) {
+            plugin.getLog().info("Refreshed {} unchanged message values to messages v{} in {}",
+                    result.refreshed, currentVersion, userFile);
+        }
+    }
+
+    private Configuration loadMessageSnapshot(ConfigurationProvider provider, int version,
+                                              String userFile, String defaultFile) throws IOException {
+        String archive = "messages/archive/" + version + "/";
+        try (InputStream selected = getClass().getClassLoader().getResourceAsStream(archive + userFile)) {
+            if (selected != null) {
+                return provider.load(new InputStreamReader(selected, StandardCharsets.UTF_8));
+            }
+        }
+        try (InputStream english = getClass().getClassLoader().getResourceAsStream(archive + defaultFile)) {
+            return english == null ? null : provider.load(new InputStreamReader(english, StandardCharsets.UTF_8));
         }
     }
 

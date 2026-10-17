@@ -155,4 +155,13 @@ class LanguageMessagesTest {
         assertEquals("previous", messages.get("empty"));
         assertFalse(messages.containsKey("missing"));
     }
+
+    @Test
+    void reservedPrefixNeverBecomesAPlayerMessageEvenWithNonStringMetadata() throws Exception {
+        ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
+        Configuration raw = provider.load("_messages-version: 1\n_internal: 42\n_label: hidden\nnotice: Hello\n");
+        Map<String, String> messages = new HashMap<>();
+        LanguageMessages.populate(raw.getKeys(), raw::get, messages);
+        assertEquals(java.util.Collections.singletonMap("notice", "Hello"), messages);
+    }
 }
