@@ -181,6 +181,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // Proxy mode must be known before takeover: preserve its stored flag until trusted facts arrive.
         if (authMePremiumIntegrator != null && authMeVersionDetector.isAuthMe6()) {
             premiumTakeoverActive = authMePremiumIntegrator.enforceFlpPremiumControl(bungeeManager.isEnabled());
+            authMePremiumIntegrator.pinProxyAutoLoginOff();
             if (!premiumTakeoverActive) {
                 logger.warn("Failed to fully enforce FastLogin premium control in AuthMe 6.0"
                         + " — premium logins may conflict with AuthMe's own listener");
@@ -352,12 +353,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * it is running.
      */
     private void registerAuthMeTakeoverListener() {
-        if (!premiumTakeoverActive) {
+        if (authMePremiumIntegrator == null || authMeVersionDetector == null || !authMeVersionDetector.isAuthMe6()) {
             return;
         }
 
         getServer().getPluginManager().registerEvents(new AuthMeTakeoverListener(this), this);
-        if (!bungeeManager.isEnabled()
+        if (premiumTakeoverActive && !bungeeManager.isEnabled()
                 && getServer().getPluginManager().isPluginEnabled("packetevents")) {
             // only true here: on a proxy backend AuthMe never registers that listener, and
             // without the packet library it cannot
@@ -387,12 +388,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
         if (bungeeManager.isEnabled()) {
-            if (authMePremiumIntegrator.hasProxyAutoLoginPolicy()) {
-                Bukkit.getScheduler().runTaskLater(this,
-                    () -> authMePremiumIntegrator.reassertProxyAutoLogin(), 1L);
-            }
+            Bukkit.getScheduler().runTaskLater(this, () -> {
+                authMePremiumIntegrator.pinProxyAutoLoginOff();
+                if (authMePremiumIntegrator.hasProxyAutoLoginPolicy()) {
+                    authMePremiumIntegrator.reassertProxyAutoLogin();
+                }
+            }, 1L);
             return;
         }
+        Bukkit.getScheduler().runTaskLater(this,
+                () -> authMePremiumIntegrator.pinProxyAutoLoginOff(), 1L);
         if (!getServer().getPluginManager().isPluginEnabled("packetevents")) {
             return;
         }

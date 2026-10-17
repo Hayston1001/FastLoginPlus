@@ -1,31 +1,13 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.bukkit.compat;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
+import com.github.games647.fastlogin.core.shared.AuthMeProxyPin;
 
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -90,6 +72,7 @@ public final class AuthMePremiumIntegrator {
     private ProxyPremiumPolicy proxyPremiumPolicy = ProxyPremiumPolicy.UNKNOWN;
     private boolean premiumConsumersNeedRefresh;
     private boolean premiumSettingNeedsSave;
+    private boolean proxyReceiverPinLogged;
     private final AtomicBoolean policyMismatchWarned = new AtomicBoolean();
 
     // Cached reflection handles (lazy-initialized)
@@ -1211,6 +1194,84 @@ public final class AuthMePremiumIntegrator {
     public synchronized boolean reassertProxyAutoLogin() {
         return proxyPremiumPolicy == ProxyPremiumPolicy.UNKNOWN
                 || setPremiumEnabled(proxyPremiumPolicy == ProxyPremiumPolicy.ON, true);
+    }
+
+    /**
+     * Disables AuthMe's independent proxy login receiver without disabling notifications.
+     * No old secret is logged, backed up, or restored when FLP is removed.
+     *
+     * @return whether the pin succeeded or the integration is absent/disabled
+     */
+    public synchronized boolean pinProxyAutoLoginOff() {
+        if (!versionDetector.isAuthMePresent()) {
+            plugin.getLog().info("AuthMe 6 proxy receiver absent; skipping proxy auto-login pin");
+            return true;
+        }
+        if (!AuthMeProxyPin.isReviewedVersion(versionDetector.getVersion())) {
+            plugin.getLog().error("Unsupported AuthMe version; proxy auto-login disablement is NOT guaranteed. "
+                    + "Use the reviewed AuthMe 6.0.1 integration.");
+            return false;
+        }
+        try {
+            Object injector = getAuthMeInjector();
+            if (injector == null) {
+                throw new IllegalStateException("AuthMe injector unavailable");
+            }
+            boolean active = pinProxyReceiver(injector);
+            if (active && !proxyReceiverPinLogged) {
+                plugin.getLog().warn("AuthMe proxy auto-login, including cross-server SSO, is disabled; "
+                        + "password players must log in again after switching servers. "
+                        + "Hooks.bungeecord stays enabled. Restore Hooks.proxySharedSecret yourself "
+                        + "if FastLoginPlus is removed.");
+                proxyReceiverPinLogged = true;
+            }
+            return true;
+        } catch (ClassNotFoundException ex) {
+            plugin.getLog().info("AuthMe proxy receiver integration class absent; skipping pin, "
+                    + "which is NOT guaranteed on this installation");
+            return false;
+        } catch (Exception | LinkageError ex) {
+            // Exception messages and causes can contain configuration values, including secrets.
+            plugin.getLog().error("Failed to pin/read back AuthMe Hooks.proxySharedSecret as empty; "
+                    + "proxy auto-login is NOT guaranteed disabled. Check the supported AuthMe version.");
+            return false;
+        }
+    }
+
+    boolean pinProxyReceiver(Object injector) throws ReflectiveOperationException {
+        return pinProxyReceiver(injector, Class.forName(AUTHME_SETTINGS_CLASS),
+                Class.forName("fr.xephi.authme.settings.properties.HooksSettings"),
+                Class.forName("ch.jalu.configme.properties.Property"), Class.forName(BUNGEE_RECEIVER_CLASS));
+    }
+
+    // The same reflection path is exercised with stand-ins without starting AuthMe or Bukkit.
+    static boolean pinProxyReceiver(Object injector, Class<?> settingsClass, Class<?> hooksClass,
+                                    Class<?> propertyBase, Class<?> receiverClass)
+            throws ReflectiveOperationException {
+        Method singleton = injector.getClass().getMethod("getSingleton", Class.class);
+        Object settings = singleton.invoke(injector, settingsClass);
+        Object enabled = hooksClass.getField("BUNGEECORD").get(null);
+        Object secret = hooksClass.getField("PROXY_SHARED_SECRET").get(null);
+        Method get = settings.getClass().getMethod("getProperty", propertyBase);
+        if (!Boolean.TRUE.equals(get.invoke(settings, enabled))) {
+            return false;
+        }
+        // Always save and refresh: retry a previous failed save or a stale receiver as well.
+        settings.getClass().getMethod("setProperty", propertyBase, Object.class)
+                .invoke(settings, secret, "");
+        settings.getClass().getMethod("save").invoke(settings);
+        // Both PLAY and Paper CONFIGURATION perform.login paths use this receiver's HMAC check.
+        Object receiver = singleton.invoke(injector, receiverClass);
+        receiverClass.getMethod("reload", settingsClass).invoke(receiver, settings);
+        Field cachedSecret = receiverClass.getDeclaredField("proxySharedSecret");
+        cachedSecret.setAccessible(true);
+        Field cachedEnabled = receiverClass.getDeclaredField("isEnabled");
+        cachedEnabled.setAccessible(true);
+        if (!"".equals(get.invoke(settings, secret)) || !"".equals(cachedSecret.get(receiver))
+                || !Boolean.TRUE.equals(get.invoke(settings, enabled)) || !cachedEnabled.getBoolean(receiver)) {
+            throw new IllegalStateException("AuthMe proxy receiver pin readback mismatch");
+        }
+        return true;
     }
 
     /**

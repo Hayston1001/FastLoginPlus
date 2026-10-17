@@ -206,18 +206,24 @@ class UnverifiedDeclarationTest {
         ArgumentCaptor<Runnable> action = ArgumentCaptor.forClass(Runnable.class);
         verify(scheduler).runTaskLater(eq(plugin), action.capture(), eq(1L));
         verify(integrator, never()).reassertProxyAutoLogin();
+        verify(integrator, never()).pinProxyAutoLoginOff();
         action.getValue().run();
+        verify(integrator).pinProxyAutoLoginOff();
         verify(integrator).reassertProxyAutoLogin();
     }
 
     @Test
-    void unknownProxyPolicyDoesNotScheduleReloadWork() {
+    void unknownProxyPolicyStillReassertsTheIndependentReceiverPin() {
         BukkitScheduler scheduler = mock(BukkitScheduler.class);
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
             bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
             plugin.reassertAuthMeTakeover("/authme reload while policy is unknown");
         }
-        verifyNoInteractions(scheduler);
+        ArgumentCaptor<Runnable> action = ArgumentCaptor.forClass(Runnable.class);
+        verify(scheduler).runTaskLater(eq(plugin), action.capture(), eq(1L));
+        verify(integrator, never()).pinProxyAutoLoginOff();
+        action.getValue().run();
+        verify(integrator).pinProxyAutoLoginOff();
         verify(integrator, never()).reassertProxyAutoLogin();
         verify(integrator, never()).applyProxyAutoLogin(anyBoolean());
         verify(integrator, never()).unregisterPremiumPacketListener();

@@ -1,29 +1,12 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.core.shared;
+
+import org.slf4j.Logger;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -79,6 +62,81 @@ public final class AuthMeProxyPin {
     private static final String CONFIG_MANAGER_RELOAD = "reload";
 
     private AuthMeProxyPin() {
+    }
+
+    /**
+     * Pins the reviewed AuthMeVelocity 6.0.1 sender off independently of FLP's own policy.
+     * The bridge snapshot is rebuilt even if ConfigMe already says false, then read back.
+     *
+     * @param plugin live AuthMeVelocity instance, or null when absent
+     * @param propertiesClassName AuthMe's ConfigMe property holder
+     * @param version version reported by the proxy plugin descriptor
+     * @param logger FLP logger; exception text is deliberately never logged
+     * @return checked outcome, without propagating integration failures
+     */
+    public static Outcome forceAutoLoginOff(Object plugin, String propertiesClassName,
+                                            String version, Logger logger) {
+        return forceAutoLoginOff(plugin, propertiesClassName, version, logger, CONFIGME_PROPERTY_CLASS);
+    }
+
+    static Outcome forceAutoLoginOff(Object plugin, String propertiesClassName,
+                                    String version, Logger logger, String propertyBaseClassName) {
+        if (plugin == null) {
+            logger.info("AuthMeVelocity absent; skipping its auto-login pin");
+            return Outcome.UNSUPPORTED;
+        }
+        if (!isReviewedVersion(version)) {
+            logger.error("Unsupported AuthMeVelocity version; auto-login pin is NOT guaranteed. "
+                    + "Use the reviewed AuthMe 6.0.1 integration.");
+            return Outcome.UNSUPPORTED;
+        }
+        try {
+            ClassLoader loader = plugin.getClass().getClassLoader();
+            Class<?> properties = Class.forName(propertiesClassName, false, loader);
+            Class<?> propertyBase = Class.forName(propertyBaseClassName, false, loader);
+            Object property = properties.getField("AUTOLOGIN").get(null);
+            Object manager = readField(plugin, CONFIG_MANAGER_FIELD);
+            Object settings = readField(manager, SETTINGS_MANAGER_FIELD);
+            Object bridge = readField(plugin, BRIDGE_FIELD);
+            Method get = settings.getClass().getMethod("getProperty", propertyBase);
+            boolean changed = !Boolean.FALSE.equals(get.invoke(settings, property));
+            settings.getClass().getMethod("setProperty", propertyBase, Object.class)
+                    .invoke(settings, property, false);
+            settings.getClass().getMethod("save").invoke(settings);
+            Method reload = manager.getClass().getDeclaredMethod("reload");
+            reload.setAccessible(true);
+            Object configuration = reload.invoke(manager);
+            Method apply = bridge.getClass().getDeclaredMethod("reload", configuration.getClass());
+            apply.setAccessible(true);
+            apply.invoke(bridge, configuration);
+            Object liveConfiguration = readField(bridge, "configuration");
+            Method enabled = liveConfiguration.getClass().getDeclaredMethod("autoLoginEnabled");
+            enabled.setAccessible(true);
+            if (!Boolean.FALSE.equals(get.invoke(settings, property))
+                    || !Boolean.FALSE.equals(enabled.invoke(liveConfiguration))) {
+                throw new IllegalStateException("AuthMe auto-login readback mismatch");
+            }
+            logger.info("AuthMeVelocity auto-login, including cross-server SSO, is disabled; "
+                    + "FastLoginPlus handles login.");
+            return changed ? Outcome.APPLIED : Outcome.ALREADY_OFF;
+        } catch (ClassNotFoundException ex) {
+            logger.info("AuthMeVelocity integration class absent; skipping auto-login pin, "
+                    + "which is NOT guaranteed on this installation");
+            return Outcome.UNSUPPORTED;
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
+            // AuthMe failures may embed configuration values. Never log their message or cause.
+            logger.error("Failed to pin/read back AuthMeVelocity autoLogin=false; "
+                    + "auto-login is NOT guaranteed disabled. Check the supported AuthMe version.");
+            return Outcome.FAILED;
+        }
+    }
+
+    /**
+     * @param version version reported by AuthMe's plugin descriptor
+     * @return whether the configuration/consumer shape has been reviewed for this version
+     */
+    public static boolean isReviewedVersion(String version) {
+        return version != null && version.matches("6\\.0\\.1(?:[-+].*)?");
     }
 
     /**

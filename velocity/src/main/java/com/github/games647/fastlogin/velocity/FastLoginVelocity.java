@@ -43,6 +43,7 @@ import com.google.common.io.ByteStreams;
 import com.google.inject.Inject;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.event.Subscribe;
+import com.velocitypowered.api.event.command.PostCommandInvocationEvent;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.event.proxy.ProxyShutdownEvent;
 import com.velocitypowered.api.plugin.Plugin;
@@ -116,6 +117,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         }
 
         forceAuthMeProxyUuidMode();
+        reassertAuthMeAutoLoginPin();
 
         server.getEventManager().register(this, new ConnectListener(this, core.getAntiBotService()));
         server.getEventManager().register(this, new PluginMessageListener(this));
@@ -256,6 +258,30 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     }
 
     /**
+     * Reassert after AuthMe's synchronous command body, not before it reloads its settings.
+     *
+     * @param event completed command invocation
+     */
+    @Subscribe
+    public void onAuthMeReload(PostCommandInvocationEvent event) {
+        if (isAuthMeReloadCommand(event.getCommand())) {
+            reassertAuthMeAutoLoginPin();
+        }
+    }
+
+    static boolean isAuthMeReloadCommand(String command) {
+        return command != null && AUTHME_RELOAD_COMMAND.equalsIgnoreCase(
+                command.trim().replaceFirst("^/", "").split("\\s+")[0]);
+    }
+
+    void reassertAuthMeAutoLoginPin() {
+        Object authMe = resolvePluginInstance(server.getPluginManager(), AUTHME_PLUGIN_ID);
+        String version = server.getPluginManager().getPlugin(AUTHME_PLUGIN_ID)
+                .flatMap(container -> container.getDescription().getVersion()).orElse("");
+        AuthMeProxyPin.forceAutoLoginOff(authMe, AUTHME_CONFIG_PROPERTIES_CLASS, version, logger);
+    }
+
+    /**
      * Fallback path for {@link #forceAuthMeProxyUuidMode()}: rewrite the config file and ask
      * AuthMe Velocity to reload itself through its own command.
      *
@@ -320,6 +346,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
             server.getCommandManager().executeAsync(console, AUTHME_RELOAD_COMMAND)
                     .whenComplete((executed, error) -> {
                         if (error == null && Boolean.TRUE.equals(executed)) {
+                            reassertAuthMeAutoLoginPin();
                             logger.info("Reloaded {}; premium.{}=false is now active",
                                     AUTHME_PLUGIN_NAME, AuthMeProxyConfig.OFFLINE_UUID_KEY);
                         } else if (attempt < AUTHME_RELOAD_ATTEMPTS) {
