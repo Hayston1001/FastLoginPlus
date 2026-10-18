@@ -67,6 +67,7 @@ final class EasyAuth344Bridge {
     private final ConcurrentHashMap<String, PendingBinding> pendingBindings = new ConcurrentHashMap<>();
     private static final long BIND_WINDOW_NANOS = TimeUnit.MINUTES.toNanos(10);
     private final PremiumNameResolver premiumNames = PremiumNameResolver.mojang();
+    private boolean storageChecked;
 
     EasyAuth344Bridge() {
         var mod = FabricLoader.getInstance().getModContainer("easyauth")
@@ -273,6 +274,28 @@ final class EasyAuth344Bridge {
         } catch (RuntimeException failure) {
             LOGGER.warn("Renamed EasyAuth account to {}, but old row {} could not be deleted", name, oldName, failure);
         }
+    }
+
+    void warnUnverifiedStorage() {
+        warnUnverifiedStorage(LOGGER);
+    }
+
+    synchronized void warnUnverifiedStorage(Logger logger) {
+        if (storageChecked) {
+            return;
+        }
+        Object db = field(easyAuth, null, "DB");
+        String className = db == null ? null : db.getClass().getName();
+        storageChecked = true;
+        if (!isVerifiedStorage(className)) {
+            logger.warn("EasyAuth storage {} is an unverified combination. EasyAuth getUserData returns null "
+                    + "on SQL exceptions; read failures may be treated as no account (fail-open). "
+                    + "The supported combination is local SQLite on both sides.", className);
+        }
+    }
+
+    static boolean isVerifiedStorage(String className) {
+        return "xyz.nikitacartes.easyauth.storage.database.SQLite".equals(className);
     }
 
     void verifyPolicy() {

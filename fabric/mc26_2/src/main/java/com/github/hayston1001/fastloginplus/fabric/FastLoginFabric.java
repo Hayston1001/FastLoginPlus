@@ -52,6 +52,7 @@ public final class FastLoginFabric implements ModInitializer {
                 registerCommands(dispatcher, bridge));
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             bridge.verifyPolicy();
+            bridge.warnUnverifiedStorage();
             try {
                 FabricConfig.warnIfUntrusted(FabricConfig.loadAtStartup());
             } catch (RuntimeException unreadable) {
