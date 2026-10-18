@@ -149,10 +149,6 @@ public class ConnectListener {
                                       String username, Action action, Continuation continuation,
                                       AtomicBoolean resumed) {
         switch (action) {
-            case Ignore:
-                // No FLP decision: leave any other handler's result untouched.
-                resumeOnce(continuation, resumed);
-                break;
             case Block:
                 String message = plugin.getCore().getMessage("kick-antibot");
                 TextComponent messageParsed = LegacyComponentSerializer.legacyAmpersand().deserialize(message);

@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.core;
 
@@ -42,6 +23,7 @@ import java.time.Duration;
 import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AntiBotServiceTest {
 
@@ -56,7 +38,7 @@ class AntiBotServiceTest {
     void disabledServiceShouldAlwaysContinue() {
         FakeTicker ticker = new FakeTicker(0);
         AntiBotService service = new AntiBotService(
-                logger, false, () -> true, Action.Block,
+                logger, false, () -> true,
                 new TrustedIpSet(Collections.emptySet()),
                 new IpBanManager(ticker),
                 new PerIpRateLimiter(ticker, 1, 1000, 1, 1000),
@@ -73,7 +55,7 @@ class AntiBotServiceTest {
     void enabledServiceShouldEnforceLimits() {
         FakeTicker ticker = new FakeTicker(0);
         AntiBotService service = new AntiBotService(
-                logger, true, () -> true, Action.Block,
+                logger, true, () -> true,
                 new TrustedIpSet(Collections.emptySet()),
                 new IpBanManager(ticker),
                 new PerIpRateLimiter(ticker, 2, 10_000, 100, 300_000),
@@ -89,6 +71,33 @@ class AntiBotServiceTest {
         assertEquals(Action.Block, service.onIncomingConnection(addr("1.2.3.4"), "user4"));
     }
 
+    @Test
+    void longWindowLimitShouldBlockAndBan() throws UnknownHostException {
+        FakeTicker ticker = new FakeTicker(0);
+        IpBanManager bans = new IpBanManager(ticker);
+        AntiBotService service = new AntiBotService(logger, true, () -> true,
+                new TrustedIpSet(Collections.emptySet()), bans,
+                new PerIpRateLimiter(ticker, 100, 1_000, 1, 300_000), 60_000, ticker);
+
+        assertEquals(Action.Continue, service.onIncomingConnection(addr("1.2.3.4"), "user1"));
+        ticker.add(Duration.ofSeconds(2));
+        assertEquals(Action.Block, service.onIncomingConnection(addr("1.2.3.4"), "user2"));
+        assertTrue(bans.isBanned(InetAddress.getByName("1.2.3.4")));
+    }
+
+    @Test
+    void bannedIpShouldBlockWithoutConsumingGlobalQuota() throws UnknownHostException {
+        FakeTicker ticker = new FakeTicker(0);
+        IpBanManager bans = new IpBanManager(ticker);
+        bans.ban(InetAddress.getByName("1.2.3.4"), 60_000);
+        AntiBotService service = new AntiBotService(logger, true, () -> {
+            throw new AssertionError("A banned IP must not reach the global limiter");
+        }, new TrustedIpSet(Collections.emptySet()), bans,
+                new PerIpRateLimiter(ticker, 10, 10_000, 20, 300_000), 60_000, ticker);
+
+        assertEquals(Action.Block, service.onIncomingConnection(addr("1.2.3.4"), "banned"));
+    }
+
     // --- check order (global before per-IP) ---
     @Test
     void globalLimitShouldNotConsumePerIpQuota() {
@@ -96,7 +105,7 @@ class AntiBotServiceTest {
         // global limit = 1, per-IP burst = 10
         TickingRateLimiter globalLimit = new TickingRateLimiter(ticker, 1, 60_000);
         AntiBotService service = new AntiBotService(
-                logger, true, globalLimit, Action.Ignore,
+                logger, true, globalLimit,
                 new TrustedIpSet(Collections.emptySet()),
                 new IpBanManager(ticker),
                 new PerIpRateLimiter(ticker, 10, 10_000, 100, 300_000),
@@ -105,8 +114,8 @@ class AntiBotServiceTest {
 
         // First request from IP A passes both
         assertEquals(Action.Continue, service.onIncomingConnection(addr("1.2.3.4"), "user1"));
-        // Second request from IP A: global limit hit -> Ignore (not Block)
-        assertEquals(Action.Ignore, service.onIncomingConnection(addr("1.2.3.4"), "user2"));
+        // Second request from IP A: global limit hit -> Block
+        assertEquals(Action.Block, service.onIncomingConnection(addr("1.2.3.4"), "user2"));
 
         // IP A should NOT be banned (global rejection shouldn't trigger per-IP ban)
         // Advance time to expire global limiter
@@ -119,10 +128,12 @@ class AntiBotServiceTest {
     void trustedIpShouldBypassAllChecks() throws UnknownHostException {
         FakeTicker ticker = new FakeTicker(0);
         InetAddress trusted = InetAddress.getByName("10.0.0.1");
+        IpBanManager bans = new IpBanManager(ticker);
+        bans.ban(trusted, 60_000);
         AntiBotService service = new AntiBotService(
-                logger, true, () -> false, Action.Block,  // global always rejects
+                logger, true, () -> false,  // global always rejects
                 new TrustedIpSet(Collections.singleton(trusted)),
-                new IpBanManager(ticker),
+                bans,
                 new PerIpRateLimiter(ticker, 0, 1000, 0, 1000),  // per-IP always rejects
                 60_000, ticker
         );
@@ -139,7 +150,7 @@ class AntiBotServiceTest {
     void maliciousUsernameShouldNotCrashLogging() {
         FakeTicker ticker = new FakeTicker(0);
         AntiBotService service = new AntiBotService(
-                logger, true, () -> true, Action.Block,
+                logger, true, () -> true,
                 new TrustedIpSet(Collections.emptySet()),
                 new IpBanManager(ticker),
                 new PerIpRateLimiter(ticker, 1, 1000, 1, 1000),
@@ -167,7 +178,7 @@ class AntiBotServiceTest {
         // burst window 1h — the burst state must survive the periodic cleanup
         PerIpRateLimiter perIpLimiter = new PerIpRateLimiter(ticker, 2, 3_600_000, 1_000, 600_000);
         AntiBotService service = new AntiBotService(
-                logger, true, () -> true, Action.Block,
+                logger, true, () -> true,
                 new TrustedIpSet(Collections.emptySet()),
                 new IpBanManager(ticker),
                 perIpLimiter,

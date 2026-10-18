@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.core.shared.event;
 
@@ -30,7 +11,8 @@ import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
 import java.net.InetSocketAddress;
 
 /**
- * This event fires when the anti-bot service decides to block or ignore an incoming connection.
+ * This event fires when the anti-bot service decides to block an incoming connection.
+ * The action is always {@link Action#Block}; cancelling the event bypasses the block.
  * <p>
  * Other plugins can listen to this event to react to anti-bot decisions (e.g. logging) or
  * cancel the event to bypass the anti-bot block (e.g. whitelisted players).
@@ -64,7 +46,7 @@ public interface FastLoginAntiBotEvent extends FastLoginCancellableEvent {
     String getUsername();
 
     /**
-     * @return the anti-bot action that was decided (Block or Ignore)
+     * @return the anti-bot action, always {@link Action#Block}
      */
     Action getAction();
 }

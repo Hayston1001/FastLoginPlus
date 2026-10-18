@@ -36,7 +36,6 @@ import com.github.games647.craftapi.resolver.http.RotatingProxySelector;
 import com.github.games647.fastlogin.core.CommonUtil;
 import com.github.games647.fastlogin.core.ProxyAgnosticMojangResolver;
 import com.github.games647.fastlogin.core.antibot.AntiBotService;
-import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
 import com.github.games647.fastlogin.core.antibot.IpBanManager;
 import com.github.games647.fastlogin.core.antibot.PerIpRateLimiter;
 import com.github.games647.fastlogin.core.antibot.RateLimiter;
@@ -143,6 +142,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         } catch (IOException ioEx) {
             plugin.getLog().error("Failed to load config.yml", ioEx);
             return;
+        }
+
+        if (config.getSection("anti-bot").getKeys().contains("action")) {
+            plugin.getLog().warn("anti-bot.action is no longer supported; anti-bot always blocks");
         }
 
         // Restore canonical comments and key order from the bundled template,
@@ -334,19 +337,6 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             globalLimiter = () -> true;
         }
 
-        // --- action ---
-        Action action = Action.Ignore;
-        switch (botSection.getString("action")) {
-            case "ignore":
-                action = Action.Ignore;
-                break;
-            case "block":
-                action = Action.Block;
-                break;
-            default:
-                plugin.getLog().warn("Invalid anti bot action - defaulting to ignore");
-        }
-
         // --- trusted IPs ---
         Set<InetAddress> trustedIps = new HashSet<>();
         for (String ip : botSection.getStringList("trusted-ips")) {
@@ -375,7 +365,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
                 botSection.getLong("ban-duration") * 60 * 1_000L, 300_000L);
         IpBanManager ipBanManager = new IpBanManager(ticker);
 
-        return new AntiBotService(plugin.getLog(), enabled, globalLimiter, action,
+        return new AntiBotService(plugin.getLog(), enabled, globalLimiter,
                 trustedIpSet, ipBanManager, perIpLimiter, banDurationMs, ticker);
     }
 

@@ -62,8 +62,11 @@ class ConnectListenerResumeOnceTest {
     }
 
     @Test
-    void healthyDecisionResumesExactlyOnce() {
+    void blockDecisionDeniesAndResumesExactlyOnce() {
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        FastLoginCore<?, ?, ?> core = mock(FastLoginCore.class);
+        doReturn(core).when(plugin).getCore();
+        when(core.getMessage("kick-antibot")).thenReturn("Blocked");
         when(plugin.getLog()).thenReturn(mock(Logger.class));
         ConnectListener listener = new ConnectListener(plugin, mock(AntiBotService.class));
 
@@ -72,13 +75,51 @@ class ConnectListenerResumeOnceTest {
 
         PreLoginEvent event = new PreLoginEvent(mock(InboundConnection.class), "Steve");
         event.setResult(PreLoginEvent.PreLoginComponentResult.forceOnlineMode());
-        Object prior = event.getResult();
         listener.applyDecisionSafely(event, mock(InboundConnection.class),
-                "Steve", Action.Ignore, continuation, resumed);
+                "Steve", Action.Block, continuation, resumed);
 
-        assertSame(prior, event.getResult(), "ignore is not an FLP offline decision");
+        assertFalse(event.getResult().isAllowed());
+        assertFalse(event.getResult().isForceOfflineMode());
+        ConnectListener.resumeOnce(continuation, resumed);
         verify(continuation, times(1)).resume();
         assertTrue(resumed.get());
+    }
+
+    @Test
+    void cancelledAntiBotEventQueuesPremiumCheckAndResumesExactlyOnce() {
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        when(plugin.getLog()).thenReturn(mock(Logger.class));
+        ProxyServer proxy = mock(ProxyServer.class);
+        EventManager manager = mock(EventManager.class);
+        when(plugin.getProxy()).thenReturn(proxy);
+        when(proxy.getEventManager()).thenReturn(manager);
+        AntiBotService antiBot = mock(AntiBotService.class);
+        when(antiBot.onIncomingConnection(any(), anyString())).thenReturn(Action.Block);
+        when(manager.fire(any(VelocityFastLoginAntiBotEvent.class))).thenAnswer(invocation -> {
+            VelocityFastLoginAntiBotEvent fired = invocation.getArgument(0);
+            assertSame(Action.Block, fired.getAction());
+            fired.setCancelled(true);
+            return CompletableFuture.completedFuture(fired);
+        });
+        AsyncScheduler scheduler = mock(AsyncScheduler.class);
+        when(plugin.getScheduler()).thenReturn(scheduler);
+        AtomicReference<Runnable> queued = new AtomicReference<>();
+        doAnswer(invocation -> {
+            queued.set(invocation.getArgument(0, Runnable.class));
+            return new CompletableFuture<>();
+        }).when(scheduler).runAsync(any(Runnable.class));
+        PreLoginEvent event = new PreLoginEvent(mock(InboundConnection.class), "Steve");
+        Object prior = event.getResult();
+        Continuation continuation = mock(Continuation.class);
+
+        new ConnectListener(plugin, antiBot).onPreLogin(event).execute(continuation);
+
+        assertSame(prior, event.getResult());
+        verify(scheduler).runAsync(any(Runnable.class));
+        verify(continuation, never()).resume();
+        queued.get().run();
+        verify(continuation, times(1)).resume();
+        assertSame(prior, event.getResult());
     }
 
     @Test

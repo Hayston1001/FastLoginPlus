@@ -29,7 +29,17 @@ class BackendPolicyConfigTest {
                 }
                 Map<?, ?> antiBot = (Map<?, ?>) settings.get("anti-bot");
                 assertEquals(Boolean.TRUE, antiBot.get("enabled"));
-                assertEquals("ignore", antiBot.get("action"));
+                assertFalse(antiBot.containsKey("action"));
+                assertEquals(9, antiBot.size());
+                assertEquals(600, antiBot.get("connections"));
+                assertEquals(10, antiBot.get("expire"));
+                assertEquals(20, antiBot.get("per-ip-connections"));
+                assertEquals(5, antiBot.get("per-ip-expire"));
+                assertEquals(10, antiBot.get("burst-limit"));
+                assertEquals(10, antiBot.get("burst-window"));
+                assertEquals(5, antiBot.get("ban-duration"));
+                assertTrue(antiBot.containsKey("trusted-ips"));
+                assertNull(antiBot.get("trusted-ips"));
             }
         }
     }
