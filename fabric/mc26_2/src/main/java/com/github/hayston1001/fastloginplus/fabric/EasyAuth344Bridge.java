@@ -29,6 +29,8 @@ import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.time.ZonedDateTime;
 import java.util.HexFormat;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -50,6 +52,10 @@ final class EasyAuth344Bridge {
     private static final String PLAYERS_CACHE = "xyz.nikitacartes.easyauth.utils.PlayersCache";
     private static final String EASY_AUTH_SHA256 =
             "1945c37f98a60df5aa33c18261413b523aa949585a0e3d7b870d3cfa02e64f62";
+    private static final String[] RENAME_FIELDS = {
+        "password", "uuid", "lastIp", "lastAuthenticatedDate", "loginTries", "lastKickedDate",
+        "onlineAccount", "registrationDate", "dataVersion", "forcedUuid"
+    };
 
     private final Class<?> easyAuth;
     private final Class<?> playerAuth;
@@ -133,6 +139,9 @@ final class EasyAuth344Bridge {
                 if (entry == null || !entryType.isInstance(entry)) {
                     throw new IllegalStateException("EasyAuth account was not loaded before configuration");
                 }
+                if (claim.getDecision() == Decision.PREMIUM_VERIFIED) {
+                    followRename(entry, claim.getPlayerName(), claim.getVerifiedMojangUuid());
+                }
                 AccountState.Snapshot state = accountStatus(claim.getPlayerName());
                 PendingBinding binding = matchedBinding(claim);
                 if (claim.getDecision() == Decision.PREMIUM_VERIFIED) {
@@ -169,6 +178,98 @@ final class EasyAuth344Bridge {
             throw new IllegalStateException("EasyAuth account check was interrupted", error);
         } catch (ExecutionException | TimeoutException error) {
             throw new IllegalStateException("EasyAuth account check failed before configuration", error);
+        }
+    }
+
+    private RenameFollow.Row renameRow(Object entry) {
+        return new RenameFollow.Row((String) field(entryType, entry, "username"),
+                (String) field(entryType, entry, "password"),
+                Objects.toString(field(entryType, entry, "onlineAccount")),
+                (UUID) field(entryType, entry, "uuid"));
+    }
+
+    private void followRename(Object entry, String name, UUID verifiedUuid) {
+        RenameFollow.Row current = renameRow(entry);
+        if (!name.equals(current.name())) {
+            throw FabricMessages.failure("ownership-conflict");
+        }
+        if (!RenameFollow.needsLookup(current, verifiedUuid)) {
+            return;
+        }
+        Object db = field(easyAuth, null, "DB");
+        Map<?, ?> rows = renameCandidates(db, verifiedUuid);
+        RenameFollow.Result result = RenameFollow.decide(name, current,
+                rows.values().stream().map(this::renameRow).toList(), verifiedUuid);
+        if (result.action() == RenameFollow.Action.CONFLICT) {
+            LOGGER.warn("Conflicting EasyAuth rename sources for {} ({}): {}", name, verifiedUuid, result.names());
+            throw FabricMessages.failure("rename-conflict");
+        }
+        if (result.action() == RenameFollow.Action.MIGRATE) {
+            String oldName = result.names().getFirst();
+            migrateRename(db, entry, rows.get(oldName), name, oldName);
+        }
+    }
+
+    private Map<?, ?> renameCandidates(Object db, UUID verifiedUuid) {
+        if (!db.getClass().getName().equals("xyz.nikitacartes.easyauth.storage.database.SQLite")) {
+            return (Map<?, ?>) invoke(db, "getAllData");
+        }
+        SQLiteStorage storage = sqliteStorage(db);
+        Map<String, Object> matches = new HashMap<>();
+        for (SQLiteAccountReader.Row row : SQLiteAccountReader.findByUuid(
+                storage.connection(), storage.table(), verifiedUuid)) {
+            matches.put(row.username(), sqliteEntry(row));
+        }
+        return matches;
+    }
+
+    private void migrateRename(Object db, Object entry, Object previous, String name, String oldName) {
+        Field[] fields = new Field[RENAME_FIELDS.length];
+        Object[] original = new Object[fields.length];
+        Object[] replacement = new Object[fields.length];
+        boolean copying = false;
+        Method put;
+        try {
+            // Resolve before touching the live cache or saving the new row; older 3.4.x APIs may lack put.
+            put = playersCache.getMethod("put", String.class, entryType);
+            for (int i = 0; i < fields.length; i++) {
+                fields[i] = entryType.getField(RENAME_FIELDS[i]);
+                original[i] = fields[i].get(entry);
+                replacement[i] = fields[i].get(previous);
+            }
+            copying = true;
+            for (int i = 0; i < fields.length; i++) {
+                fields[i].set(entry, replacement[i]);
+            }
+            if (!Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, entry))) {
+                throw new IllegalStateException("EasyAuth did not save the renamed account");
+            }
+        } catch (ReflectiveOperationException | RuntimeException failure) {
+            if (copying) {
+                for (int i = 0; i < fields.length; i++) {
+                    try {
+                        fields[i].set(entry, original[i]);
+                    } catch (IllegalAccessException | RuntimeException restoreFailure) {
+                        failure.addSuppressed(restoreFailure);
+                    }
+                }
+            }
+            LOGGER.error("Could not migrate EasyAuth account {} to {}", oldName, name, failure);
+            throw FabricMessages.failure("rename-failed", failure);
+        }
+        try {
+            put.invoke(null, name, entry);
+        } catch (ReflectiveOperationException | RuntimeException failure) {
+            // The new row is durable. Keep the old row too and refuse this login so a retry can re-read it.
+            LOGGER.error("EasyAuth account {} was saved, but its renamed cache entry is unavailable", name, failure);
+            throw FabricMessages.failure("rename-failed", failure);
+        }
+        try {
+            if (!Boolean.TRUE.equals(invoke(db, "deleteUserData", String.class, oldName))) {
+                LOGGER.warn("Renamed EasyAuth account to {}, but old row {} was not deleted", name, oldName);
+            }
+        } catch (RuntimeException failure) {
+            LOGGER.warn("Renamed EasyAuth account to {}, but old row {} could not be deleted", name, oldName, failure);
         }
     }
 
@@ -551,6 +652,15 @@ final class EasyAuth344Bridge {
         if (!db.getClass().getName().equals("xyz.nikitacartes.easyauth.storage.database.SQLite")) {
             return invoke(db, "getUserData", String.class, name);
         }
+        SQLiteStorage storage = sqliteStorage(db);
+        Object extended = field(easyAuth, null, "extendedConfig");
+        boolean caseInsensitive = bool(extended, "allowCaseInsensitiveUsername");
+        SQLiteAccountReader.Row row = SQLiteAccountReader.read(
+                storage.connection(), storage.table(), name, caseInsensitive);
+        return row == null ? null : sqliteEntry(row);
+    }
+
+    private static SQLiteStorage sqliteStorage(Object db) {
         try {
             Field connectionField = db.getClass().getDeclaredField("connection");
             connectionField.setAccessible(true);
@@ -559,19 +669,23 @@ final class EasyAuth344Bridge {
             Object storageConfig = configField.get(db);
             Object sqliteConfig = field(storageConfig.getClass(), storageConfig, "sqlite");
             String table = (String) field(sqliteConfig.getClass(), sqliteConfig, "sqliteTable");
-            Object extended = field(easyAuth, null, "extendedConfig");
-            boolean caseInsensitive = bool(extended, "allowCaseInsensitiveUsername");
-            SQLiteAccountReader.Row row = SQLiteAccountReader.read(
-                    (Connection) connectionField.get(db), table, name, caseInsensitive);
-            if (row == null) {
-                return null;
-            }
+            return new SQLiteStorage((Connection) connectionField.get(db), table);
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("EasyAuth SQLite storage is unavailable", error);
+        }
+    }
+
+    private Object sqliteEntry(SQLiteAccountReader.Row row) {
+        try {
             Constructor<?> constructor = entryType.getConstructor(
                     String.class, String.class, String.class, String.class);
             return constructor.newInstance(row.username(), row.usernameLowerCase(), row.uuid(), row.data());
         } catch (ReflectiveOperationException error) {
             throw new IllegalStateException("EasyAuth SQLite account read is unavailable", error);
         }
+    }
+
+    private record SQLiteStorage(Connection connection, String table) {
     }
 
     private void checkOfflineEntry(Object entry, String name, UUID forwardedUuid) {

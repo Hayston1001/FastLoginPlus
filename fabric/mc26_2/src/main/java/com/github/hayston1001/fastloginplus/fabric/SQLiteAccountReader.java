@@ -9,7 +9,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 /** Reads EasyAuth's pinned SQLite schema without treating a failed query as a missing account. */
 final class SQLiteAccountReader {
@@ -18,13 +21,9 @@ final class SQLiteAccountReader {
     }
 
     static Row read(Connection connection, String table, String name, boolean caseInsensitive) {
-        if (connection == null || table == null || table.isEmpty()) {
-            throw new IllegalStateException("EasyAuth SQLite connection or table is unavailable");
-        }
         String column = caseInsensitive ? "username" : "username_lower";
         String lookup = caseInsensitive ? name : name.toLowerCase(Locale.ENGLISH);
-        String sql = "SELECT username, username_lower, uuid, data FROM \""
-                + table.replace("\"", "\"\"") + "\" WHERE " + column + " = ?";
+        String sql = select(connection, table) + " WHERE " + column + " = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, lookup);
             try (ResultSet results = statement.executeQuery()) {
@@ -43,6 +42,29 @@ final class SQLiteAccountReader {
         } catch (SQLException failure) {
             throw new IllegalStateException("EasyAuth SQLite account query failed", failure);
         }
+    }
+
+    static List<Row> findByUuid(Connection connection, String table, UUID uuid) {
+        String sql = select(connection, table) + " WHERE uuid = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, uuid.toString());
+            try (ResultSet results = statement.executeQuery()) {
+                List<Row> matches = new ArrayList<>();
+                while (results.next()) {
+                    matches.add(row(results));
+                }
+                return matches;
+            }
+        } catch (SQLException failure) {
+            throw new IllegalStateException("EasyAuth SQLite UUID query failed", failure);
+        }
+    }
+
+    private static String select(Connection connection, String table) {
+        if (connection == null || table == null || table.isEmpty()) {
+            throw new IllegalStateException("EasyAuth SQLite connection or table is unavailable");
+        }
+        return "SELECT username, username_lower, uuid, data FROM \"" + table.replace("\"", "\"\"") + "\"";
     }
 
     private static Row row(ResultSet results) throws SQLException {
