@@ -1,49 +1,24 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
-package com.github.games647.fastlogin.core.shared;
+package com.github.games647.fastlogin.shared.config;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.stream.Collectors;
-
-import net.md_5.bungee.config.Configuration;
 
 /**
- * Restores config.yml from the bundled template while preserving user values.
+ * Restores a config file from supplied template lines while preserving user values.
  * Comments, section headers, and key ordering come from the template;
  * values come from the user's existing config.
  */
@@ -54,33 +29,21 @@ public final class ConfigRefresher {
     }
 
     /**
-     * Rewrite config.yml using the template structure and user's values.
+     * Rewrite a config file using the template structure and user's values.
      *
      * <p>After this call the on-disk file has canonical comments and key order
      * from the bundled template, but every value is taken from the user's
      * existing config.</p>
      *
-     * @param classLoader  to load the template resource from the JAR
-     * @param configPath   path to the user's config.yml on disk
-     * @param userConfig   the parsed user Configuration (with all values)
-     * @param templateName bundled template resource name
-     *                     (e.g. "config.yml", "config-proxy.yml")
-     * @throws IOException if reading the template or writing the file fails
+     * @param configPath    path to the user's config file on disk
+     * @param templateLines the template's raw text lines
+     * @param userValues    flattened dotted keys and values, including merged defaults
+     * @throws IOException if writing the file fails
      */
-    public static void refresh(ClassLoader classLoader, Path configPath,
-                               Configuration userConfig, String templateName)
+    public static void refresh(Path configPath, List<String> templateLines,
+                               Map<String, Object> userValues)
             throws IOException {
-        // 1. Flatten user config into a dotted-key map
-        Map<String, Object> userValues = new LinkedHashMap<>();
-        flattenConfig(userConfig, "", userValues);
-
-        // 2. Read template as raw text lines
-        List<String> templateLines = readResourceLines(classLoader, templateName);
-        if (templateLines == null) {
-            return;
-        }
-
-        // 3. Walk template line by line, substituting user values
+        // Walk template line by line, substituting user values
         List<String> output = new ArrayList<>();
         List<String> sectionPath = new ArrayList<>();
         List<Integer> indentStack = new ArrayList<>();
@@ -134,7 +97,7 @@ public final class ConfigRefresher {
                         }
                     }
                     // Do NOT push to section stack — it's a list, not a map
-                } else if (userVal != null && !(userVal instanceof Configuration)
+                } else if (userVal != null && !(userVal instanceof Map)
                         && !templateHasChildren(templateLines, lineIndex, indent)) {
                     // Scalar key written without a value in the template —
                     // preserve the user's value on the key line.  If the template
@@ -182,7 +145,7 @@ public final class ConfigRefresher {
             }
         }
 
-        // 4. Write back
+        // Write back
         writeOutput(output, configPath);
     }
 
@@ -225,38 +188,6 @@ public final class ConfigRefresher {
     }
 
     // ---- internal helpers ------------------------------------------------
-
-    /**
-     * Recursively flatten a BungeeCord Configuration into dotted-key map.
-     *
-     * @param config the configuration section to flatten
-     * @param prefix the dotted prefix for nested keys
-     * @param result the map to populate with flattened key-value pairs
-     */
-    private static void flattenConfig(Configuration config, String prefix,
-                                      Map<String, Object> result) {
-        for (String key : config.getKeys()) {
-            String fullKey = prefix.isEmpty() ? key : prefix + "." + key;
-            Object value = config.get(key);
-            if (value instanceof Configuration) {
-                flattenConfig((Configuration) value, fullKey, result);
-            } else if (value != null) {
-                result.put(fullKey, value);
-            }
-        }
-    }
-
-    private static List<String> readResourceLines(ClassLoader cl, String resource)
-            throws IOException {
-        try (InputStream is = cl.getResourceAsStream(resource)) {
-            if (is == null) {
-                return null;
-            }
-            return new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))
-                    .lines()
-                    .collect(Collectors.toList());
-        }
-    }
 
     private static int getIndentLevel(String line) {
         int count = 0;
@@ -374,7 +305,7 @@ public final class ConfigRefresher {
      * @return true if the value is a YAML 1.1 ambiguous scalar
      */
     private static boolean isAmbiguousScalar(String s) {
-        switch (s.toLowerCase(java.util.Locale.ROOT)) {
+        switch (s.toLowerCase(Locale.ROOT)) {
             case "true":
             case "false":
             case "yes":

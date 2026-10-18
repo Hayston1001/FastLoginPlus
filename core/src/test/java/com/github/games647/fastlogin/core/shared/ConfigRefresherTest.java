@@ -1,29 +1,13 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.core.shared;
+
+import com.github.games647.fastlogin.shared.config.ConfigRefresher;
+import com.github.games647.fastlogin.shared.config.ConfigurationFiles;
 
 import net.md_5.bungee.config.Configuration;
 import net.md_5.bungee.config.ConfigurationProvider;
@@ -34,15 +18,24 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class ConfigRefresherTest {
 
@@ -54,6 +47,87 @@ class ConfigRefresherTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void representativeOldConfigMatchesByteSnapshot() throws IOException {
+        String template = "# Canonical template\n\n"
+                + "language: 'en'\n"
+                + "anti-bot:\n  enabled: true\n  trusted-ips: []\n"
+                + "  limits:\n    burst: 10\n"
+                + "quoted: 'default'\nmultiline: 'default'\n"
+                + "ServerRSAPublicKeyFile:\nnew-key: 42 # Added default\n";
+        String oldConfig = "# Old comment\nremoved-key: obsolete\n"
+                + "language: zh\nanti-bot:\n  enabled: false\n"
+                + "  trusted-ips: ['127.0.0.1', 'proxy:25565']\n"
+                + "  limits:\n    burst: 7\n"
+                + "quoted: \"owner's # key\"\nmultiline: |-\n  first\n  second\n"
+                + "ServerRSAPublicKeyFile: ' /keys/custom.pem '\n";
+        String expected = "# Canonical template\n\n"
+                + "language: 'zh'\n"
+                + "anti-bot:\n  enabled: false\n  trusted-ips: \n"
+                + "    - 127.0.0.1\n    - 'proxy:25565'\n"
+                + "  limits:\n    burst: 7\n"
+                + "quoted: 'owner''s # key'\nmultiline: 'first\nsecond'\n"
+                + "ServerRSAPublicKeyFile: ' /keys/custom.pem '\nnew-key: 42\n";
+        Path config = tempDir.resolve("config.yml");
+        Files.write(config, oldConfig.getBytes(StandardCharsets.UTF_8));
+        Configuration defaults = provider.load(new StringReader(template));
+        Configuration merged = ConfigurationFiles.load(
+                config, defaults, FastLoginCore.configurationLoader(provider));
+
+        ConfigRefresher.refresh(config, Arrays.asList(template.split("\n")),
+                ConfigRefreshAdapter.flattenConfig(merged));
+
+        assertArrayEquals(expected.getBytes(StandardCharsets.UTF_8), Files.readAllBytes(config));
+    }
+
+    @Test
+    void loadMaterializesDefaultsMissingFromOldConfig() throws IOException {
+        Path config = tempDir.resolve("config.yml");
+        Files.write(config, "language: zh\ncheck-update: false\n".getBytes(StandardCharsets.UTF_8));
+        PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
+        when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
+        when(plugin.getPluginFolder()).thenReturn(tempDir);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+
+        core.load();
+
+        String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
+        assertTrue(output.contains("  trusted-ips:\n"));
+        assertTrue(output.contains("  per-ip-connections: 20\n"));
+        assertEquals("zh", core.getConfig().getString("language"));
+        assertEquals(20, core.getConfig().getInt("anti-bot.per-ip-connections"));
+    }
+
+    @Test
+    void adapterPreservesFlattenedKeysOrderAndLeafValues() {
+        Configuration config = provider.load(new StringReader("MixedCase: first\n"
+                + "nested:\n  inner:\n    Value: 7\n  list: [one, two]\n"
+                + "empty: {}\nnil: null\nlast: false\n"));
+
+        Map<String, Object> values = ConfigRefreshAdapter.flattenConfig(config);
+
+        assertEquals(Arrays.asList("MixedCase", "nested.inner.Value", "nested.list", "last"),
+                new ArrayList<>(values.keySet()));
+        assertEquals("first", values.get("MixedCase"));
+        assertEquals(7, values.get("nested.inner.Value"));
+        assertSame(config.get("nested.list"), values.get("nested.list"));
+        assertEquals(false, values.get("last"));
+        assertFalse(values.containsKey("empty"));
+        assertFalse(values.containsKey("nil"));
+    }
+
+    @Test
+    void missingTemplateStillLeavesFileUntouched() throws IOException {
+        Path config = tempDir.resolve("config.yml");
+        byte[] original = "# User comment\nlanguage: zh\n".getBytes(StandardCharsets.UTF_8);
+        Files.write(config, original);
+
+        assertNull(ConfigRefreshAdapter.readTemplateLines(getClass().getClassLoader(), "absent-template"));
+        refresh(config, load(config), "absent-template");
+
+        assertArrayEquals(original, Files.readAllBytes(config));
+    }
 
     @Test
     void backendConfigMigratedToProxyTemplateDropsBackendOnlyKeysAndPreservesValues()
@@ -71,7 +145,7 @@ class ConfigRefresherTest {
         userConfig.set("proxies", Arrays.asList("proxy1.example:8080"));
         provider.save(userConfig, config.toFile());
 
-        ConfigRefresher.refresh(getClass().getClassLoader(), config, load(config), PROXY_TEMPLATE);
+        refresh(config, load(config), PROXY_TEMPLATE);
 
         String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
         assertFalse(output.contains("verifyClientKeys:"));
@@ -97,7 +171,7 @@ class ConfigRefresherTest {
         // back with the backend template defaults.
         Path config = copyResource(PROXY_TEMPLATE);
 
-        ConfigRefresher.refresh(getClass().getClassLoader(), config, load(config), FULL_TEMPLATE);
+        refresh(config, load(config), FULL_TEMPLATE);
 
         String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
         assertTrue(output.contains("verifyClientKeys: false"));
@@ -111,7 +185,7 @@ class ConfigRefresherTest {
         // A fresh proxy install must stay trimmed across refresh cycles.
         Path config = copyResource(PROXY_TEMPLATE);
 
-        ConfigRefresher.refresh(getClass().getClassLoader(), config, load(config), PROXY_TEMPLATE);
+        refresh(config, load(config), PROXY_TEMPLATE);
 
         String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
         assertFalse(output.contains("verifyClientKeys:"));
@@ -134,7 +208,7 @@ class ConfigRefresherTest {
         userConfig.set("anti-bot", false);
         provider.save(userConfig, config.toFile());
 
-        ConfigRefresher.refresh(getClass().getClassLoader(), config, load(config), FULL_TEMPLATE);
+        refresh(config, load(config), FULL_TEMPLATE);
 
         String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
         assertTrue(output.contains("anti-bot:"));
@@ -153,7 +227,7 @@ class ConfigRefresherTest {
         userConfig.set("language", "no");
         userConfig.set("ServerRSAPublicKeyFile", "1_000");
         // no save/load round-trip here: the parsed config carries real Strings
-        ConfigRefresher.refresh(getClass().getClassLoader(), config, userConfig, FULL_TEMPLATE);
+        refresh(config, userConfig, FULL_TEMPLATE);
 
         String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
         assertTrue(output.contains("language: 'no'"));
@@ -171,7 +245,7 @@ class ConfigRefresherTest {
         Configuration userConfig = load(config);
         userConfig.set("language", "zh");
 
-        ConfigRefresher.refresh(getClass().getClassLoader(), config, userConfig, FULL_TEMPLATE);
+        refresh(config, userConfig, FULL_TEMPLATE);
 
         Configuration refreshed = load(config);
         assertEquals("zh", refreshed.getString("language"));
@@ -195,6 +269,13 @@ class ConfigRefresherTest {
         }
     }
 
+    private void refresh(Path file, Configuration config, String template) throws IOException {
+        List<String> lines = ConfigRefreshAdapter.readTemplateLines(getClass().getClassLoader(), template);
+        if (lines != null) {
+            ConfigRefresher.refresh(file, lines, ConfigRefreshAdapter.flattenConfig(config));
+        }
+    }
+
     @Test
     void refreshedConfigEndsWithSingleTrailingNewline() throws IOException {
         // The bundled templates end with a newline, so the rewritten file must
@@ -205,7 +286,7 @@ class ConfigRefresherTest {
             Files.deleteIfExists(tempDir.resolve("config.yml"));
             Path config = copyResource(template);
 
-            ConfigRefresher.refresh(getClass().getClassLoader(), config, load(config), template);
+            refresh(config, load(config), template);
 
             String output = new String(Files.readAllBytes(config), StandardCharsets.UTF_8);
             assertTrue(output.endsWith("\n"), template + " must end with a newline");

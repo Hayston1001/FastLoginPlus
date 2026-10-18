@@ -21,6 +21,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -49,6 +50,7 @@ import com.github.games647.fastlogin.core.storage.MySQLStorage;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.SQLiteStorage;
 import com.github.games647.fastlogin.shared.config.ConfigurationFiles;
+import com.github.games647.fastlogin.shared.config.ConfigRefresher;
 import com.github.games647.fastlogin.shared.message.LanguageMessages;
 import com.google.common.base.Ticker;
 import com.zaxxer.hikari.HikariConfig;
@@ -151,11 +153,12 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         // Restore canonical comments and key order from the bundled template,
         // while preserving all user-modified values.
         try {
-            ConfigRefresher.refresh(
-                    getClass().getClassLoader(),
-                    plugin.getPluginFolder().resolve("config.yml"),
-                    config,
-                    configTemplate);
+            List<String> templateLines = ConfigRefreshAdapter.readTemplateLines(
+                    getClass().getClassLoader(), configTemplate);
+            if (templateLines != null) {
+                ConfigRefresher.refresh(plugin.getPluginFolder().resolve("config.yml"),
+                        templateLines, ConfigRefreshAdapter.flattenConfig(config));
+            }
         } catch (IOException ioEx) {
             plugin.getLog().warn("Could not refresh config.yml from template", ioEx);
             // non-fatal: continue with the config as-is
