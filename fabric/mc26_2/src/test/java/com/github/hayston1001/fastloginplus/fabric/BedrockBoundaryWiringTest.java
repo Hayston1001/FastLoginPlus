@@ -27,6 +27,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -58,7 +59,8 @@ class BedrockBoundaryWiringTest {
         UUID offline = UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
         UUID premium = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5");
         return Stream.of(withClaim(new IdentityClaim(IdentityClaim.Decision.OFFLINE, name, offline, null)),
-                withClaim(new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED, name, premium, premium)));
+                withClaim(new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED, name, premium, premium)),
+                withClaim(new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED, name, offline, premium)));
     }
 
     @ParameterizedTest
@@ -142,6 +144,16 @@ class BedrockBoundaryWiringTest {
             verifyNoMoreInteractions(bridge);
             verifyNoInteractions(notice);
         }
+    }
+
+    @Test
+    void relocatedPolicyStillRejectsArbitraryPremiumUuidRewrite() {
+        UUID forwarded = UUID.fromString("12345678-1234-1234-1234-123456789abc");
+        UUID premium = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38aaf5");
+        GameProfile profile = withClaim(new IdentityClaim(
+                IdentityClaim.Decision.PREMIUM_VERIFIED, "Name", forwarded, premium));
+
+        assertThrows(IllegalArgumentException.class, () -> FastLoginFabric.parseClaim(profile));
     }
 
     private static GameProfile withClaim(IdentityClaim claim) {

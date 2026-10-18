@@ -53,6 +53,7 @@ class UnverifiedSenderTest {
         when(plugin.getLog()).thenReturn(log);
         when(config.getBoolean("autoLogin")).thenReturn(true);
         when(config.getBoolean("auto-register-unknown")).thenReturn(true);
+        when(config.get("premiumUuid")).thenReturn(false);
         Player player = mock(Player.class);
         UUID uuid = com.github.games647.craftapi.UUIDAdapter.generateOfflineId("TestUser");
         when(player.getUsername()).thenReturn("TestUser");

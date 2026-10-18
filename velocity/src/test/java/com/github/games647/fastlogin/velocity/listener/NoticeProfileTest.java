@@ -69,6 +69,7 @@ class NoticeProfileTest {
         Configuration config = new Configuration();
         config.set("secondAttemptCracked", true);
         config.set("autoLogin", false);
+        config.set("premiumUuid", false);
         when(core.getConfig()).thenReturn(config);
         CrackedNoticeDelivery delivery = spy(new CrackedNoticeDelivery(plugin));
         when(plugin.getCrackedNoticeDelivery()).thenReturn(delivery);

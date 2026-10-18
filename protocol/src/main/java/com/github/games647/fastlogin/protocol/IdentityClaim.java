@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.protocol;
 
@@ -340,9 +321,10 @@ public final class IdentityClaim {
 
     /**
      * Applies the v1 Fabric policy after the transport has authenticated the forwarded profile.
-     * Unresolved decisions and UUID rewrites are rejected until a separate compatibility path is
-     * verified. Offline UUIDs must match the exact case-sensitive player name. This makes
-     * {@code premiumUuid: false} unavailable for the initial 26.2 release.
+     * Premium claims must forward the verified Mojang UUID or the offline UUID derived from the
+     * exact case-sensitive player name. The latter is the {@code premiumUuid: false} downgrade,
+     * not an arbitrary UUID rewrite. Unresolved decisions remain rejected, and offline claims
+     * must forward the name-derived offline UUID.
      *
      * @param values identity properties in the forwarded profile
      * @param expectedName forwarded profile name
@@ -355,7 +337,9 @@ public final class IdentityClaim {
             throw new IllegalArgumentException("Identity decision is unresolved");
         }
         if (claim.decision == Decision.PREMIUM_VERIFIED
-                && !claim.forwardedUuid.equals(claim.verifiedMojangUuid)) {
+                && !claim.forwardedUuid.equals(claim.verifiedMojangUuid)
+                && !claim.forwardedUuid.equals(UUID.nameUUIDFromBytes(
+                        ("OfflinePlayer:" + claim.playerName).getBytes(StandardCharsets.UTF_8)))) {
             throw new IllegalArgumentException("Premium UUID rewrite is unsupported");
         }
         if (claim.decision == Decision.OFFLINE

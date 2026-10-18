@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.protocol;
 
@@ -125,7 +106,7 @@ class IdentityClaimTest {
     }
 
     @Test
-    void fabricPolicyRejectsUnresolvedAndRewrittenPremiumIdentity() {
+    void fabricPolicyRejectsUnresolvedAndArbitrarilyRewrittenPremiumIdentity() {
         String undecided = new IdentityClaim(IdentityClaim.Decision.UNDECIDED,
                 "Player_1", FORWARDED, null).encode();
         String rewritten = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
@@ -137,9 +118,60 @@ class IdentityClaimTest {
         assertThrows(IllegalArgumentException.class, () -> IdentityClaim.parseForFabric(
                 Collections.singletonList(new IdentityClaim(IdentityClaim.Decision.OFFLINE,
                         "Player_1", FORWARDED, null).encode()), "Player_1", FORWARDED));
+    }
+
+    @Test
+    void fabricPolicyRoundTripsVerifiedPremiumIdentity() {
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                "Player_1", MOJANG, MOJANG);
+
+        IdentityClaim parsed = IdentityClaim.parseForFabric(
+                Collections.singletonList(claim.encode()), "Player_1", MOJANG);
+
+        assertEquals(IdentityClaim.Decision.PREMIUM_VERIFIED, parsed.getDecision());
+        assertEquals(MOJANG, parsed.getForwardedUuid());
+        assertEquals(MOJANG, parsed.getVerifiedMojangUuid());
+        assertEquals(claim.encode(), parsed.encode());
+    }
+
+    @Test
+    void fabricPolicyRoundTripsPremiumIdentityWithOfflineUuid() {
         UUID offline = UUID.nameUUIDFromBytes("OfflinePlayer:Player_1".getBytes(StandardCharsets.UTF_8));
-        assertEquals(IdentityClaim.Decision.OFFLINE, IdentityClaim.parseForFabric(
-                Collections.singletonList(new IdentityClaim(IdentityClaim.Decision.OFFLINE,
-                        "Player_1", offline, null).encode()), "Player_1", offline).getDecision());
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                "Player_1", offline, MOJANG);
+
+        IdentityClaim parsed = IdentityClaim.parseForFabric(
+                Collections.singletonList(claim.encode()), "Player_1", offline);
+
+        assertEquals(IdentityClaim.Decision.PREMIUM_VERIFIED, parsed.getDecision());
+        assertEquals(offline, parsed.getForwardedUuid());
+        assertEquals(MOJANG, parsed.getVerifiedMojangUuid());
+        assertEquals(claim.encode(), parsed.encode());
+    }
+
+    @Test
+    void fabricPolicyRejectsOfflineDowngradeForDifferentNameCase() {
+        UUID offline = UUID.nameUUIDFromBytes("OfflinePlayer:player_1".getBytes(StandardCharsets.UTF_8));
+        for (IdentityClaim.Decision decision : Arrays.asList(
+                IdentityClaim.Decision.PREMIUM_VERIFIED, IdentityClaim.Decision.OFFLINE)) {
+            IdentityClaim claim = new IdentityClaim(decision, "Player_1", offline,
+                    decision == IdentityClaim.Decision.PREMIUM_VERIFIED ? MOJANG : null);
+            assertThrows(IllegalArgumentException.class, () -> IdentityClaim.parseForFabric(
+                    Collections.singletonList(claim.encode()), "Player_1", offline));
+        }
+    }
+
+    @Test
+    void fabricPolicyRoundTripsOfflineIdentity() {
+        UUID offline = UUID.nameUUIDFromBytes("OfflinePlayer:Player_1".getBytes(StandardCharsets.UTF_8));
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, "Player_1", offline, null);
+
+        IdentityClaim parsed = IdentityClaim.parseForFabric(
+                Collections.singletonList(claim.encode()), "Player_1", offline);
+
+        assertEquals(IdentityClaim.Decision.OFFLINE, parsed.getDecision());
+        assertEquals(offline, parsed.getForwardedUuid());
+        assertEquals(null, parsed.getVerifiedMojangUuid());
+        assertEquals(claim.encode(), parsed.encode());
     }
 }

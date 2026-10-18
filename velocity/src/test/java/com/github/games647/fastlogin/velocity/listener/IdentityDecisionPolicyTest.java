@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.velocity.listener;
 
@@ -41,9 +22,9 @@ class IdentityDecisionPolicyTest {
 
     @Test
     void missingSessionAndUndecidedSessionRemainUnresolved() {
-        assertEquals(Decision.UNDECIDED, decide(null, false, false, "Player_1", VERIFIED).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(null, false, false, true, "Player_1", VERIFIED).getDecision());
         VelocityLoginSession session = new VelocityLoginSession("Player_1", false, null);
-        assertEquals(Decision.UNDECIDED, decide(session, false, false, "Player_1", VERIFIED).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, false, false, true, "Player_1", VERIFIED).getDecision());
     }
 
     @Test
@@ -51,10 +32,11 @@ class IdentityDecisionPolicyTest {
         VelocityLoginSession session = new VelocityLoginSession("Player_1", false, null);
         session.setIdentityDecision(Decision.OFFLINE);
         UUID offline = UUIDAdapter.generateOfflineId("Player_1");
-        assertEquals(Decision.OFFLINE, decide(session, false, false, "Player_1", offline).getDecision());
-        assertEquals(Decision.UNDECIDED, decide(session, false, true, "Player_1", offline).getDecision());
-        assertEquals(Decision.UNDECIDED, decide(session, false, false, "Other", offline).getDecision());
-        assertEquals(Decision.UNDECIDED, decide(session, false, false, "Player_1", VERIFIED).getDecision());
+        assertEquals(Decision.OFFLINE, decide(session, false, false, true, "Player_1", offline).getDecision());
+        assertEquals(Decision.OFFLINE, decide(session, false, false, false, "Player_1", offline).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, false, true, true, "Player_1", offline).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, false, false, true, "Other", offline).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, false, false, true, "Player_1", VERIFIED).getDecision());
     }
 
     @Test
@@ -63,17 +45,79 @@ class IdentityDecisionPolicyTest {
         session.setVerifiedUsername("Player_1");
         session.setUuid(VERIFIED);
 
-        assertEquals(Decision.UNDECIDED, decide(session, true, false, "Other", VERIFIED).getDecision());
-        assertEquals(Decision.UNDECIDED, decide(session, true, false, "Player_1", OTHER).getDecision());
-        assertEquals(Decision.UNDECIDED, decide(session, true, true, "Player_1", VERIFIED).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, true, false, true, "Other", VERIFIED).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, true, false, true, "Player_1", OTHER).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, true, true, true, "Player_1", VERIFIED).getDecision());
 
-        IdentityClaim claim = decide(session, true, false, "Player_1", VERIFIED);
+        IdentityClaim claim = decide(session, true, false, true, "Player_1", VERIFIED);
         assertEquals(Decision.PREMIUM_VERIFIED, claim.getDecision());
         assertEquals(VERIFIED, claim.getVerifiedMojangUuid());
+        assertEquals(Decision.PREMIUM_VERIFIED, session.getIdentityDecision());
+    }
+
+    @Test
+    void disabledPremiumUuidAllowsOnlyTheNameDerivedOfflineDowngrade() {
+        VelocityLoginSession session = verifiedSession();
+        UUID offline = UUIDAdapter.generateOfflineId("Player_1");
+
+        IdentityClaim claim = decide(session, true, false, false, "Player_1", offline);
+
+        assertEquals(Decision.PREMIUM_VERIFIED, claim.getDecision());
+        assertEquals(offline, claim.getForwardedUuid());
+        assertEquals(VERIFIED, claim.getVerifiedMojangUuid());
+        assertEquals(Decision.PREMIUM_VERIFIED, session.getIdentityDecision());
+        assertEquals(VERIFIED, session.getUuid());
+        assertEquals(Decision.PREMIUM_VERIFIED,
+                decide(session, true, false, false, "Player_1", VERIFIED).getDecision());
+    }
+
+    @Test
+    void disabledPremiumUuidStillRejectsArbitraryUuidRewrites() {
+        VelocityLoginSession session = verifiedSession();
+
+        IdentityClaim claim = decide(session, true, false, false, "Player_1", OTHER);
+
+        assertEquals(Decision.UNDECIDED, claim.getDecision());
+        assertEquals(null, claim.getVerifiedMojangUuid());
+        assertEquals(Decision.UNDECIDED, session.getIdentityDecision());
+    }
+
+    @Test
+    void enabledPremiumUuidRejectsOfflineDowngrade() {
+        VelocityLoginSession session = verifiedSession();
+        UUID offline = UUIDAdapter.generateOfflineId("Player_1");
+
+        IdentityClaim claim = decide(session, true, false, true, "Player_1", offline);
+
+        assertEquals(Decision.UNDECIDED, claim.getDecision());
+        assertEquals(null, claim.getVerifiedMojangUuid());
+        assertEquals(Decision.UNDECIDED, session.getIdentityDecision());
+    }
+
+    @Test
+    void offlineDowngradeStillRequiresVerifiedMatchingJavaSession() {
+        VelocityLoginSession session = verifiedSession();
+        UUID offline = UUIDAdapter.generateOfflineId("Player_1");
+        assertEquals(Decision.UNDECIDED, decide(null, true, false, false, "Player_1", offline).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, false, false, false, "Player_1", offline).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, true, true, false, "Player_1", offline).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, true, false, false, "Other",
+                UUIDAdapter.generateOfflineId("Other")).getDecision());
+        assertEquals(Decision.UNDECIDED, decide(session, true, false, false, "Player_1",
+                UUIDAdapter.generateOfflineId("player_1")).getDecision());
+        session.setUuid(null);
+        assertEquals(Decision.UNDECIDED, decide(session, true, false, false, "Player_1", offline).getDecision());
+    }
+
+    private static VelocityLoginSession verifiedSession() {
+        VelocityLoginSession session = new VelocityLoginSession("Player_1", true, null);
+        session.setVerifiedUsername("Player_1");
+        session.setUuid(VERIFIED);
+        return session;
     }
 
     private static IdentityClaim decide(VelocityLoginSession session, boolean online, boolean bedrock,
-                                        String name, UUID uuid) {
-        return IdentityDecisionPolicy.decide(session, online, bedrock, name, uuid);
+                                        boolean premiumUuid, String name, UUID uuid) {
+        return IdentityDecisionPolicy.decide(session, online, bedrock, premiumUuid, name, uuid);
     }
 }
