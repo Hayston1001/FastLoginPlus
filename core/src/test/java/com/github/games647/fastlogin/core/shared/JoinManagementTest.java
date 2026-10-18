@@ -44,6 +44,7 @@ import java.util.function.Supplier;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -351,6 +352,64 @@ class JoinManagementTest {
         assertEquals(0, mgmt.premiumRequests);
     }
 
+    // ---- D-11: pre-login event coverage ----
+
+    @Test
+    void preLoginEventFiresOnceWithTheLoadedProfileBeforeTheExistingDecision() {
+        StoredProfile profile = existingRow(UUID.randomUUID(), true, false);
+        when(storage.loadProfile("TestUser")).thenReturn(profile);
+        when(core.getDefiniteFailures("TestUser")).thenReturn(0);
+        when(config.get("secondAttemptCracked")).thenReturn(true);
+
+        TestJoinManagement mgmt = createManagement();
+        mgmt.onLogin("TestUser", new TestSource());
+
+        assertEquals(1, mgmt.eventCalls);
+        assertSame(profile, mgmt.eventProfile);
+        assertEquals(1, mgmt.premiumRequests);
+    }
+
+    @Test
+    void preLoginEventFiresOnceForANewPlayerBeforeTheCrackedFallback() {
+        StoredProfile profile = newRow();
+        when(storage.loadProfile("TestUser")).thenReturn(profile);
+        when(core.getDefiniteFailures("TestUser")).thenReturn(1);
+        when(config.get("secondAttemptCracked")).thenReturn(true);
+
+        TestJoinManagement mgmt = createManagement();
+        mgmt.onLogin("TestUser", new TestSource());
+
+        assertEquals(1, mgmt.eventCalls);
+        assertSame(profile, mgmt.eventProfile);
+        assertEquals(1, mgmt.crackedSessions);
+    }
+
+    @Test
+    void preLoginEventDoesNotFireWhenTheProfileCouldNotBeRead() {
+        when(storage.loadProfile("TestUser")).thenReturn(null);
+
+        TestJoinManagement mgmt = createManagement();
+        mgmt.onLogin("TestUser", new TestSource());
+
+        assertEquals(0, mgmt.eventCalls);
+        assertEquals(0, mgmt.premiumRequests);
+        assertEquals(0, mgmt.crackedSessions);
+    }
+
+    @Test
+    void preLoginEventSkipsAMigratedBedrockRecord() {
+        StoredProfile profile = new StoredProfile(1, UUID.randomUUID(), "TestUser", false,
+                FloodgateState.TRUE, "127.0.0.1", Instant.now());
+        when(storage.loadProfile("TestUser")).thenReturn(profile);
+
+        TestJoinManagement mgmt = createManagement();
+        mgmt.onLogin("TestUser", new TestSource());
+
+        assertEquals(0, mgmt.eventCalls);
+        assertEquals(0, mgmt.premiumRequests);
+        assertEquals(0, mgmt.crackedSessions);
+    }
+
     private StoredProfile existingRow(UUID uuid, boolean consented, boolean observed) {
         StoredProfile profile = new StoredProfile(1, uuid, "TestUser", consented, FloodgateState.FALSE,
                 "127.0.0.1", Instant.now());
@@ -389,6 +448,8 @@ class JoinManagementTest {
 
         private int premiumRequests;
         private int crackedSessions;
+        private int eventCalls;
+        private StoredProfile eventProfile;
 
         TestJoinManagement(FastLoginCore<Object, Object, PlatformPlugin<Object>> core) {
             super(core, null, null);
@@ -397,6 +458,8 @@ class JoinManagementTest {
         @Override
         public FastLoginPreLoginEvent callFastLoginPreLoginEvent(String username, TestSource source,
                                                                  StoredProfile profile) {
+            eventCalls++;
+            eventProfile = profile;
             return mock(FastLoginPreLoginEvent.class);
         }
 
