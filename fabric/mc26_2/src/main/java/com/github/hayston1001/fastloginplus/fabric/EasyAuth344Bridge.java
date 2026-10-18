@@ -247,8 +247,7 @@ final class EasyAuth344Bridge {
     /**
      * Returns the pending binding this verified identity may claim: a live
      * entry for the name whose pinned premium UUID matches the verified one.
-     * The verification is the claim — a matching verified connection is the
-     * only proof the binding window accepts.
+     * The gate also requires the proxy's recorded consent before conversion.
      *
      * @param claim the identity facts of the connecting player
      * @return the claimable entry, or null when nothing may be claimed
@@ -300,9 +299,8 @@ final class EasyAuth344Bridge {
             throw FabricMessages.failure("ownership-conflict");
         }
         if (action == PremiumGate.Action.CLAIM_AND_LOGIN) {
-            // the first successful passwordless login claims the queued binding:
-            // offline starters convert here; already verified password holders
-            // can also convert explicitly with /flp premium after authentication
+            // A later verified connection with recorded consent claims the window;
+            // the command never converts an already authenticated password account.
             checkBindingEntry(entry, claim.getPlayerName());
             completeBindingClaim(player, claim, entry, binding);
             return;
@@ -321,40 +319,13 @@ final class EasyAuth344Bridge {
                 ? "binding-window-unavailable" : "binding-consent-required";
     }
 
-    private void completeAuthenticatedBinding(ServerPlayer player, IdentityClaim claim,
-                                              Object entry, Object current) {
-        String name = claim.getPlayerName();
-        verifyPolicy();
-        BindingRequest.completeNow(claim.getDecision(),
-                Boolean.TRUE.equals(invoke(player, "easyAuth$isAuthenticated")), accountStatus(name).state());
-        checkBindingEntry(entry, name);
-        checkBindingEntry(current, name);
-        if (!Objects.equals(field(entryType, entry, "password"), field(entryType, current, "password"))) {
-            throw FabricMessages.failure("binding-account-changed");
-        }
-        Object db = field(easyAuth, null, "DB");
-        // Already authenticated: persist the conversion without replaying EasyAuth's
-        // login completion or restoring its pre-login location a second time.
-        try {
-            EasyAuthAccountUpdate.bind(entryType, entry, claim.getVerifiedMojangUuid(),
-                    candidate -> Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, candidate)));
-        } catch (RuntimeException failure) {
-            throw FabricMessages.failure("binding-save-failed", failure);
-        }
-        pendingBindings.remove(name);
-        LOGGER.info("Bound authenticated EasyAuth password account {} to verified Mojang UUID {}",
-                name, claim.getVerifiedMojangUuid());
-    }
-
     /**
-     * Binds a verified, authenticated password holder immediately, or queues
-     * verification for an offline password holder. The offline command
-     * only sets the proxy's FastLoginPlus record (the network-level preference)
-     * and this entry (pin of the claimed name's premium UUID, one claim window);
-     * the EasyAuth account is <em>not</em> touched. The account is converted to
-     * premium (cleared password, pinned UUID) only at the first successful
-     * passwordless login whose verified UUID matches the pin, so a failed
-     * upgrade never costs the password lock.
+     * Queues a binding for an authenticated password holder, whether this
+     * connection is offline or verified. The command pins the name's premium
+     * UUID and sends consent to the proxy, which may require confirmation.
+     * The EasyAuth account is untouched until a later verified connection
+     * matches the pin and carries the proxy's recorded consent, so an
+     * unconfirmed or failed upgrade keeps the password lock.
      *
      * @param server the running server
      * @param player the authenticated password account holder
@@ -369,7 +340,7 @@ final class EasyAuth344Bridge {
         }
         Object entry = invoke(player, "easyAuth$getPlayerEntryV1");
         AccountState.Snapshot state = accountStatus(name);
-        boolean completeNow = BindingRequest.completeNow(claim.getDecision(), authenticated, state.state());
+        BindingRequest.requireBindable(claim.getDecision(), authenticated, state.state());
         checkBindingEntry(entry, name);
         FabricConfig.StartupSettings config = FabricConfig.startup();
         String proxyIds = config.allowedProxyIds();
@@ -380,12 +351,6 @@ final class EasyAuth344Bridge {
         String passwordHash = (String) field(entryType, entry, "password");
         if (!passwordHash.equals(field(entryType, current, "password"))) {
             throw FabricMessages.failure("binding-account-saving");
-        }
-        if (completeNow) {
-            completeAuthenticatedBinding(player, claim, entry, current);
-            BindingConsentWriter.send(player, name, proxyIds);
-            player.sendSystemMessage(FabricMessages.text("binding-complete"));
-            return;
         }
         player.sendSystemMessage(FabricMessages.text("binding-checking"));
         // resolve the pinned premium UUID off the server thread, then finish on it
@@ -416,14 +381,15 @@ final class EasyAuth344Bridge {
         }
         PendingBinding pending = new PendingBinding(offlineUuid(name), passwordHash, target.get());
         pendingBindings.put(name, pending);
-        // the command only books the upgrade: the proxy record (network-level
-        // preference) is set here, the EasyAuth account stays a password account
+        // Request the upgrade; the proxy may defer it for confirmation.
+        // The EasyAuth account stays a password account until a later claim.
         BindingConsentWriter.send(player, name, proxyIds);
-        player.sendSystemMessage(FabricMessages.text("binding-queued", "{uuid}", target.get().toString()));
+        player.sendSystemMessage(FabricMessages.text("binding-requested", "{uuid}", target.get().toString()));
     }
 
     /**
-     * Claims the pending binding on a Mojang-verified connection. The pin is
+     * Claims the pending binding on a Mojang-verified connection with recorded
+     * proxy consent. The pin is
      * already matched (see {@link #matchedBinding}); the account must still be
      * the one the holder started the binding with, otherwise the entry dies
      * and the password account stays untouched.
@@ -480,8 +446,8 @@ final class EasyAuth344Bridge {
 
     /**
      * One queued binding: the account it was started from, the pinned premium
-     * UUID of the claimed name, and the claim window. One verified connection
-     * whose UUID matches the pin claims it.
+     * UUID of the claimed name, and the claim window. A verified connection
+     * whose UUID matches the pin and whose consent is recorded can claim it.
      */
     static final class PendingBinding {
         private final UUID offlineUuid;

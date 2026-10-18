@@ -7,12 +7,12 @@ package com.github.hayston1001.fastloginplus.fabric;
 
 import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision;
 
-/** Requires password ownership for both binding paths; verification chooses when to convert. */
+/** Requires password ownership before requesting a binding on either identity path. */
 final class BindingRequest {
     private BindingRequest() {
     }
 
-    static boolean completeNow(Decision decision, boolean authenticated, AccountState state) {
+    static void requireBindable(Decision decision, boolean authenticated, AccountState state) {
         if (!authenticated) {
             throw FabricMessages.failure("binding-login-required");
         }
@@ -22,6 +22,5 @@ final class BindingRequest {
         if (state != AccountState.PASSWORD && state != AccountState.BIND_PENDING) {
             throw FabricMessages.failure("binding-password-required");
         }
-        return decision == Decision.PREMIUM_VERIFIED;
     }
 }

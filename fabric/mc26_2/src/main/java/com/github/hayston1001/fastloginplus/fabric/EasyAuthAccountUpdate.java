@@ -19,10 +19,6 @@ final class EasyAuthAccountUpdate {
     private EasyAuthAccountUpdate() {
     }
 
-    static void bind(Class<?> entryType, Object entry, UUID verifiedUuid, StorageUpdate update) {
-        persist(entryType, entry, verifiedUuid, null, true, update);
-    }
-
     static void authenticate(Class<?> entryType, Object entry, UUID verifiedUuid, ZonedDateTime now,
                              String ip, boolean binding, StorageUpdate update) {
         persist(entryType, entry, verifiedUuid, new LoginUpdate(now, ip), binding, update);

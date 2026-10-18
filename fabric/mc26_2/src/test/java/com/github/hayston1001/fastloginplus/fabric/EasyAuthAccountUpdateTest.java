@@ -5,7 +5,6 @@
  */
 package com.github.hayston1001.fastloginplus.fabric;
 
-import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim;
 import org.junit.jupiter.api.Test;
 
 import java.time.ZonedDateTime;
@@ -13,24 +12,11 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class EasyAuthAccountUpdateTest {
 
     private static final UUID OFFLINE = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID VERIFIED = UUID.fromString("00000000-0000-0000-0000-000000000002");
-
-    @Test
-    void failedBindingUpdateRestoresPasswordAccount() {
-        Entry entry = new Entry();
-        assertThrows(IllegalStateException.class, () -> EasyAuthAccountUpdate.bind(Entry.class, entry,
-                VERIFIED, candidate -> {
-                    assertEquals("", entry.password);
-                    assertEquals(VERIFIED, entry.uuid);
-                    return false;
-                }));
-        assertOriginal(entry);
-    }
 
     @Test
     void thrownLoginUpdateRestoresAllMutableFields() {
@@ -55,49 +41,6 @@ class EasyAuthAccountUpdateTest {
         assertEquals(VERIFIED, entry.uuid);
         assertEquals(0L, entry.loginTries);
         assertEquals("127.0.0.2", entry.lastIp);
-    }
-
-    @Test
-    void authenticatedVerifiedRetryBindsWithoutReplayingLoginState() {
-        Entry entry = new Entry();
-        org.junit.jupiter.api.Assertions.assertTrue(BindingRequest.completeNow(
-                com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED,
-                true, AccountState.PASSWORD));
-        EasyAuthAccountUpdate.bind(Entry.class, entry, VERIFIED, candidate -> true);
-        assertEquals("", entry.password);
-        assertEquals(Kind.TRUE, entry.onlineAccount);
-        assertEquals(VERIFIED, entry.uuid);
-        assertEquals(ZonedDateTime.parse("2026-01-01T00:00:00Z"), entry.lastAuthenticatedDate);
-        assertEquals(2L, entry.loginTries);
-        assertEquals("127.0.0.1", entry.lastIp);
-        assertThrows(FabricMessages.PlayerFailure.class, () -> BindingRequest.completeNow(
-                com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED,
-                true, AccountState.BOUND));
-    }
-
-    @Test
-    void unconsentedVerifiedPasswordFlowCanHandOffToImmediateBindingAfterAuthentication() {
-        for (IdentityClaim.Consent consent : new IdentityClaim.Consent[]{
-                IdentityClaim.Consent.NO, IdentityClaim.Consent.UNKNOWN}) {
-            Entry entry = new Entry();
-            IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
-                    "TestUser", VERIFIED, VERIFIED,
-                    new IdentityClaim.Facts(false, false, consent, true, true, false));
-            AccountState.Snapshot state = new AccountState.Snapshot(AccountState.PASSWORD, null);
-            assertEquals(PremiumGate.Action.PASSWORD_LOCK, PremiumGate.decideVerified(claim.getConsent(),
-                    state, claim.getVerifiedMojangUuid(), false, claim.isAutoLogin()));
-            assertEquals("binding-consent-required", EasyAuth344Bridge.passwordLockMessage(claim, state));
-            assertThrows(FabricMessages.PlayerFailure.class,
-                    () -> BindingRequest.completeNow(claim.getDecision(), false, state.state()));
-            assertOriginal(entry);
-
-            // EasyAuth has now authenticated the password holder on the same verified connection.
-            assertTrue(BindingRequest.completeNow(claim.getDecision(), true, state.state()));
-            EasyAuthAccountUpdate.bind(Entry.class, entry, claim.getVerifiedMojangUuid(), candidate -> true);
-            assertEquals("", entry.password);
-            assertEquals(Kind.TRUE, entry.onlineAccount);
-            assertEquals(VERIFIED, entry.uuid);
-        }
     }
 
     private static void assertOriginal(Entry entry) {

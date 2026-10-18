@@ -12,7 +12,8 @@ import net.minecraft.server.Bootstrap;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
@@ -41,8 +42,9 @@ class BindingQueueTest {
             ("OfflinePlayer:" + NAME).getBytes(StandardCharsets.UTF_8));
     private static final UUID TARGET = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
-    @Test
-    void passwordHolderQueuesConsentUsingOnlyStartupTrustSettings() throws Exception {
+    @ParameterizedTest
+    @EnumSource(value = IdentityClaim.Decision.class, names = {"OFFLINE", "PREMIUM_VERIFIED"})
+    void passwordHolderQueuesConsentUsingOnlyStartupTrustSettings(IdentityClaim.Decision decision) throws Exception {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
         EasyAuth344Bridge bridge = mock(EasyAuth344Bridge.class, CALLS_REAL_METHODS);
@@ -56,7 +58,9 @@ class BindingQueueTest {
         set(bridge, "premiumNames", resolver);
 
         ServerPlayer player = mock(ServerPlayer.class, withSettings().extraInterfaces(PlayerAuth.class));
-        when(player.getGameProfile()).thenReturn(new GameProfile(OFFLINE, NAME));
+        boolean verified = decision == IdentityClaim.Decision.PREMIUM_VERIFIED;
+        UUID forwarded = verified ? TARGET : OFFLINE;
+        when(player.getGameProfile()).thenReturn(new GameProfile(forwarded, NAME));
         when(((PlayerAuth) player).easyAuth$isAuthenticated()).thenReturn(true);
         when(((PlayerAuth) player).easyAuth$getPlayerEntryV1()).thenReturn(EasyAuth.DB.entry);
         player.connection = mock(ServerGamePacketListenerImpl.class);
@@ -80,7 +84,7 @@ class BindingQueueTest {
                 assertTrue(pending.get(NAME).matchesTarget(TARGET));
                 return null;
             });
-            IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, NAME, OFFLINE, null,
+            IdentityClaim claim = new IdentityClaim(decision, NAME, forwarded, verified ? TARGET : null,
                     new IdentityClaim.Facts(false, false, IdentityClaim.Consent.NO, true, false, false));
 
             bridge.beginBinding(server, player, claim);
@@ -88,7 +92,7 @@ class BindingQueueTest {
 
             consent.verify(() -> BindingConsentWriter.send(player, NAME, proxyId));
             consent.verifyNoMoreInteractions();
-            messages.verify(() -> FabricMessages.text("binding-queued", "{uuid}", TARGET.toString()));
+            messages.verify(() -> FabricMessages.text("binding-requested", "{uuid}", TARGET.toString()));
             assertEquals(AccountState.BIND_PENDING, bridge.accountStatus(NAME).state());
             assertTrue(pending.get(NAME).matchesTarget(TARGET));
             assertTrue(pending.get(NAME).matchesAccount(OFFLINE, "old-hash"));

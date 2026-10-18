@@ -16,6 +16,7 @@ import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FabricMessagesTest {
@@ -95,13 +96,26 @@ class FabricMessagesTest {
     }
 
     @Test
-    void queuedBindingTellsThePlayerToReconnectManuallyInBothLanguages() throws Exception {
-        String english = bundled("en").getProperty("binding-queued");
-        String chinese = bundled("zh").getProperty("binding-queued");
-        assertTrue(english.contains("consent recorded for UUID {uuid}. Please reconnect"));
-        assertTrue(chinese.contains("同意已记录, 目标 UUID 为 {uuid}. 请重新连接"));
+    void requestedBindingExplainsConditionalConfirmationAndReconnectInBothLanguages() throws Exception {
+        String english = bundled("en").getProperty("binding-requested");
+        String chinese = bundled("zh").getProperty("binding-requested");
+        assertTrue(english.contains("binding request sent for UUID {uuid}."));
+        assertTrue(chinese.contains("绑定请求已发出, 目标 UUID 为 {uuid}."));
+        assertTrue(english.contains("If a confirmation prompt appears, run /flp premium once more."));
+        assertTrue(chinese.contains("若出现确认提示, 请再执行一次 /flp premium."));
+        assertTrue(english.contains("Then reconnect to complete passwordless premium login."));
+        assertTrue(chinese.contains("然后重新连接以完成正版免密登录."));
         assertTrue(english.contains("Your password stays unchanged until success."));
         assertTrue(chinese.contains("成功前原密码不变."));
+        assertTrue(english.contains("If the ten-minute window expires or the backend restarts, "
+                + "log in with your password and run /flp premium again."));
+        assertTrue(chinese.contains("若十分钟窗口过期或后端重启, 请用密码登录后重新执行 /flp premium."));
+        assertFalse(english.contains("consent recorded"));
+        assertFalse(chinese.contains("同意已记录"));
+        for (String language : new String[]{"en", "zh"}) {
+            assertFalse(bundled(language).containsKey("binding-queued"));
+            assertFalse(bundled(language).containsKey("binding-complete"));
+        }
     }
 
     @Test
@@ -121,6 +135,7 @@ class FabricMessagesTest {
                 messages.getProperty("same-name-cracked-recorded"));
         assertEquals(bundled("en").getProperty("premium-policy-disabled"),
                 messages.getProperty("premium-policy-disabled"));
+        assertEquals(bundled("en").getProperty("binding-requested"), messages.getProperty("binding-requested"));
     }
 
     @Test
@@ -140,6 +155,7 @@ class FabricMessagesTest {
                 messages.getProperty("binding-consent-required"));
         assertEquals(bundled("en").getProperty("same-name-cracked-recorded"),
                 messages.getProperty("same-name-cracked-recorded"));
+        assertEquals(bundled("en").getProperty("binding-requested"), messages.getProperty("binding-requested"));
     }
 
     private Properties bundled(String language) throws Exception {

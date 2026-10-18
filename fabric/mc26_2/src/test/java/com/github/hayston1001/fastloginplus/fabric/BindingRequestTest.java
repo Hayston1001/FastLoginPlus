@@ -12,38 +12,40 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BindingRequestTest {
     @Test
     void verifiedPasswordHolderCanBindAfterExpiryOrRestart() {
-        assertTrue(BindingRequest.completeNow(Decision.PREMIUM_VERIFIED, true, AccountState.PASSWORD));
-        assertTrue(BindingRequest.completeNow(Decision.PREMIUM_VERIFIED, true, AccountState.BIND_PENDING));
+        assertDoesNotThrow(() -> BindingRequest.requireBindable(
+                Decision.PREMIUM_VERIFIED, true, AccountState.PASSWORD));
+        assertDoesNotThrow(() -> BindingRequest.requireBindable(
+                Decision.PREMIUM_VERIFIED, true, AccountState.BIND_PENDING));
     }
 
     @Test
     void verifiedButUnauthenticatedConnectionStillCannotBind() {
         var error = assertThrows(FabricMessages.PlayerFailure.class,
-                () -> BindingRequest.completeNow(Decision.PREMIUM_VERIFIED, false, AccountState.PASSWORD));
+                () -> BindingRequest.requireBindable(Decision.PREMIUM_VERIFIED, false, AccountState.PASSWORD));
         assertEquals("binding-login-required", error.getMessage());
     }
 
     @Test
     void offlineHolderStillQueuesVerificationAndNeedsAuthentication() {
-        assertFalse(BindingRequest.completeNow(Decision.OFFLINE, true, AccountState.PASSWORD));
+        assertDoesNotThrow(() -> BindingRequest.requireBindable(Decision.OFFLINE, true, AccountState.PASSWORD));
+        assertDoesNotThrow(() -> BindingRequest.requireBindable(Decision.OFFLINE, true, AccountState.BIND_PENDING));
         assertThrows(FabricMessages.PlayerFailure.class,
-                () -> BindingRequest.completeNow(Decision.OFFLINE, false, AccountState.PASSWORD));
+                () -> BindingRequest.requireBindable(Decision.OFFLINE, false, AccountState.PASSWORD));
     }
 
     @Test
     void otherFailuresDoNotClaimThePlayerIsLoggedOut() {
         assertEquals("binding-identity-required", assertThrows(FabricMessages.PlayerFailure.class,
-                () -> BindingRequest.completeNow(Decision.UNDECIDED, true, AccountState.PASSWORD)).getMessage());
+                () -> BindingRequest.requireBindable(Decision.UNDECIDED, true, AccountState.PASSWORD)).getMessage());
         for (AccountState state : new AccountState[]{AccountState.BOUND, AccountState.CONFLICT, AccountState.OPEN}) {
             assertEquals("binding-password-required", assertThrows(FabricMessages.PlayerFailure.class,
-                    () -> BindingRequest.completeNow(Decision.PREMIUM_VERIFIED, true, state)).getMessage());
+                    () -> BindingRequest.requireBindable(Decision.PREMIUM_VERIFIED, true, state)).getMessage());
         }
     }
 
