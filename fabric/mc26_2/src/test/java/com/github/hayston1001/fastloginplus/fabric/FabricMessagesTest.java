@@ -119,6 +119,30 @@ class FabricMessagesTest {
     }
 
     @Test
+    void adminMessagesExplainTheQueueAndRemainReadableInBothLanguages() throws Exception {
+        for (String language : new String[]{"en", "zh"}) {
+            Properties messages = bundled(language);
+            for (String suffix : new String[]{"permission", "no-carrier", "already", "open", "queued",
+                    "name-unavailable", "changed"}) {
+                String key = "admin-premium-" + suffix;
+                String value = messages.getProperty(key);
+                assertTrue(value != null && !value.isBlank(), key);
+                assertFalse(value.contains("\n") || value.contains("\r"), key);
+                assertFalse(value.matches(".*[\\uFF0C\\u3002\\uFF1B\\uFF1A\\uFF01\\uFF1F\\uFF08\\uFF09].*"), key);
+                assertEquals(value, FabricMessages.load(language, directory).getProperty(key));
+                assertEquals(!java.util.Set.of("permission", "no-carrier").contains(suffix),
+                        value.contains("{player}"), key);
+                assertEquals("queued".equals(suffix), value.contains("{uuid}"), key);
+            }
+            String queued = messages.getProperty("admin-premium-queued");
+            assertTrue(queued.contains("ten minutes") || queued.contains("十分钟"));
+            assertTrue(queued.contains("reconnect manually") || queued.contains("手动重连"));
+            assertTrue(queued.contains("password is unchanged") || queued.contains("原密码不变"));
+            assertTrue(queued.contains("Restarting") || queued.contains("重启"));
+        }
+    }
+
+    @Test
     void missingAndBlankOverrideKeysFallBack() throws Exception {
         Files.writeString(directory.resolve("messages_en.properties"),
                 "binding-checking=Custom message\nbinding-login-required=\nbinding-consent-required=\n",

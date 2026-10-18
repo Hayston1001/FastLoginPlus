@@ -10,6 +10,7 @@ import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim.Decisi
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.metadata.ModOrigin;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
@@ -40,6 +41,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.LongSupplier;
+import java.util.function.Consumer;
 
 /** EasyAuth 3.4.x bridge using the account and login API verified against 3.4.4. */
 final class EasyAuth344Bridge {
@@ -486,6 +488,102 @@ final class EasyAuth344Bridge {
         // The EasyAuth account stays a password account until a later claim.
         BindingConsentWriter.send(player, name, proxyIds);
         player.sendSystemMessage(FabricMessages.text("binding-requested", "{uuid}", target.get().toString()));
+    }
+
+    /**
+     * Authorizes another name without password-holder proof. Called on the server
+     * thread; only the name lookup runs asynchronously. Conversion still requires
+     * a later verified connection, the pinned account and recorded proxy consent.
+     *
+     * @param server     the running server
+     * @param carrier    the player connection relaying consent
+     * @param targetName exact name whose premium login is authorized
+     * @param actor      command source name for the audit log
+     * @param feedback   command-source feedback, invoked on the server thread
+     */
+    void adminPremium(MinecraftServer server, ServerPlayer carrier, String targetName,
+                      String actor, Consumer<Component> feedback) {
+        try {
+            AccountState.Snapshot state = accountStatus(targetName);
+            if (state.state() == AccountState.BOUND) {
+                feedback.accept(FabricMessages.text("admin-premium-already", "{player}", targetName));
+                return;
+            }
+            if (state.state() == AccountState.CONFLICT) {
+                feedback.accept(FabricMessages.text("ownership-conflict"));
+                return;
+            }
+            FabricConfig.StartupSettings config = FabricConfig.startup();
+            FabricConfig.warnIfUntrusted(config);
+            String proxyIds = config.allowedProxyIds();
+            if (state.state() == AccountState.OPEN) {
+                sendAdminConsent(carrier, targetName, proxyIds);
+                LOGGER.info("Admin premium authorization: actor={} target={} queued=false", actor, targetName);
+                feedback.accept(FabricMessages.text("admin-premium-open", "{player}", targetName));
+                return;
+            }
+            Object current = readAccount(field(easyAuth, null, "DB"), targetName);
+            checkBindingEntry(current, targetName);
+            String passwordHash = (String) field(entryType, current, "password");
+            CompletableFuture.supplyAsync(() -> premiumNames.resolve(targetName)).whenComplete((target, error) ->
+                    server.execute(() -> finishAdminPremium(carrier, targetName, actor, passwordHash,
+                            target, proxyIds, feedback)));
+        } catch (RuntimeException failure) {
+            adminPremiumFailure(actor, targetName, feedback, failure);
+        }
+    }
+
+    private void finishAdminPremium(ServerPlayer carrier, String name, String actor, String passwordHash,
+                                    Optional<UUID> target, String proxyIds, Consumer<Component> feedback) {
+        try {
+            if (target == null || target.isEmpty()) {
+                feedback.accept(FabricMessages.text("admin-premium-name-unavailable", "{player}", name));
+                return;
+            }
+            verifyPolicy();
+            Object current = readAccount(field(easyAuth, null, "DB"), name);
+            try {
+                checkBindingEntry(current, name);
+            } catch (FabricMessages.PlayerFailure changed) {
+                feedback.accept(FabricMessages.text("admin-premium-changed", "{player}", name));
+                return;
+            }
+            if (!passwordHash.equals(field(entryType, current, "password"))) {
+                feedback.accept(FabricMessages.text("admin-premium-changed", "{player}", name));
+                return;
+            }
+            PendingBinding pending = new PendingBinding(offlineUuid(name), passwordHash, target.get());
+            PendingBinding previous = pendingBindings.put(name, pending);
+            try {
+                sendAdminConsent(carrier, name, proxyIds);
+            } catch (RuntimeException failure) {
+                if (previous == null) {
+                    pendingBindings.remove(name, pending);
+                } else {
+                    pendingBindings.replace(name, pending, previous);
+                }
+                throw failure;
+            }
+            LOGGER.info("Admin premium authorization: actor={} target={} queued=true uuid={}", actor, name,
+                    target.get());
+            feedback.accept(FabricMessages.text("admin-premium-queued", "{player}", name,
+                    "{uuid}", target.get().toString()));
+        } catch (RuntimeException failure) {
+            adminPremiumFailure(actor, name, feedback, failure);
+        }
+    }
+
+    private static void sendAdminConsent(ServerPlayer carrier, String name, String proxyIds) {
+        if (!carrier.connection.isAcceptingMessages()) {
+            throw new IllegalStateException("Admin premium message carrier disconnected");
+        }
+        BindingConsentWriter.sendForOther(carrier, name, proxyIds);
+    }
+
+    private static void adminPremiumFailure(String actor, String name, Consumer<Component> feedback,
+                                            RuntimeException failure) {
+        LOGGER.error("Admin premium authorization failed: actor={} target={}", actor, name, failure);
+        feedback.accept(FabricMessages.text("auth-unavailable"));
     }
 
     /**

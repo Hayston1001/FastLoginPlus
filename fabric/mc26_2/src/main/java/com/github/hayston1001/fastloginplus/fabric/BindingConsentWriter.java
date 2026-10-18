@@ -65,12 +65,25 @@ final class BindingConsentWriter {
      * @param sourceProxyIds comma-joined proxy IDs this backend trusts
      */
     static void send(ServerPlayer player, String playerName, String sourceProxyIds) {
+        send(player, playerName, sourceProxyIds, true);
+    }
+
+    /**
+     * Admin consent skips premium-warning, matching the classic other-player command.
+     *
+     * @param carrier        the connection carrying the message
+     * @param targetName     exact target name, independent of the carrier
+     * @param sourceProxyIds comma-joined proxy IDs this backend trusts
+     */
+    static void sendForOther(ServerPlayer carrier, String targetName, String sourceProxyIds) {
+        send(carrier, targetName, sourceProxyIds, false);
+    }
+
+    private static void send(ServerPlayer player, String playerName, String sourceProxyIds, boolean sourceInvoker) {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         try (DataOutputStream output = new DataOutputStream(buffer)) {
-            // /flp premium has no target argument and only the player can invoke it.
-            // The carrier is that player's connection, so the source is the invoker;
-            // the proxy can apply its existing premium-warning confirmation gate.
-            ToggleWire.write(output, true, playerName, true, sourceProxyIds);
+            // Only the self path uses the proxy's premium-warning confirmation gate.
+            ToggleWire.write(output, true, playerName, sourceInvoker, sourceProxyIds);
         } catch (IOException impossible) {
             throw new IllegalStateException("Cannot serialize the premium consent message", impossible);
         }
