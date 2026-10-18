@@ -6,6 +6,7 @@
 package com.github.hayston1001.fastloginplus.fabric;
 
 import java.time.ZonedDateTime;
+import java.lang.reflect.Field;
 import java.util.UUID;
 
 /** Keeps EasyAuth's live account entry intact when its synchronous update fails. */
@@ -17,6 +18,56 @@ final class EasyAuthAccountUpdate {
     }
 
     private EasyAuthAccountUpdate() {
+    }
+
+    /**
+     * Resolves and snapshots both rows before a proxy request can be sent.
+     *
+     * @param entryType EasyAuth account class
+     * @param entry durable account snapshot to save
+     * @param cached live account, if present
+     * @param offlineUuid UUID for subsequent password logins
+     * @param update synchronous storage operation
+     * @return local unbind operation with rollback on storage failure
+     */
+    static Runnable prepareUnbind(Class<?> entryType, Object entry, Object cached, UUID offlineUuid,
+                                  StorageUpdate update) {
+        try {
+            Field kind = entryType.getField("onlineAccount");
+            Field uuid = entryType.getField("uuid");
+            Object[] rows = cached == null || cached == entry ? new Object[]{entry} : new Object[]{entry, cached};
+            Object[] oldKinds = new Object[rows.length];
+            Object[] oldUuids = new Object[rows.length];
+            for (int i = 0; i < rows.length; i++) {
+                oldKinds[i] = kind.get(rows[i]);
+                oldUuids[i] = uuid.get(rows[i]);
+            }
+            @SuppressWarnings({"rawtypes", "unchecked"})
+            Object offline = Enum.valueOf((Class<Enum>) oldKinds[0].getClass(), "FALSE");
+            return () -> {
+                try {
+                    for (Object row : rows) {
+                        kind.set(row, offline);
+                        uuid.set(row, offlineUuid);
+                    }
+                    if (!update.save(entry)) {
+                        throw new IllegalStateException("EasyAuth account unbind failed");
+                    }
+                } catch (ReflectiveOperationException | RuntimeException failure) {
+                    for (int i = 0; i < rows.length; i++) {
+                        try {
+                            kind.set(rows[i], oldKinds[i]);
+                            uuid.set(rows[i], oldUuids[i]);
+                        } catch (ReflectiveOperationException | RuntimeException restoreFailure) {
+                            failure.addSuppressed(restoreFailure);
+                        }
+                    }
+                    throw FabricMessages.failure("cracked-save-failed", failure);
+                }
+            };
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("EasyAuth account unbind API is unavailable", failure);
+        }
     }
 
     static void authenticate(Class<?> entryType, Object entry, UUID verifiedUuid, ZonedDateTime now,

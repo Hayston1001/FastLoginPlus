@@ -11,6 +11,8 @@ import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.server.level.ServerPlayer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -27,6 +29,34 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 
 class BindingConsentWriterTest {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void disablingPayloadPreservesTargetInvokerAndTrustList(boolean sourceInvoker) throws Exception {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+        ServerPlayer carrier = mock(ServerPlayer.class);
+        String proxyIds = UUID.randomUUID() + "," + UUID.randomUUID();
+        try (var networking = mockStatic(ServerPlayNetworking.class)) {
+            networking.when(() -> ServerPlayNetworking.send(eq(carrier),
+                    any(BindingConsentWriter.ConsentPayload.class))).thenAnswer(call -> {
+                        BindingConsentWriter.ConsentPayload payload = call.getArgument(1);
+                        assertEquals("fastloginplus:ch-st", payload.type().id().toString());
+                        try (var input = new DataInputStream(new ByteArrayInputStream(payload.data()))) {
+                            ToggleWire.Toggle toggle = ToggleWire.read(input);
+                            assertFalse(toggle.willEnable());
+                            assertEquals("TargetUser", toggle.playerName());
+                            assertEquals(sourceInvoker, toggle.isSourceInvoker());
+                            assertEquals(proxyIds, toggle.sourceProxyId());
+                            assertEquals(0, input.available());
+                        }
+                        return null;
+                    });
+            BindingConsentWriter.sendToggle(carrier, "TargetUser", false, sourceInvoker, proxyIds);
+            networking.verify(() -> ServerPlayNetworking.send(eq(carrier),
+                    any(BindingConsentWriter.ConsentPayload.class)));
+        }
+    }
+
     @Test
     void otherPlayerPayloadNamesTheTargetAndSkipsInvokerConfirmation() throws Exception {
         SharedConstants.tryDetectVersion();

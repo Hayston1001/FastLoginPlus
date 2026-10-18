@@ -324,6 +324,10 @@ final class EasyAuth344Bridge {
         verifyPolicy();
         Object db = field(easyAuth, null, "DB");
         Object entry = readAccount(db, name);
+        return accountStatus(name, entry);
+    }
+
+    private AccountState.Snapshot accountStatus(String name, Object entry) {
         if (entry == null) {
             return new AccountState.Snapshot(AccountState.OPEN, null);
         }
@@ -489,6 +493,99 @@ final class EasyAuth344Bridge {
                                             RuntimeException failure) {
         LOGGER.error("Admin premium authorization failed: actor={} target={}", actor, name, failure);
         feedback.accept(FabricMessages.text("auth-unavailable"));
+    }
+
+    void cracked(ServerPlayer player) {
+        String name = player.getGameProfile().name();
+        requestCracked(player, name, name, true, player::sendSystemMessage);
+    }
+
+    void adminCracked(ServerPlayer carrier, String targetName, String actor, Consumer<Component> feedback) {
+        requestCracked(carrier, targetName, actor, false, feedback);
+    }
+
+    private void requestCracked(ServerPlayer carrier, String name, String actor,
+                                boolean sourceInvoker, Consumer<Component> feedback) {
+        AccountState state = null;
+        boolean unbound = false;
+        boolean sent = false;
+        try {
+            verifyPolicy();
+            if (sourceInvoker && !Boolean.TRUE.equals(invoke(carrier, "easyAuth$isAuthenticated"))) {
+                feedback.accept(FabricMessages.text("cracked-login-required"));
+                return;
+            }
+            Object db = field(easyAuth, null, "DB");
+            Object entry = readAccount(db, name);
+            AccountState.Snapshot snapshot = accountStatus(name, entry);
+            state = snapshot.state();
+            if (state == AccountState.CONFLICT) {
+                feedback.accept(FabricMessages.text("ownership-conflict"));
+                return;
+            }
+            Runnable unbind = null;
+            if (state == AccountState.BOUND) {
+                if (((String) field(entryType, entry, "password")).isEmpty()) {
+                    feedback.accept(FabricMessages.text("cracked-no-password", "{player}", name));
+                    return;
+                }
+                Object cached = invoke(playersCache, null, "get", String.class, name);
+                if (cached != null) {
+                    checkPremiumEntry(cached, name, snapshot.uuid());
+                    if (!Objects.equals(field(entryType, entry, "password"), field(entryType, cached, "password"))) {
+                        throw FabricMessages.failure("ownership-conflict");
+                    }
+                }
+                unbind = EasyAuthAccountUpdate.prepareUnbind(entryType, entry, cached, offlineUuid(name),
+                        candidate -> Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, candidate)));
+            }
+            String proxyIds = commandProxyIds(carrier);
+            BindingConsentWriter.sendToggle(carrier, name, false, sourceInvoker, proxyIds);
+            sent = true;
+            if (unbind != null) {
+                unbind.run();
+                unbound = true;
+            }
+            feedback.accept(FabricMessages.text(sourceInvoker ? "cracked-requested" : "admin-cracked-requested",
+                    "{player}", name));
+        } catch (RuntimeException failure) {
+            LOGGER.error("Cracked request failed: actor={} target={} proxyRequestSent={}", actor, name, sent, failure);
+            feedback.accept(FabricMessages.reason(failure, "auth-unavailable"));
+        } finally {
+            LOGGER.info("Cracked request: actor={} target={} state={} localUnbound={} proxyRequestSent={}",
+                    actor, name, state, unbound, sent);
+        }
+    }
+
+    void adminDelete(ServerPlayer carrier, String targetName, String actor, Consumer<Component> feedback) {
+        AccountState state = null;
+        boolean sent = false;
+        try {
+            state = accountStatus(targetName).state();
+            if (state == AccountState.BOUND) {
+                feedback.accept(FabricMessages.text("delete-premium-denied", "{player}", targetName));
+                return;
+            }
+            // Always relayed: the final result belongs to the proxy console, not the carrier.
+            DeleteConsentWriter.send(carrier, targetName, false, commandProxyIds(carrier));
+            sent = true;
+            feedback.accept(FabricMessages.text("delete-requested", "{player}", targetName));
+        } catch (RuntimeException failure) {
+            LOGGER.error("Profile deletion request failed: actor={} target={}", actor, targetName, failure);
+            feedback.accept(FabricMessages.reason(failure, "auth-unavailable"));
+        } finally {
+            LOGGER.info("Profile deletion request: actor={} target={} state={} proxyRequestSent={}",
+                    actor, targetName, state, sent);
+        }
+    }
+
+    private static String commandProxyIds(ServerPlayer carrier) {
+        FabricConfig.StartupSettings config = FabricConfig.startup();
+        FabricConfig.warnIfUntrusted(config);
+        if (!carrier.connection.isAcceptingMessages()) {
+            throw new IllegalStateException("Command message carrier disconnected");
+        }
+        return config.allowedProxyIds();
     }
 
     private void checkBindingEntry(Object entry, String name) {

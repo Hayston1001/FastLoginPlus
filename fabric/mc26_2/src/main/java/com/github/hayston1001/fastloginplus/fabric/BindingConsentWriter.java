@@ -65,7 +65,7 @@ final class BindingConsentWriter {
      * @param sourceProxyIds comma-joined proxy IDs this backend trusts
      */
     static void send(ServerPlayer player, String playerName, String sourceProxyIds) {
-        send(player, playerName, sourceProxyIds, true);
+        sendToggle(player, playerName, true, true, sourceProxyIds);
     }
 
     /**
@@ -76,17 +76,18 @@ final class BindingConsentWriter {
      * @param sourceProxyIds comma-joined proxy IDs this backend trusts
      */
     static void sendForOther(ServerPlayer carrier, String targetName, String sourceProxyIds) {
-        send(carrier, targetName, sourceProxyIds, false);
+        sendToggle(carrier, targetName, true, false, sourceProxyIds);
     }
 
-    private static void send(ServerPlayer player, String playerName, String sourceProxyIds, boolean sourceInvoker) {
+    static void sendToggle(ServerPlayer carrier, String targetName, boolean enable,
+                           boolean sourceInvoker, String sourceProxyIds) {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         try (DataOutputStream output = new DataOutputStream(buffer)) {
             // Only the self path uses the proxy's premium-warning confirmation gate.
-            ToggleWire.write(output, true, playerName, sourceInvoker, sourceProxyIds);
+            ToggleWire.write(output, enable, targetName, sourceInvoker, sourceProxyIds);
         } catch (IOException impossible) {
             throw new IllegalStateException("Cannot serialize the premium consent message", impossible);
         }
-        ServerPlayNetworking.send(player, new ConsentPayload(buffer.toByteArray()));
+        ServerPlayNetworking.send(carrier, new ConsentPayload(buffer.toByteArray()));
     }
 }

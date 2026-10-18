@@ -143,6 +143,29 @@ class FabricMessagesTest {
     }
 
     @Test
+    void crackedAndDeleteMessagesKeepTheirScopeAndEnglishPunctuation() throws Exception {
+        for (String language : new String[]{"en", "zh"}) {
+            Properties messages = bundled(language);
+            for (String key : new String[]{"cracked-requested", "admin-cracked-requested", "cracked-no-password",
+                    "delete-requested", "delete-premium-denied", "admin-command-permission",
+                    "cracked-login-required", "cracked-save-failed"}) {
+                String value = messages.getProperty(key);
+                assertTrue(value != null && !value.isBlank(), key);
+                assertFalse(value.matches(".*[\uFF0C\u3002\uFF1B\uFF1A\uFF01\uFF1F\uFF08\uFF09].*"), key);
+                assertEquals(value, FabricMessages.load(language, directory).getProperty(key));
+                assertEquals(java.util.Set.of("admin-cracked-requested", "cracked-no-password",
+                        "delete-requested", "delete-premium-denied").contains(key), value.contains("{player}"));
+            }
+            String cracked = messages.getProperty("cracked-requested");
+            assertTrue(cracked.contains("reconnect manually") || cracked.contains("手动重连"));
+            assertTrue(cracked.contains("password is retained") || cracked.contains("密码保留"));
+            String delete = messages.getProperty("delete-requested");
+            assertTrue(delete.contains("proxy console") || delete.contains("代理控制台"));
+            assertTrue(delete.contains("not deleted") || delete.contains("不删除 EasyAuth"));
+        }
+    }
+
+    @Test
     void missingAndBlankOverrideKeysFallBack() throws Exception {
         Files.writeString(directory.resolve("messages_en.properties"),
                 "premium-requested=Custom message\nbinding-login-required=\nbinding-consent-required=\n",

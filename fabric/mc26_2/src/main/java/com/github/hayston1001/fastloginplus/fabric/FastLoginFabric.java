@@ -10,6 +10,7 @@ import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -48,6 +49,7 @@ public final class FastLoginFabric implements ModInitializer {
         FabricCrackedNotice crackedNotice = new FabricCrackedNotice();
         crackedNotice.register();
         BindingConsentWriter.register();
+        DeleteConsentWriter.register();
         CommandRegistrationCallback.EVENT.register((dispatcher, dedicated, environment) ->
                 registerCommands(dispatcher, bridge));
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
@@ -87,7 +89,50 @@ public final class FastLoginFabric implements ModInitializer {
                                             : builder.buildFuture();
                                 })
                                 .executes(context -> adminPremium(context.getSource(),
-                                        StringArgumentType.getString(context, "player"), bridge)))));
+                                        StringArgumentType.getString(context, "player"), bridge))))
+                        .then(literal("cracked").executes(context -> {
+                            bridge.cracked(context.getSource().getPlayerOrException());
+                            return 1;
+                        }).then(adminPlayerArgument().executes(context -> adminAccountCommand(context.getSource(),
+                                StringArgumentType.getString(context, "player"), bridge, false))))
+                        .then(literal("delete").then(adminPlayerArgument().executes(context ->
+                                adminAccountCommand(context.getSource(),
+                                        StringArgumentType.getString(context, "player"), bridge, true)))));
+    }
+
+    private static RequiredArgumentBuilder<CommandSourceStack, String> adminPlayerArgument() {
+        return RequiredArgumentBuilder.<CommandSourceStack, String>argument("player", StringArgumentType.word())
+                .suggests((context, builder) -> {
+                    var source = context.getSource();
+                    return source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)
+                            ? SharedSuggestionProvider.suggest(source.getOnlinePlayerNames(), builder)
+                            : builder.buildFuture();
+                });
+    }
+
+    private static int adminAccountCommand(CommandSourceStack source, String name,
+                                           EasyAuth344Bridge bridge, boolean delete) {
+        if (!source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) {
+            source.sendSuccess(() -> FabricMessages.text("admin-command-permission"), false);
+            return 0;
+        }
+        var carrier = source.getPlayer();
+        if (carrier == null) {
+            var players = source.getServer().getPlayerList().getPlayers();
+            if (players.isEmpty()) {
+                source.sendSuccess(() -> FabricMessages.text("admin-premium-no-carrier"), false);
+                return 0;
+            }
+            carrier = players.getFirst();
+        }
+        if (delete) {
+            bridge.adminDelete(carrier, name, source.getTextName(),
+                    message -> source.sendSuccess(() -> message, false));
+        } else {
+            bridge.adminCracked(carrier, name, source.getTextName(),
+                    message -> source.sendSuccess(() -> message, false));
+        }
+        return 1;
     }
 
     private static int adminPremium(CommandSourceStack source, String targetName, EasyAuth344Bridge bridge) {
