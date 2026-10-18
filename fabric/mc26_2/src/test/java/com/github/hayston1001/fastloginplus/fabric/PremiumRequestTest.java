@@ -9,68 +9,58 @@ import com.github.hayston1001.fastloginplus.fabric.protocol.IdentityClaim;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
-import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
 
-class BindingQueueTest {
+class PremiumRequestTest {
     private static final String NAME = "TestUser";
     private static final UUID OFFLINE = UUID.nameUUIDFromBytes(
             ("OfflinePlayer:" + NAME).getBytes(StandardCharsets.UTF_8));
     private static final UUID TARGET = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private EasyAuth344Bridge bridge;
+    private ServerPlayer player;
 
-    @ParameterizedTest
-    @EnumSource(value = IdentityClaim.Decision.class, names = {"OFFLINE", "PREMIUM_VERIFIED"})
-    void passwordHolderQueuesConsentUsingOnlyStartupTrustSettings(IdentityClaim.Decision decision) throws Exception {
+    @BeforeEach
+    void setup() throws Exception {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
-        EasyAuth344Bridge bridge = mock(EasyAuth344Bridge.class, CALLS_REAL_METHODS);
+        EasyAuth.DB = new Database();
+        bridge = mock(EasyAuth344Bridge.class, CALLS_REAL_METHODS);
         doNothing().when(bridge).verifyPolicy();
-        var pending = new ConcurrentHashMap<String, EasyAuth344Bridge.PendingBinding>();
         set(bridge, "easyAuth", EasyAuth.class);
         set(bridge, "entryType", Entry.class);
-        set(bridge, "pendingBindings", pending);
-        PremiumNameResolver resolver = mock(PremiumNameResolver.class);
-        when(resolver.resolve(NAME)).thenReturn(Optional.of(TARGET));
-        set(bridge, "premiumNames", resolver);
 
-        ServerPlayer player = mock(ServerPlayer.class, withSettings().extraInterfaces(PlayerAuth.class));
-        boolean verified = decision == IdentityClaim.Decision.PREMIUM_VERIFIED;
-        UUID forwarded = verified ? TARGET : OFFLINE;
-        when(player.getGameProfile()).thenReturn(new GameProfile(forwarded, NAME));
+        player = mock(ServerPlayer.class, withSettings().extraInterfaces(PlayerAuth.class));
+        when(player.getGameProfile()).thenReturn(new GameProfile(TARGET, NAME));
         when(((PlayerAuth) player).easyAuth$isAuthenticated()).thenReturn(true);
         when(((PlayerAuth) player).easyAuth$getPlayerEntryV1()).thenReturn(EasyAuth.DB.entry);
         player.connection = mock(ServerGamePacketListenerImpl.class);
         when(player.connection.isAcceptingMessages()).thenReturn(true);
-        MinecraftServer server = mock(MinecraftServer.class);
-        CompletableFuture<Runnable> completion = new CompletableFuture<>();
-        doAnswer(call -> {
-            completion.complete(call.getArgument(0));
-            return null;
-        }).when(server).execute(any(Runnable.class));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = IdentityClaim.Decision.class, names = {"OFFLINE", "PREMIUM_VERIFIED"})
+    void passwordHolderRequestsOnlyConsentUsingStartupTrustSettings(IdentityClaim.Decision decision) {
+        boolean verified = decision == IdentityClaim.Decision.PREMIUM_VERIFIED;
+        UUID forwarded = verified ? TARGET : OFFLINE;
+        when(player.getGameProfile()).thenReturn(new GameProfile(forwarded, NAME));
 
         String proxyId = UUID.randomUUID().toString();
         var startup = new FabricConfig.StartupSettings(proxyId);
@@ -79,31 +69,47 @@ class BindingQueueTest {
              var consent = mockStatic(BindingConsentWriter.class);
              var messages = mockStatic(FabricMessages.class)) {
             config.when(FabricConfig::startup).thenReturn(startup);
-            consent.when(() -> BindingConsentWriter.send(player, NAME, proxyId)).thenAnswer(call -> {
-                assertTrue(pending.get(NAME).matchesAccount(OFFLINE, "old-hash"));
-                assertTrue(pending.get(NAME).matchesTarget(TARGET));
-                return null;
-            });
             IdentityClaim claim = new IdentityClaim(decision, NAME, forwarded, verified ? TARGET : null,
                     new IdentityClaim.Facts(false, false, IdentityClaim.Consent.NO, true, false, false));
 
-            bridge.beginBinding(server, player, claim);
-            completion.get(5, TimeUnit.SECONDS).run();
+            bridge.beginBinding(player, claim);
+            bridge.beginBinding(player, claim);
 
-            consent.verify(() -> BindingConsentWriter.send(player, NAME, proxyId));
+            consent.verify(() -> BindingConsentWriter.send(player, NAME, proxyId), org.mockito.Mockito.times(2));
             consent.verifyNoMoreInteractions();
-            messages.verify(() -> FabricMessages.text("binding-requested", "{uuid}", TARGET.toString()));
-            assertEquals(AccountState.BIND_PENDING, bridge.accountStatus(NAME).state());
-            assertTrue(pending.get(NAME).matchesTarget(TARGET));
-            assertTrue(pending.get(NAME).matchesAccount(OFFLINE, "old-hash"));
+            messages.verify(() -> FabricMessages.text("premium-requested"), org.mockito.Mockito.times(2));
+            assertEquals(AccountState.PASSWORD, bridge.accountStatus(NAME).state());
             assertEquals("old-hash", EasyAuth.DB.entry.password);
             assertEquals(OFFLINE, EasyAuth.DB.entry.uuid);
             assertEquals("FALSE", EasyAuth.DB.entry.onlineAccount);
-            config.verify(FabricConfig::startup);
-            config.verify(() -> FabricConfig.warnIfUntrusted(startup));
+            config.verify(FabricConfig::startup, org.mockito.Mockito.times(2));
+            config.verify(() -> FabricConfig.warnIfUntrusted(startup), org.mockito.Mockito.times(2));
             config.verifyNoMoreInteractions();
-            verify(server).execute(any(Runnable.class));
-            verifyNoMoreInteractions(server);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"send", "disconnected", "read", "unauthenticated"})
+    void requestFailureNeverChangesThePasswordAccount(String failure) {
+        String proxyId = UUID.randomUUID().toString();
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED, NAME, TARGET, TARGET);
+        try (var config = mockStatic(FabricConfig.class); var consent = mockStatic(BindingConsentWriter.class)) {
+            config.when(FabricConfig::startup).thenReturn(new FabricConfig.StartupSettings(proxyId));
+            switch (failure) {
+                case "send" -> consent.when(() -> BindingConsentWriter.send(player, NAME, proxyId))
+                        .thenThrow(new IllegalStateException("send unavailable"));
+                case "disconnected" -> when(player.connection.isAcceptingMessages()).thenReturn(false);
+                case "read" -> EasyAuth.DB.failRead = true;
+                case "unauthenticated" -> when(((PlayerAuth) player).easyAuth$isAuthenticated()).thenReturn(false);
+                default -> throw new AssertionError(failure);
+            }
+            assertThrows(RuntimeException.class, () -> bridge.beginBinding(player, claim));
+            assertEquals("old-hash", EasyAuth.DB.entry.password);
+            assertEquals(OFFLINE, EasyAuth.DB.entry.uuid);
+            assertEquals("FALSE", EasyAuth.DB.entry.onlineAccount);
+            if (!"send".equals(failure)) {
+                consent.verifyNoInteractions();
+            }
         }
     }
 
@@ -120,13 +126,17 @@ class BindingQueueTest {
     }
 
     public static final class EasyAuth {
-        public static final Database DB = new Database();
+        public static Database DB;
     }
 
     public static final class Database {
         final Entry entry = new Entry();
+        boolean failRead;
 
         public Entry getUserData(String name) {
+            if (failRead) {
+                throw new IllegalStateException("read unavailable");
+            }
             return NAME.equals(name) ? entry : null;
         }
     }

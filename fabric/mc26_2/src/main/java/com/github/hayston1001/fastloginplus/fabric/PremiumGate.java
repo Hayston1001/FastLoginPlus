@@ -32,44 +32,35 @@ final class PremiumGate {
     }
 
     /**
-     * Decides for a Mojang-verified premium connection. A queued claim (live
-     * entry whose pinned UUID matches) converts a password account during login
-     * only with the proxy's recorded consent. A pending window never permits
-     * conversion without that consent. Otherwise the password flow remains;
-     * its authenticated holder can request binding with /flp premium afterward.
-     * A name without an account has no ownership question
-     * (rule 1 row 1): it is auto-registered and logged in — unless the
-     * auto-register-unknown policy is off (F-15 A), which keeps the player in
-     * the register dialog instead. Converted accounts only ever log in without
-     * a password, so a mismatched identity is refused (rule 8).
+     * Converts a password account only with recorded proxy consent and a verified
+     * identity. Its password is retained but dormant while premium-bound. Unknown
+     * accounts follow the registration policy; bound accounts require their UUID.
      *
      * @param consent the name's upgrade consent as the proxy recorded it
      * @param state the local account state
      * @param verifiedUuid the Mojang UUID this connection was verified as
-     * @param claimEntryMatches whether a live claim entry pins this verified UUID
      * @param autoLogin the proxy's autoLogin policy value
      * @return the action to apply
      */
     static Action decideVerified(IdentityClaim.Consent consent, AccountState.Snapshot state,
-                                 UUID verifiedUuid, boolean claimEntryMatches, boolean autoLogin) {
-        return decideVerified(consent, state, verifiedUuid, claimEntryMatches, autoLogin, true);
+                                 UUID verifiedUuid, boolean autoLogin) {
+        return decideVerified(consent, state, verifiedUuid, autoLogin, true);
     }
 
     /**
      * Full form of {@link #decideVerified(IdentityClaim.Consent,
-     * AccountState.Snapshot, UUID, boolean, boolean)} with the auto-register
+     * AccountState.Snapshot, UUID, boolean)} with the auto-register
      * policy (F-15 A).
      *
      * @param consent the name's upgrade consent as the proxy recorded it
      * @param state the local account state
      * @param verifiedUuid the Mojang UUID this connection was verified as
-     * @param claimEntryMatches whether a live claim entry pins this verified UUID
      * @param autoLogin the proxy's autoLogin policy value
      * @param autoRegisterUnknown the proxy's auto-register-unknown policy value
      * @return the action to apply
      */
     static Action decideVerified(IdentityClaim.Consent consent, AccountState.Snapshot state,
-                                 UUID verifiedUuid, boolean claimEntryMatches, boolean autoLogin,
+                                 UUID verifiedUuid, boolean autoLogin,
                                  boolean autoRegisterUnknown) {
         if (state.state() == AccountState.CONFLICT) {
             return Action.REJECT;
@@ -92,11 +83,10 @@ final class PremiumGate {
             // register dialog instead of an automatic account
             return autoRegisterUnknown ? Action.FREE_LOGIN : Action.PASSWORD_LOCK;
         }
-        if (claimEntryMatches && consent == IdentityClaim.Consent.YES) {
+        if (state.state() == AccountState.PASSWORD && consent == IdentityClaim.Consent.YES) {
             return Action.CLAIM_AND_LOGIN;
         }
-        // No consented claim: consent alone never converts a password account,
-        // and missing consent must not prevent its holder from logging in.
+        // Without consent, the existing password remains the login method.
         return Action.PASSWORD_LOCK;
     }
 

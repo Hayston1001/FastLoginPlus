@@ -22,7 +22,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -52,7 +51,6 @@ class SQLiteRenameFollowBridgeTest {
         set("easyAuth", EasyAuth.class);
         set("entryType", Entry.class);
         set("playersCache", Cache.class);
-        set("pendingBindings", new ConcurrentHashMap<String, EasyAuth344Bridge.PendingBinding>());
         server = mock(MinecraftServer.class);
         doAnswer(call -> {
             CompletableFuture<Void> result = new CompletableFuture<>();

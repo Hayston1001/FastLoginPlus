@@ -17,11 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class BindingRequestTest {
     @Test
-    void verifiedPasswordHolderCanBindAfterExpiryOrRestart() {
+    void verifiedPasswordHolderCanRequestConsent() {
         assertDoesNotThrow(() -> BindingRequest.requireBindable(
                 Decision.PREMIUM_VERIFIED, true, AccountState.PASSWORD));
-        assertDoesNotThrow(() -> BindingRequest.requireBindable(
-                Decision.PREMIUM_VERIFIED, true, AccountState.BIND_PENDING));
     }
 
     @Test
@@ -32,9 +30,8 @@ class BindingRequestTest {
     }
 
     @Test
-    void offlineHolderStillQueuesVerificationAndNeedsAuthentication() {
+    void offlineHolderCanRequestConsentButNeedsAuthentication() {
         assertDoesNotThrow(() -> BindingRequest.requireBindable(Decision.OFFLINE, true, AccountState.PASSWORD));
-        assertDoesNotThrow(() -> BindingRequest.requireBindable(Decision.OFFLINE, true, AccountState.BIND_PENDING));
         assertThrows(FabricMessages.PlayerFailure.class,
                 () -> BindingRequest.requireBindable(Decision.OFFLINE, false, AccountState.PASSWORD));
     }
@@ -50,14 +47,10 @@ class BindingRequestTest {
     }
 
     @Test
-    void passwordLockExplanationMatchesWindowPolicyOrRegistration() {
+    void passwordLockExplanationMatchesPolicyOrRegistration() {
         UUID uuid = UUID.randomUUID();
         IdentityClaim claim = new IdentityClaim(Decision.PREMIUM_VERIFIED, "TestUser", uuid, uuid,
                 new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, true, false, false));
-        assertEquals("binding-window-unavailable", EasyAuth344Bridge.passwordLockMessage(claim,
-                new AccountState.Snapshot(AccountState.PASSWORD, null)));
-        assertEquals("binding-window-unavailable", EasyAuth344Bridge.passwordLockMessage(claim,
-                new AccountState.Snapshot(AccountState.BIND_PENDING, null)));
         assertEquals("registration-required", EasyAuth344Bridge.passwordLockMessage(claim,
                 new AccountState.Snapshot(AccountState.OPEN, null)));
         IdentityClaim disabled = new IdentityClaim(Decision.PREMIUM_VERIFIED, "TestUser", uuid, uuid,
@@ -73,10 +66,8 @@ class BindingRequestTest {
                 IdentityClaim.Consent.NO, IdentityClaim.Consent.UNKNOWN}) {
             IdentityClaim claim = new IdentityClaim(Decision.PREMIUM_VERIFIED, "TestUser", uuid, uuid,
                     new IdentityClaim.Facts(false, false, consent, true, false, false));
-            for (AccountState state : new AccountState[]{AccountState.PASSWORD, AccountState.BIND_PENDING}) {
-                assertEquals("binding-consent-required", EasyAuth344Bridge.passwordLockMessage(claim,
-                        new AccountState.Snapshot(state, null)));
-            }
+            assertEquals("binding-consent-required", EasyAuth344Bridge.passwordLockMessage(claim,
+                    new AccountState.Snapshot(AccountState.PASSWORD, null)));
             assertEquals("registration-required", EasyAuth344Bridge.passwordLockMessage(claim,
                     new AccountState.Snapshot(AccountState.OPEN, null)));
             IdentityClaim disabled = new IdentityClaim(Decision.PREMIUM_VERIFIED, "TestUser", uuid, uuid,

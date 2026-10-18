@@ -71,8 +71,7 @@ public final class FastLoginFabric implements ModInitializer {
                         .then(literal("premium").executes(context -> {
                             var player = context.getSource().getPlayerOrException();
                             try {
-                                bridge.beginBinding(context.getSource().getServer(), player,
-                                        parseClaim(player.getGameProfile()));
+                                bridge.beginBinding(player, parseClaim(player.getGameProfile()));
                                 return 1;
                             } catch (RuntimeException rejected) {
                                 LOGGER.warn("Premium binding rejected for {}",
@@ -105,7 +104,7 @@ public final class FastLoginFabric implements ModInitializer {
             }
             carrier = players.getFirst();
         }
-        bridge.adminPremium(source.getServer(), carrier, targetName, source.getTextName(),
+        bridge.adminPremium(carrier, targetName, source.getTextName(),
                 message -> source.sendSuccess(() -> message, false));
         return 1;
     }

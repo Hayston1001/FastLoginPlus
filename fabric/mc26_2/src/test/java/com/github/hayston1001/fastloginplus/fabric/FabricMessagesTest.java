@@ -29,8 +29,8 @@ class FabricMessagesTest {
             String effective = "zh".equalsIgnoreCase(requested) ? "zh" : "en";
             org.slf4j.Logger logger = org.mockito.Mockito.mock(org.slf4j.Logger.class);
             Properties loaded = FabricMessages.loadAndReportLanguage(requested, directory, logger);
-            assertEquals(bundled(effective).getProperty("binding-checking"),
-                    loaded.getProperty("binding-checking"));
+            assertEquals(bundled(effective).getProperty("premium-requested"),
+                    loaded.getProperty("premium-requested"));
             org.mockito.Mockito.verify(logger).info("Fabric message language={} "
                     + "(set language in fastloginplus-fabric.yml; restart the backend to apply changes)",
                     effective);
@@ -64,16 +64,15 @@ class FabricMessagesTest {
         Properties english = bundled("en");
         Properties chinese = bundled("zh");
         assertEquals(english.stringPropertyNames(), chinese.stringPropertyNames());
-        assertNotEquals(english.getProperty("binding-window-unavailable"),
-                chinese.getProperty("binding-window-unavailable"));
-        assertEquals(chinese.getProperty("binding-window-unavailable"),
-                FabricMessages.load("zh", directory).getProperty("binding-window-unavailable"));
+        assertNotEquals(english.getProperty("premium-requested"), chinese.getProperty("premium-requested"));
+        assertEquals(chinese.getProperty("premium-requested"),
+                FabricMessages.load("zh", directory).getProperty("premium-requested"));
         assertNotEquals(english.getProperty("binding-consent-required"),
                 chinese.getProperty("binding-consent-required"));
         assertEquals(chinese.getProperty("binding-consent-required"),
                 FabricMessages.load("zh", directory).getProperty("binding-consent-required"));
         org.junit.jupiter.api.Assertions.assertTrue(english.getProperty("premium-policy-disabled")
-                .contains("no usable password"));
+                .contains("retained password does not enable unverified access"));
         assertNotEquals(english.getProperty("premium-policy-disabled"),
                 chinese.getProperty("premium-policy-disabled"));
         assertEquals("你的账号已被记录为盗版. 你是正版玩家吗? 如被误判可使用 /flp premium 重新发起验证",
@@ -96,34 +95,35 @@ class FabricMessagesTest {
     }
 
     @Test
-    void requestedBindingExplainsConditionalConfirmationAndReconnectInBothLanguages() throws Exception {
-        String english = bundled("en").getProperty("binding-requested");
-        String chinese = bundled("zh").getProperty("binding-requested");
-        assertTrue(english.contains("binding request sent for UUID {uuid}."));
-        assertTrue(chinese.contains("绑定请求已发出, 目标 UUID 为 {uuid}."));
+    void premiumRequestExplainsConfirmationReconnectAndDormantPasswordInBothLanguages() throws Exception {
+        String english = bundled("en").getProperty("premium-requested");
+        String chinese = bundled("zh").getProperty("premium-requested");
+        assertTrue(english.contains("premium consent requested."));
+        assertTrue(chinese.contains("正版同意请求已发出."));
         assertTrue(english.contains("If a confirmation prompt appears, run /flp premium once more."));
         assertTrue(chinese.contains("若出现确认提示, 请再执行一次 /flp premium."));
-        assertTrue(english.contains("Then reconnect to complete passwordless premium login."));
-        assertTrue(chinese.contains("然后重新连接以完成正版免密登录."));
-        assertTrue(english.contains("Your password stays unchanged until success."));
-        assertTrue(chinese.contains("成功前原密码不变."));
-        assertTrue(english.contains("If the ten-minute window expires or the backend restarts, "
-                + "log in with your password and run /flp premium again."));
-        assertTrue(chinese.contains("若十分钟窗口过期或后端重启, 请用密码登录后重新执行 /flp premium."));
+        assertTrue(english.contains("Then reconnect with your premium account to enable passwordless login."));
+        assertTrue(chinese.contains("然后使用正版账号重新连接以启用免密登录."));
+        assertTrue(english.contains("Your password is retained but not used while premium is enabled."));
+        assertTrue(chinese.contains("密码保留, 但 premium 期间不使用."));
         assertFalse(english.contains("consent recorded"));
         assertFalse(chinese.contains("同意已记录"));
         for (String language : new String[]{"en", "zh"}) {
             assertFalse(bundled(language).containsKey("binding-queued"));
             assertFalse(bundled(language).containsKey("binding-complete"));
+            for (String key : new String[]{"binding-account-saving", "binding-account-changed", "binding-checking",
+                    "binding-name-unavailable", "binding-requested", "binding-window-unavailable",
+                    "admin-premium-queued", "admin-premium-name-unavailable", "admin-premium-changed"}) {
+                assertFalse(bundled(language).containsKey(key), key);
+            }
         }
     }
 
     @Test
-    void adminMessagesExplainTheQueueAndRemainReadableInBothLanguages() throws Exception {
+    void adminMessagesExplainTheRequestAndRemainReadableInBothLanguages() throws Exception {
         for (String language : new String[]{"en", "zh"}) {
             Properties messages = bundled(language);
-            for (String suffix : new String[]{"permission", "no-carrier", "already", "open", "queued",
-                    "name-unavailable", "changed"}) {
+            for (String suffix : new String[]{"permission", "no-carrier", "already", "open", "requested"}) {
                 String key = "admin-premium-" + suffix;
                 String value = messages.getProperty(key);
                 assertTrue(value != null && !value.isBlank(), key);
@@ -132,25 +132,23 @@ class FabricMessagesTest {
                 assertEquals(value, FabricMessages.load(language, directory).getProperty(key));
                 assertEquals(!java.util.Set.of("permission", "no-carrier").contains(suffix),
                         value.contains("{player}"), key);
-                assertEquals("queued".equals(suffix), value.contains("{uuid}"), key);
+                assertFalse(value.contains("{uuid}"), key);
             }
-            String queued = messages.getProperty("admin-premium-queued");
-            assertTrue(queued.contains("ten minutes") || queued.contains("十分钟"));
-            assertTrue(queued.contains("reconnect manually") || queued.contains("手动重连"));
-            assertTrue(queued.contains("password is unchanged") || queued.contains("原密码不变"));
-            assertTrue(queued.contains("Restarting") || queued.contains("重启"));
+            String requested = messages.getProperty("admin-premium-requested");
+            assertTrue(requested.contains("reconnect manually") || requested.contains("手动重连"));
+            assertTrue(requested.contains("password is retained but not used")
+                    || requested.contains("密码保留, 但 premium 期间不使用"));
+            assertFalse(requested.contains("ten minutes") || requested.contains("十分钟"));
         }
     }
 
     @Test
     void missingAndBlankOverrideKeysFallBack() throws Exception {
         Files.writeString(directory.resolve("messages_en.properties"),
-                "binding-checking=Custom message\nbinding-login-required=\nbinding-consent-required=\n",
+                "premium-requested=Custom message\nbinding-login-required=\nbinding-consent-required=\n",
                 StandardCharsets.UTF_8);
         Properties messages = FabricMessages.load("en", directory);
-        assertEquals("Custom message", messages.getProperty("binding-checking"));
-        assertEquals(bundled("en").getProperty("binding-window-unavailable"),
-                messages.getProperty("binding-window-unavailable"));
+        assertEquals("Custom message", messages.getProperty("premium-requested"));
         assertEquals(bundled("en").getProperty("binding-login-required"),
                 messages.getProperty("binding-login-required"));
         assertEquals(bundled("en").getProperty("binding-consent-required"),
@@ -159,7 +157,8 @@ class FabricMessagesTest {
                 messages.getProperty("same-name-cracked-recorded"));
         assertEquals(bundled("en").getProperty("premium-policy-disabled"),
                 messages.getProperty("premium-policy-disabled"));
-        assertEquals(bundled("en").getProperty("binding-requested"), messages.getProperty("binding-requested"));
+        assertEquals(bundled("en").getProperty("admin-premium-requested"),
+                messages.getProperty("admin-premium-requested"));
     }
 
     @Test
@@ -170,16 +169,14 @@ class FabricMessagesTest {
     @Test
     void missingChineseOverrideKeyFallsBackToEnglish() throws Exception {
         Files.writeString(directory.resolve("messages_zh.properties"),
-                "binding-checking=Selected translation\n", StandardCharsets.UTF_8);
+                "admin-premium-requested=Selected translation\n", StandardCharsets.UTF_8);
         Properties messages = FabricMessages.load("zh", directory);
-        assertEquals("Selected translation", messages.getProperty("binding-checking"));
-        assertEquals(bundled("en").getProperty("binding-window-unavailable"),
-                messages.getProperty("binding-window-unavailable"));
+        assertEquals("Selected translation", messages.getProperty("admin-premium-requested"));
         assertEquals(bundled("en").getProperty("binding-consent-required"),
                 messages.getProperty("binding-consent-required"));
         assertEquals(bundled("en").getProperty("same-name-cracked-recorded"),
                 messages.getProperty("same-name-cracked-recorded"));
-        assertEquals(bundled("en").getProperty("binding-requested"), messages.getProperty("binding-requested"));
+        assertEquals(bundled("en").getProperty("premium-requested"), messages.getProperty("premium-requested"));
     }
 
     private Properties bundled(String language) throws Exception {

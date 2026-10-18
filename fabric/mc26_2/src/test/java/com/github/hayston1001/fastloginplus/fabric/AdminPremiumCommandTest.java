@@ -82,13 +82,13 @@ class AdminPremiumCommandTest {
         ServerPlayer invoker = mock(ServerPlayer.class);
         when(source.getPlayer()).thenReturn(invoker);
         doAnswer(call -> {
-            Consumer<Component> result = call.getArgument(4);
-            result.accept(Component.literal("queued"));
+            Consumer<Component> result = call.getArgument(3);
+            result.accept(Component.literal("requested"));
             return null;
-        }).when(bridge).adminPremium(eq(server), eq(invoker), eq("OtherUser"), eq("Admin"), any());
+        }).when(bridge).adminPremium(eq(invoker), eq("OtherUser"), eq("Admin"), any());
         assertEquals(1, dispatcher.execute("flp premium OtherUser", source));
-        verify(bridge).adminPremium(eq(server), eq(invoker), eq("OtherUser"), eq("Admin"), any());
-        assertEquals(List.of("queued"), feedback);
+        verify(bridge).adminPremium(eq(invoker), eq("OtherUser"), eq("Admin"), any());
+        assertEquals(List.of("requested"), feedback);
         verifyNoInteractions(server);
     }
 
@@ -100,7 +100,7 @@ class AdminPremiumCommandTest {
         ServerPlayer carrier = mock(ServerPlayer.class);
         when(players.getPlayers()).thenReturn(List.of(carrier, mock(ServerPlayer.class)));
         assertEquals(1, dispatcher.execute("flp premium OtherUser", source));
-        verify(bridge).adminPremium(eq(server), eq(carrier), eq("OtherUser"), eq("Admin"), any());
+        verify(bridge).adminPremium(eq(carrier), eq("OtherUser"), eq("Admin"), any());
     }
 
     @Test
@@ -142,7 +142,7 @@ class AdminPremiumCommandTest {
         try (var fabric = mockStatic(FastLoginFabric.class, CALLS_REAL_METHODS)) {
             fabric.when(() -> FastLoginFabric.parseClaim(profile)).thenReturn(claim);
             assertEquals(1, dispatcher.execute("flp premium", source));
-            verify(bridge).beginBinding(server, player, claim);
+            verify(bridge).beginBinding(player, claim);
             assertTrue(feedback.isEmpty());
         }
     }

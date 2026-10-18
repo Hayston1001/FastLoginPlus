@@ -18,7 +18,7 @@ final class EasyAuthLoginFlow {
     }
 
     static void authenticate(Class<?> entryType, Object entry, UUID verifiedUuid, LoginContext context,
-                             boolean binding, EasyAuthAccountUpdate.StorageUpdate update, Runnable finish) {
+                             EasyAuthAccountUpdate.StorageUpdate update, Runnable finish) {
         if (context.lastKick() == null
                 || context.lastKick().plusSeconds(context.resetTimeout()).isAfter(context.now())) {
             throw new IllegalStateException("EasyAuth account is in a login timeout");
@@ -28,7 +28,7 @@ final class EasyAuthLoginFlow {
         }
 
         EasyAuthAccountUpdate.authenticate(entryType, entry, verifiedUuid, context.now(), context.ip(),
-                binding, update);
+                update);
         finish.run();
     }
 }

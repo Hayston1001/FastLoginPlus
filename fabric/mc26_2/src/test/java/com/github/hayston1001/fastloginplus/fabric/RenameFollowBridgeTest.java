@@ -23,7 +23,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -74,7 +73,6 @@ class RenameFollowBridgeTest {
         set("easyAuth", EasyAuth.class);
         set("entryType", Entry.class);
         set("playersCache", Cache.class);
-        set("pendingBindings", new ConcurrentHashMap<String, EasyAuth344Bridge.PendingBinding>());
         server = mock(MinecraftServer.class);
         doAnswer(call -> {
             CompletableFuture<Void> result = new CompletableFuture<>();
@@ -88,8 +86,11 @@ class RenameFollowBridgeTest {
         }).when(server).submit(any(Runnable.class));
     }
 
-    @Test
-    void savesAllStateBeforeCachePutAndOldRowDeleteThenRereadsStatus() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"", "dormant-hash"})
+    void savesAllStateBeforeCachePutAndOldRowDeleteThenRereadsStatus(String password) throws Exception {
+        old.password = password;
+        EasyAuth.DB.rows.put(OLD_NAME, copy(old));
         // The migrated account stays BOUND even when automatic creation of new accounts is disabled.
         bridge.beforeConfigure(server, claim(IdentityClaim.Decision.PREMIUM_VERIFIED));
 

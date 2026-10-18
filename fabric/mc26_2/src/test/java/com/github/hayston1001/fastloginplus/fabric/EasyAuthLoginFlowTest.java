@@ -53,7 +53,7 @@ class EasyAuthLoginFlowTest {
         var entry = new EasyAuthAccountUpdateTest.Entry();
         AtomicInteger saved = new AtomicInteger();
         AtomicInteger finished = new AtomicInteger();
-        EasyAuthLoginFlow.authenticate(entry.getClass(), entry, VERIFIED, validContext(), true,
+        EasyAuthLoginFlow.authenticate(entry.getClass(), entry, VERIFIED, validContext(),
                 candidate -> {
                     saved.incrementAndGet();
                     assertPremium(entry);
@@ -82,7 +82,7 @@ class EasyAuthLoginFlowTest {
         AtomicInteger saved = new AtomicInteger();
         IllegalStateException injected = new IllegalStateException("session completion unavailable");
         var failure = assertThrows(IllegalStateException.class, () -> EasyAuthLoginFlow.authenticate(
-                entry.getClass(), entry, VERIFIED, validContext(), true,
+                entry.getClass(), entry, VERIFIED, validContext(),
                 candidate -> {
                     saved.incrementAndGet();
                     return true;
@@ -99,7 +99,7 @@ class EasyAuthLoginFlowTest {
         AtomicInteger saved = new AtomicInteger();
         AtomicInteger finished = new AtomicInteger();
         var failure = assertThrows(IllegalStateException.class, () -> EasyAuthLoginFlow.authenticate(
-                entry.getClass(), entry, VERIFIED, context, true,
+                entry.getClass(), entry, VERIFIED, context,
                 candidate -> {
                     saved.incrementAndGet();
                     return true;
@@ -114,7 +114,7 @@ class EasyAuthLoginFlowTest {
         var entry = new EasyAuthAccountUpdateTest.Entry();
         AtomicInteger finished = new AtomicInteger();
         assertThrows(IllegalStateException.class, () -> EasyAuthLoginFlow.authenticate(
-                entry.getClass(), entry, VERIFIED, validContext(), true,
+                entry.getClass(), entry, VERIFIED, validContext(),
                 candidate -> {
                     if (throwing) {
                         throw new IllegalStateException("database unavailable");
@@ -139,7 +139,7 @@ class EasyAuthLoginFlowTest {
     }
 
     private static void assertPremium(EasyAuthAccountUpdateTest.Entry entry) {
-        assertEquals("", entry.password);
+        assertEquals("old-hash", entry.password);
         assertEquals(EasyAuthAccountUpdateTest.Kind.TRUE, entry.onlineAccount);
         assertEquals(VERIFIED, entry.uuid);
         assertEquals(NOW, entry.lastAuthenticatedDate);

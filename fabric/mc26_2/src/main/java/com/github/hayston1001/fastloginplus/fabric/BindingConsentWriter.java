@@ -21,7 +21,7 @@ import java.io.IOException;
  * Sends the premium-toggle consent to the proxy, riding the player connection
  * the way the classic backends do. After any required confirmation, the proxy
  * records the consent and resolves the target Mojang UUID. A later verified
- * connection with recorded consent can claim the queued binding.
+ * connection with recorded consent can enable premium login without erasing the password.
  *
  * <p>The payload carries the sending backend's trusted proxy IDs so the proxy
  * authenticates the message exactly like the classic backends' messages.

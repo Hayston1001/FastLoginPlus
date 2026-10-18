@@ -20,15 +20,15 @@ final class EasyAuthAccountUpdate {
     }
 
     static void authenticate(Class<?> entryType, Object entry, UUID verifiedUuid, ZonedDateTime now,
-                             String ip, boolean binding, StorageUpdate update) {
-        persist(entryType, entry, verifiedUuid, new LoginUpdate(now, ip), binding, update);
+                             String ip, StorageUpdate update) {
+        persist(entryType, entry, verifiedUuid, new LoginUpdate(now, ip), update);
     }
 
     private record LoginUpdate(ZonedDateTime now, String ip) {
     }
 
     private static void persist(Class<?> entryType, Object entry, UUID verifiedUuid, LoginUpdate login,
-                                boolean clearPassword, StorageUpdate update) {
+                                StorageUpdate update) {
         Object oldPassword = get(entryType, entry, "password");
         Object oldKind = get(entryType, entry, "onlineAccount");
         Object oldUuid = get(entryType, entry, "uuid");
@@ -38,9 +38,6 @@ final class EasyAuthAccountUpdate {
         try {
             @SuppressWarnings({"rawtypes", "unchecked"})
             Object premium = Enum.valueOf((Class<Enum>) oldKind.getClass(), "TRUE");
-            if (clearPassword) {
-                set(entryType, entry, "password", "");
-            }
             set(entryType, entry, "onlineAccount", premium);
             set(entryType, entry, "uuid", verifiedUuid);
             if (login != null) {

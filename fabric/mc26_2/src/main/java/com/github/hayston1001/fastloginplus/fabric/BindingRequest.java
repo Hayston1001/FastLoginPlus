@@ -19,7 +19,7 @@ final class BindingRequest {
         if (decision != Decision.OFFLINE && decision != Decision.PREMIUM_VERIFIED) {
             throw FabricMessages.failure("binding-identity-required");
         }
-        if (state != AccountState.PASSWORD && state != AccountState.BIND_PENDING) {
+        if (state != AccountState.PASSWORD) {
             throw FabricMessages.failure("binding-password-required");
         }
     }

@@ -22,7 +22,7 @@ class EasyAuthAccountUpdateTest {
     void thrownLoginUpdateRestoresAllMutableFields() {
         Entry entry = new Entry();
         assertThrows(IllegalStateException.class, () -> EasyAuthAccountUpdate.authenticate(
-                Entry.class, entry, VERIFIED, ZonedDateTime.now(), "127.0.0.2", true,
+                Entry.class, entry, VERIFIED, ZonedDateTime.now(), "127.0.0.2",
                 candidate -> {
                     assertEquals(Kind.TRUE, entry.onlineAccount);
                     assertEquals(0L, entry.loginTries);
@@ -35,8 +35,8 @@ class EasyAuthAccountUpdateTest {
     void successfulUpdateRetainsPremiumAccount() {
         Entry entry = new Entry();
         EasyAuthAccountUpdate.authenticate(Entry.class, entry, VERIFIED, ZonedDateTime.now(),
-                "127.0.0.2", true, candidate -> true);
-        assertEquals("", entry.password);
+                "127.0.0.2", candidate -> true);
+        assertEquals("old-hash", entry.password);
         assertEquals(Kind.TRUE, entry.onlineAccount);
         assertEquals(VERIFIED, entry.uuid);
         assertEquals(0L, entry.loginTries);
