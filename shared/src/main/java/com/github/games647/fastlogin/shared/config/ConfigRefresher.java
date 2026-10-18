@@ -37,7 +37,7 @@ public final class ConfigRefresher {
      *
      * @param configPath    path to the user's config file on disk
      * @param templateLines the template's raw text lines
-     * @param userValues    flattened dotted keys and values, including merged defaults
+     * @param userValues    caller-supplied flattened keys and values; classic callers include merged defaults
      * @throws IOException if writing the file fails
      */
     public static void refresh(Path configPath, List<String> templateLines,

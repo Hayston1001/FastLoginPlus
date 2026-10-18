@@ -31,7 +31,7 @@ class FabricMessagesTest {
             assertEquals(bundled(effective).getProperty("binding-checking"),
                     loaded.getProperty("binding-checking"));
             org.mockito.Mockito.verify(logger).info("Fabric message language={} "
-                    + "(set language in fastloginplus-fabric.properties; restart the backend to apply changes)",
+                    + "(set language in fastloginplus-fabric.yml; restart the backend to apply changes)",
                     effective);
             org.mockito.Mockito.verifyNoMoreInteractions(logger);
         }
@@ -45,20 +45,17 @@ class FabricMessagesTest {
         org.mockito.Mockito.verify(logger).warn(
                 "Unknown Fabric message language='{}'; effective language={}", "unsupported", "en");
         org.mockito.Mockito.verify(logger).info("Fabric message language={} "
-                + "(set language in fastloginplus-fabric.properties; restart the backend to apply changes)", "en");
+                + "(set language in fastloginplus-fabric.yml; restart the backend to apply changes)", "en");
         org.mockito.Mockito.verifyNoMoreInteractions(logger);
     }
 
     @Test
     void bundledConfigurationParsesWithUnchangedLocalDefaults() throws Exception {
-        Properties configuration = new Properties();
-        try (var reader = new InputStreamReader(getClass().getResourceAsStream(
-                "/fastloginplus-fabric.properties"), StandardCharsets.UTF_8)) {
-            configuration.load(reader);
-        }
-        assertEquals(java.util.Set.of("language", "allowed-proxy-ids"), configuration.stringPropertyNames());
-        assertEquals("en", configuration.getProperty("language"));
-        assertEquals("", configuration.getProperty("allowed-proxy-ids"));
+        FlatYamlReader.Result configuration = FlatYamlReader.read(FabricConfig.templateLines());
+        assertEquals(0, configuration.unsupportedLine());
+        assertEquals(java.util.Set.of("language", "allowed-proxy-ids"), configuration.values().keySet());
+        assertEquals("en", configuration.values().get("language"));
+        assertEquals("", configuration.values().get("allowed-proxy-ids"));
     }
 
     @Test

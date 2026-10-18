@@ -6,26 +6,32 @@
 package com.github.hayston1001.fastloginplus.fabric;
 
 import com.github.hayston1001.fastloginplus.fabric.shared.config.ConfigurationFiles;
+import com.github.hayston1001.fastloginplus.fabric.shared.config.ConfigRefresher;
 
 import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 /**
- * The backend-local settings file. The commented default ships with the mod and
- * is written out on first start, so every key is documented where the admin
- * edits it (D-07).
+ * Backend-local startup settings, refreshed from the bundled flat YAML template.
  */
 final class FabricConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("fastloginplus_fabric");
-    private static final String FILE_NAME = "fastloginplus-fabric.properties";
+    private static final String FILE_NAME = "fastloginplus-fabric.yml";
+    private static final String LEGACY_FILE_NAME = "fastloginplus-fabric.properties";
 
     private static StartupSettings startupSettings;
     private static RuntimeException startupFailure;
@@ -41,9 +47,9 @@ final class FabricConfig {
     static synchronized StartupSettings loadAtStartup() {
         if (startupSettings == null && startupFailure == null) {
             try {
-                Properties file = readFile();
-                FabricMessages.load(file.getProperty("language", "en"));
-                startupSettings = new StartupSettings(file.getProperty("allowed-proxy-ids", ""));
+                Map<String, Object> file = readFile(FabricLoader.getInstance().getConfigDir(), LOGGER);
+                FabricMessages.load(stringValue(file, "language", "en"));
+                startupSettings = new StartupSettings(stringValue(file, "allowed-proxy-ids", ""));
             } catch (RuntimeException unreadable) {
                 startupFailure = unreadable;
             }
@@ -61,13 +67,64 @@ final class FabricConfig {
         return startupSettings;
     }
 
-    private static Properties readFile() {
-        Path file = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
-        writeDefaultOnce(file);
+    static Map<String, Object> readFile(Path configDirectory, Logger logger) {
+        Path file = configDirectory.resolve(FILE_NAME);
         try {
-            return ConfigurationFiles.loadProperties(file);
+            Files.createDirectories(configDirectory);
+            List<String> template = templateLines();
+            boolean created = !Files.exists(file);
+            if (created) {
+                Path legacy = configDirectory.resolve(LEGACY_FILE_NAME);
+                Map<String, Object> initial = new LinkedHashMap<>();
+                if (Files.exists(legacy)) {
+                    Properties old = ConfigurationFiles.loadProperties(legacy);
+                    try {
+                        initial.put("language", FlatYamlReader.singleLine(old.getProperty("language", "en")));
+                        initial.put("allowed-proxy-ids",
+                                FlatYamlReader.singleLine(old.getProperty("allowed-proxy-ids", "")));
+                    } catch (IllegalArgumentException unsupported) {
+                        throw new IOException("Legacy settings cannot be represented as flat YAML strings",
+                                unsupported);
+                    }
+                    ConfigRefresher.refresh(file, template, initial);
+                    Path backup = legacy.resolveSibling(LEGACY_FILE_NAME + ".bak");
+                    Files.move(legacy, backup);
+                    logger.info("Migrated {} to {}; kept the original as {}", legacy, file, backup);
+                } else {
+                    ConfigRefresher.refresh(file, template, initial);
+                    logger.info("Wrote default configuration to {}", file);
+                }
+            }
+            FlatYamlReader.Result parsed = FlatYamlReader.read(Files.readAllLines(file, StandardCharsets.UTF_8));
+            Map<String, Object> values = new LinkedHashMap<>(parsed.values());
+            Object proxies = values.get("allowed-proxy-ids");
+            if (proxies instanceof List<?> list) {
+                values.put("allowed-proxy-ids", String.join(",", list.stream().map(String.class::cast).toList()));
+            }
+            if (parsed.unsupportedLine() != 0) {
+                logger.warn("Unsupported YAML in {} at line {}; keeping earlier values and skipping template refresh",
+                        file, parsed.unsupportedLine());
+            } else if (!created) {
+                ConfigRefresher.refresh(file, template, values);
+            }
+            return values;
         } catch (IOException error) {
-            throw new IllegalStateException("Cannot read fastloginplus-fabric.properties", error);
+            throw new IllegalStateException("Cannot load or refresh fastloginplus-fabric.yml", error);
+        }
+    }
+
+    private static String stringValue(Map<String, Object> values, String key, String fallback) {
+        return values.get(key) instanceof String value ? value : fallback;
+    }
+
+    static List<String> templateLines() throws IOException {
+        try (InputStream input = FabricConfig.class.getResourceAsStream("/" + FILE_NAME)) {
+            if (input == null) {
+                throw new IOException("Missing bundled fastloginplus-fabric.yml");
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                return reader.lines().toList();
+            }
         }
     }
 
@@ -79,8 +136,12 @@ final class FabricConfig {
      * @param config the parsed settings
      */
     static void warnIfUntrusted(StartupSettings config) {
+        warnIfUntrusted(config, LOGGER);
+    }
+
+    static void warnIfUntrusted(StartupSettings config, Logger logger) {
         if (config.allowedProxyIds().trim().isEmpty()) {
-            LOGGER.warn("fastloginplus-fabric.properties has an empty allowed-proxy-ids; the proxy "
+            logger.warn("fastloginplus-fabric.yml has an empty allowed-proxy-ids; the proxy "
                     + "will refuse the upgrade consent message and /flp premium can never complete. "
                     + "Fill in the proxy's UUID (its proxyId.txt).");
         }
@@ -88,21 +149,5 @@ final class FabricConfig {
 
     /** Frozen at SERVER_STARTED; file edits require a backend restart. */
     record StartupSettings(String allowedProxyIds) {
-    }
-
-    private static void writeDefaultOnce(Path file) {
-        if (Files.exists(file)) {
-            return;
-        }
-        try (InputStream template = FabricConfig.class.getResourceAsStream("/" + FILE_NAME)) {
-            if (template == null) {
-                LOGGER.warn("No default {} shipped with this build; create it by hand", file);
-                return;
-            }
-            Files.copy(template, file);
-            LOGGER.info("Wrote default configuration to {}", file);
-        } catch (IOException error) {
-            LOGGER.warn("Could not write the default {}: {}", file, error.getMessage());
-        }
     }
 }

@@ -41,7 +41,7 @@ final class FabricMessages {
             logger.warn("Unknown Fabric message language='{}'; effective language={}",
                     language, effectiveLanguage(language));
         }
-        logger.info("Fabric message language={} (set language in fastloginplus-fabric.properties; "
+        logger.info("Fabric message language={} (set language in fastloginplus-fabric.yml; "
                 + "restart the backend to apply changes)", effectiveLanguage(language));
         return loaded;
     }

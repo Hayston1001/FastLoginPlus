@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2026 Hayston1001
+
+# FastLoginPlus Fabric configuration (backend-local keys only).
+# This mode rejects Bedrock/Floodgate connections.
+#
+# Effect scope: policy keys (autoRegister, autoLogin, offline-whitelist,
+# premium-warning, kick-toggle, auto-register-unknown, ...) live on the proxy
+# and arrive here with the identity facts. They are enforced here but NOT set
+# here. This file only holds keys that are local to this backend.
+#
+# Configuration changes require a backend restart.
+# Hot reload and /flp reload are known unsupported.
+# EasyAuth policy (external, not keys in this file) is rechecked on each
+# connection and account operation using EasyAuth's current in-memory settings.
+# This does not reread EasyAuth's configuration files or provide hot reload.
+#
+# A pending binding window is in-memory state with a ten-minute lifetime.
+# Restarting the backend interrupts unfinished binding; log in and start again.
+# Disconnecting does not by itself clear the binding window.
+
+# Backend-local player messages: en or zh. Unknown non-empty values warn at
+# startup and fall back to en. Changing the language requires a backend restart.
+# Optional UTF-8 overrides remain in config/fastloginplus-fabric/messages_en.properties
+# or messages_zh.properties. Missing message keys fall back to English.
+language: en
+
+# Comma-separated UUIDs of trusted proxies (from each proxy's proxyId.txt).
+# YAML block lists and flow lists are also accepted; startup rewrites them as
+# a comma-separated string. This list is frozen until the backend restarts.
+# The proxy refuses unauthenticated upgrade consent messages. With an empty list,
+# /flp premium can queue an upgrade but the consent never reaches the proxy, so
+# binding can never complete. Fill this in on every backend running /flp premium.
+allowed-proxy-ids: ''
