@@ -76,30 +76,40 @@ tasks.register('checkLicenseHeaders') {
 }
 tasks.named('check') { dependsOn tasks.named('checkLicenseHeaders') }
 
-tasks.register('verifyReleaseTag') {
-    group = 'verification'
-    def ref = providers.environmentVariable('GITHUB_REF').orElse('')
-    inputs.property('gitRef', ref)
-    doLast {
+// Fabric/Loom forces PREFER_PROJECT, so every project needs the same repository
+// list; settings-level repositories would be ignored in that mode.
+allprojects {
+    apply from: rootProject.file('gradle/repositories.gradle')
+}
+
+// One entry point for a release: tag guard, every module's build (tests and
+// checks) and the staged installable jars. The Fabric integration is always
+// included, so a release has five installable jars.
+tasks.register('release', Sync) {
+    group = 'distribution'
+    description = 'Build every module and stage the installable jars.'
+    dependsOn tasks.named('build')
+    dependsOn subprojects.collect { it.tasks.named('build') }
+
+    def classicModules = ['bukkit', 'folia', 'bungee', 'velocity']
+    from(classicModules.collect { module ->
+        project(":${module}").tasks.named('shadowJar')
+    })
+    from(project(':fabric26_2').tasks.named('jar'))
+    into layout.buildDirectory.dir('release')
+
+    doFirst {
+        def ref = providers.environmentVariable('GITHUB_REF').orElse('')
         if (ref.get().startsWith('refs/tags/v') && ref.get().substring('refs/tags/v'.length()) !=
             project.version.toString()) {
             throw new GradleException("Release tag ${ref.get()} does not match Gradle version ${project.version}")
         }
     }
-}
-
-tasks.register('stageRelease', Sync) {
-    group = 'distribution'
-    description = 'Collect the four installable plugin jars for release.'
-    dependsOn tasks.named('verifyReleaseTag')
-    from(['bukkit', 'folia', 'bungee', 'velocity'].collect { module ->
-        project(":${module}").tasks.named('shadowJar')
-    })
-    into layout.buildDirectory.dir('release')
     doLast {
         def jars = destinationDir.listFiles().findAll { it.name.endsWith('.jar') }
-        if (jars.size() != 4 || jars.any { it.name.endsWith('-plain.jar') }) {
-            throw new GradleException("Expected four installable plugin jars in ${destinationDir}")
+        def expected = classicModules.size() + 1
+        if (jars.size() != expected || jars.any { it.name.endsWith('-plain.jar') }) {
+            throw new GradleException("Expected ${expected} installable jars in ${destinationDir}")
         }
     }
 }
@@ -263,6 +273,13 @@ subprojects {
             }
         }
         tasks.named('check') { dependsOn verifyPluginJar }
+    }
+
+    // Loom's classpath includes Minecraft and native libraries, so the generic
+    // runtime-classpath guard cannot run for the Fabric module. That module has
+    // its own verifyFabricJar instead, and the task is not registered here.
+    if (project.name == 'fabric26_2') {
+        return
     }
 
     // Inspect every class in a dependency that can enter a platform jar.

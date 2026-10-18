@@ -119,6 +119,7 @@ listeners, or the proxy relay path.
 | `folia`   | 21           | Folia plugin — **manual, hand-maintained copy of `bukkit`** adapted to regionized scheduling |
 | `bungee`  | 17           | BungeeCord proxy plugin                                            |
 | `velocity`| 17           | Velocity proxy plugin                                              |
+| `fabric26_2` | 25        | Fabric 26.2 integration (Loom; EasyAuth 3.4.4)                     |
 
 The `Java floor` column is `ext.javaFloor` at the top of that module's `build.gradle`.
 An artifact's
@@ -126,8 +127,9 @@ An artifact's
 and the highest bytecode among the dependencies that get shaded into it, so a
 dependency bump can raise a floor without touching this column. `META-INF/versions/N`
 multi-release branches are add-ons for newer JREs and never count towards the floor.
-Floors are unrelated to the build JDK below: the build runs on JDK 21 even though
-`bungee`/`velocity` refuse to load on anything below 17.
+Floors are unrelated to the build JDKs below: Gradle runs on JDK 25, the classic modules
+use the JDK 21 toolchain, and Fabric uses 25 even though `bungee`/`velocity` refuse to
+load on anything below 17.
 
 ### Adding a module
 
@@ -146,15 +148,14 @@ part of the Gradle build yet — porting it means exactly those four steps.
 
 Build requirements:
 
-- **JDK 21** (the version pinned in `.java-version`, used by CI, and pinned as the Gradle
-  toolchain) — this is a *build*
-  requirement and says nothing about what the built artifacts need at runtime (see the
-  `Java floor` column). The
-  per-module `ext.javaFloor` values above are handed to javac as `--release`, which
-  rejects APIs
-  newer than each module's target, so a single modern JDK is all you need —
-  but do not use Java-9+ APIs in `core`/`bukkit` or Java-18+ APIs in
-  `bungee`/`velocity`. Note that `--release` only guards the APIs *you* compile
+- **JDK 25** to run Gradle (required by Fabric 26.2 / Loom); this is the version
+  pinned in `.java-version` and used by CI. The classic modules are compiled with a
+  **JDK 21 toolchain**, Fabric with a 25 toolchain. These are *build* requirements and
+  say nothing about what the built artifacts need at runtime (see the `Java floor`
+  column). The per-module `ext.javaFloor` values above are handed to javac as
+  `--release`, which rejects APIs newer than each module's target — but do not use
+  Java-9+ APIs in `core`/`bukkit` or Java-18+ APIs in `bungee`/`velocity`. Note that
+  `--release` only guards the APIs *you* compile
   against: it does not stop a newer dependency from silently raising the
   module's *runtime* requirement, which is what the bytecode-floor check below
   is for. That check exempts
@@ -164,11 +165,11 @@ Build requirements:
   (52 = Java 8, 55 = 11, 61 = 17, 65 = 21), for the dependency JAR and for the
   built artifact.
 - **Gradle 9.6.1** is supplied by the wrapper; no separate Gradle installation is
-  needed. The build's toolchain needs a JDK 21: one that is installed is used
-  automatically, and otherwise Gradle downloads one (the Foojay resolver declared in
-  `settings.gradle`), so a bare clone builds without installing anything by hand. CI
-  provides the JDK itself. A git clone is expected: the build embeds the commit hash in the final
-  JAR name and manifest.
+  needed. Gradle itself must run on JDK 25 (the Fabric build requires it); it is not
+  provisioned by the build, so install it first (CI provides it). The classic toolchain
+  needs a JDK 21: one that is installed is used automatically, and otherwise Gradle
+  downloads one (the Foojay resolver declared in `settings.gradle`). A git clone is
+  expected: the build embeds the commit hash in the final JAR name and manifest.
 
 Some auth-plugin APIs (CrazyLogin, UltraAuth, BungeeAuth) are provided as
 local JARs in the `lib/` directory of each module — no manual
@@ -189,8 +190,8 @@ installation is required.
 # Build selected modules and their dependencies
 ./gradlew :bukkit:build :folia:build
 
-# Collect four installable plugin JARs for release
-./gradlew stageRelease
+# Build all modules and collect the release JARs
+./gradlew release
 
 # Re-test against the oldest supported server SQLite driver
 ./gradlew :core:sqliteFloorTest
@@ -199,8 +200,9 @@ installation is required.
 On Windows use `gradlew.bat` in place of `./gradlew`. Installable plugin JARs
 land in each platform module's `build/libs/`, named like
 `FastLoginPlusBukkit-<version>-<commit>.jar`. Files ending in `-plain.jar` are
-unshaded intermediates; `stageRelease` collects only installable JARs in
-`build/release/`. The project version lives in `build.gradle`; dependency versions
+unshaded intermediates; `release` builds every module and collects the
+installable JARs in `build/release/` — four classic plugins plus the Fabric
+integration. The project version lives in `build.gradle`; dependency versions
 live in `gradle/libs.versions.toml`, except the deliberately pinned ones
 (`gradle/*.gradle`, see below).
 
@@ -249,7 +251,7 @@ and verify before pushing:
 
 - Tests use **JUnit 6** and **Mockito (inline mock maker — required for static
   mocks)**; both are declared in the root Gradle build. JUnit 6 raises the floor for
-  *running* tests to **JDK 17+** — the pinned build JDK 21 already satisfies
+  *running* tests to **JDK 17+** — the pinned build JDK 25 already satisfies
   this, but `./gradlew test` will not start on anything older. Tests never ship,
   so no module's runtime floor changes with it.
 - Unit tests live in each module's `src/test/java`; `bukkit` additionally has

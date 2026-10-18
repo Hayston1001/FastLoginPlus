@@ -50,47 +50,20 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
+// Loom adds a project-level repository for its remapped Minecraft artifacts,
+// so the build uses PREFER_PROJECT. The single repository list lives in
+// gradle/repositories.gradle and is applied to every project by the root build.
 dependencyResolutionManagement {
-    // Loom injects its local remapped-mod repository. Keep the stricter default
-    // for the existing modules, and allow that repository in the opt-in build.
-    repositoriesMode.set(providers.gradleProperty('includeFabric').map { it.toBoolean() }
-        .orElse(false).get() ? RepositoriesMode.PREFER_PROJECT : RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        mavenCentral()
-        maven { url = uri('https://maven.fabricmc.net/') }
-        maven { url = uri('https://libraries.minecraft.net/') }
-        maven { url = uri('https://repo.opencollab.dev/main/') }
-        maven { url = uri('https://repo.papermc.io/repository/maven-public/') }
-        maven { url = uri('https://repo.codemc.io/repository/maven-public/') }
-        maven { url = uri('https://repo.dmulloy2.net/repository/public/') }
-        maven { url = uri('https://repo.extendedclip.com/content/repositories/placeholderapi') }
-        // JitPack's ProtocolSupport POM declares master-SNAPSHOT although
-        // the requested coordinate is the immutable master-66b494a8dd-1.
-        maven {
-            url = uri('https://jitpack.io')
-            content { excludeGroup 'com.github.ProtocolSupport' }
-        }
-        exclusiveContent {
-            forRepository {
-                maven {
-                    url = uri('https://jitpack.io')
-                    metadataSources { artifact() }
-                }
-            }
-            filter { includeGroup 'com.github.ProtocolSupport' }
-        }
-    }
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
 }
 
 rootProject.name = 'FastLoginPlus'
 include 'protocol', 'shared', 'craftapi', 'core', 'bukkit', 'folia', 'bungee', 'velocity'
 
-// Fabric's 26.2 Loom build needs a Java 25 Gradle JVM. The existing Java 21
-// build remains unchanged; the dedicated Fabric job opts in with -PincludeFabric.
-if (providers.gradleProperty('includeFabric').map { it.toBoolean() }.orElse(false).get()) {
-    if (!JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_25)) {
-        throw new GradleException('The Fabric 26.2 build requires Gradle to run on Java 25')
-    }
-    include 'fabric26_2'
-    project(':fabric26_2').projectDir = file('fabric/mc26_2')
+// Fabric 26.2 and Loom require the JVM running Gradle to be Java 25. The classic
+// modules keep their Java 21 toolchain.
+if (!JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_25)) {
+    throw new GradleException('The Fabric 26.2 build requires Gradle to run on Java 25')
 }
+include 'fabric26_2'
+project(':fabric26_2').projectDir = file('fabric/mc26_2')

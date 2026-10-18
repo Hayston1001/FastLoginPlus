@@ -109,13 +109,6 @@ tasks.named('jar') {
     archiveBaseName = 'FastLoginPlusFabric-26.2'
 }
 
-// The shared runtime-classpath guard is for Shadow jars. Loom's classpath
-// includes Minecraft and native libraries that are not packaged in this mod.
-tasks.named('checkRuntimeBytecode') {
-    setDependsOn([])
-    enabled = false
-}
-
 def fabricJar = tasks.named('jar', Jar)
 def verifyFabricJar = tasks.register('verifyFabricJar') {
     group = 'verification'

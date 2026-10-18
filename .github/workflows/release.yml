@@ -15,15 +15,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up JDK
+      - name: Set up JDKs
         uses: actions/setup-java@v6
         with:
           distribution: 'temurin'
-          java-version-file: '.java-version'
+          # Gradle must run on 25 for Fabric/Loom; the classic modules use the
+          # 21 toolchain.
+          java-version: |
+            21
+            25
           cache: 'gradle'
 
       - name: Build
-        run: bash ./gradlew build stageRelease --parallel --no-daemon --console=plain
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME_25_X64 }}
+        run: bash ./gradlew release --parallel --no-daemon --console=plain
 
       - name: Extract changelog for this version
         run: |

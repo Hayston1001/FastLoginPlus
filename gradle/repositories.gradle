@@ -1,0 +1,39 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * Copyright (c) 2026 Hayston1001
+ */
+
+// Applied to every project by the root build. The Fabric 26.2 integration
+// requires Loom, which adds a project-level repository; the build therefore
+// uses PREFER_PROJECT and a settings-level repository list would be ignored.
+// Keeping the one list here makes local builds and CI resolve the same way.
+//
+// ProtocolSupport's JitPack POM declares master-SNAPSHOT for the immutable
+// master-<commit> coordinate, so Gradle rejects its metadata. The exclusive
+// repository below is artifact-only: Gradle fetches the JAR without reading the
+// POM. The general JitPack entry still serves other JitPack artifacts and
+// excludes this group so the broken POM is never selected.
+repositories {
+    mavenCentral()
+    maven { url = uri('https://maven.fabricmc.net/') }
+    maven { url = uri('https://libraries.minecraft.net/') }
+    maven { url = uri('https://repo.opencollab.dev/main/') }
+    maven { url = uri('https://repo.papermc.io/repository/maven-public/') }
+    maven { url = uri('https://repo.codemc.io/repository/maven-public/') }
+    maven { url = uri('https://repo.dmulloy2.net/repository/public/') }
+    maven { url = uri('https://repo.extendedclip.com/content/repositories/placeholderapi') }
+    maven {
+        url = uri('https://jitpack.io')
+        content { excludeGroup 'com.github.ProtocolSupport' }
+    }
+    exclusiveContent {
+        forRepository {
+            maven {
+                url = uri('https://jitpack.io')
+                metadataSources { artifact() }
+            }
+        }
+        filter { includeGroup 'com.github.ProtocolSupport' }
+    }
+}

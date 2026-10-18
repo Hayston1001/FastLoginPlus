@@ -1,2 +1,2 @@
-# Latest GitHub Action java release that is installed on the runners
-21
+# Gradle runs on JDK 25 (Fabric/Loom); classic modules use the 21 toolchain.
+25

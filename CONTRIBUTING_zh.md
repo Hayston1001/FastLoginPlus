@@ -109,12 +109,13 @@ graph TB
 | `folia`   | 21           | Folia 插件 —— **`bukkit` 的手工维护副本**, 适配区域化调度           |
 | `bungee`  | 17           | BungeeCord 代理插件                                                |
 | `velocity`| 17           | Velocity 代理插件                                                  |
+| `fabric26_2` | 25        | Fabric 26.2 集成(Loom; EasyAuth 3.4.4)                             |
 
 `Java floor` 这一列就是该模块 `build.gradle` 顶部的 `ext.javaFloor`. 而产物的**运行时 floor**
 —— 能*加载*它的最低 JRE —— 取"这个值"与"被 shade 进来的依赖中最高的字节码"两者中更高的那个,
 所以依赖升级可以在不动这一列的情况下抬高 floor. `META-INF/versions/N` 多版本分支是给更高 JRE 的
-附加实现, 永远不计入 floor. floor 与下面的构建 JDK 无关: 构建跑在 JDK 21 上, 而
-`bungee`/`velocity` 的产物在 17 以下的 JRE 上根本加载不了.
+附加实现, 永远不计入 floor. floor 与下面的构建 JDK 无关: Gradle 跑在 JDK 25 上, 经典模块使用
+21 工具链, Fabric 使用 25; 而 `bungee`/`velocity` 的产物在 17 以下的 JRE 上根本加载不了.
 
 ### 新增模块
 
@@ -129,8 +130,8 @@ graph TB
 
 构建要求:
 
-- **JDK 21**(写在 `.java-version` 里、CI 使用的版本, 也是构建钉住的 Gradle toolchain) —— 这是**构建**要求, 与产物运行时需要什么无关(见上表 `Java floor`). 各模块顶部的 `ext.javaFloor` 会被当作 javac 的 `--release`, 从而拒绝比该模块目标更新的 API, 所以你只需要一个现代 JDK —— 但不要在 `core`/`bukkit` 里用 Java 9+ 的 API, 也不要在 `bungee`/`velocity` 里用 Java 18+ 的 API. 注意 `--release` 只约束*你自己*编译时用到的 API: 它无法阻止更新的依赖悄悄抬高模块的*运行时*要求, 下面的字节码地板检查就是为此存在的. 该检查豁免 `module-info.class`(Guava 33+ 带有 class 53 的 module-info, 而真正的类仍是 Java 8) —— floor 结论要用字节码验证: 取 `META-INF/versions/` **之外**最高的 class 文件主版本号(52 = Java 8, 55 = 11, 61 = 17, 65 = 21), 依赖 JAR 与最终产物都要看.
-- **Gradle 9.6.1** 由 wrapper 提供, 无需单独安装. 构建的 toolchain 需要一个 JDK 21: 机器上装了就直接用, 没装则由 Gradle 自行下载(`settings.gradle` 里声明的 Foojay resolver), 所以裸克隆即可构建, 不用手动准备任何东西. CI 由自己提供 JDK. 需要是 git clone: 构建会把 commit hash 写进最终 JAR 的文件名与 manifest.
+- **JDK 25** 用来运行 Gradle(Fabric 26.2 / Loom 的要求), 即 `.java-version` 里钉住、CI 使用的版本. 经典模块用 **JDK 21 工具链**编译, Fabric 用 25 工具链. 这是**构建**要求, 与产物运行时需要什么无关(见上表 `Java floor`). 各模块顶部的 `ext.javaFloor` 会被当作 javac 的 `--release`, 从而拒绝比该模块目标更新的 API —— 但不要在 `core`/`bukkit` 里用 Java 9+ 的 API, 也不要在 `bungee`/`velocity` 里用 Java 18+ 的 API. 注意 `--release` 只约束*你自己*编译时用到的 API: 它无法阻止更新的依赖悄悄抬高模块的*运行时*要求, 下面的字节码地板检查就是为此存在的. 该检查豁免 `module-info.class`(Guava 33+ 带有 class 53 的 module-info, 而真正的类仍是 Java 8) —— floor 结论要用字节码验证: 取 `META-INF/versions/` **之外**最高的 class 文件主版本号(52 = Java 8, 55 = 11, 61 = 17, 65 = 21), 依赖 JAR 与最终产物都要看.
+- **Gradle 9.6.1** 由 wrapper 提供, 无需单独安装. Gradle 本身必须跑在 JDK 25 上(Fabric 构建要求), 这个 JVM 不会由构建自动准备, 需要先安装(CI 会提供). 经典 toolchain 需要 JDK 21: 机器上装了就直接用, 没装则由 Gradle 自行下载(`settings.gradle` 里声明的 Foojay resolver). 需要是 git clone: 构建会把 commit hash 写进最终 JAR 的文件名与 manifest.
 
 部分登录插件的 API(CrazyLogin、UltraAuth、BungeeAuth)以本地 JAR 放在各模块的 `lib/` 目录里 —— 不需要手动安装.
 
@@ -149,8 +150,8 @@ graph TB
 # 构建指定模块及其依赖
 ./gradlew :bukkit:build :folia:build
 
-# 收集四个平台可安装的发布 JAR
-./gradlew stageRelease
+# 构建全部模块并收集发布 JAR
+./gradlew release
 
 # 复测服务器 SQLite 最低兼容版本
 ./gradlew :core:sqliteFloorTest
@@ -158,7 +159,8 @@ graph TB
 
 Windows 下把 `./gradlew` 换成 `gradlew.bat`. 可安装的插件 JAR 位于各平台模块的
 `build/libs/`, 命名形如 `FastLoginPlusBukkit-<version>-<commit>.jar`. 带 `-plain.jar`
-的文件未包含依赖; `stageRelease` 只将可安装的 JAR 收集到 `build/release/`.
+的文件未包含依赖; `release` 构建全部模块并把可安装的 JAR 收集到 `build/release/` ——
+四个经典插件加 Fabric 集成.
 项目版本在 `build.gradle` 中, 依赖版本在 `gradle/libs.versions.toml` 中(有意钉住的那些例外
 在 `gradle/*.gradle` 里, 见下文).
 
@@ -181,7 +183,7 @@ Windows 下把 `./gradlew` 换成 `gradlew.bat`. 可安装的插件 JAR 位于�
 
 ## 测试
 
-- 测试使用 **JUnit 6** 与 **Mockito(inline mock maker —— 静态 mock 必需)**; 两者都在根 Gradle 构建中声明. JUnit 6 把*运行*测试的下限抬到了 **JDK 17+** —— `.java-version` 钉住的构建 JDK 21 已满足, 但更低的 JDK 上 `./gradlew test` 无法启动. 测试依赖不会随产物发布, 因此任何模块的运行时 floor 都不受影响.
+- 测试使用 **JUnit 6** 与 **Mockito(inline mock maker —— 静态 mock 必需)**; 两者都在根 Gradle 构建中声明. JUnit 6 把*运行*测试的下限抬到了 **JDK 17+** —— `.java-version` 钉住的构建 JDK 25 已满足, 但更低的 JDK 上 `./gradlew test` 无法启动. 测试依赖不会随产物发布, 因此任何模块的运行时 floor 都不受影响.
 - 单元测试位于各模块的 `src/test/java`; `bukkit` 另有一个 `integration` 测试包.
 - 修 bug 请补测试(非平凡 bug 建议先写一个失败的测试再提交), `core` 中新的决策逻辑也要补测试.
 - 如果你改的是数据包处理或登录流程, 至少要为受影响的 `core` 逻辑新增/扩充测试 —— 完整的跨平台行为需要人工验证, 请在 PR 里描述你验证的方式(用到的平台、服务器版本、登录插件).
