@@ -1,4 +1,3 @@
-_messages-version: 1
 #
 # SPDX-License-Identifier: MIT
 #
@@ -9,7 +8,17 @@ _messages-version: 1
 # FastLoginPlus - English Language File
 # This file is auto-generated. Missing keys will be filled automatically on startup.
 
+_messages-version: 1
+
 # ====== Shared (BungeeCord & Bukkit) ======
+
+database-error: '&4Database error. Please contact an admin.'
+# Same-name cracked observation (first confirmation, shown once)
+same-name-cracked-recorded: '&eYour account has been recorded as cracked. Are you a premium player? If you were misjudged, use &b/flp premium&e to start the verification again'
+# Premium warning (double-confirm)
+premium-warning: '&c&lWARNING: &6This command should&l only&6 be invoked if you are the owner of this paid Minecraft account\nType &a/flp premium&6 again to confirm'
+# Update notification
+update-available: '&e[FastLoginPlus] &aNew version available: &f%new% &a(current: &f%current%&a). Download: &fhttps://github.com/Hayston1001/FastLoginPlus/releases'
 
 # Offline whitelist: kicked when an unknown cracked player tries to join
 offline-whitelist-kick-message: '&4Only registered players are allowed to join this server. Please contact an admin.'
@@ -60,7 +69,6 @@ account-state-checking: '&6Confirming your account state, please wait. If a pass
 
 # Error messages
 error-kick: '&4Error occurred'
-database-error: '&4Database error. Please contact an admin.'
 ownership-conflict: '&4Account ownership does not match this connection. Login refused. Please contact an admin.'
 account-state-unavailable: '&6Your account state could not be confirmed, so the automatic premium login was skipped. Use your password to log in.'
 premium-password-login: '&eYour premium identity was verified. This account already has a password, so passwordless login is skipped for this session. After logging in you may run &b/flp premium&e to enable passwordless login.'
@@ -70,17 +78,8 @@ invalid-session: '&4Invalid session'
 invalid-request: '&4Invalid request'
 auth-server-unreachable: '&6The authentication servers are unreachable right now, so your premium identity could not be confirmed. Please reconnect later.'
 
-# Same-name cracked observation (first confirmation, shown once)
-same-name-cracked-recorded: '&eYour account has been recorded as cracked. Are you a premium player? If you were misjudged, use &b/flp premium&e to start the verification again'
-
 # Server not ready
 not-started: '&cServer is not fully started yet. Please retry'
 
-# Premium warning (double-confirm)
-premium-warning: '&c&lWARNING: &6This command should&l only&6 be invoked if you are the owner of this paid Minecraft account\nType &a/flp premium&6 again to confirm'
-
 # Client key verification
 invalid-public-key: '&cInvalid client public key. Please try to restart your game.'
-
-# Update notification
-update-available: '&e[FastLoginPlus] &aNew version available: &f%new% &a(current: &f%current%&a). Download: &fhttps://github.com/Hayston1001/FastLoginPlus/releases'

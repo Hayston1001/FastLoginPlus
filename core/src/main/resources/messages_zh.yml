@@ -1,4 +1,3 @@
-_messages-version: 1
 #
 # SPDX-License-Identifier: MIT
 #
@@ -9,7 +8,17 @@ _messages-version: 1
 # FastLoginPlus - 中文语言文件
 # 此文件自动生成，缺失的键值会在启动时自动补全。
 
+_messages-version: 1
+
 # ====== 通用 (BungeeCord & Bukkit) ======
+
+database-error: '&4数据库错误，请联系管理员'
+# 同名盗版观察（首次确认时提示一次）
+same-name-cracked-recorded: '&e你的账号已被记录为盗版. 你是正版玩家吗? 如被误判可使用 &b/flp premium&e 重新发起验证'
+# Premium 确认警告（二次确认）
+premium-warning: '&c&l警告: &6此命令&l仅&6应在你是该正版账号的拥有者时使用\n再次输入 &a/flp premium&6 以确认'
+# 更新通知
+update-available: '&e[FastLoginPlus] &a发现新版本: &f%new% &a(当前: &f%current%&a). 下载: &fhttps://github.com/Hayston1001/FastLoginPlus/releases'
 
 # 离线白名单：未注册的离线玩家被踢出
 offline-whitelist-kick-message: '&4本服务器仅允许已注册的玩家加入，请联系管理员'
@@ -60,7 +69,6 @@ account-state-checking: '&6正在确认账号状态, 请稍候. 若随后出现�
 
 # 错误消息
 error-kick: '&4发生错误'
-database-error: '&4数据库错误，请联系管理员'
 ownership-conflict: '&4此连接不符合该账号的归属要求, 已拒绝登录. 请联系管理员.'
 account-state-unavailable: '&6暂时无法确认你的账号状态，已跳过正版自动登录，请使用密码登录。'
 premium-password-login: '&e正版身份已验证. 该账号已存在密码, 本次不进行免密登录. 可选择登录后执行 &b/flp premium&e 以启用免密登录'
@@ -70,17 +78,8 @@ invalid-session: '&4无效的会话'
 invalid-request: '&4无效的请求'
 auth-server-unreachable: '&6认证服务器暂时无法连接，无法确认你的正版身份，请稍后重连。'
 
-# 同名盗版观察（首次确认时提示一次）
-same-name-cracked-recorded: '&e你的账号已被记录为盗版. 你是正版玩家吗? 如被误判可使用 &b/flp premium&e 重新发起验证'
-
 # 服务器未就绪
 not-started: '&c服务器尚未完全启动，请稍后重试'
 
-# Premium 确认警告（二次确认）
-premium-warning: '&c&l警告: &6此命令&l仅&6应在你是该正版账号的拥有者时使用\n再次输入 &a/flp premium&6 以确认'
-
 # 客户端密钥验证
 invalid-public-key: '&c客户端公钥无效，请尝试重启游戏'
-
-# 更新通知
-update-available: '&e[FastLoginPlus] &a发现新版本: &f%new% &a(当前: &f%current%&a). 下载: &fhttps://github.com/Hayston1001/FastLoginPlus/releases'
