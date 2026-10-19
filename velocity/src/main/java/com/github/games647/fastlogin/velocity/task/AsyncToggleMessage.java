@@ -110,7 +110,10 @@ public class AsyncToggleMessage implements Runnable {
         playerProfile.setOnlinemodePreferred(false);
         playerProfile.setId(null);
         playerProfile.setSameNameCracked(false);
-        core.getStorage().save(playerProfile);
+        if (!core.getStorage().saveQuietly(playerProfile)) {
+            sendMessage("database-error");
+            return;
+        }
         if (core.isDebug()) {
             core.getPlugin().getLog().info("Marked {} as cracked in proxy database", targetPlayer);
         }
@@ -182,7 +185,10 @@ public class AsyncToggleMessage implements Runnable {
                 "Failed to resolve Mojang UUID for {} during premium toggle", targetPlayer, e);
         }
 
-        core.getStorage().save(playerProfile);
+        if (!core.getStorage().saveQuietly(playerProfile)) {
+            sendMessage("database-error");
+            return;
+        }
         if (core.isDebug()) {
             core.getPlugin().getLog().info("Marked {} as premium in proxy database", targetPlayer);
         }

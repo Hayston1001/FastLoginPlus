@@ -19,7 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Properties;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -81,10 +81,10 @@ class FabricNoticeProfileTest {
     void backendSelectedLanguageIsRenderedOnceBeforeNonceBoundAck() throws Exception {
         Field messages = FabricMessages.class.getDeclaredField("messages");
         messages.setAccessible(true);
-        Properties original = (Properties) messages.get(null);
+        Map<String, String> original = (Map<String, String>) messages.get(null);
         try {
             for (String language : List.of("en", "zh")) {
-                Properties selected = FabricMessages.load(language, directory);
+                Map<String, String> selected = FabricMessages.load(language, directory);
                 messages.set(null, selected);
                 List<String> rendered = new ArrayList<>();
                 List<byte[]> acknowledgements = new ArrayList<>();
@@ -98,7 +98,7 @@ class FabricNoticeProfileTest {
                         text -> rendered.add(text.getString()), acknowledge, "trusted-proxy");
                 FabricCrackedNotice.renderAfterJoin(queue, identity,
                         text -> rendered.add(text.getString()), acknowledge, "trusted-proxy");
-                assertEquals(List.of(selected.getProperty("same-name-cracked-recorded")), rendered);
+                assertEquals(List.of(selected.get("same-name-cracked-recorded")), rendered);
                 assertEquals(1, acknowledgements.size());
                 CrackedNoticeWire ack = CrackedNoticeWire.decode(acknowledgements.getFirst());
                 assertTrue(parsed.matches(ack));

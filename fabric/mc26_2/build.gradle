@@ -139,6 +139,12 @@ def verifyFabricJar = tasks.register('verifyFabricJar') {
             if (zip.getEntry('fastloginplus-fabric.properties') != null) {
                 throw new GradleException('Fabric jar must not ship the legacy configuration template')
             }
+            if (zip.getEntry('messages_en.yml') == null || zip.getEntry('messages_zh.yml') == null) {
+                throw new GradleException('Fabric jar is missing a bundled YAML language file')
+            }
+            if (zip.getEntry('messages_en.properties') != null || zip.getEntry('messages_zh.properties') != null) {
+                throw new GradleException('Fabric jar must not ship legacy properties language files')
+            }
             if (zip.getEntry('com/github/hayston1001/fastloginplus/fabric/shared/config/ConfigRefresher.class') == null) {
                 throw new GradleException('Fabric jar is missing the relocated configuration refresher')
             }

@@ -10,6 +10,7 @@ import com.github.hayston1001.fastloginplus.fabric.shared.message.LanguageMessag
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.chat.Component;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -18,13 +19,17 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.TreeSet;
 
 /** Backend-local UTF-8 messages with per-key English fallback. */
 final class FabricMessages {
     private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger("fastloginplus_fabric");
-    private static final Properties ENGLISH = bundled("en");
-    private static volatile Properties messages = ENGLISH;
+    private static final Map<String, String> ENGLISH = bundled("en");
+    private static volatile Map<String, String> messages = ENGLISH;
 
     private FabricMessages() {
     }
@@ -34,8 +39,8 @@ final class FabricMessages {
         messages = loadAndReportLanguage(language, directory, LOGGER);
     }
 
-    static Properties loadAndReportLanguage(String language, Path directory, org.slf4j.Logger logger) {
-        Properties loaded = load(language, directory);
+    static Map<String, String> loadAndReportLanguage(String language, Path directory, org.slf4j.Logger logger) {
+        Map<String, String> loaded = load(language, directory);
         if (language != null && !language.isEmpty()
                 && !"en".equalsIgnoreCase(language) && !"zh".equalsIgnoreCase(language)) {
             logger.warn("Unknown Fabric message language='{}'; effective language={}",
@@ -50,61 +55,134 @@ final class FabricMessages {
         return "zh".equalsIgnoreCase(language) ? "zh" : "en";
     }
 
-    static Properties load(String language, Path directory) {
+    static Map<String, String> load(String language, Path directory) {
         String locale = effectiveLanguage(language);
-        Path file = directory.resolve("messages_" + locale + ".properties");
-        Properties defaults = bundled("en");
+        migrateLegacyProperties(locale, directory);
+        Path file = directory.resolve("messages_" + locale + ".yml");
+        Map<String, String> defaults = new LinkedHashMap<>(bundled("en"));
         // An absent override uses the bundled locale. A selected override file
         // with a missing key falls back to English, just like the classic loader.
         if (!Files.exists(file) && "zh".equals(locale)) {
             defaults.putAll(bundled(locale));
         }
         try {
-            return LanguageMessages.load(file,
-                    defaults, new ConfigurationFiles.Loader<Properties>() {
-                        @Override
-                        public Properties load(Reader reader, Properties fallback) throws IOException {
-                            Properties result = new Properties(fallback);
-                            result.load(reader);
-                            return result;
-                        }
-
-                        @Override
-                        public Collection<String> getKeys(Properties config) {
-                            return config.stringPropertyNames();
-                        }
-
-                        @Override
-                        public Object get(Properties config, String key) {
-                            String value = config.getProperty(key);
-                            return value == null || value.isBlank() ? defaults.getProperty(key) : value;
-                        }
-
-                        @Override
-                        public void set(Properties config, String key, Object value) {
-                            config.put(key, value);
-                        }
-                    });
+            return LanguageMessages.load(file, defaults, YAML_LOADER);
         } catch (IOException error) {
             throw new IllegalStateException("Cannot load Fabric language messages", error);
         }
     }
 
-    private static Properties bundled(String language) {
-        Properties values = new Properties();
-        try (InputStream input = FabricMessages.class.getResourceAsStream("/messages_" + language + ".properties")) {
+    private static void migrateLegacyProperties(String locale, Path directory) {
+        Path legacy = directory.resolve("messages_" + locale + ".properties");
+        Path yaml = directory.resolve("messages_" + locale + ".yml");
+        if (!Files.exists(legacy) || Files.exists(yaml)) {
+            return;
+        }
+        try {
+            Properties properties = new Properties();
+            try (Reader reader = Files.newBufferedReader(legacy, StandardCharsets.UTF_8)) {
+                properties.load(reader);
+            }
+            StringBuilder content = new StringBuilder();
+            content.append("# SPDX-License-Identifier: MIT\n");
+            content.append("# Migrated from ").append(legacy.getFileName()).append('\n');
+            for (String key : new TreeSet<>(properties.stringPropertyNames())) {
+                content.append(key).append(": ").append(quote(properties.getProperty(key))).append('\n');
+            }
+            Files.writeString(yaml, content, StandardCharsets.UTF_8);
+            Path backup = legacy.resolveSibling(legacy.getFileName() + ".bak");
+            Files.move(legacy, backup);
+            LOGGER.info("Migrated {} to {}; kept the original as {}", legacy, yaml, backup);
+        } catch (IOException error) {
+            throw new IllegalStateException("Cannot migrate Fabric message overrides", error);
+        }
+    }
+
+    private static String quote(String value) {
+        StringBuilder out = new StringBuilder(value.length() + 2).append('"');
+        for (int index = 0; index < value.length(); index++) {
+            char next = value.charAt(index);
+            switch (next) {
+                case '\\' -> out.append("\\\\");
+                case '"' -> out.append("\\\"");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                case '\t' -> out.append("\\t");
+                default -> {
+                    if (next < 0x20) {
+                        out.append(String.format("\\u%04x", (int) next));
+                    } else {
+                        out.append(next);
+                    }
+                }
+            }
+        }
+        return out.append('"').toString();
+    }
+
+    private static Map<String, String> loadYaml(Reader reader, Map<String, String> defaults) throws IOException {
+        List<String> lines;
+        try (BufferedReader buffered = new BufferedReader(reader)) {
+            lines = buffered.lines().toList();
+        }
+        FlatYamlReader.Result parsed = FlatYamlReader.readMessages(lines);
+        if (parsed.unsupportedLine() != 0) {
+            throw new IOException("Unsupported YAML in Fabric messages at line " + parsed.unsupportedLine());
+        }
+        Map<String, String> values = new LinkedHashMap<>(defaults);
+        for (Map.Entry<String, Object> entry : parsed.values().entrySet()) {
+            if (!(entry.getValue() instanceof String text)) {
+                throw new IOException("Fabric message '" + entry.getKey() + "' must be a string");
+            }
+            values.put(entry.getKey(), text);
+        }
+        defaults.forEach((key, fallback) -> {
+            String current = values.get(key);
+            if (current == null || current.isBlank()) {
+                values.put(key, fallback);
+            }
+        });
+        return values;
+    }
+
+    private static final ConfigurationFiles.Loader<Map<String, String>> YAML_LOADER =
+            new ConfigurationFiles.Loader<>() {
+                @Override
+                public Map<String, String> load(Reader reader, Map<String, String> defaults) throws IOException {
+                    return loadYaml(reader, defaults);
+                }
+
+                @Override
+                public Collection<String> getKeys(Map<String, String> config) {
+                    return config.keySet();
+                }
+
+                @Override
+                public Object get(Map<String, String> config, String key) {
+                    return config.get(key);
+                }
+
+                @Override
+                public void set(Map<String, String> config, String key, Object value) {
+                    config.put(key, String.valueOf(value));
+                }
+            };
+
+    private static Map<String, String> bundled(String language) {
+        try (InputStream input = FabricMessages.class.getResourceAsStream("/messages_" + language + ".yml")) {
             if (input == null) {
                 throw new IllegalStateException("Missing bundled Fabric language: " + language);
             }
-            values.load(new InputStreamReader(input, StandardCharsets.UTF_8));
-            return values;
+            try (Reader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+                return loadYaml(reader, Map.of());
+            }
         } catch (IOException error) {
             throw new IllegalStateException("Cannot read bundled Fabric language", error);
         }
     }
 
     static Component text(String key, String... replacements) {
-        String value = messages.getProperty(key, ENGLISH.getProperty(key, key));
+        String value = messages.getOrDefault(key, ENGLISH.getOrDefault(key, key));
         for (int i = 0; i < replacements.length; i += 2) {
             value = value.replace(replacements[i], replacements[i + 1]);
         }

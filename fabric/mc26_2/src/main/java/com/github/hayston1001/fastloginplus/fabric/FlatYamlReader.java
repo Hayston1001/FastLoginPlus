@@ -20,6 +20,20 @@ final class FlatYamlReader {
     }
 
     static Result read(List<String> lines) {
+        return read(lines, false);
+    }
+
+    /**
+     * Parses the flat YAML subset used by messages.
+     *
+     * @param lines input lines
+     * @return parsed values and the first unsupported line, or zero
+     */
+    static Result readMessages(List<String> lines) {
+        return read(lines, true);
+    }
+
+    private static Result read(List<String> lines, boolean allowControlCharacters) {
         Map<String, Object> values = new LinkedHashMap<>();
         String listKey = null;
         List<String> blockItems = null;
@@ -43,7 +57,7 @@ final class FlatYamlReader {
                             || (listIndent >= 0 && listIndent != indent)) {
                         throw new IllegalArgumentException("Nested or orphaned content");
                     }
-                    String item = scalar(text.substring(1).strip());
+                    String item = scalar(text.substring(1).strip(), allowControlCharacters);
                     if (blockItems == null) {
                         blockItems = new ArrayList<>();
                         values.put(listKey, blockItems);
@@ -58,7 +72,8 @@ final class FlatYamlReader {
                     }
                     String key = text.substring(0, colon);
                     String raw = text.substring(colon + 1).strip();
-                    Object value = raw.startsWith("[") ? flowList(raw) : scalar(raw);
+                    Object value = raw.startsWith("[") ? flowList(raw, allowControlCharacters)
+                            : scalar(raw, allowControlCharacters);
                     values.put(key, value);
                     listKey = raw.isEmpty() ? key : null;
                     blockItems = null;
@@ -71,13 +86,13 @@ final class FlatYamlReader {
         return new Result(values, 0);
     }
 
-    private static String scalar(String raw) {
+    private static String scalar(String raw, boolean allowControlCharacters) {
         if (raw.isEmpty()) {
             return "";
         }
         char first = raw.charAt(0);
         if (first == '\'' || first == '"') {
-            Token token = quoted(raw, 0);
+            Token token = quoted(raw, 0, allowControlCharacters);
             if (token.end() != raw.length()) {
                 throw new IllegalArgumentException("Content after a quoted scalar");
             }
@@ -88,10 +103,10 @@ final class FlatYamlReader {
             throw new IllegalArgumentException("Not a plain scalar");
         }
         // Hashes are literal inside values, not inline comments in this subset.
-        return singleLine(raw);
+        return singleLine(raw, allowControlCharacters);
     }
 
-    private static List<String> flowList(String raw) {
+    private static List<String> flowList(String raw, boolean allowControlCharacters) {
         if (!raw.endsWith("]")) {
             throw new IllegalArgumentException("Unterminated list");
         }
@@ -107,7 +122,7 @@ final class FlatYamlReader {
             }
             char first = raw.charAt(cursor);
             if (first == '\'' || first == '"') {
-                Token token = quoted(raw, cursor);
+                Token token = quoted(raw, cursor, allowControlCharacters);
                 if (token.end() > end) {
                     throw new IllegalArgumentException("Unterminated list item");
                 }
@@ -121,7 +136,7 @@ final class FlatYamlReader {
                         || item.indexOf('{') >= 0 || item.indexOf('}') >= 0) {
                     throw new IllegalArgumentException("Nested or empty list item");
                 }
-                items.add(scalar(item));
+                items.add(scalar(item, allowControlCharacters));
                 cursor = stop;
             }
             while (cursor < end && Character.isWhitespace(raw.charAt(cursor))) {
@@ -137,7 +152,7 @@ final class FlatYamlReader {
     private record Token(String value, int end) {
     }
 
-    private static Token quoted(String raw, int start) {
+    private static Token quoted(String raw, int start, boolean allowControlCharacters) {
         char quote = raw.charAt(start);
         StringBuilder value = new StringBuilder();
         int cursor = start + 1;
@@ -148,7 +163,7 @@ final class FlatYamlReader {
                     value.append('\'');
                     cursor++;
                 } else {
-                    return new Token(singleLine(value.toString()), cursor);
+                    return new Token(singleLine(value.toString(), allowControlCharacters), cursor);
                 }
             } else if (quote == '"' && next == '\\') {
                 if (cursor == raw.length()) {
@@ -203,9 +218,14 @@ final class FlatYamlReader {
     }
 
     static String singleLine(String value) {
+        return singleLine(value, false);
+    }
+
+    private static String singleLine(String value, boolean allowControlCharacters) {
         // The shared writer uses physical lines for embedded CR/LF; that shape is not flat.
-        if (value.codePoints().anyMatch(c -> (c < 0x20 && c != '\t') || (c >= 0x7f && c <= 0x9f && c != 0x85)
-                || (c >= 0xd800 && c <= 0xdfff) || c == 0xfffe || c == 0xffff)) {
+        if (!allowControlCharacters && value.codePoints().anyMatch(c ->
+                (c < 0x20 && c != '\t') || (c >= 0x7f && c <= 0x9f && c != 0x85)
+                        || (c >= 0xd800 && c <= 0xdfff) || c == 0xfffe || c == 0xffff)) {
             throw new IllegalArgumentException("Not a single-line YAML string");
         }
         return value;

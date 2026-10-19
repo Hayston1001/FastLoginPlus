@@ -21,8 +21,8 @@
 
 # Backend-local player messages: en or zh. Unknown non-empty values warn at
 # startup and fall back to en. Changing the language requires a backend restart.
-# Optional UTF-8 overrides remain in config/fastloginplus-fabric/messages_en.properties
-# or messages_zh.properties. Missing message keys fall back to English.
+# Optional UTF-8 overrides remain in config/fastloginplus-fabric/messages_en.yml
+# or messages_zh.yml. Missing message keys fall back to English.
 language: en
 
 # Comma-separated UUIDs of trusted proxies (from each proxy's proxyId.txt).
