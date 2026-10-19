@@ -22,8 +22,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
-import java.util.TreeSet;
 
 /** Backend-local UTF-8 messages with per-key English fallback. */
 final class FabricMessages {
@@ -57,7 +55,6 @@ final class FabricMessages {
 
     static Map<String, String> load(String language, Path directory) {
         String locale = effectiveLanguage(language);
-        migrateLegacyProperties(locale, directory);
         Path file = directory.resolve("messages_" + locale + ".yml");
         Map<String, String> defaults = new LinkedHashMap<>(bundled("en"));
         // An absent override uses the bundled locale. A selected override file
@@ -70,54 +67,6 @@ final class FabricMessages {
         } catch (IOException error) {
             throw new IllegalStateException("Cannot load Fabric language messages", error);
         }
-    }
-
-    private static void migrateLegacyProperties(String locale, Path directory) {
-        Path legacy = directory.resolve("messages_" + locale + ".properties");
-        Path yaml = directory.resolve("messages_" + locale + ".yml");
-        if (!Files.exists(legacy) || Files.exists(yaml)) {
-            return;
-        }
-        try {
-            Properties properties = new Properties();
-            try (Reader reader = Files.newBufferedReader(legacy, StandardCharsets.UTF_8)) {
-                properties.load(reader);
-            }
-            StringBuilder content = new StringBuilder();
-            content.append("# SPDX-License-Identifier: MIT\n");
-            content.append("# Migrated from ").append(legacy.getFileName()).append('\n');
-            for (String key : new TreeSet<>(properties.stringPropertyNames())) {
-                content.append(key).append(": ").append(quote(properties.getProperty(key))).append('\n');
-            }
-            Files.writeString(yaml, content, StandardCharsets.UTF_8);
-            Path backup = legacy.resolveSibling(legacy.getFileName() + ".bak");
-            Files.move(legacy, backup);
-            LOGGER.info("Migrated {} to {}; kept the original as {}", legacy, yaml, backup);
-        } catch (IOException error) {
-            throw new IllegalStateException("Cannot migrate Fabric message overrides", error);
-        }
-    }
-
-    private static String quote(String value) {
-        StringBuilder out = new StringBuilder(value.length() + 2).append('"');
-        for (int index = 0; index < value.length(); index++) {
-            char next = value.charAt(index);
-            switch (next) {
-                case '\\' -> out.append("\\\\");
-                case '"' -> out.append("\\\"");
-                case '\n' -> out.append("\\n");
-                case '\r' -> out.append("\\r");
-                case '\t' -> out.append("\\t");
-                default -> {
-                    if (next < 0x20) {
-                        out.append(String.format("\\u%04x", (int) next));
-                    } else {
-                        out.append(next);
-                    }
-                }
-            }
-        }
-        return out.append('"').toString();
     }
 
     private static Map<String, String> loadYaml(Reader reader, Map<String, String> defaults) throws IOException {
@@ -182,11 +131,15 @@ final class FabricMessages {
     }
 
     static Component text(String key, String... replacements) {
+        return Component.literal(plain(key, replacements));
+    }
+
+    static String plain(String key, String... replacements) {
         String value = messages.getOrDefault(key, ENGLISH.getOrDefault(key, key));
         for (int i = 0; i < replacements.length; i += 2) {
             value = value.replace(replacements[i], replacements[i + 1]);
         }
-        return Component.literal(value);
+        return value;
     }
 
     static PlayerFailure failure(String key) {

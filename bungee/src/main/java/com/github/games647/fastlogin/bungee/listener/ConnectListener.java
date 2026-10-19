@@ -177,7 +177,9 @@ public class ConnectListener implements Listener {
         InetSocketAddress address = preLoginEvent.getConnection().getAddress();
         String username = connection.getName();
 
-        plugin.getLog().info("Incoming login request for {} from {}", username, connection.getSocketAddress());
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Incoming login request for {} from {}", username, connection.getSocketAddress());
+        }
 
         Action action = antiBotService.onIncomingConnection(address, username);
         if (action != Action.Continue) {
@@ -325,7 +327,7 @@ public class ConnectListener implements Listener {
                 failure -> plugin.getLog().warn("Could not attach the verified premium UUID for {}"
                         + " to the login profile — AuthMe's first-login dialog is not skipped"
                         + ": {}", username, failure.toString()));
-        if (attached) {
+        if (attached && plugin.getCore().isDebug()) {
             plugin.getLog().info("Attaching verified premium UUID {} to the forwarded profile",
                     premiumUuid);
         }
@@ -353,7 +355,7 @@ public class ConnectListener implements Listener {
                 ForwardingAttributes.IDENTITY, claim.encode(),
                 failure -> plugin.getLog().warn("Could not attach the identity facts for {}"
                         + " to the login profile: {}", username, failure.toString()));
-        if (attached) {
+        if (attached && plugin.getCore().isDebug()) {
             plugin.getLog().info("Attaching identity facts for {} to the forwarded profile", username);
         }
     }
@@ -376,8 +378,10 @@ public class ConnectListener implements Listener {
                 REWRITE_ID_SETTER.invoke(connection, offlineUUID);
             }
 
-            String format = "Overridden UUID from {} to {} (based of {}) on {}";
-            plugin.getLog().info(format, oldPremiumId, offlineUUID, username, connection);
+            if (plugin.getCore().isDebug()) {
+                String format = "Overridden UUID from {} to {} (based of {}) on {}";
+                plugin.getLog().info(format, oldPremiumId, offlineUUID, username, connection);
+            }
         } catch (Exception ex) {
             plugin.getLog().error("Failed to set offline uuid of {}", username, ex);
         } catch (Throwable throwable) {

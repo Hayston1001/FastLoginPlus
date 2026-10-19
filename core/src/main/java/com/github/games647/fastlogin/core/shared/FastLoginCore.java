@@ -49,9 +49,9 @@ import com.github.games647.fastlogin.core.hooks.PasswordGenerator;
 import com.github.games647.fastlogin.core.storage.MySQLStorage;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.SQLiteStorage;
-import com.github.games647.fastlogin.shared.config.ConfigurationFiles;
-import com.github.games647.fastlogin.shared.config.ConfigRefresher;
-import com.github.games647.fastlogin.shared.message.LanguageMessages;
+import com.github.hayston1001.fastloginplus.shared.config.ConfigurationFiles;
+import com.github.hayston1001.fastloginplus.shared.config.ConfigRefresher;
+import com.github.hayston1001.fastloginplus.shared.message.LanguageMessages;
 import com.google.common.base.Ticker;
 import com.zaxxer.hikari.HikariConfig;
 
@@ -642,10 +642,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         pendingVerifications.computeIfPresent(username, (key, pending) -> {
             if (sessionServerReachable) {
                 definiteFailures.merge(key, 1, Integer::sum);
-                plugin.getLog().info("Premium verification for {} never completed while the session "
+                plugin.getLog().warn("Premium verification for {} never completed while the session "
                         + "server answers: counted as a failed verification", key);
             } else {
-                plugin.getLog().info("Premium verification for {} never completed and the session "
+                plugin.getLog().warn("Premium verification for {} never completed and the session "
                         + "server is unreachable: treated as an authentication outage, nothing recorded", key);
             }
             return null;

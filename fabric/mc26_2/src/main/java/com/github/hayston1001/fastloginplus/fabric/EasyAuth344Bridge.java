@@ -369,7 +369,9 @@ final class EasyAuth344Bridge {
                 throw FabricMessages.failure("ownership-conflict");
             }
             checkOfflineEntry(entry, claim.getPlayerName(), claim.getForwardedUuid());
-            LOGGER.info("EasyAuth password lock remains active for {}", player.getGameProfile().name());
+            if (FabricConfig.isDebug()) {
+                LOGGER.info("EasyAuth password lock remains active for {}", player.getGameProfile().name());
+            }
             return;
         }
         if (claim.getDecision() != Decision.PREMIUM_VERIFIED) {
@@ -380,8 +382,10 @@ final class EasyAuth344Bridge {
                 !claim.getFacts().policyDeclared() || claim.getFacts().autoRegisterUnknown());
         if (action == PremiumGate.Action.PASSWORD_LOCK) {
             // Missing consent or disabled policy keeps the password/registration flow.
-            LOGGER.info("Premium login not applied; the password lock stays for {}",
-                    player.getGameProfile().name());
+            if (FabricConfig.isDebug()) {
+                LOGGER.info("Premium login not applied; the password lock stays for {}",
+                        player.getGameProfile().name());
+            }
             player.sendSystemMessage(FabricMessages.text(passwordLockMessage(claim, state)));
             return;
         }
@@ -403,8 +407,10 @@ final class EasyAuth344Bridge {
                 }
                 throw failure;
             }
-            LOGGER.info("Enabled premium login for EasyAuth account {} with verified Mojang UUID {}",
-                    claim.getPlayerName(), claim.getVerifiedMojangUuid());
+            if (FabricConfig.isDebug()) {
+                LOGGER.info("Enabled premium login for EasyAuth account {} with verified Mojang UUID {}",
+                        claim.getPlayerName(), claim.getVerifiedMojangUuid());
+            }
             return;
         }
         authenticatePremium(player, entry, claim.getVerifiedMojangUuid());
@@ -643,7 +649,9 @@ final class EasyAuth344Bridge {
                         throw new IllegalStateException("EasyAuth did not accept the premium authentication state");
                     }
                     player.sendSystemMessage(FabricMessages.text("authenticated"));
-                    LOGGER.info("Completed EasyAuth premium login for {}", player.getGameProfile().name());
+                    if (FabricConfig.isDebug()) {
+                        LOGGER.info("Completed EasyAuth premium login for {}", player.getGameProfile().name());
+                    }
                 });
     }
 

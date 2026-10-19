@@ -103,7 +103,9 @@ public class ProtocolLibListener extends PacketAdapter {
             }
         } catch (Throwable th) {
             // diagnostic only — never break registration over it
-            plugin.getLog().debug("Could not check ENCRYPTION_BEGIN packet type support", th);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Could not check ENCRYPTION_BEGIN packet type support", th);
+            }
         }
     }
 
@@ -296,7 +298,9 @@ public class ProtocolLibListener extends PacketAdapter {
             }
         }
 
-        plugin.getLog().trace("GameProfile {} with {} connecting", sessionKey, username);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("GameProfile {} with {} connecting", sessionKey, username);
+        }
 
         packetEvent.getAsyncMarker().incrementProcessingDelay();
         Runnable nameCheckTask = new NameCheckTask(

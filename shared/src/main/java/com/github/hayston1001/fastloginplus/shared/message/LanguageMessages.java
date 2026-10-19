@@ -4,11 +4,11 @@
  * Copyright (c) 2026 games647 and contributors
  * Copyright (c) 2026 Hayston1001
  */
-package com.github.games647.fastlogin.shared.message;
+package com.github.hayston1001.fastloginplus.shared.message;
 
-import com.github.games647.fastlogin.shared.MessageColors;
-import com.github.games647.fastlogin.shared.config.ConfigurationFiles;
-import com.github.games647.fastlogin.shared.config.ConfigurationFiles.Loader;
+import com.github.hayston1001.fastloginplus.shared.MessageColors;
+import com.github.hayston1001.fastloginplus.shared.config.ConfigurationFiles;
+import com.github.hayston1001.fastloginplus.shared.config.ConfigurationFiles.Loader;
 
 import java.io.IOException;
 import java.io.Reader;

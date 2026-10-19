@@ -5,7 +5,6 @@
  */
 package com.github.hayston1001.fastloginplus.fabric;
 
-import com.github.hayston1001.fastloginplus.fabric.shared.config.ConfigurationFiles;
 import com.github.hayston1001.fastloginplus.fabric.shared.config.ConfigRefresher;
 
 import net.fabricmc.loader.api.FabricLoader;
@@ -22,7 +21,6 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 /**
  * Backend-local startup settings, refreshed from the bundled flat YAML template.
@@ -31,7 +29,6 @@ final class FabricConfig {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("fastloginplus_fabric");
     private static final String FILE_NAME = "fastloginplus-fabric.yml";
-    private static final String LEGACY_FILE_NAME = "fastloginplus-fabric.properties";
 
     private static StartupSettings startupSettings;
     private static RuntimeException startupFailure;
@@ -49,7 +46,11 @@ final class FabricConfig {
             try {
                 Map<String, Object> file = readFile(FabricLoader.getInstance().getConfigDir(), LOGGER);
                 FabricMessages.load(stringValue(file, "language", "en"));
-                startupSettings = new StartupSettings(stringValue(file, "allowed-proxy-ids", ""));
+                startupSettings = new StartupSettings(
+                        stringValue(file, "allowed-proxy-ids", ""),
+                        booleanValue(file, "check-update", true),
+                        intValue(file, "update-check-interval", 24),
+                        booleanValue(file, "debug", false));
             } catch (RuntimeException unreadable) {
                 startupFailure = unreadable;
             }
@@ -67,6 +68,16 @@ final class FabricConfig {
         return startupSettings;
     }
 
+    /**
+     * Returns whether diagnostic logging is enabled. Before the startup snapshot
+     * exists, diagnostics stay off instead of failing a login path.
+     *
+     * @return true when verbose logging is enabled
+     */
+    static synchronized boolean isDebug() {
+        return startupSettings != null && startupSettings.debug();
+    }
+
     static Map<String, Object> readFile(Path configDirectory, Logger logger) {
         Path file = configDirectory.resolve(FILE_NAME);
         try {
@@ -74,26 +85,8 @@ final class FabricConfig {
             List<String> template = templateLines();
             boolean created = !Files.exists(file);
             if (created) {
-                Path legacy = configDirectory.resolve(LEGACY_FILE_NAME);
-                Map<String, Object> initial = new LinkedHashMap<>();
-                if (Files.exists(legacy)) {
-                    Properties old = ConfigurationFiles.loadProperties(legacy);
-                    try {
-                        initial.put("language", FlatYamlReader.singleLine(old.getProperty("language", "en")));
-                        initial.put("allowed-proxy-ids",
-                                FlatYamlReader.singleLine(old.getProperty("allowed-proxy-ids", "")));
-                    } catch (IllegalArgumentException unsupported) {
-                        throw new IOException("Legacy settings cannot be represented as flat YAML strings",
-                                unsupported);
-                    }
-                    ConfigRefresher.refresh(file, template, initial);
-                    Path backup = legacy.resolveSibling(LEGACY_FILE_NAME + ".bak");
-                    Files.move(legacy, backup);
-                    logger.info("Migrated {} to {}; kept the original as {}", legacy, file, backup);
-                } else {
-                    ConfigRefresher.refresh(file, template, initial);
-                    logger.info("Wrote default configuration to {}", file);
-                }
+                ConfigRefresher.refresh(file, template, new LinkedHashMap<>());
+                logger.info("Wrote default configuration to {}", file);
             }
             FlatYamlReader.Result parsed = FlatYamlReader.read(Files.readAllLines(file, StandardCharsets.UTF_8));
             Map<String, Object> values = new LinkedHashMap<>(parsed.values());
@@ -101,6 +94,7 @@ final class FabricConfig {
             if (proxies instanceof List<?> list) {
                 values.put("allowed-proxy-ids", String.join(",", list.stream().map(String.class::cast).toList()));
             }
+            values = normalize(values, logger);
             if (parsed.unsupportedLine() != 0) {
                 logger.warn("Unsupported YAML in {} at line {}; keeping earlier values and skipping template refresh",
                         file, parsed.unsupportedLine());
@@ -115,6 +109,70 @@ final class FabricConfig {
 
     private static String stringValue(Map<String, Object> values, String key, String fallback) {
         return values.get(key) instanceof String value ? value : fallback;
+    }
+
+    private static boolean booleanValue(Map<String, Object> values, String key, boolean fallback) {
+        return values.get(key) instanceof Boolean value ? value : fallback;
+    }
+
+    private static int intValue(Map<String, Object> values, String key, int fallback) {
+        return values.get(key) instanceof Integer value ? value : fallback;
+    }
+
+    private static Map<String, Object> normalize(Map<String, Object> values, Logger logger) {
+        Map<String, Object> normalized = new LinkedHashMap<>(values);
+        normalized.put("debug", normalizeBoolean(values, "debug", false, logger));
+        normalized.put("check-update", normalizeBoolean(values, "check-update", true, logger));
+        normalized.put("update-check-interval",
+                normalizeInterval(values, "update-check-interval", 24, logger));
+        return normalized;
+    }
+
+    private static boolean normalizeBoolean(Map<String, Object> values, String key,
+                                            boolean fallback, Logger logger) {
+        Object value = values.get(key);
+        if (value == null) {
+            return fallback;
+        }
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        if (value instanceof String text) {
+            if ("true".equalsIgnoreCase(text)) {
+                return true;
+            }
+            if ("false".equalsIgnoreCase(text)) {
+                return false;
+            }
+        }
+        logger.warn("fastloginplus-fabric.yml has an invalid {} value '{}'; using {}",
+                key, value, fallback);
+        return fallback;
+    }
+
+    private static int normalizeInterval(Map<String, Object> values, String key,
+                                         int fallback, Logger logger) {
+        Object value = values.get(key);
+        if (value instanceof Number number) {
+            int parsed = number.intValue();
+            if (parsed >= 1) {
+                return parsed;
+            }
+        } else if (value instanceof String text) {
+            try {
+                int parsed = Integer.parseInt(text);
+                if (parsed >= 1) {
+                    return parsed;
+                }
+            } catch (NumberFormatException ignored) {
+                // handled by the fallback below
+            }
+        } else if (value == null) {
+            return fallback;
+        }
+        logger.warn("fastloginplus-fabric.yml has an invalid {} value '{}'; using {}",
+                key, value, fallback);
+        return fallback;
     }
 
     static List<String> templateLines() throws IOException {
@@ -148,6 +206,11 @@ final class FabricConfig {
     }
 
     /** Frozen at SERVER_STARTED; file edits require a backend restart. */
-    record StartupSettings(String allowedProxyIds) {
+    record StartupSettings(String allowedProxyIds, boolean checkUpdate,
+                           int updateCheckInterval, boolean debug) {
+
+        StartupSettings(String allowedProxyIds) {
+            this(allowedProxyIds, true, 24, false);
+        }
     }
 }

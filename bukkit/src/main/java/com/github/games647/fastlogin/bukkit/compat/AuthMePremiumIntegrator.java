@@ -383,11 +383,7 @@ public final class AuthMePremiumIntegrator {
                     }
                 }
             } catch (Exception e) {
-                plugin.getLog().warn("Failed to unregister {} from AuthMe 6.0: {}",
-                    playerName, e);
-                if (plugin.getCore().isDebug()) {
-                    plugin.getLog().info("AuthMe unregister exception trace", e);
-                }
+                plugin.getLog().warn("Failed to unregister {} from AuthMe 6.0", playerName, e);
             }
 
             // b) Remove from AuthMe's in-memory player cache (synchronous)
@@ -1600,9 +1596,7 @@ public final class AuthMePremiumIntegrator {
 
             return true;
         } catch (Exception e) {
-            if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("Failed to unregister premium packet listener: {}", e);
-            }
+            plugin.getLog().warn("Failed to unregister premium packet listener: {}", e);
             return false;
         }
     }
@@ -1686,12 +1680,12 @@ public final class AuthMePremiumIntegrator {
             }
             if (completePreJoinDialog(dialogListener, "pendingRegisterResponses",
                     connection, playerId)) {
-                plugin.getLog().info("Closed AuthMe preJoin register dialog for {}", playerId);
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("Closed AuthMe preJoin register dialog for {}", playerId);
+                }
             }
         } catch (Exception e) {
-            if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("Failed to close AuthMe preJoin dialog: {}", e);
-            }
+            plugin.getLog().warn("Failed to close AuthMe preJoin dialog: {}", e);
         }
     }
 
@@ -1718,12 +1712,12 @@ public final class AuthMePremiumIntegrator {
             }
             if (completePreJoinDialog(dialogListener, "pendingLoginResponses",
                     connection, playerId)) {
-                plugin.getLog().info("Closed AuthMe preJoin login dialog for {}", playerId);
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("Closed AuthMe preJoin login dialog for {}", playerId);
+                }
             }
         } catch (Exception e) {
-            if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("Failed to close AuthMe preJoin dialog: {}", e);
-            }
+            plugin.getLog().warn("Failed to close AuthMe preJoin dialog: {}", e);
         }
     }
 

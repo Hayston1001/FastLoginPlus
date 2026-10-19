@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.core.shared;
 
@@ -69,7 +50,9 @@ public abstract class FloodgateManagement<P extends C, C, L extends LoginSession
 
     @Override
     public void run() {
-        core.getPlugin().getLog().info("Player {} is connecting through Geyser Floodgate.", username);
+        if (core.isDebug()) {
+            core.getPlugin().getLog().info("Player {} is connecting through Geyser Floodgate.", username);
+        }
 
         // check if the Bedrock player is linked to a Java account
         isLinked = floodgatePlayer.getLinkedPlayer() != null;
@@ -94,26 +77,34 @@ public abstract class FloodgateManagement<P extends C, C, L extends LoginSession
         if (profile.isExistingPlayer()) {
             if (profile.isFloodgateMigrated()) {
                 if (profile.getFloodgate() == FloodgateState.TRUE && isLinked) {
-                    core.getPlugin().getLog()
-                            .info("Player {} is already stored by FastLogin as a non-linked Bedrock Edition player",
-                                    username);
+                    if (core.isDebug()) {
+                        core.getPlugin().getLog()
+                                .info("Player {} is already stored by FastLogin as a non-linked Bedrock Edition player",
+                                        username);
+                    }
                     return;
                 } else if (profile.getFloodgate() == FloodgateState.FALSE && isLinked) {
                     profile.setFloodgate(FloodgateState.LINKED);
-                    core.getPlugin().getLog().info(
-                            "Player {} will be changed from a Java player to a linked Floodgate player",
-                            username);
+                    if (core.isDebug()) {
+                        core.getPlugin().getLog().info(
+                                "Player {} will be changed from a Java player to a linked Floodgate player",
+                                username);
+                    }
                 }
             } else {
                 if (isLinked) {
                     profile.setFloodgate(FloodgateState.LINKED);
-                    core.getPlugin().getLog().info(
-                            "Player {} will be migrated to the v2 database schema as a linked Floodgate user",
-                            username);
+                    if (core.isDebug()) {
+                        core.getPlugin().getLog().info(
+                                "Player {} will be migrated to the v2 database schema as a linked Floodgate user",
+                                username);
+                    }
                 } else {
                     profile.setFloodgate(FloodgateState.TRUE);
-                    core.getPlugin().getLog().info(
-                            "Player {} will be migrated to the v2 database schema as a Floodgate user", username);
+                    if (core.isDebug()) {
+                        core.getPlugin().getLog().info(
+                                "Player {} will be migrated to the v2 database schema as a Floodgate user", username);
+                    }
                 }
             }
         } else {

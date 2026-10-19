@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.core;
 
@@ -31,6 +12,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
+import com.github.hayston1001.fastloginplus.shared.update.VersionComparator;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -74,7 +56,7 @@ public class UpdateChecker {
     public boolean checkForUpdates() {
         try {
             String tag = fetchLatestTag();
-            if (tag != null && isNewer(tag, currentVersion)) {
+            if (tag != null && VersionComparator.isNewer(tag, currentVersion)) {
                 latestVersion = tag;
                 return true;
             }
@@ -82,7 +64,7 @@ public class UpdateChecker {
             String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
             logger.warn("Update check failed, network unreachable: {}", reason);
             if (debug) {
-                logger.debug("Update check failed (full trace)", e);
+                logger.info("Update check failed (full trace)", e);
             }
         }
         return false;
@@ -112,44 +94,4 @@ public class UpdateChecker {
         }
     }
 
-    /**
-     * Compares two version strings numerically (e.g. "0.1.0" vs "0.0.7").
-     * Handles optional "v" prefix and pre-release suffix (e.g. "v1.0.0-beta1").
-     *
-     * @param remote the remote version tag
-     * @param local the current local version
-     * @return true if remote is newer than local
-     */
-    private boolean isNewer(String remote, String local) {
-        int[] remoteParts = parseVersion(remote);
-        int[] localParts = parseVersion(local);
-        int maxLen = Math.max(remoteParts.length, localParts.length);
-        for (int i = 0; i < maxLen; i++) {
-            int r = i < remoteParts.length ? remoteParts[i] : 0;
-            int l = i < localParts.length ? localParts[i] : 0;
-            if (r > l) {
-                return true;
-            }
-            if (r < l) {
-                return false;
-            }
-        }
-        return false;
-    }
-
-    private int[] parseVersion(String version) {
-        String cleaned = version.startsWith("v") ? version.substring(1) : version;
-        // strip pre-release suffix (e.g. "1.0.0-beta1" -> "1.0.0")
-        String numeric = cleaned.split("-")[0];
-        String[] parts = numeric.split("\\.");
-        int[] result = new int[parts.length];
-        for (int i = 0; i < parts.length; i++) {
-            try {
-                result[i] = Integer.parseInt(parts[i]);
-            } catch (NumberFormatException e) {
-                result[i] = 0;
-            }
-        }
-        return result;
-    }
 }

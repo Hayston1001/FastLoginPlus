@@ -109,6 +109,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private final ConcurrentMap<String, Long> crackedOverrides = new ConcurrentHashMap<>();
     private final Logger logger;
 
+    private void debugLog(String message, Object... arguments) {
+        if (core.isDebug()) {
+            logger.info(message, arguments);
+        }
+    }
+
     private boolean serverStarted;
     private BungeeManager bungeeManager;
     private final FoliaScheduler scheduler;
@@ -732,7 +738,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             // still premium) — do NOT consume the entry here.  Only skip the
             // AuthMe autoRegister; the message is delivered later by the retry
             // task (remove-if-present guards against double-send).
-            logger.info("Skipping autoRegister for {}: pending cracked toggle (relay stays queued)",
+            debugLog("Skipping autoRegister for {}: pending cracked toggle (relay stays queued)",
                     playerName);
             // defensive: make sure a relay task exists for the still-queued entry
             scheduleToggleRelay(playerName);
@@ -746,7 +752,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // apply: a mismatch is the entire point of premiumUuid:false, and the attestation came
         // from authenticated forwarding or the validated legacy declaration, not from a name lookup.
         if (forwardedPremiumUuid != null) {
-            logger.info("Proxy attested {} as premium ({}) in the configure phase",
+            debugLog("Proxy attested {} as premium ({}) in the configure phase",
                     playerName, forwardedPremiumUuid);
             applyPremiumAtConfigure(playerName, forwardedPremiumUuid, connectionUuid,
                     connection, address, isPendingPremium, identityFacts);
@@ -763,7 +769,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // signal already drives the pre-login path on Spigot, where this phase does not exist.
         if (trustedAttestation
                 && usesForwardedUuidAttestation(forwardedPremiumUuid, connectionUuid, playerName)) {
-            logger.info("Proxy forwarded the Mojang UUID {} for {} in the configure phase — "
+            debugLog("Proxy forwarded the Mojang UUID {} for {} in the configure phase — "
                     + "marking the AuthMe record synchronously (no Mojang lookup needed)",
                     connectionUuid, playerName);
             applyPremiumAtConfigure(playerName, connectionUuid, connectionUuid,
@@ -793,14 +799,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                         // the proxy hands out the offline UUID — a cracked player, or a premium
                         // player under premiumUuid:false on a fallback path (Bungee, or a proxy
                         // too old for the profile attestation); it is not a failure.
-                        logger.info(
+                        debugLog(
                             "Skipping autoRegister for {}: connection UUID {} != premium UUID {}"
                                 + " (expected when the proxy assigns the offline UUID — a cracked"
                                 + " player, or premiumUuid:false)",
                             playerName, connectionUuid, premiumUuid);
                         return;
                     }
-                    logger.info(
+                    debugLog(
                         "Pending premium toggle for {}: allowing autoRegister "
                             + "despite UUID mismatch ({} vs {})",
                         playerName, connectionUuid, premiumUuid);
@@ -924,7 +930,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // command just deleted.
         if (isCrackedOverrideActive(System.currentTimeMillis(), crackedOverrides.get(playerName),
                 CRACKED_OVERRIDE_TTL_MILLIS)) {
-            logger.info("Skipping premium marking for {}: an administrator switched this player "
+            debugLog("Skipping premium marking for {}: an administrator switched this player "
                     + "to cracked", playerName);
             return;
         }
@@ -1121,7 +1127,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
         if (outcome != com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.AUTO_REGISTER_LOGIN
                 && outcome != com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.AUTO_LOGIN) {
-            logger.info("Keeping the auth plugin's own login flow for {} (decision {})",
+            debugLog("Keeping the auth plugin's own login flow for {} (decision {})",
                     playerName, outcome);
             if (facts != null && address != null
                     && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
@@ -1131,7 +1137,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     && verified && !autoLogin
                     && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
                             .AccountState.PREMIUM_OWNED) {
-                logger.info("AuthMe placeholder release policy for {}: source={} autoLogin=false",
+                debugLog("AuthMe placeholder release policy for {}: source={} autoLogin=false",
                         playerName, declared.policyDeclared() ? "proxy declaration" : "local configuration");
                 AuthMePremiumIntegrator integrator = getAuthMePremiumIntegrator();
                 AuthMePremiumIntegrator.ReleaseOutcome release = integrator == null

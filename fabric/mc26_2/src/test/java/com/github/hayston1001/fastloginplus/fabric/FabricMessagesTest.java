@@ -55,7 +55,8 @@ class FabricMessagesTest {
     void bundledConfigurationParsesWithUnchangedLocalDefaults() throws Exception {
         FlatYamlReader.Result configuration = FlatYamlReader.read(FabricConfig.templateLines());
         assertEquals(0, configuration.unsupportedLine());
-        assertEquals(java.util.Set.of("language", "allowed-proxy-ids"), configuration.values().keySet());
+        assertEquals(java.util.Set.of("language", "allowed-proxy-ids", "debug",
+                "check-update", "update-check-interval"), configuration.values().keySet());
         assertEquals("en", configuration.values().get("language"));
         assertEquals("", configuration.values().get("allowed-proxy-ids"));
     }
@@ -184,29 +185,6 @@ class FabricMessagesTest {
                 messages.get("premium-policy-disabled"));
         assertEquals(bundled("en").get("admin-premium-requested"),
                 messages.get("admin-premium-requested"));
-    }
-
-    @Test
-    void legacyPropertyOverridesAreMigratedToYaml() throws Exception {
-        Files.writeString(directory.resolve("messages_en.properties"),
-                "premium-requested=Legacy message\n", StandardCharsets.UTF_8);
-
-        Map<String, String> messages = FabricMessages.load("en", directory);
-
-        assertEquals("Legacy message", messages.get("premium-requested"));
-        assertTrue(Files.exists(directory.resolve("messages_en.yml")));
-        assertTrue(Files.exists(directory.resolve("messages_en.properties.bak")));
-        assertFalse(Files.exists(directory.resolve("messages_en.properties")));
-    }
-
-    @Test
-    void legacyPropertyMigrationPreservesEscapes() throws Exception {
-        Files.writeString(directory.resolve("messages_en.properties"),
-                "premium-requested=Line\\nQuote \\\"Q\\\" and \\\\ slash\n", StandardCharsets.UTF_8);
-
-        Map<String, String> messages = FabricMessages.load("en", directory);
-
-        assertEquals("Line\nQuote \"Q\" and \\ slash", messages.get("premium-requested"));
     }
 
     @Test

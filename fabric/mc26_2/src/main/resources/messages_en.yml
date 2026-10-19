@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+#
+# Copyright (c) 2026 Hayston1001
 # UTF-8 player messages. Missing or blank overrides fall back to bundled values.
 
 ownership-conflict: "FastLoginPlus: this account does not match this connection's verified identity. Reconnect with the correct account or contact an admin."
@@ -30,4 +32,5 @@ binding-consent-required: "FastLoginPlus: this name has not been switched to pas
 premium-policy-disabled: "FastLoginPlus: automatic premium login is disabled by the server policy. A retained password does not enable unverified access to a premium-bound account; contact an administrator. Other accounts keep EasyAuth's password or registration flow."
 registration-required: "FastLoginPlus: automatic account creation is disabled. Register with EasyAuth first, then log in and run /flp premium to bind."
 authenticated: "Authenticated with FastLoginPlus."
+update-available: "FastLoginPlus: new version available: %new% (current: %current%). Download: https://github.com/Hayston1001/FastLoginPlus/releases"
 same-name-cracked-recorded: "Your account has been recorded as cracked. Are you a premium player? If you were misjudged, use /flp premium to start the verification again"

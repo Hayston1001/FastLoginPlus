@@ -171,8 +171,10 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     // or registration flow, and no premium row is
                     // written, so an undeclared consent can never
                     // turn into one
-                    core.getPlugin().getLog().info(
-                            "Keeping the auth plugin's own login flow for {}", playerName);
+                    if (core.isDebug()) {
+                        core.getPlugin().getLog().info(
+                                "Keeping the auth plugin's own login flow for {}", playerName);
+                    }
                     if (account == LoginMethodDecider.AccountState.READ_FAILURE) {
                         core.getPlugin().sendMessage(player,
                                 core.getMessage("account-state-unavailable"));
@@ -204,9 +206,11 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
             } else if (needsAccount) {
                 // guide register: the auth plugin's own dialog, the player sets
                 // the password (the decision table's GUIDE_REGISTER outcome)
-                core.getPlugin().getLog().info(
-                        "Not auto-registering {} (auto-register-unknown is off): "
-                                + "the auth plugin's own register flow applies", playerName);
+                if (core.isDebug()) {
+                    core.getPlugin().getLog().info(
+                            "Not auto-registering {} (auto-register-unknown is off): "
+                                    + "the auth plugin's own register flow applies", playerName);
+                }
                 return;
             } else if (!callFastLoginAutoLoginEvent(session, playerProfile).isCancelled()) {
                 success = forceLogin(player);

@@ -48,7 +48,9 @@ public class ForceLoginTask
     @Override
     public void run() {
         if (session == null) {
-            core.getPlugin().getLog().info("No active login session on force handling for {}", player);
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("No active login session on force handling for {}", player);
+            }
             return;
         }
 
@@ -65,7 +67,9 @@ public class ForceLoginTask
     @Override
     public boolean forceLogin(Player player) {
         if (session.isAlreadyLogged()) {
-            core.getPlugin().getLog().info("Ignoring second force login attempt for {}", player);
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info("Ignoring second force login attempt for {}", player);
+            }
             return true;
         }
 
@@ -118,7 +122,10 @@ public class ForceLoginTask
             }
             return;
         }
-        core.getPlugin().getLog().info("Sending force {} for {} towards server {}", type, player.getUsername(), server);
+        if (core.isDebug()) {
+            core.getPlugin().getLog().info("Sending force {} for {} towards server {}",
+                    type, player.getUsername(), server);
+        }
 
         UUID proxyId = core.getPlugin().getProxyId();
         // also hand over the Mojang UUID verified at GameProfileRequestEvent. The

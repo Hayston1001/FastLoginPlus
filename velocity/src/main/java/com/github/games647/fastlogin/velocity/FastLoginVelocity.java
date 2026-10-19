@@ -413,8 +413,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
                     proxyId = UUID.fromString(lines.get(0));
                 }
             } catch (IOException e) {
-                logger.error("Unable to load proxy id from '{}'", idFile.toAbsolutePath());
-                logger.error("Detailed exception:", e);
+                logger.error("Unable to load proxy id from '{}'", idFile.toAbsolutePath(), e);
             } catch (IllegalArgumentException e) {
                 Path filePath = idFile.toAbsolutePath();
                 logger.error("'{}' contains an invalid uuid! FastLogin will not work without a valid id.", filePath);
@@ -428,8 +427,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
             try {
                 Files.write(idFile, Collections.singletonList(proxyId.toString()), StandardOpenOption.CREATE);
             } catch (IOException e) {
-                logger.error("Unable to save proxy id to '{}'", idFile.toAbsolutePath());
-                logger.error("Detailed exception:", e);
+                logger.error("Unable to save proxy id to '{}'", idFile.toAbsolutePath(), e);
             }
         }
     }

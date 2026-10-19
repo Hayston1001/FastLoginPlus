@@ -88,6 +88,8 @@ class ConnectListenerResumeOnceTest {
     @Test
     void cancelledAntiBotEventQueuesPremiumCheckAndResumesExactlyOnce() {
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        FastLoginCore<?, ?, ?> core = mock(FastLoginCore.class);
+        doReturn(core).when(plugin).getCore();
         when(plugin.getLog()).thenReturn(mock(Logger.class));
         ProxyServer proxy = mock(ProxyServer.class);
         EventManager manager = mock(EventManager.class);
@@ -143,6 +145,8 @@ class ConnectListenerResumeOnceTest {
     @Test
     void failedAntiBotCallbackDoesNotGuessADenialOrOfflineDecision() {
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        FastLoginCore<?, ?, ?> core = mock(FastLoginCore.class);
+        doReturn(core).when(plugin).getCore();
         when(plugin.getLog()).thenReturn(mock(Logger.class));
         ProxyServer proxy = mock(ProxyServer.class);
         EventManager manager = mock(EventManager.class);
@@ -160,7 +164,6 @@ class ConnectListenerResumeOnceTest {
         new ConnectListener(plugin, antiBot).onPreLogin(event).execute(continuation);
         assertSame(prior, event.getResult());
         verify(continuation).resume();
-        verify(plugin, never()).getCore();
     }
 
     @Test

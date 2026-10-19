@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: MIT
+#
 # Copyright (c) 2026 Hayston1001
 
 # FastLoginPlus Fabric configuration (backend-local keys only).
@@ -24,6 +25,18 @@
 # Optional UTF-8 overrides remain in config/fastloginplus-fabric/messages_en.yml
 # or messages_zh.yml. Missing message keys fall back to English.
 language: en
+
+# Enable verbose diagnostic logging for troubleshooting. Per-connection and
+# per-player decision details are only logged when this is true. Changes
+# require a backend restart.
+debug: false
+
+# Check GitHub Releases for a newer FastLoginPlus version. The check runs in
+# the background and never blocks a login.
+check-update: true
+
+# Hours between update checks. Values below 1 fall back to 24.
+update-check-interval: 24
 
 # Comma-separated UUIDs of trusted proxies (from each proxy's proxyId.txt).
 # YAML block lists and flow lists are also accepted; startup rewrites them as

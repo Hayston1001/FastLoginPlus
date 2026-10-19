@@ -79,13 +79,17 @@ public class ConnectListener {
         InboundConnection connection = preLoginEvent.getConnection();
         String username = preLoginEvent.getUsername();
         InetSocketAddress address = connection.getRemoteAddress();
-        plugin.getLog().info("Incoming login request for {} from {}", username, address);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Incoming login request for {} from {}", username, address);
+        }
 
         // FloodgateVelocity only sets the correct username in GetProfileRequestEvent, but we need it here too.
         if (plugin.getFloodgateService() != null) {
             String floodgateUsername = getFloodgateUsername(connection);
             if (floodgateUsername != null) {
-                plugin.getLog().info("Found player's Floodgate: {}", floodgateUsername);
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("Found player's Floodgate: {}", floodgateUsername);
+                }
                 username = floodgateUsername;
             }
         }
@@ -258,11 +262,15 @@ public class ConnectListener {
                 // accepted and serialises as hasSignature=false.
                 event.setGameProfile(event.getGameProfile().addProperty(new GameProfile.Property(
                         ForwardingAttributes.PREMIUM_UUID, verifiedUUID.toString(), "")));
-                plugin.getLog().info("Attaching verified premium UUID {} to the forwarded profile",
-                        verifiedUUID);
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("Attaching verified premium UUID {} to the forwarded profile",
+                            verifiedUUID);
+                }
                 event.setGameProfile(event.getGameProfile().withId(offlineUUID));
-                plugin.getLog().info("Overridden UUID from {} to {} (based of {}) on {}",
-                        verifiedUUID, offlineUUID, verifiedUsername, event.getConnection());
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("Overridden UUID from {} to {} (based of {}) on {}",
+                            verifiedUUID, offlineUUID, verifiedUsername, event.getConnection());
+                }
             }
 
             if (!(boolean) plugin.getCore().getConfig().get("forwardSkin")) {
@@ -342,7 +350,9 @@ public class ConnectListener {
         if (floodgateService != null) {
             FloodgatePlayer floodgatePlayer = floodgateService.getBedrockPlayer(player.getUniqueId());
             if (floodgatePlayer != null) {
-                plugin.getLog().info("Running floodgate handling for {}", player);
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("Running floodgate handling for {}", player);
+                }
                 Runnable floodgateAuthTask = new FloodgateAuthTask(plugin.getCore(), player, floodgatePlayer, server);
                 plugin.getScheduler().runAsync(floodgateAuthTask);
                 return;
@@ -351,7 +361,9 @@ public class ConnectListener {
 
         VelocityLoginSession session = plugin.getSession().get(player.getRemoteAddress());
         if (session == null) {
-            plugin.getLog().info("No active login session found on server connect for {}", player);
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("No active login session found on server connect for {}", player);
+            }
             return;
         }
         if (!player.isOnlineMode() && session.getIdentityDecision() == IdentityClaim.Decision.OFFLINE) {

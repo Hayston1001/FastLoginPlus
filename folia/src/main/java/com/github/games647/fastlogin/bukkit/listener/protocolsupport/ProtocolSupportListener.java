@@ -49,7 +49,9 @@ public class ProtocolSupportListener extends JoinManagement<Player, CommandSende
 
         String username = loginStartEvent.getConnection().getProfile().getName();
         InetSocketAddress address = loginStartEvent.getConnection().getRawAddress();
-        plugin.getLog().info("Incoming login request for {} from {}", username, address);
+        if (plugin.getCore().isDebug()) {
+            plugin.getLog().info("Incoming login request for {} from {}", username, address);
+        }
 
         Action action = antiBotService.onIncomingConnection(address, username);
         if (action != Action.Continue) {

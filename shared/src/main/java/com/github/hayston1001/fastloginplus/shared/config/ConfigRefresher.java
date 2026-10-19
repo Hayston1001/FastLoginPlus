@@ -1,10 +1,9 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Copyright (c) 2026 games647 and contributors
  * Copyright (c) 2026 Hayston1001
  */
-package com.github.games647.fastlogin.shared.config;
+package com.github.hayston1001.fastloginplus.shared.config;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

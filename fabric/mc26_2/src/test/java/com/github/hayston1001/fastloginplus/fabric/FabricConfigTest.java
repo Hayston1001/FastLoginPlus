@@ -17,7 +17,6 @@ import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -38,7 +37,6 @@ import static org.mockito.Mockito.when;
 
 class FabricConfigTest {
     private static final String PROXY_ONE = "069a79f4-44e9-4726-a5be-fca90e38aaf5";
-    private static final String PROXY_TWO = "853c80ef-3c37-49fd-aa49-938b674adae6";
 
     @TempDir
     Path directory;
@@ -64,7 +62,9 @@ class FabricConfigTest {
     @Test
     void firstStartCreatesDirectoryAndExactTemplateThenSecondStartKeepsBytes() throws Exception {
         Path config = directory.resolve("new/config");
-        assertEquals(Map.of("language", "en", "allowed-proxy-ids", ""), FabricConfig.readFile(config, logger));
+        assertEquals(Map.of("language", "en", "allowed-proxy-ids", "",
+                "debug", false, "check-update", true, "update-check-interval", 24),
+                FabricConfig.readFile(config, logger));
         Path yaml = config.resolve("fastloginplus-fabric.yml");
         byte[] first = Files.readAllBytes(yaml);
         try (var input = getClass().getResourceAsStream("/fastloginplus-fabric.yml")) {
@@ -78,37 +78,40 @@ class FabricConfigTest {
     }
 
     @Test
-    void migratesOnlyLocalKeysAndPreservesOriginalPropertiesAsBackup() throws Exception {
-        Path old = directory.resolve("fastloginplus-fabric.properties");
-        String proxies = PROXY_ONE + ", " + PROXY_TWO;
-        String legacy = "# Original comment\nlanguage=zh\nallowed-proxy-ids=" + proxies + "\npolicy=ignored\n";
-        Files.writeString(old, legacy);
+    void parsesDebugAndUpdateSettingsWithoutQuotingThem() throws Exception {
+        Files.writeString(yaml(), "language: en\nallowed-proxy-ids: '" + PROXY_ONE + "'\n"
+                + "debug: true\ncheck-update: false\nupdate-check-interval: 6\n");
         var values = FabricConfig.readFile(directory, logger);
-        assertEquals(Map.of("language", "zh", "allowed-proxy-ids", proxies), values);
-        assertFalse(Files.exists(old));
-        Path backup = directory.resolve("fastloginplus-fabric.properties.bak");
-        assertEquals(legacy, Files.readString(backup));
-        Path yaml = yaml();
-        byte[] first = Files.readAllBytes(yaml);
-        assertEquals(values, FlatYamlReader.read(Files.readAllLines(yaml)).values());
-        verify(logger).info("Migrated {} to {}; kept the original as {}", old, yaml, backup);
-        // Even a recreated legacy file must not override the migrated YAML.
-        Files.writeString(old, "language=en\nallowed-proxy-ids=untrusted\n");
-        assertEquals(values, FabricConfig.readFile(directory, logger));
-        assertArrayEquals(first, Files.readAllBytes(yaml));
-        assertEquals(legacy, Files.readString(backup));
+        assertEquals(true, values.get("debug"));
+        assertEquals(false, values.get("check-update"));
+        assertEquals(6, values.get("update-check-interval"));
+        String output = Files.readString(yaml());
+        assertTrue(output.contains("debug: true\n"));
+        assertTrue(output.contains("check-update: false\n"));
+        assertTrue(output.contains("update-check-interval: 6\n"));
+        verifyNoInteractions(logger);
+    }
+
+    @Test
+    void invalidDebugAndIntervalFallBackWithWarnings() throws Exception {
+        Files.writeString(yaml(), "debug: maybe\nupdate-check-interval: 0\n");
+        var values = FabricConfig.readFile(directory, logger);
+        assertEquals(false, values.get("debug"));
+        assertEquals(true, values.get("check-update"));
+        assertEquals(24, values.get("update-check-interval"));
+        verify(logger).warn("fastloginplus-fabric.yml has an invalid {} value '{}'; using {}",
+                "debug", "maybe", false);
+        verify(logger).warn("fastloginplus-fabric.yml has an invalid {} value '{}'; using {}",
+                "update-check-interval", "0", 24);
         verifyNoMoreInteractions(logger);
     }
 
     @Test
-    void existingYamlWinsWithoutReadingOrRenamingLegacyProperties() throws Exception {
-        Files.writeString(yaml(), "language: zh\nallowed-proxy-ids: '" + PROXY_ONE + "'\n");
-        Path old = directory.resolve("fastloginplus-fabric.properties");
-        Files.writeString(old, "language=en\nallowed-proxy-ids=wrong\n");
-        assertEquals(PROXY_ONE, FabricConfig.readFile(directory, logger).get("allowed-proxy-ids"));
-        assertTrue(Files.exists(old));
-        assertFalse(Files.exists(directory.resolve("fastloginplus-fabric.properties.bak")));
-        verifyNoInteractions(logger);
+    void debugSwitchUsesTheFrozenStartupSnapshot() throws Exception {
+        field("startupSettings").set(null, new FabricConfig.StartupSettings("", true, 24, true));
+        assertTrue(FabricConfig.isDebug());
+        field("startupSettings").set(null, new FabricConfig.StartupSettings("", true, 24, false));
+        assertFalse(FabricConfig.isDebug());
     }
 
     @ParameterizedTest
@@ -184,7 +187,8 @@ class FabricConfigTest {
             fabric.when(FabricLoader::getInstance).thenReturn(loader);
             assertEquals("", FabricConfig.loadAtStartup().allowedProxyIds());
             messages.verify(() -> FabricMessages.load("en"));
-            assertEquals(Map.of("language", "en", "allowed-proxy-ids", ""),
+            assertEquals(Map.of("language", "en", "allowed-proxy-ids", "",
+                    "debug", "false", "check-update", "true", "update-check-interval", "24"),
                     FlatYamlReader.read(Files.readAllLines(yaml())).values());
         }
     }
@@ -207,49 +211,6 @@ class FabricConfigTest {
     }
 
     @Test
-    void backupCollisionNeverOverwritesExistingBackupOrDeletesOriginal() throws Exception {
-        Path old = directory.resolve("fastloginplus-fabric.properties");
-        Files.writeString(old, "language=zh\nallowed-proxy-ids=" + PROXY_ONE + "\n");
-        Path backup = directory.resolve("fastloginplus-fabric.properties.bak");
-        Files.writeString(backup, "previous backup");
-        byte[] original = Files.readAllBytes(old);
-        assertThrows(IllegalStateException.class, () -> FabricConfig.readFile(directory, logger));
-        assertEquals("previous backup", Files.readString(backup));
-        assertArrayEquals(original, Files.readAllBytes(old));
-        assertEquals(PROXY_ONE, FlatYamlReader.read(Files.readAllLines(yaml())).values().get("allowed-proxy-ids"));
-        verifyNoInteractions(logger);
-    }
-
-    @Test
-    void unreadableYamlLeavesLegacyFileUntouchedAndDoesNotCreateBackup() throws Exception {
-        Path old = directory.resolve("fastloginplus-fabric.properties");
-        Files.writeString(old, "language=zh\nallowed-proxy-ids=" + PROXY_ONE + "\n", StandardCharsets.UTF_8);
-        byte[] original = Files.readAllBytes(old);
-        // An existing directory at the YAML path cannot be read or replaced as a config file.
-        Files.createDirectory(yaml());
-        assertThrows(IllegalStateException.class, () -> FabricConfig.readFile(directory, logger));
-        assertArrayEquals(original, Files.readAllBytes(old));
-        assertFalse(Files.exists(directory.resolve("fastloginplus-fabric.properties.bak")));
-    }
-
-    @Test
-    void migrationWriteFailurePreservesOriginalAndNeverRenamesIt() throws Exception {
-        Path old = directory.resolve("fastloginplus-fabric.properties");
-        Files.writeString(old, "language=zh\nallowed-proxy-ids=" + PROXY_ONE + "\n");
-        byte[] original = Files.readAllBytes(old);
-        try (var refresher = mockStatic(ConfigRefresher.class)) {
-            refresher.when(() -> ConfigRefresher.refresh(any(), any(), any()))
-                    .thenThrow(new IOException("Injected write failure"));
-            var failure = assertThrows(IllegalStateException.class, () -> FabricConfig.readFile(directory, logger));
-            assertEquals("Injected write failure", failure.getCause().getMessage());
-            assertArrayEquals(original, Files.readAllBytes(old));
-            assertFalse(Files.exists(yaml()));
-            assertFalse(Files.exists(directory.resolve("fastloginplus-fabric.properties.bak")));
-            verifyNoInteractions(logger);
-        }
-    }
-
-    @Test
     void refreshWriteFailureDoesNotReplaceTheExistingYamlWithDefaults() throws Exception {
         String original = "# Keep on failure\nlanguage: zh\nallowed-proxy-ids: '" + PROXY_ONE + "'\n";
         Files.writeString(yaml(), original);
@@ -260,19 +221,6 @@ class FabricConfigTest {
             assertEquals(original, Files.readString(yaml()));
             verifyNoInteractions(logger);
         }
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"first\\nsecond", "first\\u0000second", "\\uD800"})
-    void unsupportedLegacyScalarNeverCreatesBrokenYamlOrRenamesOriginal(String value) throws Exception {
-        Path old = directory.resolve("fastloginplus-fabric.properties");
-        Files.writeString(old, "language=zh\nallowed-proxy-ids=" + value + "\n");
-        byte[] original = Files.readAllBytes(old);
-        assertThrows(IllegalStateException.class, () -> FabricConfig.readFile(directory, logger));
-        assertArrayEquals(original, Files.readAllBytes(old));
-        assertFalse(Files.exists(yaml()));
-        assertFalse(Files.exists(directory.resolve("fastloginplus-fabric.properties.bak")));
-        verifyNoInteractions(logger);
     }
 
     private Path yaml() {

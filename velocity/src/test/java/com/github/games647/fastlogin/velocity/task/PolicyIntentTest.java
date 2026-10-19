@@ -1,5 +1,6 @@
 /*
  * SPDX-License-Identifier: MIT
+ *
  * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.velocity.task;

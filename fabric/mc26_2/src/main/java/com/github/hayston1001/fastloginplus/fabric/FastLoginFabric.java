@@ -28,6 +28,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import static net.minecraft.commands.Commands.literal;
 import static net.minecraft.commands.Commands.argument;
@@ -39,6 +42,7 @@ import static net.minecraft.commands.Commands.argument;
 public final class FastLoginFabric implements ModInitializer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("fastloginplus_fabric");
+    private static ScheduledExecutorService updateExecutor;
 
     @Override
     public void onInitialize() {
@@ -56,12 +60,15 @@ public final class FastLoginFabric implements ModInitializer {
             bridge.verifyPolicy();
             bridge.warnUnverifiedStorage();
             try {
-                FabricConfig.warnIfUntrusted(FabricConfig.loadAtStartup());
+                FabricConfig.StartupSettings settings = FabricConfig.loadAtStartup();
+                FabricConfig.warnIfUntrusted(settings);
+                scheduleUpdateCheck(settings);
             } catch (RuntimeException unreadable) {
                 // never fail the server start over our own settings (R-6)
                 LOGGER.warn("Fabric configuration could not be read: {}", unreadable.getMessage());
             }
         });
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> stopUpdateCheck());
         ServerConfigurationConnectionEvents.BEFORE_CONFIGURE.register((listener, server) ->
                 beforeConfigure(listener, server, bridge, crackedNotice));
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
@@ -158,8 +165,10 @@ public final class FastLoginFabric implements ModInitializer {
                                 EasyAuth344Bridge bridge, FabricCrackedNotice crackedNotice) {
         GameProfile profile = listener.getOwner();
         if (BedrockBoundary.isBedrock(profile.name(), profile.id())) {
-            LOGGER.info("Rejecting unsupported Bedrock/Floodgate identity: name={} uuid={}",
-                    profile.name(), profile.id());
+            if (FabricConfig.isDebug()) {
+                LOGGER.info("Rejecting unsupported Bedrock/Floodgate identity: name={} uuid={}",
+                        profile.name(), profile.id());
+            }
             listener.disconnect(FabricMessages.text("bedrock-unsupported"));
             return;
         }
@@ -168,8 +177,10 @@ public final class FastLoginFabric implements ModInitializer {
             IdentityClaim claim = parseClaim(profile);
             bridge.beforeConfigure(server, claim);
             crackedNotice.beforeConfigure(listener, claim);
-            LOGGER.info("Validated {} forwarding claim for {}; profile property names={}",
-                    claim.getDecision(), profile.name(), profile.properties().keySet().size());
+            if (FabricConfig.isDebug()) {
+                LOGGER.info("Validated {} forwarding claim for {}; profile property names={}",
+                        claim.getDecision(), profile.name(), profile.properties().keySet().size());
+            }
         } catch (IllegalArgumentException invalidClaim) {
             LOGGER.warn("Invalid forwarding identity for {}: {}", profile.name(), invalidClaim.getMessage());
             listener.disconnect(FabricMessages.text("invalid-identity"));
@@ -183,8 +194,10 @@ public final class FastLoginFabric implements ModInitializer {
                        FabricCrackedNotice crackedNotice) {
         GameProfile profile = handler.player.getGameProfile();
         if (BedrockBoundary.isBedrock(profile.name(), profile.id())) {
-            LOGGER.info("Rejecting unsupported Bedrock/Floodgate identity: name={} uuid={}",
-                    profile.name(), profile.id());
+            if (FabricConfig.isDebug()) {
+                LOGGER.info("Rejecting unsupported Bedrock/Floodgate identity: name={} uuid={}",
+                        profile.name(), profile.id());
+            }
             handler.disconnect(FabricMessages.text("bedrock-unsupported"));
             return;
         }
@@ -195,6 +208,36 @@ public final class FastLoginFabric implements ModInitializer {
         } catch (RuntimeException rejected) {
             LOGGER.warn("Rejecting Fabric player {}: {}", profile.name(), rejected.getMessage());
             handler.disconnect(FabricMessages.reason(rejected, "auth-unavailable"));
+        }
+    }
+
+    private static void scheduleUpdateCheck(FabricConfig.StartupSettings settings) {
+        stopUpdateCheck();
+        if (!settings.checkUpdate()) {
+            return;
+        }
+        FabricUpdateChecker checker = new FabricUpdateChecker(
+                LOGGER, modVersion("fastloginplus_fabric"), settings.debug());
+        updateExecutor = Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "FastLoginPlus update check");
+            thread.setDaemon(true);
+            return thread;
+        });
+        long intervalHours = Math.max(1, settings.updateCheckInterval());
+        updateExecutor.scheduleWithFixedDelay(() -> {
+            if (checker.checkForUpdates()) {
+                LOGGER.warn(FabricMessages.plain("update-available",
+                        "%new%", checker.getLatestVersion(),
+                        "%current%", checker.getCurrentVersion()));
+            }
+        }, 3L, intervalHours * 3600L, TimeUnit.SECONDS);
+    }
+
+    private static void stopUpdateCheck() {
+        ScheduledExecutorService executor = updateExecutor;
+        updateExecutor = null;
+        if (executor != null) {
+            executor.shutdownNow();
         }
     }
 

@@ -1,27 +1,8 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The MIT License (MIT)
- *
- * Copyright (c) 2015-2026 games647, Hayston and contributors
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * Copyright (c) 2026 games647 and contributors
+ * Copyright (c) 2026 Hayston1001
  */
 package com.github.games647.fastlogin.bukkit.listener.protocollib;
 
@@ -388,8 +369,10 @@ public class VerifyResponseTask implements Runnable {
         // The async verification can outlive the connection (e.g. the user cancelled the
         // login while Mojang was still answering). Don't log a scary error or kick a ghost.
         if (!ProtocolLibCompat.isConnectionActive(plugin.getLog(), plugin.getCore().isDebug(), player)) {
-            plugin.getLog().info("Skipping disconnect for {}: connection already closed",
-                    session.getRequestUsername());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Skipping disconnect for {}: connection already closed",
+                        session.getRequestUsername());
+            }
             return;
         }
 
@@ -411,8 +394,10 @@ public class VerifyResponseTask implements Runnable {
             // The player already disconnected while the async session verification was running
             // (e.g. the user cancelled the connection). ProtocolLib throws an NPE when resolving
             // the NetworkManager of a player whose connection is closed — nothing left to kick.
-            plugin.getLog().info("Cannot kick {}: connection already closed ({})",
-                    player.getName(), ex.getClass().getSimpleName());
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Cannot kick {}: connection already closed ({})",
+                        player.getName(), ex.getClass().getSimpleName());
+            }
         }
     }
 

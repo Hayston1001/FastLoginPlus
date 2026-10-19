@@ -6,8 +6,8 @@
  */
 package com.github.games647.fastlogin.core.shared;
 
-import com.github.games647.fastlogin.shared.config.ConfigRefresher;
-import com.github.games647.fastlogin.shared.config.ConfigurationFiles;
+import com.github.hayston1001.fastloginplus.shared.config.ConfigRefresher;
+import com.github.hayston1001.fastloginplus.shared.config.ConfigurationFiles;
 
 import net.md_5.bungee.config.Configuration;
 import net.md_5.bungee.config.ConfigurationProvider;

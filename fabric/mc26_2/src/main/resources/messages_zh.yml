@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: MIT
+#
+# Copyright (c) 2026 Hayston1001
 # UTF-8 player messages. Missing or blank overrides fall back to bundled values.
 
 ownership-conflict: "FastLoginPlus: 此账号与本次连接的认证身份不符. 请使用正确的账号重新连接, 或联系管理员."
@@ -30,4 +32,5 @@ binding-consent-required: "FastLoginPlus: 此名字尚未切换成正版免密�
 premium-policy-disabled: "FastLoginPlus: 服务器策略已关闭正版自动登录. 保留的密码不能让未验证连接进入已绑定正版的账号, 请联系管理员. 其他账号仍使用 EasyAuth 的密码登录或注册流程."
 registration-required: "FastLoginPlus: 自动建档已关闭. 请先通过 EasyAuth 注册并登录, 再执行 /flp premium 绑定."
 authenticated: "已通过 FastLoginPlus 完成认证."
+update-available: "FastLoginPlus: 发现新版本: %new% (当前: %current%). 下载: https://github.com/Hayston1001/FastLoginPlus/releases"
 same-name-cracked-recorded: "你的账号已被记录为盗版. 你是正版玩家吗? 如被误判可使用 /flp premium 重新发起验证"
