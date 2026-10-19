@@ -181,7 +181,7 @@ class FloodgateManagementTest {
     void shouldTreatRecordExistenceAsRegisteredWithoutConsent() {
         // the record's existence (not the consent flag) marks a name whose
         // auto-auth already ran once. The pre-decision observation write no
-        // longer flips the consent (D-03 E-3), and a returning Bedrock player
+        // longer flips the consent, and a returning Bedrock player
         // must still be treated as registered - autoRegisterFloodgate=false
         // would otherwise defer them forever
         setConfig("true", "false", "false");

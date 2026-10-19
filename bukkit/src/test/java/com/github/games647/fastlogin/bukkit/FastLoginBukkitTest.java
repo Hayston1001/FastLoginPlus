@@ -156,7 +156,7 @@ class FastLoginBukkitTest {
 
     @Test
     void localAutoRegisterNeverGatesTheProxyPremiumPath() {
-        // R-10 enforcement switch: behind a proxy the login policy arrives with
+        // behind a proxy the login policy arrives with
         // the identity facts, so this server's local autoRegister copy is
         // "ignored here" (config.yml) — only standalone deployments read it
         assertTrue(FastLoginBukkit.runsProxyPremiumPath(true, false));

@@ -11,7 +11,7 @@ import com.github.games647.craftapi.resolver.MojangResolver;
 /**
  * Reachability of Mojang's session server (the one that answers
  * {@code hasJoined}), used to tell a client-side verification failure apart
- * from an authentication outage (F-13, R2).
+ * from an authentication outage.
  *
  * <p>The probe is a {@code hasJoined} call with a nonsense name and hash: the
  * session server answers "no such record", which proves it is reachable. It

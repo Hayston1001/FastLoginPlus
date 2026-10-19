@@ -16,8 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins the D-03 decision table row by row, plus the two confirmed extensions:
- * Q-B's three-state consent and R-7's auth-plugin premium accounts.
+ * Pins the decision table row by row, including the three-state consent (an
+ * unknown one never unlocks a password account) and auth-plugin premium
+ * accounts counting as consent.
  */
 class LoginMethodDeciderTest {
 
@@ -61,7 +62,7 @@ class LoginMethodDeciderTest {
 
     @Test
     void unverifiedOntoConsentedPremiumAccountIsRejected() {
-        // rule 8, the symmetric row
+        // the symmetric row: an unverified connection cannot use a consented name
         assertEquals(Outcome.REJECT,
                 LoginMethodDecider.decide(false, AccountState.PASSWORD_ACCOUNT, Consent.YES));
     }
@@ -74,14 +75,14 @@ class LoginMethodDeciderTest {
 
     @Test
     void unknownConsentNeverUnlocksAnything() {
-        // Q-B three-state: facts that never arrived keep the password lock
+        // three-state consent: facts that never arrived keep the password lock
         assertEquals(Outcome.PASSWORD,
                 LoginMethodDecider.decide(true, AccountState.PASSWORD_ACCOUNT, Consent.UNKNOWN));
     }
 
     @Test
     void unreadableAccountFailsClosedToThePasswordLock() {
-        // rule 1: never passwordless on an account state that could not be read
+        // never passwordless on an account state that could not be read
         assertEquals(Outcome.PASSWORD,
                 LoginMethodDecider.decide(true, AccountState.READ_FAILURE, Consent.YES));
         assertEquals(Outcome.PASSWORD,
@@ -90,7 +91,7 @@ class LoginMethodDeciderTest {
 
     @Test
     void autoLoginOffKeepsUnconvertedAccountsOnThePasswordFlow() {
-        // D-06 #1: policy prevents new claiming/registration, not established ownership.
+        // the policy prevents new claiming/registration, not established ownership.
         assertEquals(Outcome.PASSWORD,
                 LoginMethodDecider.decide(true, AccountState.PASSWORD_ACCOUNT, Consent.YES, false));
         assertEquals(Outcome.GUIDE_REGISTER,
@@ -133,7 +134,7 @@ class LoginMethodDeciderTest {
 
     @Test
     void declaredPolicyNeverReadsTheLocalCopy() {
-        // R-10 enforcement: behind a proxy the declared value is the authority;
+        // behind a proxy the declared value is the authority;
         // config.yml marks this server's local copy "ignored here", and the
         // supplier proves the local key is not even read
         assertTrue(LoginMethodDecider.resolvePolicyValue(true, true, LoginMethodDeciderTest::localKeyTouched));
@@ -154,7 +155,7 @@ class LoginMethodDeciderTest {
 
     @Test
     void autoRegisterUnknownGatesTheAutoRegisterCell() {
-        // F-15 A: "verified premium + no local account" — on (default) the
+        // "verified premium + no local account" — on (default) the
         // account is auto-created for the proven identity, off the player gets
         // the register dialog instead
         assertEquals(Outcome.AUTO_REGISTER_LOGIN,
@@ -172,7 +173,7 @@ class LoginMethodDeciderTest {
 
     @Test
     void authPluginPremiumAccountCountsAsConsent() {
-        // R-7: an account the auth plugin itself established as premium is
+        // an account the auth plugin itself established as premium is
         // trusted as an upgrade consent
         assertEquals(Outcome.AUTO_LOGIN,
                 LoginMethodDecider.decide(true, AccountState.PREMIUM_OWNED, Consent.UNKNOWN));

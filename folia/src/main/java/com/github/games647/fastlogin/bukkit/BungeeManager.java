@@ -165,7 +165,7 @@ public class BungeeManager {
      * Whether the forwarded profile attributes arrive over a signature-protected
      * channel (Velocity modern forwarding signs the whole forwarding payload with
      * the shared secret). Legacy forwarding (BungeeCord) carries unsigned
-     * attributes, so their claims need the proxy ID token instead (D-04).
+     * attributes, so their claims need the proxy ID token instead.
      *
      * <p>Both mechanisms enabled at once (a migration or a misconfiguration) is
      * handled as the legacy chain, the stricter side: only signature-protected

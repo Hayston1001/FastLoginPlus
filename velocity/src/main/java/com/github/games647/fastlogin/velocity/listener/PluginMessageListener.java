@@ -230,7 +230,7 @@ public class PluginMessageListener {
                     // the backend confirmed a premium outcome (auto-register or
                     // auto-login), so the account now belongs to this verified
                     // identity — this is what the consent records ("registered as
-                    // premium", incl. the R-7 sync for auth-plugin premium accounts)
+                    // premium", including auth-plugin-created premium accounts)
                     playerProfile.setOnlinemodePreferred(true);
                     playerProfile.setSameNameCracked(false);
                     plugin.getCore().getStorage().save(playerProfile);

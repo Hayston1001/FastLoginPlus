@@ -196,7 +196,7 @@ class SQLiteStorageTest {
     @Test
     void reconciliationClearsMarksWhenTheFallbackIsDisabled() {
         // the config can change while the server is down: startup (or a reload)
-        // with secondAttemptCracked=false must clear the marks (F-12)
+        // with secondAttemptCracked=false must clear the marks
         UUID premiumUuid = UUID.randomUUID();
         StoredProfile marked = new StoredProfile(premiumUuid, "Steve", true, FloodgateState.FALSE, "1.1.1.1");
         marked.setSameNameCracked(true);
@@ -229,7 +229,7 @@ class SQLiteStorageTest {
     @Test
     void migratesTableWithoutSameNameCrackedColumn() throws Exception {
         // Databases that predate the observation column get it added; their rows
-        // read as "not observed" (D-03 Q-E old-data compatibility)
+        // read as "not observed" (old-data compatibility)
         storage.close();
         storage = null;
 

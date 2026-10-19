@@ -1027,7 +1027,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // then rejects the login
         getCore().resetVerificationState(playerName);
 
-        // Login-method decision (D-03): the account state plus the declared facts
+        // Login-method decision: the account state plus the declared facts
         // decide, never the attestation alone. A missing or untrusted declaration
         // leaves the consent unknown, which never unlocks a password account.
         if (!allowsPremiumLogin(playerName, facts, connection, address, premiumUuid, connectionUuid)) {
@@ -1141,7 +1141,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     /**
      * Reads the proxy's identity facts from the forwarded profile (the early
-     * channel). Trust follows D-04 per chain: signature-protected forwarding
+     * channel). Trust depends on the chain: signature-protected forwarding
      * (Velocity modern forwarding) proves the declaration already, while legacy
      * forwarding (BungeeCord) is unsigned, so its claims must carry this proxy's
      * ID token and pass the proxy allowlist. Anything that fails falls closed to
@@ -1248,7 +1248,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     /**
-     * The login-method decision behind the configure-phase premium grant (D-03):
+     * The login-method decision behind the configure-phase premium grant:
      * the account state plus the declared facts, never the attestation alone.
      *
      * @param playerName the logging-in player's name

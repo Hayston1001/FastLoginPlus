@@ -110,8 +110,9 @@ class ForceLoginManagementTest {
         // Velocity: authPlugin is always null (no setAuthPluginHook call in the
         // velocity module). The proxy verified the session, so the observation
         // must be written locally instead of waiting for a SuccessMessage ack —
-        // but this write happens BEFORE the backend decided (rule 7/8 could still
-        // reject), so it must never grant the upgrade consent (D-03 E-3).
+        // but this write happens BEFORE the backend decided, and a mismatched
+        // identity or ownership can still reject the login, so the write must
+        // never grant the upgrade consent.
         UUID premiumUuid = UUID.randomUUID();
         StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
         TestLoginSession session = new TestLoginSession("TestUser", true, profile);
@@ -199,7 +200,7 @@ class ForceLoginManagementTest {
         assertEquals(1, mgmt.ackCount);
     }
 
-    // ---- R-7 recovery confirms premium ownership and converges the proxy record ----
+    // ---- auth-plugin premium recovery confirms ownership and converges the proxy record ----
 
     @Test
     void premiumOwnedAccountRecoversExplicitNoConsentAndWarns() throws Exception {
@@ -483,7 +484,7 @@ class ForceLoginManagementTest {
         verify(plugin, never()).sendMessage(any(), anyString());
     }
 
-    // ---- F-15 A: auto-register-unknown gates the "no local account" cell ----
+    // ---- auto-register-unknown gates the "no local account" cell ----
 
     @Test
     void standaloneGuidesRegistrationWhenAutoRegisterUnknownIsOff() throws Exception {

@@ -38,7 +38,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Pins the record-driven routing and the same-name cracked fallback (D-03 E-3):
+ * Pins the record-driven routing and the same-name cracked fallback:
  * what the stored observations and the consent do to the login path of a name.
  */
 class JoinManagementTest {
@@ -139,7 +139,7 @@ class JoinManagementTest {
 
     @Test
     void observedNameSkipsTheDoomedVerification() {
-        // Q-E: the persistent observation sends the name straight to the
+        // the persistent observation sends the name straight to the
         // password flow, no failed connection first
         StoredProfile profile = existingRow(null, false, true);
         when(storage.loadProfile("TestUser")).thenReturn(profile);
@@ -191,7 +191,7 @@ class JoinManagementTest {
 
     @Test
     void fallbackDisabledTreatsAnObservationAsNeverRecorded() throws Exception {
-        // F-12: with secondAttemptCracked off a marked name is "as if never
+        // with secondAttemptCracked off a marked name is "as if never
         // recorded" - a row that holds nothing but the observation gets the
         // unknown-name decision again, including the premium check
         StoredProfile profile = existingRow(null, false, true);
@@ -217,7 +217,7 @@ class JoinManagementTest {
 
     @Test
     void fallbackDisabledRetriesVerificationForObservedUuidRows() {
-        // F-12: the premium UUID observation of a marked row is still intact, so
+        // the premium UUID observation of a marked row is still intact, so
         // the name verifies again; a passing verification then clears the mark
         StoredProfile profile = existingRow(UUID.randomUUID(), false, true);
         when(storage.loadProfile("TestUser")).thenReturn(profile);
@@ -333,7 +333,7 @@ class JoinManagementTest {
         assertEquals(0, mgmt.premiumRequests);
     }
 
-    // ---- D-11: pre-login event coverage ----
+    // ---- pre-login event coverage ----
 
     @Test
     void preLoginEventFiresOnceWithTheLoadedProfileBeforeTheExistingDecision() {

@@ -104,19 +104,19 @@ public abstract class LoginSession {
      * record at login time: the record's existence, the recorded consent, the
      * premium UUID observation and the same-name cracked observation.
      *
-     * @param core the proxy core, for the policy keys (R-10)
+     * @param core the proxy core, for the policy keys
      */
     public synchronized void computeFacts(FastLoginCore<?, ?, ?> core) {
         StoredProfile stored = profile;
         boolean newPlayer = stored == null || !stored.isExistingPlayer();
         Consent consent = stored != null && stored.isOnlinemodePreferred() ? Consent.YES : Consent.NO;
         // reading the same-name cracked observation follows the configured
-        // fallback semantics (F-12): with secondAttemptCracked off the mark is
+        // fallback semantics: with secondAttemptCracked off the mark is
         // dormant and the name is reported as never observed
         boolean premiumName = stored != null
                 && (stored.getId() != null
                 || (stored.isSameNameCracked() && core.getConfig().getBoolean("secondAttemptCracked")));
-        // policy keys live on the proxy (R-10) and travel with the facts
+        // policy keys live on the proxy and travel with the facts
         this.facts = new IdentityClaim.Facts(newPlayer, premiumName && uuid == null, consent,
                 core.getConfig().getBoolean("autoLogin"),
                 core.getConfig().getBoolean("auto-register-unknown"),

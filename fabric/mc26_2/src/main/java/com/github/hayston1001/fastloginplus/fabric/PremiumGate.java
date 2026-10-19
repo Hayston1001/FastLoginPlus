@@ -50,7 +50,7 @@ final class PremiumGate {
     /**
      * Full form of {@link #decideVerified(IdentityClaim.Consent,
      * AccountState.Snapshot, UUID, boolean)} with the auto-register
-     * policy (F-15 A).
+     * policy.
      *
      * @param consent the name's upgrade consent as the proxy recorded it
      * @param state the local account state
@@ -77,9 +77,9 @@ final class PremiumGate {
             return Action.FREE_LOGIN;
         }
         if (state.state() == AccountState.OPEN) {
-            // decision table row 1: no account, no ownership question. On
-            // (default) the unclaimed entry is converted and the player logged
-            // in; with auto-register-unknown off (F-15 A) the player gets the
+            // no account, no ownership question. On (default) the unclaimed
+            // entry is converted and the player logged in; with
+            // auto-register-unknown off the player gets the
             // register dialog instead of an automatic account
             return autoRegisterUnknown ? Action.FREE_LOGIN : Action.PASSWORD_LOCK;
         }
@@ -92,8 +92,7 @@ final class PremiumGate {
 
     /**
      * Decides for an unverified (offline or same-name cracked) connection.
-     * Converted accounts refuse such connections (rule 8); everything else
-     * stays behind the password.
+     * Converted accounts refuse it; everything else stays behind the password.
      *
      * @param state the local account state
      * @return the action to apply

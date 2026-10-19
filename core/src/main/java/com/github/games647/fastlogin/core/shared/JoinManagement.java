@@ -73,8 +73,8 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             callFastLoginPreLoginEvent(username, source, profile);
 
             profile.setLastIp(ip);
-            // reading the observation follows the configured fallback semantics
-            // (F-12): with secondAttemptCracked off a marked name is treated as if
+            // reading the observation follows the configured fallback semantics:
+            // with secondAttemptCracked off a marked name is treated as if
             // it had never been recorded, so it verifies again — and a passing
             // verification then clears the stale mark. The read side is the
             // authority; the startup reconciliation only keeps the database tidy.
@@ -85,7 +85,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             // premium UUID — is treated as if it had never been recorded
             boolean dormantObservationOnly = profile.isSameNameCracked() && !observedCracked && !hasRealRecord;
             if (profile.isExistingPlayer() && !dormantObservationOnly) {
-                // routing follows the record's facts (D-03): a consented name or a
+                // routing follows the record's facts: a consented name or a
                 // name whose premium UUID observation is still intact is verified
                 // again; everything else keeps the password flow
                 boolean premiumName = profile.isOnlinemodePreferred()
@@ -94,8 +94,8 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                     // the cracked fallback only applies to names without consent: a
                     // consented name is verified on every connection (an impostor can
                     // never drag it into the password flow), while a name whose premium
-                    // identity is not consented can recover through the password flow
-                    // (rule 7's "log in with the password, then upgrade")
+                    // identity is not consented can log in with its password and upgrade
+                    // afterwards
                     if (!profile.isOnlinemodePreferred() && shouldFallBackToCracked(username)) {
                         if (core.isDebug()) {
                             core.getPlugin().getLog()
@@ -143,8 +143,8 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                     core.getPlugin().getLog().info("Unverified premium attempt -> cracked {}", username);
                 }
 
-                // the previous attempt never verified: record the same-name cracked
-                // observation (D-03 Q-E) and open the password flow directly
+                // the previous attempt never verified: record the persistent
+                // same-name cracked observation and open the password flow directly
                 confirmSameNameCracked(username, profile);
                 startCrackedSession(source, profile, username);
                 return;
@@ -203,7 +203,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                 }
 
                 if (!checkedPremium) {
-                    // "could not tell" (F-13): a lookup that never completed —
+                    // "could not tell": a lookup that never completed —
                     // rate limit, network trouble or an interruption — says
                     // nothing about the name. It must not degrade the player
                     // into the password flow: a new premium player would then
@@ -324,7 +324,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     /**
      * Whether the configured cracked fallback is active ({@code secondAttemptCracked}).
      * The same switch governs reading a stored observation: with it off a recorded
-     * name is treated as never marked (F-12).
+     * name is treated as never marked.
      *
      * @return true when the fallback and the observation semantics are enabled
      */
@@ -335,7 +335,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     /**
      * Whether repeated unverified premium attempts for the name open the cracked
      * fallback. Requires the {@code secondAttemptCracked} fallback to be enabled
-     * and one settled, definitive "not premium" verdict (F-13) — an attempt that
+     * and one settled, definitive "not premium" verdict — an attempt that
      * merely never verified counts only once the settlement judged it failed.
      *
      * @param username exact login name
@@ -346,7 +346,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     }
 
     /**
-     * Records the same-name cracked observation (D-03 Q-E) on the name's row: a
+     * Records the same-name cracked observation on the name's row: a
      * premium verification for this name was observed to fail and none passed
      * since. The observation is per name and persistent, so later connections go
      * straight to the password flow instead of failing one connection first.
@@ -373,8 +373,8 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     /**
      * The Fabric mode keeps undecided names reserved after Mojang lookup failures.
      *
-     * <p>Superseded (F-13, 2026-10-14): an unfinished Mojang lookup is "could
-     * not tell", and the unified handling is a kick that explains why
+     * <p>Unused: an unfinished Mojang lookup is "could not tell", and the
+     * unified handling is a kick that explains why
      * ({@code auth-server-unreachable}) — reserving the name would keep a
      * degraded, half-known state instead. This hook has no implementer in the
      * tree (the Fabric mod runs its own flow) and is kept only so out-of-tree
@@ -410,8 +410,8 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     /**
      * Fallback for a decision without a completed Mojang lookup.
      *
-     * <p>Superseded (F-13, 2026-10-14) alongside
-     * {@link #shouldReserveUnknownPremiumNames()}: an unfinished lookup now
+     * <p>Unused, alongside {@link #shouldReserveUnknownPremiumNames()}:
+     * an unfinished lookup now
      * kicks with {@code auth-server-unreachable} instead of starting any
      * session. Kept so out-of-tree subclasses keep compiling.</p>
      *

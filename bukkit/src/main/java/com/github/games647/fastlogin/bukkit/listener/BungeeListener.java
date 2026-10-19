@@ -148,7 +148,7 @@ public class BungeeListener implements PluginMessageListener {
             try {
                 //we need to check if the player is registered on Bukkit too
                 boolean registered = authPlugin != null && authPlugin.isRegistered(playerName);
-                // R-7 recovery also needs a task when the proxy has no account yet:
+                // Recovery of an auth-plugin premium account also needs a task when the proxy has no account yet:
                 // the confirmed login acknowledges premium ownership back to it.
                 if (!registered || authPlugin.inspectAccount(playerName)
                         == com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.PREMIUM_OWNED) {

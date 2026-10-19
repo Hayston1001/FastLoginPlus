@@ -120,7 +120,7 @@ public class StoredProfile extends Profile {
     /**
      * The same-name cracked observation: a premium verification for this name was
      * observed to fail and no later verification passed. It records the observation
-     * per name (D-03 Q-E), so every later connection can skip the doomed verification
+     * persistently per name, so every later connection can skip the doomed verification
      * attempt and go straight to the password flow.
      *
      * @return true when the name was observed as a same-name cracked player

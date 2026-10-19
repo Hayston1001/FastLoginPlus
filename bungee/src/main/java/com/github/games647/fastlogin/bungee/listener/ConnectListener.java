@@ -263,8 +263,8 @@ public class ConnectListener implements Listener {
                     attachPremiumAttestation(connection, verifiedUsername, verifiedUUID);
                 }
 
-                // The early channel also carries the identity facts (D-02: both
-                // proxy kinds ride the forwarded profile attributes), so a
+                // The early channel also carries the identity facts (both proxy
+                // kinds ride the forwarded profile attributes), so a
                 // Paper/Folia backend can decide before AuthMe's dialog opens.
                 attachIdentityFacts(connection, verifiedUsername, verifiedUUID, session);
             } else {
@@ -281,7 +281,7 @@ public class ConnectListener implements Listener {
                 IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, connection.getName(),
                         connection.getUniqueId(), null, session.getFacts(),
                         UUID.fromString(ProxyServer.getInstance().getConfig().getUuid()));
-                // D-23: try early, warn once on failure, keep admission and the
+                // Try early, warn once on failure, keep admission and the
                 // onServerConnected late sender intact. Never reject all offline players.
                 earlyDeclarations.attach(connection, claim);
             }
@@ -335,9 +335,9 @@ public class ConnectListener implements Listener {
 
     /**
      * Hands the backend the identity facts for this verified login as a login
-     * profile property (D-02: the early channel is the forwarded attributes on
-     * both proxy kinds), together with this proxy's ID token, which early-channel
-     * consumers check against their proxy allowlist (D-04).
+     * profile property (the early channel is the forwarded attributes on both
+     * proxy kinds), together with this proxy's ID token, which early-channel
+     * consumers check against their proxy allowlist.
      *
      * @param connection   the login connection being established
      * @param username     the player name

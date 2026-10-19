@@ -226,7 +226,7 @@ public final class IdentityClaim {
 
     /**
      * The proxy whose verified login produced this claim, used by early-channel
-     * consumers to check the claim against their proxy allowlist (D-04).
+     * consumers to check the claim against their proxy allowlist.
      *
      * @return the proxy UUID, or null when the sender declared none
      */

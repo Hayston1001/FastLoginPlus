@@ -22,7 +22,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Pins the F-13 reachability probe: it asks the session server (a hasJoined
+ * Pins the reachability probe: it asks the session server (a hasJoined
  * with a nonsense hash), it reads "no such record" as reachable, and it reuses
  * one answer for the cache window so an authentication outage costs a single
  * probe.

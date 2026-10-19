@@ -36,7 +36,7 @@ public class SQLiteStorage extends SQLStorage {
             + "`LastLogin` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
             //the premium shouldn't steal the cracked account by changing the name
             + "`Floodgate` INTEGER(3), "
-            // the same-name cracked observation (D-03 Q-E); rows migrated from
+            // the persistent same-name cracked observation; rows migrated from
             // older schemas may hold NULL, which reads as "not observed"
             + "`SameNameCracked` INTEGER(3), "
             + "UNIQUE (`Name`) "

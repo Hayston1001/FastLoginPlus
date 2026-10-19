@@ -87,11 +87,11 @@ public interface AuthPlugin<P> {
     /**
      * Classifies the account behind a name so the login-method decision can tell
      * a password account from one the auth plugin itself established as premium
-     * (R-7: such a record counts as an upgrade consent).
+     * (such a record counts as an upgrade consent).
      * <p>
      * Failures must propagate: the caller maps them to
      * {@link com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState#READ_FAILURE},
-     * which fails closed to the password lock and is logged (rule 1).
+     * which fails closed to the password lock and is logged.
      *
      * @param playerName player name
      * @return the account state, never null

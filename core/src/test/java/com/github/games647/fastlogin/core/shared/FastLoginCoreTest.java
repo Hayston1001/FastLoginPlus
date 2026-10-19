@@ -76,7 +76,7 @@ class FastLoginCoreTest {
         assertEquals(600_000L, FastLoginCore.validatedDurationMs(logger, "expire", 600_000L, 300_000L));
     }
 
-    // ---- the settled verification verdicts (F-13) ----
+    // ---- the settled verification verdicts ----
 
     @Test
     void settleCountsOnlyWhenTheSessionServerAnswers() {

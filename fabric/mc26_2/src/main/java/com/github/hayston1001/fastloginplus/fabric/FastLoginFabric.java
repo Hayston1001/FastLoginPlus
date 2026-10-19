@@ -64,7 +64,7 @@ public final class FastLoginFabric implements ModInitializer {
                 FabricConfig.warnIfUntrusted(settings);
                 scheduleUpdateCheck(settings);
             } catch (RuntimeException unreadable) {
-                // never fail the server start over our own settings (R-6)
+                // never fail the server start over our own settings
                 LOGGER.warn("Fabric configuration could not be read: {}", unreadable.getMessage());
             }
         });

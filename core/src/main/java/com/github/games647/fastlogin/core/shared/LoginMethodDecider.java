@@ -12,12 +12,12 @@ import com.github.games647.fastlogin.protocol.IdentityClaim.Consent;
  * The backend's login-method decision: identity facts from the proxy, account
  * state from the local auth plugin, and the recorded upgrade consent.
  *
- * <p>Decision table (D-03): a verified premium identity without an account is
+ * <p>The decision table: a verified premium identity without an account is
  * auto-registered and logged in; with an account it needs the upgrade consent
  * (password = ownership, an account never follows a name alone); without the
- * consent a password account keeps its password flow. The auth plugin's own
- * premium account counts as consent (R-7), allowing verified owners to recover
- * when the proxy record disagrees. An unverified connection
+ * consent a password account keeps its password flow. An account the auth
+ * plugin itself established as premium counts as consent, allowing verified
+ * owners to recover when the proxy record disagrees. An unverified connection
  * keeps the password lock; with a consent it means the account switched
  * ownership behind the consent and is rejected symmetrically. Unknown consent
  * (facts that never arrived) never unlocks a password account.
@@ -27,7 +27,7 @@ import com.github.games647.fastlogin.protocol.IdentityClaim.Consent;
  * reason to hand out passwordless login).
  *
  * <p>Disabling auto-login prevents all passwordless login, claiming and registration,
- * including R-7 recovery of an already premium-owned account. Only the rejection
+ * including recovery of an already premium-owned account. Only the rejection
  * of an unverified connection onto such an account is policy-independent: that
  * ownership guardrail grants nothing. Verified owners retain the auth plugin's
  * own flow and need an explanation that their converted account has no usable
@@ -35,7 +35,7 @@ import com.github.games647.fastlogin.protocol.IdentityClaim.Consent;
  *
  * <p>{@code auto-register-unknown} (the repair for a verified premium player
  * whose local account went missing — deleted, or the databases drifted apart)
- * gates the "verified premium identity without a local account" cell (F-15 A).
+ * gates the "verified premium identity without a local account" cell.
  * Its scope: only a connection Mojang has verified whose name has no local
  * account — never an offline/cracked connection, which carries no identity
  * proof and must set its own password in the register dialog. Off = such a
@@ -50,7 +50,7 @@ public final class LoginMethodDecider {
         /** A password account its owner has not upgraded. */
         PASSWORD_ACCOUNT,
         /**
-         * An account the auth plugin itself established as premium (R-7): it is
+         * An account the auth plugin itself established as premium: it is
          * treated like an upgrade consent.
          */
         PREMIUM_OWNED,
@@ -76,7 +76,7 @@ public final class LoginMethodDecider {
     }
 
     /**
-     * Resolves a policy value behind a proxy (R-10): the proxy's declared value
+     * Resolves a policy value behind a proxy: the proxy's declared value
      * is the authority and this server's local copy is never even read for it
      * (its config.yml copy is "ignored here"). The local value only serves facts
      * that never arrived — an older proxy during a rolling upgrade — and
@@ -122,15 +122,15 @@ public final class LoginMethodDecider {
 
     /**
      * Applies the decision table to one login. The policy keys live on the proxy
-     * (R-10) and arrive with the identity facts; this backend only enforces them.
+     * and arrive with the identity facts; this backend only enforces them.
      * With auto-login off other rows collapse to the password lock or registration
-     * flow; only the unverified premium-owned rejection precedes policy. R-7
-     * recovery requires auto-login to be enabled.
+     * flow; only the unverified premium-owned rejection precedes policy. Recovery
+     * through the auth plugin's own premium account requires auto-login to be enabled.
      * Admission
      * (offline-whitelist) is the caller's check: it needs the proxy's known list.
      *
      * <p>{@code autoRegisterUnknown} gates the "verified premium identity without
-     * a local account" cell (F-15 A — the key name misleads: "unknown" is the
+     * a local account" cell (the key name misleads: "unknown" is the
      * missing local account of a proven identity, not strangers/offline names):
      * on (default) the account is auto-created for the proven identity, off the
      * player gets the register dialog and sets their own password. Offline
@@ -175,8 +175,8 @@ public final class LoginMethodDecider {
         if (!registered) {
             return Outcome.GUIDE_REGISTER;
         }
-        // rule 8, the symmetric row: a cracked connection onto a consented
-        // premium name means the account moved behind the consent
+        // The symmetric case: a cracked connection onto a consented premium
+        // name means the account moved behind the consent.
         return consent == Consent.YES ? Outcome.REJECT : Outcome.PASSWORD;
     }
 }

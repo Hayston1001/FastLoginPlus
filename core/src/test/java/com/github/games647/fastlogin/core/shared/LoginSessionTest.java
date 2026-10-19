@@ -22,7 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Pins that the declared facts are a snapshot of the record (D-03 E-3):
+ * Pins that the declared facts are a snapshot of the record:
  * observations and consent come from the stored row, never from transient
  * per-connection state.
  */
@@ -69,7 +69,7 @@ class LoginSessionTest {
 
     @Test
     void factsTreatADisabledObservationAsAbsent() {
-        // F-12: with secondAttemptCracked off the stored mark is dormant and
+        // with secondAttemptCracked off the stored mark is dormant and
         // must not even show up in the declared facts
         when(config.getBoolean("secondAttemptCracked")).thenReturn(false);
         StoredProfile observed = new StoredProfile(1, null, "TestUser", false,

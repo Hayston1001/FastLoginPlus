@@ -472,8 +472,8 @@ public final class AuthMePremiumIntegrator {
      * Classifies the AuthMe account behind a name for the login-method decision:
      * no record, a password account, or an account this plugin or AuthMe's own
      * premium flow established as premium. A premium record counts as an upgrade
-     * consent (R-7); an empty password hash is the other half of that shape.
-     * Reflective read failures propagate so the caller can fail closed (rule 1).
+     * consent; an empty password hash is the other half of that shape.
+     * Reflective read failures propagate so the caller can fail closed.
      *
      * @param playerName the player name
      * @return the account state

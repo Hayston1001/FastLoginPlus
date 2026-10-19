@@ -69,7 +69,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     // Only the observation is written here: the upgrade consent is the
                     // backend's to confirm (SuccessMessage) or the player's to give (the
                     // premium toggle). Writing it before the backend decided is exactly the
-                    // rejected-takeover leak this record model closes (D-03 E-3).
+                    // rejected-takeover leak this record model closes.
                     // Note: Floodgate forced-online sessions reach this branch too; their
                     // session UUID is never set (onGameProfileRequest only handles online-mode
                     // connections), so the row is written without a UUID — matching the
@@ -97,7 +97,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 });
 
                 // the one-time notice for a freshly confirmed same-name cracked
-                // observation (D-03 Q-E). Delivered here — when the player has
+                // observation. Delivered here — when the player has
                 // actually reached the game — because the login phase has no chat
                 // yet; it goes only to the password flow the observation caused,
                 // and only while the observation is still recorded.
@@ -121,7 +121,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
 
     /**
      * The login flow for a verified premium session with an auth plugin: the
-     * message path applies the decision table (D-03), the standalone path keeps
+     * message path applies the decision table, the standalone path keeps
      * its local keys, and only confirmed outcomes touch the record.
      *
      * @param storage the storage to persist the record with
@@ -136,7 +136,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
         boolean recoveringPremiumAccount = false;
         if (session.isFactsPresent()) {
             // The message path: a proxy exists, so the decision table
-            // (D-03) decides from the account state plus its facts.
+            // decides from the account state plus its facts.
             LoginMethodDecider.AccountState account = readAccountState(authPlugin, playerName);
             if (!session.getFacts().policyDeclared()) {
                 core.getPlugin().getLog().warn(
@@ -192,11 +192,11 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
             // local keys and the session's registration expectation
             // decide, exactly as before the decision table landed.
             // The "verified premium + no local account" cell is gated by
-            // auto-register-unknown (F-15 A): on = auto-create for the proven
+            // auto-register-unknown: on = auto-create for the proven
             // identity, off = the auth plugin's own register dialog, never an
             // automatic account. This whole branch is inside isOnlineMode(), so
             // offline/cracked connections never reach it. The value follows
-            // R-10: the declared policy first, the local key only when nothing
+            // the declared policy first, the local key only when nothing
             // was declared (standalone).
             boolean autoRegisterUnknown = resolveAutoRegisterUnknown(session);
             boolean needsAccount = session.needsRegistration()
@@ -222,8 +222,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
             if (playerProfile != null) {
                 // persist under the name-level striped lock. This write is the
                 // confirmed outcome: the account now belongs to the verified
-                // premium identity ("registered as premium" / R-7), which is
-                // what the consent records.
+                // premium identity, which is what the consent records.
                 storage.withNameLock(getName(player), () -> {
                     playerProfile.setId(session.getUuid());
                     playerProfile.setSameNameCracked(false);
@@ -328,7 +327,8 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     public abstract boolean isOnlineMode();
 
     /**
-     * Refuses the connection over an account ownership conflict (rules 7 and 8).
+     * Refuses the connection because the verified identity and the account
+     * ownership do not match.
      *
      * @param player the player to disconnect
      * @param message the localized reason
@@ -338,7 +338,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     /**
      * Reads the account state from the auth plugin. A read failure becomes
      * {@code READ_FAILURE}: the caller fails closed to the password lock and
-     * logs it (rule 1).
+     * logs it, so an unreadable account never gets passwordless access.
      *
      * @param authPlugin the auth plugin hook
      * @param playerName the player name
@@ -359,7 +359,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
 
     /**
      * The auto-login policy for this login: the proxy's declared value when it
-     * declared one (R-10), otherwise this server's own key, which keeps older
+     * declared one, otherwise this server's own key, which keeps older
      * proxies on the pre-decision behaviour.
      *
      * @param session the login session
@@ -371,8 +371,8 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     }
 
     /**
-     * The auto-register policy for this login (F-15 A): the proxy's declared
-     * value when it declared one (R-10), otherwise this server's own key. Gates
+     * The auto-register policy for this login: the proxy's declared
+     * value when it declared one, otherwise this server's own key. Gates
      * the "verified premium + no local account" cell — never an offline/cracked
      * connection.
      *

@@ -43,7 +43,7 @@ public abstract class SQLStorage implements AuthStorage {
     protected static final String ADD_FLOODGATE_COLUMN_STMT = "ALTER TABLE `" + PREMIUM_TABLE
             + "` ADD COLUMN `Floodgate` INTEGER(3)";
 
-    // the same-name cracked observation (D-03 Q-E); rows that predate the column
+    // the persistent same-name cracked observation; rows that predate the column
     // read as "not observed" (NULL -> false)
     protected static final String ADD_SAME_NAME_CRACKED_COLUMN_STMT = "ALTER TABLE `" + PREMIUM_TABLE
             + "` ADD COLUMN `SameNameCracked` INTEGER(3)";
@@ -65,7 +65,7 @@ public abstract class SQLStorage implements AuthStorage {
             + "`LastLogin`=CURRENT_TIMESTAMP WHERE `UserID`=?";
     protected static final String DELETE_BY_NAME = "DELETE FROM `" + PREMIUM_TABLE
             + "` WHERE `Name`=?";
-    // observation bookkeeping (D-03 Q-E): clears only the SameNameCracked
+    // observation bookkeeping: clears only the SameNameCracked
     // column, never any other field or table
     protected static final String CLEAR_SAME_NAME_CRACKED_STMT = "UPDATE `" + PREMIUM_TABLE
             + "` SET `SameNameCracked`=0 WHERE `SameNameCracked` != 0";
@@ -151,7 +151,7 @@ public abstract class SQLStorage implements AuthStorage {
                 stmt.executeUpdate(ADD_FLOODGATE_COLUMN_STMT);
             }
 
-            // add the same-name cracked observation column (D-03 Q-E)
+            // add the same-name cracked observation column
             if (isColumnMissing(md, "SameNameCracked")) {
                 stmt.executeUpdate(ADD_SAME_NAME_CRACKED_COLUMN_STMT);
             }
@@ -332,7 +332,7 @@ public abstract class SQLStorage implements AuthStorage {
     }
 
     /**
-     * Clears every same-name cracked observation (D-03 Q-E) in the database.
+     * Clears every same-name cracked observation in the database.
      *
      * <p>Only the {@code SameNameCracked} column is touched — no other field,
      * row property or table. Rows without a mark (including ones older than the

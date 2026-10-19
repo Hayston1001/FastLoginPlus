@@ -71,7 +71,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     /** How often the settlement sweep looks for pending verifications. */
     private static final Duration VERIFICATION_SETTLEMENT_SWEEP = Duration.ofSeconds(5);
 
-    /** How long one session-server reachability answer is reused (F-13). */
+    /** How long one session-server reachability answer is reused. */
     static final long SESSION_PROBE_CACHE_MS = 60_000L;
 
     private final Map<String, String> localeMessages = new ConcurrentHashMap<>();
@@ -80,23 +80,23 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     // serialize settlement and success so a late success clears counted failures.
     private final ConcurrentMap<String, Boolean> pendingVerifications = new ConcurrentHashMap<>();
 
-    // F-13 (R2): settled definitive "not premium" verdicts — the only thing
+    // Settled definitive "not premium" verdicts — the only thing
     // that counts towards the same-name cracked observation. Bounded with a
     // long TTL: the confirmed observation itself lives in the storage row.
     private final ConcurrentMap<String, Integer> definiteFailures = CommonUtil.buildCache(
             Duration.ofHours(1), 10_000
     );
 
-    // F-13 (R2): session-server reachability probe (see SessionServerProbe);
+    // Session-server reachability probe (see SessionServerProbe);
     // created with the resolver in load()
     private SessionServerProbe sessionProbe;
 
-    // F-13 (R2): the settlement sweep is a self-chaining delayed task (the same
+    // The settlement sweep is a self-chaining delayed task (the same
     // idiom as the relay retry), started with the storage and stopped at close
     private volatile boolean settling;
 
     // one-time chat notices owed for a freshly confirmed same-name cracked
-    // observation (D-03 Q-E): queued at the first confirmation, delivered when
+    // observation: queued at the first confirmation, delivered when
     // the player actually reaches the game — a login-phase connection cannot
     // see chat yet. The proxy's join task consumes it for proxy chat or hands
     // it to a capable Fabric backend for backend-local rendering. Keys are
@@ -215,7 +215,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         this.resolver = this.config.getBoolean("useProxyAgnosticResolver")
             ? new ProxyAgnosticMojangResolver() : new MojangResolver();
 
-        // the F-13 reachability probe uses the session server of that resolver
+        // the reachability probe uses the session server of that resolver
         this.sessionProbe = new SessionServerProbe(resolver, SESSION_PROBE_CACHE_MS);
 
         antiBot = createAntiBotService(config.getSection("anti-bot"));
@@ -463,7 +463,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             // config and storage are both in place now: align the stored
             // observation flags with the configured fallback semantics
             reconcileSameNameCracked();
-            // F-13: the settlement sweep judges unverified attempts in time,
+            // the settlement sweep judges unverified attempts in time,
             // independent of when (or whether) the player reconnects
             startVerificationSettlement();
             return true;
@@ -485,7 +485,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Aligns the stored same-name cracked observations (D-03 Q-E) with the
+     * Aligns the stored same-name cracked observations with the
      * configured {@code secondAttemptCracked} semantics.
      *
      * <p>The read side consults the config wherever the observation is used and
@@ -548,7 +548,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Records a definitive "not premium" verdict for the name (F-13): the
+     * Records a definitive "not premium" verdict for the name: the
      * session server explicitly rejected the verification. This is the only
      * observation that counts towards the same-name cracked record.
      *
@@ -562,7 +562,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Drops a pending verification without counting it (F-13): the outcome was
+     * Drops a pending verification without counting it: the outcome was
      * "could not tell" — an authentication outage, or a player who left
      * mid-verification. Nothing is recorded.
      *
@@ -574,7 +574,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     /**
      * A passing verification refutes everything recorded for the name: the
-     * pending mark and every counted failure (F-13).
+     * pending mark and every counted failure.
      *
      * @param username exact login name that verified
      */
@@ -653,7 +653,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Starts the settlement sweep (F-13): a self-chaining delayed task, so the
+     * Starts the settlement sweep: a self-chaining delayed task, so the
      * settlement never degenerates into "when the player next connects".
      */
     public void startVerificationSettlement() {
