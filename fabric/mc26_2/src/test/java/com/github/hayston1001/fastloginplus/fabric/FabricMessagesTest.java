@@ -15,9 +15,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FabricMessagesTest {
@@ -203,10 +203,41 @@ class FabricMessagesTest {
     }
 
     @Test
-    void unsupportedYamlIsRejected() throws Exception {
-        Files.writeString(directory.resolve("messages_en.yml"),
-                "premium-requested:\n  nested: value\n", StandardCharsets.UTF_8);
-        assertThrows(IllegalStateException.class, () -> FabricMessages.load("en", directory));
+    void invalidYamlFallsBackToBundledMessages() throws Exception {
+        for (String language : new String[]{"en", "zh"}) {
+            Path file = directory.resolve("messages_" + language + ".yml");
+            byte[] invalid = "premium-requested:\n  nested: value\n".getBytes(StandardCharsets.UTF_8);
+            Files.write(file, invalid);
+            org.slf4j.Logger logger = org.mockito.Mockito.mock(org.slf4j.Logger.class);
+
+            Map<String, String> loaded = FabricMessages.loadAndReportLanguage(language, directory, logger);
+
+            assertEquals(bundled(language), loaded);
+            assertArrayEquals(invalid, Files.readAllBytes(file));
+            org.mockito.Mockito.verify(logger).error(
+                    org.mockito.ArgumentMatchers.contains("Invalid Fabric message file"),
+                    org.mockito.ArgumentMatchers.eq(file),
+                    org.mockito.ArgumentMatchers.any(Throwable.class));
+            org.mockito.Mockito.verify(logger).warn("Loaded bundled Fabric language fallback for {}", file);
+        }
+    }
+
+    @Test
+    void repeatedLoadsDiscardPreviousOverridesAndRejectNonStringMessages() throws Exception {
+        Path file = directory.resolve("messages_zh.yml");
+        org.slf4j.Logger logger = org.mockito.Mockito.mock(org.slf4j.Logger.class);
+        Files.writeString(file, "custom: Previous override\n", StandardCharsets.UTF_8);
+        Map<String, String> previous = FabricMessages.loadAndReportLanguage("zh", directory, logger);
+        assertEquals("Previous override", previous.get("custom"));
+        byte[] invalid = "partial: Must not leak\npremium-requested: [not, scalar]\n".getBytes(StandardCharsets.UTF_8);
+        Files.write(file, invalid);
+
+        Map<String, String> loaded = FabricMessages.loadAndReportLanguage("zh", directory, logger);
+
+        assertEquals(bundled("zh"), loaded);
+        assertFalse(loaded.containsKey("custom"));
+        assertFalse(loaded.containsKey("partial"));
+        assertArrayEquals(invalid, Files.readAllBytes(file));
     }
 
     @Test

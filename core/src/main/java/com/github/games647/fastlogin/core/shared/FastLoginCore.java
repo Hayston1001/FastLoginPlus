@@ -20,6 +20,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -74,7 +76,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     /** How long one session-server reachability answer is reused. */
     static final long SESSION_PROBE_CACHE_MS = 60_000L;
 
-    private final Map<String, String> localeMessages = new ConcurrentHashMap<>();
+    private volatile Map<String, String> localeMessages = Collections.emptyMap();
 
     // One pending mark per case-insensitive name. Per-key compute operations
     // serialize settlement and success so a late success clears counted failures.
@@ -200,16 +202,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         appendMissingKeys(messagesFile, defaultMessagesFile);
 
         // 3. Load language file with English as default fallback
-        try {
-            Configuration messages = loadLanguageFile(messagesFile, defaultMessagesFile);
-
-            LanguageMessages.populate(messages.getKeys(), messages::get, localeMessages);
-
-            plugin.getLog().info("Loaded language file: {}", messagesFile);
-        } catch (IOException ioEx) {
-            plugin.getLog().error("Failed to load language file: {}", messagesFile, ioEx);
-            return;
-        }
+        loadLanguageMessages(messagesFile, defaultMessagesFile);
 
         // Initialize the resolver based on the config parameter
         this.resolver = this.config.getBoolean("useProxyAgnosticResolver")
@@ -812,8 +805,9 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             Configuration localized = selected == null ? defaults
                     : provider.load(new InputStreamReader(selected, StandardCharsets.UTF_8));
             updateLanguageFile(userFile, defaultFile, defaults, localized);
-        } catch (IOException ioEx) {
-            plugin.getLog().error("Cannot upgrade language file {}", userFile, ioEx);
+        } catch (IOException | RuntimeException failure) {
+            plugin.getLog().error("Cannot upgrade language file {}; it will be ignored",
+                    userFile, failure);
         }
     }
 
@@ -858,50 +852,98 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Load a language file with the English default as fallback.
-     * Keys from the default file are used when the language file doesn't have them.
+     * Loads the selected language and falls back to the bundled language when the user file
+     * is missing or not valid YAML. A broken language file must not disable the plugin.
      *
-     * @param langFile the language file name in the plugin folder
-     * @param defaultFile the default resource file name in the jar
-     * @return the merged configuration
-     * @throws IOException if the file cannot be read
+     * @param messagesFile the user's language file name
+     * @param defaultFile the English fallback resource in the jar
      */
-    private Configuration loadLanguageFile(String langFile, String defaultFile) throws IOException {
-        ConfigurationProvider configProvider = ConfigurationProvider.getProvider(YamlConfiguration.class);
-
-        // Load English defaults as the base
-        Configuration defaults;
-        try (InputStream defaultStream = getClass().getClassLoader().getResourceAsStream(defaultFile)) {
-            defaults = configProvider.load(defaultStream);
+    void loadLanguageMessages(String messagesFile, String defaultFile) {
+        Path file = plugin.getPluginFolder().resolve(messagesFile);
+        try {
+            ConfigurationProvider provider = ConfigurationProvider.getProvider(YamlConfiguration.class);
+            Configuration defaults;
+            try (InputStream input = getClass().getClassLoader().getResourceAsStream(defaultFile)) {
+                if (input == null) {
+                    throw new IOException("Missing bundled language defaults: " + defaultFile);
+                }
+                defaults = provider.load(input);
+            }
+            Configuration bundled = loadBundledLanguage(messagesFile, defaults, provider);
+            ConfigurationFiles.Loader<Configuration> loader = new BungeeConfigurationLoader(provider) {
+                @Override
+                public Configuration load(Reader reader, Configuration fallback) throws IOException {
+                    Configuration loaded = super.load(reader, fallback);
+                    // Rendering validates message types before publishing any locale state.
+                    renderLanguageMessages(loaded);
+                    return loaded;
+                }
+            };
+            LanguageMessages.Result<Configuration> result = LanguageMessages.loadWithFallback(
+                    file, defaults, bundled, loader,
+                    failure -> plugin.getLog().error(
+                            "Invalid language file {}; falling back to bundled defaults", file, failure));
+            localeMessages = renderLanguageMessages(result.getValue());
+            if (result.isFallback()) {
+                plugin.getLog().warn("Loaded bundled language fallback for {}", file);
+            } else {
+                plugin.getLog().info("Loaded language file: {}", messagesFile);
+            }
+        } catch (IOException | RuntimeException failure) {
+            localeMessages = Collections.emptyMap();
+            plugin.getLog().error("Failed to load bundled language messages for {}", file, failure);
         }
+    }
 
-        Path filePath = plugin.getPluginFolder().resolve(langFile);
+    private Map<String, String> renderLanguageMessages(Configuration messages) {
+        Map<String, String> rendered = new HashMap<>();
+        LanguageMessages.populate(messages.getKeys(), messages::get, rendered);
+        return Collections.unmodifiableMap(rendered);
+    }
 
-        return LanguageMessages.load(filePath, defaults, configurationLoader(configProvider));
+    private Configuration loadBundledLanguage(String messagesFile, Configuration defaults,
+                                              ConfigurationProvider provider) throws IOException {
+        try (InputStream selected = getClass().getClassLoader().getResourceAsStream(messagesFile)) {
+            if (selected == null) {
+                return defaults;
+            }
+            try (Reader reader = new InputStreamReader(selected, StandardCharsets.UTF_8)) {
+                return ConfigurationFiles.includeDefaultKeys(provider.load(reader, defaults), defaults,
+                        configurationLoader(provider));
+            }
+        }
     }
 
     static ConfigurationFiles.Loader<Configuration> configurationLoader(ConfigurationProvider provider) {
-        return new ConfigurationFiles.Loader<Configuration>() {
-            @Override
-            public Configuration load(Reader reader, Configuration defaults) throws IOException {
-                return provider.load(reader, defaults);
-            }
+        return new BungeeConfigurationLoader(provider);
+    }
 
-            @Override
-            public Collection<String> getKeys(Configuration config) {
-                return config.getKeys();
-            }
+    private static class BungeeConfigurationLoader implements ConfigurationFiles.Loader<Configuration> {
+        private final ConfigurationProvider provider;
 
-            @Override
-            public Object get(Configuration config, String key) {
-                return config.get(key);
-            }
+        BungeeConfigurationLoader(ConfigurationProvider provider) {
+            this.provider = provider;
+        }
 
-            @Override
-            public void set(Configuration config, String key, Object value) {
-                config.set(key, value);
-            }
-        };
+        @Override
+        public Configuration load(Reader reader, Configuration defaults) throws IOException {
+            return provider.load(reader, defaults);
+        }
+
+        @Override
+        public Collection<String> getKeys(Configuration config) {
+            return config.getKeys();
+        }
+
+        @Override
+        public Object get(Configuration config, String key) {
+            return config.get(key);
+        }
+
+        @Override
+        public void set(Configuration config, String key, Object value) {
+            config.set(key, value);
+        }
     }
 
     public void close() {

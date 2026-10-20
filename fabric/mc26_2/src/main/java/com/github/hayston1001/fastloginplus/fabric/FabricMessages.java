@@ -38,7 +38,14 @@ final class FabricMessages {
     }
 
     static Map<String, String> loadAndReportLanguage(String language, Path directory, org.slf4j.Logger logger) {
-        Map<String, String> loaded = load(language, directory);
+        Path file = directory.resolve("messages_" + effectiveLanguage(language) + ".yml");
+        LanguageMessages.Result<Map<String, String>> result = LanguageMessages.loadWithFallback(
+                file, defaults(language, file), bundledFallback(language), YAML_LOADER,
+                failure -> logger.error("Invalid Fabric message file {}; falling back to bundled messages",
+                        file, failure));
+        if (result.isFallback()) {
+            logger.warn("Loaded bundled Fabric language fallback for {}", file);
+        }
         if (language != null && !language.isEmpty()
                 && !"en".equalsIgnoreCase(language) && !"zh".equalsIgnoreCase(language)) {
             logger.warn("Unknown Fabric message language='{}'; effective language={}",
@@ -46,7 +53,15 @@ final class FabricMessages {
         }
         logger.info("Fabric message language={} (set language in fastloginplus-fabric.yml; "
                 + "restart the backend to apply changes)", effectiveLanguage(language));
-        return loaded;
+        return result.getValue();
+    }
+
+    private static Map<String, String> bundledFallback(String language) {
+        Map<String, String> fallback = new LinkedHashMap<>(bundled("en"));
+        if ("zh".equalsIgnoreCase(language)) {
+            fallback.putAll(bundled("zh"));
+        }
+        return fallback;
     }
 
     private static String effectiveLanguage(String language) {
@@ -56,17 +71,21 @@ final class FabricMessages {
     static Map<String, String> load(String language, Path directory) {
         String locale = effectiveLanguage(language);
         Path file = directory.resolve("messages_" + locale + ".yml");
-        Map<String, String> defaults = new LinkedHashMap<>(bundled("en"));
-        // An absent override uses the bundled locale. A selected override file
-        // with a missing key falls back to English, just like the classic loader.
-        if (!Files.exists(file) && "zh".equals(locale)) {
-            defaults.putAll(bundled(locale));
-        }
         try {
-            return LanguageMessages.load(file, defaults, YAML_LOADER);
+            return LanguageMessages.load(file, defaults(language, file), YAML_LOADER);
         } catch (IOException error) {
             throw new IllegalStateException("Cannot load Fabric language messages", error);
         }
+    }
+
+    private static Map<String, String> defaults(String language, Path file) {
+        Map<String, String> defaults = new LinkedHashMap<>(bundled("en"));
+        // An absent override uses the bundled locale. A selected override file
+        // with a missing key falls back to English, just like the classic loader.
+        if (!Files.exists(file) && "zh".equals(effectiveLanguage(language))) {
+            defaults.putAll(bundled("zh"));
+        }
+        return defaults;
     }
 
     private static Map<String, String> loadYaml(Reader reader, Map<String, String> defaults) throws IOException {
