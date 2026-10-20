@@ -21,7 +21,10 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
-/** Repairs language upgrades without replacing customized or unknown message values. */
+/**
+ * Repairs versioned language upgrades, including values left at the English default,
+ * without replacing customized or unknown message values.
+ */
 final class LanguageFileUpdater {
     static final String VERSION_KEY = "_messages-version";
 
@@ -68,7 +71,7 @@ final class LanguageFileUpdater {
                     && user.get(key) instanceof String
                     && !Objects.equals(user.get(key), translated)
                     && (Objects.equals(user.get(key), previousLocalized.get(key))
-                    || (userVersion == 0 && Objects.equals(user.get(key), english.get(key))))) {
+                    || Objects.equals(user.get(key), english.get(key)))) {
                 user.set(key, translated);
                 refreshed++;
             }

@@ -73,6 +73,72 @@ class LanguageFileUpdaterTest {
     }
 
     @Test
+    void englishDefaultsMigrateOnVersionUpgrade() throws Exception {
+        Configuration english = provider.load("_messages-version: 2\n"
+                + "notice: English default\ncustom: English custom\n");
+        Configuration chinese = provider.load("_messages-version: 2\n"
+                + "notice: 中文提示\ncustom: 中文自定义\n");
+        Configuration previous = provider.load("_messages-version: 1\n"
+                + "notice: 中文旧值\ncustom: 中文旧值\n");
+        Path file = directory.resolve("messages_zh.yml");
+        Files.write(file, ("_messages-version: 1\nnotice: English default\ncustom: English custom!\n")
+                .getBytes(StandardCharsets.UTF_8));
+
+        LanguageFileUpdater.Result result = LanguageFileUpdater.update(file, english, chinese, 2, previous);
+
+        assertEquals(1, result.refreshed);
+        assertEquals(0, result.added);
+        Configuration upgraded = read(file);
+        assertEquals("中文提示", upgraded.getString("notice"));
+        assertEquals("English custom!", upgraded.getString("custom"));
+        assertEquals(2, upgraded.getInt("_messages-version"));
+
+        byte[] afterFirst = Files.readAllBytes(file);
+        LanguageFileUpdater.Result repeated = LanguageFileUpdater.update(file, english, chinese, 2, null);
+        assertEquals(0, repeated.refreshed);
+        assertArrayEquals(afterFirst, Files.readAllBytes(file));
+    }
+
+    @Test
+    void productionV1EnglishDefaultsRefreshOnV2Upgrade() throws Exception {
+        Configuration english = bundled("en");
+        Configuration chinese = bundled("zh");
+        Configuration previous = resource("messages/archive/1/messages_zh.yml");
+        Path file = directory.resolve("messages_zh.yml");
+        Configuration user = new Configuration();
+        user.set("_messages-version", 1);
+        for (String key : new String[]{"database-error", "remove-premium-other", "authme-freemium-blocked"}) {
+            user.set(key, english.getString(key));
+        }
+        user.set("auto-login", "My custom login notice");
+        save(file, user);
+
+        LanguageFileUpdater.Result result = LanguageFileUpdater.update(file, english, chinese, 2, previous);
+
+        assertEquals(3, result.refreshed);
+        Configuration upgraded = read(file);
+        for (String key : new String[]{"database-error", "remove-premium-other", "authme-freemium-blocked"}) {
+            assertEquals(chinese.getString(key), upgraded.getString(key), key);
+        }
+        assertEquals("My custom login notice", upgraded.getString("auto-login"));
+        assertEquals(2, upgraded.getInt("_messages-version"));
+    }
+
+    @Test
+    void englishDefaultsDoNotMigrateWithoutVersionUpgrade() throws Exception {
+        Configuration english = provider.load("_messages-version: 1\nnotice: English default\n");
+        Configuration chinese = provider.load("_messages-version: 1\nnotice: 中文提示\n");
+        Path file = directory.resolve("messages_zh.yml");
+        Files.write(file, "_messages-version: 1\nnotice: English default\n".getBytes(StandardCharsets.UTF_8));
+
+        LanguageFileUpdater.Result result = LanguageFileUpdater.update(file, english, chinese, 1, null);
+
+        assertEquals(0, result.refreshed);
+        assertEquals("English default", read(file).get("notice"));
+        assertEquals(1, read(file).getInt("_messages-version"));
+    }
+
+    @Test
     void englishAndUnavailableTranslationsDoNotTriggerMigration() throws Exception {
         Configuration english = provider.load("notice: English default\n");
         Path file = directory.resolve("messages_en.yml");
@@ -110,9 +176,9 @@ class LanguageFileUpdaterTest {
         assertEquals(chinese.getString("premium-policy-disabled"), upgraded.getString("premium-policy-disabled"));
         assertEquals(chinese.getString("premium-password-login"), upgraded.getString("premium-password-login"));
         assertEquals("My custom login notice", upgraded.getString("auto-login"));
-        assertEquals(1, upgraded.getInt("_messages-version"));
+        assertEquals(2, upgraded.getInt("_messages-version"));
         verify(log).info("Refreshed {} unchanged message values to messages v{} in {}",
-                2, 1, "messages_zh.yml");
+                2, 2, "messages_zh.yml");
         verify(log).info("Appended {} missing keys to {}", english.getKeys().size() - 4, "messages_zh.yml");
         verifyNoMoreInteractions(log);
     }
@@ -129,7 +195,7 @@ class LanguageFileUpdaterTest {
         user.set("auto-login", "Customized login");
         user.set("obsolete", "Keep unknown");
         save(file, user);
-        LanguageFileUpdater.Result result = LanguageFileUpdater.update(file, english, chinese, 1, oldChinese);
+        LanguageFileUpdater.Result result = LanguageFileUpdater.update(file, english, chinese, 2, oldChinese);
         assertEquals(2, result.refreshed);
         Configuration upgraded = read(file);
         for (String key : new String[]{"wait-on-proxy", "ownership-conflict", "premium-password-login"}) {
@@ -137,7 +203,7 @@ class LanguageFileUpdaterTest {
         }
         assertEquals("Customized login", upgraded.get("auto-login"));
         assertEquals("Keep unknown", upgraded.get("obsolete"));
-        assertEquals(1, upgraded.getInt("_messages-version"));
+        assertEquals(2, upgraded.getInt("_messages-version"));
     }
 
     @Test
@@ -256,7 +322,7 @@ class LanguageFileUpdaterTest {
     }
 
     @Test
-    void versionOneDoesNotAcceptEnglishLeakOrValuesMissingFromTheOldSnapshot() throws Exception {
+    void versionOneMigratesEnglishLeakButPreservesCustomAndNullValues() throws Exception {
         Configuration english = provider.load("notice: English\nunknown: New default\nnull-value: New\n");
         Configuration localized = provider.load("notice: 中文\nunknown: 新值\nnull-value: 新值\n");
         Configuration previous = provider.load("notice: 旧值\n");
@@ -264,9 +330,9 @@ class LanguageFileUpdaterTest {
         Files.write(file, ("_messages-version: 1\nnotice: English\nunknown: My value\nnull-value: null\n")
                 .getBytes(StandardCharsets.UTF_8));
         LanguageFileUpdater.Result result = LanguageFileUpdater.update(file, english, localized, 2, previous);
-        assertEquals(0, result.refreshed);
+        assertEquals(1, result.refreshed);
         assertEquals(0, result.added);
-        assertEquals("English", read(file).get("notice"));
+        assertEquals("中文", read(file).get("notice"));
         assertEquals("My value", read(file).get("unknown"));
         assertNull(read(file).get("null-value"));
     }
