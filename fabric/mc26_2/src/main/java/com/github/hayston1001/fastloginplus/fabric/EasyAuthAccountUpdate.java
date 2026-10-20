@@ -32,6 +32,24 @@ final class EasyAuthAccountUpdate {
      */
     static Runnable prepareUnbind(Class<?> entryType, Object entry, Object cached, UUID offlineUuid,
                                   StorageUpdate update) {
+        return prepareState(entryType, entry, cached, "FALSE", offlineUuid, "cracked-save-failed", update);
+    }
+
+    /**
+     * Resets a passwordless bound account to normal registration without deleting its row.
+     *
+     * @param entryType EasyAuth account class
+     * @param entry durable account snapshot to save
+     * @param cached live account, if present
+     * @param update synchronous storage operation
+     * @return local release operation with rollback on storage failure
+     */
+    static Runnable prepareOpen(Class<?> entryType, Object entry, Object cached, StorageUpdate update) {
+        return prepareState(entryType, entry, cached, "UNKNOWN", null, "cracked-release-failed", update);
+    }
+
+    private static Runnable prepareState(Class<?> entryType, Object entry, Object cached, String accountKind,
+                                         UUID accountUuid, String failureKey, StorageUpdate update) {
         try {
             Field kind = entryType.getField("onlineAccount");
             Field uuid = entryType.getField("uuid");
@@ -43,12 +61,12 @@ final class EasyAuthAccountUpdate {
                 oldUuids[i] = uuid.get(rows[i]);
             }
             @SuppressWarnings({"rawtypes", "unchecked"})
-            Object offline = Enum.valueOf((Class<Enum>) oldKinds[0].getClass(), "FALSE");
+            Object nextKind = Enum.valueOf((Class<Enum>) oldKinds[0].getClass(), accountKind);
             return () -> {
                 try {
                     for (Object row : rows) {
-                        kind.set(row, offline);
-                        uuid.set(row, offlineUuid);
+                        kind.set(row, nextKind);
+                        uuid.set(row, accountUuid);
                     }
                     if (!update.save(entry)) {
                         throw new IllegalStateException("EasyAuth account unbind failed");
@@ -62,7 +80,7 @@ final class EasyAuthAccountUpdate {
                             failure.addSuppressed(restoreFailure);
                         }
                     }
-                    throw FabricMessages.failure("cracked-save-failed", failure);
+                    throw FabricMessages.failure(failureKey, failure);
                 }
             };
         } catch (ReflectiveOperationException failure) {

@@ -147,19 +147,34 @@ class FabricMessagesTest {
     void crackedAndDeleteMessagesKeepTheirScopeAndEnglishPunctuation() throws Exception {
         for (String language : new String[]{"en", "zh"}) {
             Map<String, String> messages = bundled(language);
-            for (String key : new String[]{"cracked-requested", "admin-cracked-requested", "cracked-no-password",
+            for (String key : new String[]{"cracked-requested", "admin-cracked-requested", "cracked-release-confirm",
+                    "cracked-release-requested", "admin-cracked-release-requested", "cracked-release-failed",
                     "delete-requested", "delete-premium-denied", "admin-command-permission",
                     "cracked-login-required", "cracked-save-failed"}) {
                 String value = messages.get(key);
                 assertTrue(value != null && !value.isBlank(), key);
                 assertFalse(value.matches(".*[\uFF0C\u3002\uFF1B\uFF1A\uFF01\uFF1F\uFF08\uFF09].*"), key);
                 assertEquals(value, FabricMessages.load(language, directory).get(key));
-                assertEquals(java.util.Set.of("admin-cracked-requested", "cracked-no-password",
+                assertEquals(java.util.Set.of("admin-cracked-requested", "cracked-release-confirm",
+                        "admin-cracked-release-requested",
                         "delete-requested", "delete-premium-denied").contains(key), value.contains("{player}"));
             }
             String cracked = messages.get("cracked-requested");
             assertTrue(cracked.contains("reconnect manually") || cracked.contains("手动重连"));
             assertTrue(cracked.contains("password is retained") || cracked.contains("密码保留"));
+            String confirm = messages.get("cracked-release-confirm");
+            assertTrue(confirm.contains("same command again within 30 seconds") || confirm.contains("30 秒内再次执行相同命令"));
+            assertTrue(confirm.contains("allow registration again") || confirm.contains("允许重新注册"));
+            assertFalse(confirm.contains("UUID"));
+            assertFalse(messages.containsKey("cracked-no-password"));
+            for (String key : new String[]{"cracked-release-requested", "admin-cracked-release-requested"}) {
+                String released = messages.get(key);
+                assertTrue(released.contains("/register"));
+                assertTrue(released.contains("reconnect") || released.contains("重新连接"));
+                assertFalse(released.contains("retained") || released.contains("保留"));
+            }
+            String denied = messages.get("delete-premium-denied");
+            assertTrue(denied.contains("second confirmation") || denied.contains("再次确认"));
             String delete = messages.get("delete-requested");
             assertTrue(delete.contains("proxy console") || delete.contains("代理控制台"));
             assertTrue(delete.contains("not deleted") || delete.contains("不删除 EasyAuth"));

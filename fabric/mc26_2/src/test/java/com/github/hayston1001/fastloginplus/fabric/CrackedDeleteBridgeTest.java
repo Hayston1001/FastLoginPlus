@@ -21,7 +21,10 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -52,6 +55,7 @@ class CrackedDeleteBridgeTest {
         set("easyAuth", EasyAuth.class);
         set("entryType", Entry.class);
         set("playersCache", Cache.class);
+        set("pendingCrackedReleases", new ConcurrentHashMap<>());
         carrier = mock(ServerPlayer.class, org.mockito.Mockito.withSettings().extraInterfaces(Authentication.class));
         carrier.connection = mock(ServerGamePacketListenerImpl.class);
         when(carrier.connection.isAcceptingMessages()).thenReturn(true);
@@ -128,16 +132,181 @@ class CrackedDeleteBridgeTest {
         }
     }
 
-    @Test
-    void legacyEmptyPasswordRefusesWithoutSendingOrWriting() {
-        EasyAuth.DB.entry.password = "";
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void emptyPasswordFirstCallWarnsWithoutSendingOrWriting(boolean self) {
+        emptyPassword();
         try (var toggle = mockStatic(BindingConsentWriter.class)) {
-            cracked();
+            if (self) {
+                bridge.cracked(carrier);
+            } else {
+                cracked();
+            }
             toggle.verifyNoInteractions();
-            assertFeedback("cracked-no-password");
+            assertFeedback("cracked-release-confirm");
             assertEquals(0, EasyAuth.DB.writes);
             assertEquals(Kind.TRUE, EasyAuth.DB.entry.onlineAccount);
             assertEquals(VERIFIED, EasyAuth.DB.entry.uuid);
+            assertEquals(Kind.TRUE, Cache.entry.onlineAccount);
+            assertEquals(VERIFIED, Cache.entry.uuid);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"false,distinct", "true,distinct", "false,absent", "true,absent", "false,same", "true,same"})
+    void confirmedEmptyPasswordReleasesToOpenAfterSending(boolean self, String cacheKind) throws Exception {
+        emptyPassword();
+        Cache.entry = "absent".equals(cacheKind) ? null : "same".equals(cacheKind) ? EasyAuth.DB.entry : Cache.entry;
+        Entry original = EasyAuth.DB.entry;
+        try (var config = mockStatic(FabricConfig.class); var toggle = mockStatic(BindingConsentWriter.class)) {
+            config.when(FabricConfig::startup).thenReturn(new FabricConfig.StartupSettings(PROXY));
+            toggle.when(() -> BindingConsentWriter.sendToggle(carrier, NAME, false, self, PROXY))
+                    .thenAnswer(call -> {
+                        assertEquals(Kind.TRUE, EasyAuth.DB.entry.onlineAccount);
+                        assertEquals(VERIFIED, EasyAuth.DB.entry.uuid);
+                        assertEquals(0, EasyAuth.DB.writes);
+                        if (Cache.entry != null) {
+                            assertEquals(Kind.TRUE, Cache.entry.onlineAccount);
+                            assertEquals(VERIFIED, Cache.entry.uuid);
+                        }
+                        EasyAuth.DB.sent = true;
+                        return null;
+                    });
+            if (self) {
+                bridge.cracked(carrier);
+                feedback.clear();
+                bridge.cracked(carrier);
+            } else {
+                cracked();
+                feedback.clear();
+                cracked();
+            }
+            toggle.verify(() -> BindingConsentWriter.sendToggle(carrier, NAME, false, self, PROXY));
+            assertSame(original, EasyAuth.DB.entry);
+            assertEquals(1, EasyAuth.DB.writes);
+            assertOpen(EasyAuth.DB.entry);
+            if (Cache.entry != null) {
+                assertOpen(Cache.entry);
+            }
+            assertEquals(AccountState.OPEN, bridge.accountStatus(NAME).state());
+            assertEquals(0, pending().size());
+            assertFeedback(self ? "cracked-release-requested" : "admin-cracked-release-requested");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"false", "throw"})
+    void failedReleaseRestoresBothRowsAndRequiresNewConfirmation(String failure) throws Exception {
+        emptyPassword();
+        EasyAuth.DB.failure = failure;
+        try (var config = mockStatic(FabricConfig.class); var toggle = mockStatic(BindingConsentWriter.class)) {
+            config.when(FabricConfig::startup).thenReturn(new FabricConfig.StartupSettings(PROXY));
+            toggle.when(() -> BindingConsentWriter.sendToggle(carrier, NAME, false, false, PROXY))
+                    .thenAnswer(call -> { EasyAuth.DB.sent = true; return null; });
+            cracked();
+            feedback.clear();
+            cracked();
+            assertFeedback("cracked-release-failed");
+            toggle.verify(() -> BindingConsentWriter.sendToggle(carrier, NAME, false, false, PROXY));
+            assertEquals(1, EasyAuth.DB.writes);
+            for (Entry entry : List.of(EasyAuth.DB.entry, Cache.entry)) {
+                assertEquals(Kind.TRUE, entry.onlineAccount);
+                assertEquals(VERIFIED, entry.uuid);
+                assertEquals("", entry.password);
+            }
+            assertEquals(AccountState.BOUND, bridge.accountStatus(NAME).state());
+            assertEquals(0, pending().size());
+            feedback.clear();
+            cracked();
+            assertFeedback("cracked-release-confirm");
+            assertEquals(1, EasyAuth.DB.writes);
+        }
+    }
+
+    @Test
+    void expiredReleaseConfirmationWarnsAgain() throws Exception {
+        emptyPassword();
+        try (var toggle = mockStatic(BindingConsentWriter.class)) {
+            cracked();
+            pending().replaceAll((key, time) -> System.nanoTime() - TimeUnit.SECONDS.toNanos(31));
+            feedback.clear();
+            cracked();
+            assertFeedback("cracked-release-confirm");
+            toggle.verifyNoInteractions();
+            assertEquals(0, EasyAuth.DB.writes);
+            assertEquals(1, pending().size());
+        }
+    }
+
+    @Test
+    void releaseConfirmationCannotBeSharedBetweenActors() throws Exception {
+        emptyPassword();
+        try (var toggle = mockStatic(BindingConsentWriter.class)) {
+            cracked();
+            feedback.clear();
+            bridge.adminCracked(carrier, NAME, "OtherAdmin", message -> feedback.add(message.getString()));
+            assertFeedback("cracked-release-confirm");
+            toggle.verifyNoInteractions();
+            assertEquals(0, EasyAuth.DB.writes);
+            assertEquals(2, pending().size());
+        }
+    }
+
+    @Test
+    void releaseConfirmationCannotBeSharedBetweenTargets() throws Exception {
+        emptyPassword();
+        EasyAuth.DB.otherEntry = new Entry();
+        EasyAuth.DB.otherEntry.username = "OtherUser";
+        EasyAuth.DB.otherEntry.password = "";
+        try (var toggle = mockStatic(BindingConsentWriter.class)) {
+            cracked();
+            feedback.clear();
+            bridge.adminCracked(carrier, "OtherUser", "Admin", message -> feedback.add(message.getString()));
+            assertEquals(List.of(FabricMessages.text("cracked-release-confirm", "{player}", "OtherUser")
+                    .getString()), feedback);
+            toggle.verifyNoInteractions();
+            assertEquals(0, EasyAuth.DB.writes);
+            assertEquals(2, pending().size());
+        }
+    }
+
+    @Test
+    void failedProxySendLeavesPasswordlessAccountBoundAndConsumesConfirmation() throws Exception {
+        emptyPassword();
+        try (var config = mockStatic(FabricConfig.class); var toggle = mockStatic(BindingConsentWriter.class)) {
+            config.when(FabricConfig::startup).thenReturn(new FabricConfig.StartupSettings(PROXY));
+            toggle.when(() -> BindingConsentWriter.sendToggle(carrier, NAME, false, false, PROXY))
+                    .thenThrow(new IllegalStateException("send failed"));
+            cracked();
+            feedback.clear();
+            cracked();
+            assertFeedback("auth-unavailable");
+            assertEquals(0, EasyAuth.DB.writes);
+            assertEquals(0, pending().size());
+            assertEquals(Kind.TRUE, EasyAuth.DB.entry.onlineAccount);
+            assertEquals(VERIFIED, EasyAuth.DB.entry.uuid);
+            assertEquals(Kind.TRUE, Cache.entry.onlineAccount);
+            assertEquals(VERIFIED, Cache.entry.uuid);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"password", "uuid", "kind", "username"})
+    void emptyPasswordCacheMismatchRefusesBeforeConfirmation(String mismatch) throws Exception {
+        emptyPassword();
+        switch (mismatch) {
+            case "password" -> Cache.entry.password = "changed-password";
+            case "uuid" -> Cache.entry.uuid = UUID.randomUUID();
+            case "kind" -> Cache.entry.onlineAccount = Kind.FALSE;
+            case "username" -> Cache.entry.username = "OtherUser";
+            default -> throw new IllegalArgumentException(mismatch);
+        }
+        try (var toggle = mockStatic(BindingConsentWriter.class)) {
+            cracked();
+            assertFeedback("ownership-conflict");
+            toggle.verifyNoInteractions();
+            assertEquals(0, EasyAuth.DB.writes);
+            assertEquals(0, pending().size());
         }
     }
 
@@ -262,6 +431,18 @@ class CrackedDeleteBridgeTest {
         bridge.adminCracked(carrier, NAME, "Admin", message -> feedback.add(message.getString()));
     }
 
+    private static void emptyPassword() {
+        EasyAuth.DB.entry.password = "";
+        Cache.entry.password = "";
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<Object, Long> pending() throws Exception {
+        Field field = EasyAuth344Bridge.class.getDeclaredField("pendingCrackedReleases");
+        field.setAccessible(true);
+        return (Map<Object, Long>) field.get(bridge);
+    }
+
     private void delete() {
         bridge.adminDelete(carrier, NAME, "Admin", message -> feedback.add(message.getString()));
     }
@@ -292,6 +473,12 @@ class CrackedDeleteBridgeTest {
         assertEquals("old-hash", entry.password);
     }
 
+    private static void assertOpen(Entry entry) {
+        assertEquals(Kind.UNKNOWN, entry.onlineAccount);
+        assertEquals(null, entry.uuid);
+        assertEquals("", entry.password);
+    }
+
     private void set(String name, Object value) throws Exception {
         Field field = EasyAuth344Bridge.class.getDeclaredField(name);
         field.setAccessible(true);
@@ -310,6 +497,9 @@ class CrackedDeleteBridgeTest {
         static Entry entry;
 
         public static Entry get(String name) {
+            if ("OtherUser".equals(name)) {
+                return null;
+            }
             assertEquals(NAME, name);
             return entry;
         }
@@ -317,6 +507,7 @@ class CrackedDeleteBridgeTest {
 
     public static final class Database {
         Entry entry = new Entry();
+        Entry otherEntry;
         int reads;
         int writes;
         boolean sent;
@@ -324,6 +515,9 @@ class CrackedDeleteBridgeTest {
         String failure;
 
         public Entry getUserData(String name) {
+            if ("OtherUser".equals(name)) {
+                return otherEntry;
+            }
             assertEquals(NAME, name);
             reads++;
             if (readFails) {
@@ -335,9 +529,16 @@ class CrackedDeleteBridgeTest {
         public boolean updateUserData(Entry candidate) {
             assertEquals(true, sent);
             writes++;
-            assertPassword(candidate);
-            if (Cache.entry != null) {
-                assertPassword(Cache.entry);
+            if (candidate.password.isEmpty()) {
+                assertOpen(candidate);
+                if (Cache.entry != null) {
+                    assertOpen(Cache.entry);
+                }
+            } else {
+                assertPassword(candidate);
+                if (Cache.entry != null) {
+                    assertPassword(Cache.entry);
+                }
             }
             if ("throw".equals(failure)) {
                 throw new IllegalStateException("write failed");

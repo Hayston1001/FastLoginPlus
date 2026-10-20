@@ -98,7 +98,12 @@ public final class FastLoginFabric implements ModInitializer {
                                 .executes(context -> adminPremium(context.getSource(),
                                         StringArgumentType.getString(context, "player"), bridge))))
                         .then(literal("cracked").executes(context -> {
-                            bridge.cracked(context.getSource().getPlayerOrException());
+                            var source = context.getSource();
+                            if (!source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) {
+                                source.sendSuccess(() -> FabricMessages.text("admin-command-permission"), false);
+                                return 0;
+                            }
+                            bridge.cracked(source.getPlayerOrException());
                             return 1;
                         }).then(adminPlayerArgument().executes(context -> adminAccountCommand(context.getSource(),
                                 StringArgumentType.getString(context, "player"), bridge, false))))

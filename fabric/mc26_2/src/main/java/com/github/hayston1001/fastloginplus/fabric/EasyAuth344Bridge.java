@@ -34,6 +34,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -60,7 +61,11 @@ final class EasyAuth344Bridge {
     private final Class<?> entryType;
     private final Class<?> ipLimit;
     private final Class<?> playersCache;
+    private final Map<ReleaseConfirmation, Long> pendingCrackedReleases = new ConcurrentHashMap<>();
     private boolean storageChecked;
+
+    private record ReleaseConfirmation(String actor, String target) {
+    }
 
     EasyAuth344Bridge() {
         var mod = FabricLoader.getInstance().getModContainer("easyauth")
@@ -530,11 +535,9 @@ final class EasyAuth344Bridge {
                 return;
             }
             Runnable unbind = null;
+            boolean release = false;
             if (state == AccountState.BOUND) {
-                if (((String) field(entryType, entry, "password")).isEmpty()) {
-                    feedback.accept(FabricMessages.text("cracked-no-password", "{player}", name));
-                    return;
-                }
+                release = ((String) field(entryType, entry, "password")).isEmpty();
                 Object cached = invoke(playersCache, null, "get", String.class, name);
                 if (cached != null) {
                     checkPremiumEntry(cached, name, snapshot.uuid());
@@ -542,8 +545,14 @@ final class EasyAuth344Bridge {
                         throw FabricMessages.failure("ownership-conflict");
                     }
                 }
-                unbind = EasyAuthAccountUpdate.prepareUnbind(entryType, entry, cached, offlineUuid(name),
-                        candidate -> Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, candidate)));
+                EasyAuthAccountUpdate.StorageUpdate update = candidate ->
+                        Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, candidate));
+                unbind = release ? EasyAuthAccountUpdate.prepareOpen(entryType, entry, cached, update)
+                        : EasyAuthAccountUpdate.prepareUnbind(entryType, entry, cached, offlineUuid(name), update);
+                if (release && !confirmCrackedRelease(actor, name)) {
+                    feedback.accept(FabricMessages.text("cracked-release-confirm", "{player}", name));
+                    return;
+                }
             }
             String proxyIds = commandProxyIds(carrier);
             BindingConsentWriter.sendToggle(carrier, name, false, sourceInvoker, proxyIds);
@@ -552,8 +561,8 @@ final class EasyAuth344Bridge {
                 unbind.run();
                 unbound = true;
             }
-            feedback.accept(FabricMessages.text(sourceInvoker ? "cracked-requested" : "admin-cracked-requested",
-                    "{player}", name));
+            String message = release ? "cracked-release-requested" : "cracked-requested";
+            feedback.accept(FabricMessages.text(sourceInvoker ? message : "admin-" + message, "{player}", name));
         } catch (RuntimeException failure) {
             LOGGER.error("Cracked request failed: actor={} target={} proxyRequestSent={}", actor, name, sent, failure);
             feedback.accept(FabricMessages.reason(failure, "auth-unavailable"));
@@ -561,6 +570,14 @@ final class EasyAuth344Bridge {
             LOGGER.info("Cracked request: actor={} target={} state={} localUnbound={} proxyRequestSent={}",
                     actor, name, state, unbound, sent);
         }
+    }
+
+    private boolean confirmCrackedRelease(String actor, String name) {
+        long now = System.nanoTime();
+        long timeout = TimeUnit.SECONDS.toNanos(30);
+        pendingCrackedReleases.entrySet().removeIf(pending -> now - pending.getValue() >= timeout);
+        return pendingCrackedReleases.compute(new ReleaseConfirmation(actor, name), (key, pending) ->
+                pending != null && now - pending < timeout ? null : now) == null;
     }
 
     void adminDelete(ServerPlayer carrier, String targetName, String actor, Consumer<Component> feedback) {

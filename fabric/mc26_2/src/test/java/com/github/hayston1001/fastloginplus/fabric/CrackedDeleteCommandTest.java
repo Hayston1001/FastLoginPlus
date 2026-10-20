@@ -16,7 +16,6 @@ import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.server.players.PlayerList;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -31,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -113,9 +113,20 @@ class CrackedDeleteCommandTest {
                 result.getList().stream().map(suggestion -> suggestion.getText()).toList());
     }
 
-    @Test
-    void selfCrackedUsesOnlyOwnConnectionEvenWithoutOperatorPermission() throws Exception {
-        level(0);
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1})
+    void selfCrackedChecksPermissionBeforeObtainingPlayer(int level) throws Exception {
+        level(level);
+        assertEquals(0, dispatcher.execute("flp cracked", source));
+        assertEquals(List.of(FabricMessages.text("admin-command-permission").getString()), feedback);
+        verify(source, never()).getPlayerOrException();
+        verifyNoInteractions(bridge, server);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {2, 3, 4})
+    void authorizedSelfCrackedUsesOnlyOwnConnection(int level) throws Exception {
+        level(level);
         ServerPlayer player = mock(ServerPlayer.class);
         when(source.getPlayerOrException()).thenReturn(player);
         assertEquals(1, dispatcher.execute("flp cracked", source));
