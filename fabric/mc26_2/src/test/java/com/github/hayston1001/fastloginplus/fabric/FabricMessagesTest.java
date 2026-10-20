@@ -99,8 +99,8 @@ class FabricMessagesTest {
     void premiumRequestExplainsConfirmationReconnectAndDormantPasswordInBothLanguages() throws Exception {
         String english = bundled("en").get("premium-requested");
         String chinese = bundled("zh").get("premium-requested");
-        assertTrue(english.contains("premium consent requested."));
-        assertTrue(chinese.contains("正版同意请求已发出."));
+        assertTrue(english.contains("premium consent request was handed to the proxy for processing."));
+        assertTrue(chinese.contains("正版同意请求已交给代理处理."));
         assertTrue(english.contains("If a confirmation prompt appears, run /flp premium once more."));
         assertTrue(chinese.contains("若出现确认提示, 请再执行一次 /flp premium."));
         assertTrue(english.contains("Then reconnect with your premium account to enable passwordless login."));

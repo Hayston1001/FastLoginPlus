@@ -18,7 +18,7 @@ admin-premium-no-carrier: "FastLoginPlus: 当前没有在线玩家可向代理�
 admin-premium-already: "FastLoginPlus: {player} 已绑定正版. 本次未发送请求."
 admin-premium-open: "FastLoginPlus: 已为 {player} 发送正版同意请求. 下次登录遵循代理及 EasyAuth 的注册策略. 若仍在线, 需要重新连接; 是否踢出由代理决定."
 admin-premium-requested: "FastLoginPlus: 已为 {player} 发送正版同意请求. 经正版验证重连后启用免密登录. 密码保留, 但 premium 期间不使用. 是否踢出由代理决定; 未踢出时需要手动重连."
-premium-requested: "FastLoginPlus: 正版同意请求已发出. 若出现确认提示, 请再执行一次 /flp premium. 然后使用正版账号重新连接以启用免密登录. 密码保留, 但 premium 期间不使用."
+premium-requested: "FastLoginPlus: 正版同意请求已交给代理处理. 若出现确认提示, 请再执行一次 /flp premium. 然后使用正版账号重新连接以启用免密登录. 密码保留, 但 premium 期间不使用."
 admin-command-permission: "FastLoginPlus: 此账号命令需要操作员等级 2."
 cracked-login-required: "FastLoginPlus: 请先登录 EasyAuth 账号, 然后执行 /flp cracked."
 cracked-requested: "FastLoginPlus: 关闭正版登录的请求已发出. 已有密码保留; 本地解绑成功后可用该密码重新登录. 是否踢出由代理决定; 未踢出时请手动重连. 不迁移不同 UUID 之间的玩家数据."
