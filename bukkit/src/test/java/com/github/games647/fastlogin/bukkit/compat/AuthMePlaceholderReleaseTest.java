@@ -99,14 +99,42 @@ class AuthMePlaceholderReleaseTest {
     }
 
     @Test
-    void differentOwnerProtectsTheRow() {
-        source.row = new Row(new Password(""), UUID.randomUUID());
+    void passwordWithDifferentOwnerIsNotAnActiveConflict() {
+        source.row = new Row(new Password("DO-NOT-LOG-SECRET"), UUID.randomUUID());
+        Row original = source.row;
         assertEquals(NOT_APPLICABLE, release());
+        assertSame(original, source.row);
         assertEquals(0, source.deletes.get());
+        assertAudit("NOT_APPLICABLE");
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    void differentOwnerWithUnusableHashReportsMismatchWithoutChangingState(String hash) {
+        assertOwnershipMismatch(new Row(new Password(hash), UUID.randomUUID()));
+    }
+
+    @Test
+    void differentOwnerWithAbsentPasswordReportsMismatchWithoutChangingState() {
+        assertOwnershipMismatch(new Row(null, UUID.randomUUID()));
+    }
+
+    private void assertOwnershipMismatch(Row original) {
+        source.row = original;
+        assertEquals(UUID_MISMATCH, release());
+        assertSame(original, source.row);
+        assertEquals(0, source.deletes.get());
+        assertEquals(Arrays.asList("read"), source.operations);
+        assertTrue(pending.names.contains("testuser"));
+        assertEquals(owner, verifier.verified.get("testuser"));
+        verify(logger).info(contains("AuthMe placeholder release:"),
+                eq("TestUser"), eq(owner), eq(original.getPremiumUuid()), eq("UUID_MISMATCH"));
+        assertAudit("UUID_MISMATCH");
     }
 
     @Test
     void missingVerifiedUuidDoesNotReadOrDelete() {
+        source.row = new Row(new Password(""), UUID.randomUUID());
         assertEquals(NOT_APPLICABLE, integrator.releaseUnusablePlaceholder("TestUser", null));
         assertTrue(source.operations.isEmpty());
     }

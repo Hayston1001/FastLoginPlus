@@ -110,6 +110,7 @@ flowchart TD
 - **同名盗版观察**取代了旧的一次性标记: 正版验证尝试**按名字**跟踪, **一次"已结算的确定失败"**即确认观察(会话服不可达之类的抽风永不计入, 见下文行为变化). 观察一经确认就落库(`SameNameCracked`), 该名字之后的连接直达密码流程, 不再先失败一次; 首次翻转标记的那次确认会给玩家**一次性聊天提示**(`same-name-cracked-recorded`), 告知名字已被记录为盗版以及如何用 `/flp premium` 重新验证 -- 提示在玩家进服后由代理投递(代理模式下经典与 Fabric 后端同样收到), 已记录名字的后续登录不再提示. 该回退只作用于**无同意**的名字: 有同意的名字每次连接都验证, 任何人都无法用盗版客户端把正版名字拖进密码流程. 观察的**读取跟随配置**: `secondAttemptCracked` 关闭时被记过的名字当作未记过、照常验证(验证成功后顺手清掉旧标记).
 - 同一回退也覆盖"有正版 UUID 观察但无同意"的老名字: 观察到失败后它们落到密码流程, 账号主人可凭密码登录后执行 `/flp premium`(拍板 7 的恢复路径).
 - `requestPremiumLogin` 与 `startCrackedSession` 是平台实现: bukkit/folia 通过 ProtocolLib 取消原始 START 包并注入在线模式握手(ProtocolSupport 路径类似); 代理端由 `enableOnlinemode()` 让代理与客户端完成握手.
+- Bukkit/Folia 使用 AuthMe 6 且关闭 `autoLogin` 时, 如果正版所有的账号记录没有可用密码, 且保存的非空正版 UUID 与当前已验证的正版 UUID 不同, FLP 会关闭两个登录前对话框, 使用本地化的 `ownership-conflict` 消息拒绝连接, 不修改账号记录. 有可用密码的记录以及缺少已验证 UUID 的连接仍保留原有密码流程.
 
 ## ForceLoginManagement.run()(session 执行阶段)
 

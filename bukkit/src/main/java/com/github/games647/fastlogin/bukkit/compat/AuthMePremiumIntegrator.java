@@ -80,7 +80,7 @@ public final class AuthMePremiumIntegrator {
     private final Striped<Lock> placeholderLocks = Striped.lazyWeakLock(256);
 
     public enum ReleaseOutcome {
-        RELEASED, ALREADY_ABSENT, NOT_APPLICABLE, UNSUPPORTED, FAILED
+        RELEASED, ALREADY_ABSENT, UUID_MISMATCH, NOT_APPLICABLE, UNSUPPORTED, FAILED
     }
 
     // Cached reflection handles (lazy-initialized)
@@ -539,9 +539,10 @@ public final class AuthMePremiumIntegrator {
                     Object password = auth.getClass().getMethod("getPassword").invoke(auth);
                     String hash = password == null ? null
                             : (String) password.getClass().getMethod("getHash").invoke(password);
-                    if ((hash != null && !hash.isEmpty())
-                            || (originalUuid != null && !originalUuid.equals(verifiedUuid))) {
+                    if (hash != null && !hash.isEmpty()) {
                         outcome = ReleaseOutcome.NOT_APPLICABLE;
+                    } else if (originalUuid != null && !originalUuid.equals(verifiedUuid)) {
+                        outcome = ReleaseOutcome.UUID_MISMATCH;
                     } else {
                         // Resolve every handle before deleting. Missing integration must not
                         // delete a row and only then discover that its caches cannot be cleared.

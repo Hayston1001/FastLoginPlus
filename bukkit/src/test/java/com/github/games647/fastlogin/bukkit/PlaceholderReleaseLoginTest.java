@@ -12,11 +12,15 @@ import com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState
 import com.github.games647.fastlogin.protocol.IdentityClaim;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import io.papermc.paper.connection.PlayerConnection;
+import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.InOrder;
 import org.slf4j.Logger;
 
 import java.lang.reflect.Field;
@@ -84,6 +88,46 @@ class PlaceholderReleaseLoginTest {
         assertEquals("premium-policy-disabled", notices.getIfPresent(address));
         verify(integrator, never()).closePreJoinRegisterDialog(any(), any());
         verify(integrator, never()).closePreJoinLoginDialog(any(), any());
+        verify(plugin, never()).denyLogin(anyString(), any());
+        verify(core, never()).getMessage("ownership-conflict");
+    }
+
+    @ParameterizedTest
+    @EnumSource(IdentityClaim.Consent.class)
+    void ownershipMismatchClosesDialogsAndDisconnectsWithLocalizedReason(IdentityClaim.Consent consent)
+            throws Exception {
+        PlayerConnection target = mock(PlayerConnection.class);
+        String reason = "\u00a74Localized ownership conflict";
+        when(core.getMessage("ownership-conflict")).thenReturn(reason);
+        when(integrator.releaseUnusablePlaceholder("TestUser", owner)).thenReturn(UUID_MISMATCH);
+        notices.put(address, "premium-policy-disabled");
+        assertFalse(invoke(true, new IdentityClaim.Facts(false, false, consent, false, true, false),
+                owner, target));
+        assertNull(notices.getIfPresent(address));
+        InOrder order = inOrder(integrator, target);
+        order.verify(integrator).releaseUnusablePlaceholder("TestUser", owner);
+        order.verify(integrator).closePreJoinRegisterDialog(connectionUuid, target);
+        order.verify(integrator).closePreJoinLoginDialog(connectionUuid, target);
+        order.verify(target).disconnect(LegacyComponentSerializer.legacySection().deserialize(reason));
+        verify(plugin, never()).denyLogin(anyString(), any());
+        verifyNoMoreInteractions(integrator);
+        verify(hook, never()).forceLogin(any());
+        verify(hook, never()).forceRegister(any(), anyString());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void localOwnershipMismatchUsesLoginRejectionWhenConfigureConnectionIsUnavailable(boolean incompatible)
+            throws Exception {
+        Object target = incompatible ? connection : null;
+        when(integrator.releaseUnusablePlaceholder("TestUser", owner)).thenReturn(UUID_MISMATCH);
+        notices.put(address, "premium-policy-disabled");
+        assertFalse(invoke(true, null, owner, target));
+        assertNull(notices.getIfPresent(address));
+        InOrder order = inOrder(integrator, plugin);
+        order.verify(integrator).closePreJoinRegisterDialog(connectionUuid, target);
+        order.verify(integrator).closePreJoinLoginDialog(connectionUuid, target);
+        order.verify(plugin).denyLogin("TestUser", "ownership-conflict");
     }
 
     @Test
@@ -91,6 +135,8 @@ class PlaceholderReleaseLoginTest {
         when(integrator.releaseUnusablePlaceholder("TestUser", null)).thenReturn(NOT_APPLICABLE);
         assertFalse(decide(true, false, null));
         assertEquals("premium-policy-disabled", notices.getIfPresent(address));
+        verify(plugin, never()).denyLogin(anyString(), any());
+        verify(core, never()).getMessage("ownership-conflict");
     }
 
     @Test

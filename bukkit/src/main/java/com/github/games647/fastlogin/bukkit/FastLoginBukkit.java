@@ -1347,6 +1347,18 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     }
                     integrator.closePreJoinRegisterDialog(connectionUuid, connection);
                     integrator.closePreJoinLoginDialog(connectionUuid, connection);
+                } else if (release == AuthMePremiumIntegrator.ReleaseOutcome.UUID_MISMATCH) {
+                    if (address != null) {
+                        passwordNotices.invalidate(address);
+                    }
+                    integrator.closePreJoinRegisterDialog(connectionUuid, connection);
+                    integrator.closePreJoinLoginDialog(connectionUuid, connection);
+                    String reason = core.getMessage("ownership-conflict");
+                    if (connection != null) {
+                        disconnectConfiguration(playerName, connection, reason);
+                    } else {
+                        denyLogin(playerName, reason);
+                    }
                 } else if (facts != null && address != null) {
                     passwordNotices.put(address, "premium-policy-disabled");
                 }
