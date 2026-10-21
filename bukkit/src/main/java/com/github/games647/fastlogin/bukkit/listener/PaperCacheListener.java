@@ -39,6 +39,12 @@ public class PaperCacheListener implements Listener {
             return;
         }
 
+        // Paper has no PlayerLoginEvent handler: reject before configuration or join instead.
+        if (!plugin.isServerFullyStarted()) {
+            event.disallow(Result.KICK_OTHER, plugin.getCore().getMessage("not-started"));
+            return;
+        }
+
         // Before configuration/preJoin: AuthMe must not trust an unsigned handshake's v4 UUID.
         if (plugin.isUntrustedPremiumConnection(event.getPlayerProfile(), event.getName(), event.getUniqueId())) {
             event.disallow(Result.KICK_OTHER, plugin.getCore().getMessage("proxy-claim-required"));

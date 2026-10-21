@@ -53,6 +53,7 @@ class ProxyAdmissionTest {
         when(manager.getAllowedProxyIds()).thenReturn(java.util.Collections.singleton(proxy));
         when(core.getMessage(KICK)).thenReturn(KICK);
         doReturn(mock(FileConfiguration.class)).when(plugin).getConfig();
+        doReturn(true).when(plugin).isServerFullyStarted();
         doNothing().when(plugin).recordPreLoginAttestation(anyString(), any());
     }
 

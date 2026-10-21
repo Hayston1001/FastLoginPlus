@@ -250,10 +250,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         ConnectionListener connectionListener = new ConnectionListener(this);
         pluginManager.registerEvents(connectionListener, this);
 
-        // On Paper with a proxy, unregister PlayerLoginEvent to avoid
-        // HorriblePlayerLoginEventHack which disables re-configuration APIs
-        // (including AsyncPlayerConnectionConfigureEvent).
-        if (isPaper() && bungeeManager.isEnabled()) {
+        // PlayerLoginEvent is Spigot-only: any listener disables Paper's configure API
+        // through HorriblePlayerLoginEventHack, even without a proxy. Paper checks startup
+        // in async pre-login and retains pending login/kick delivery at join time.
+        if (isPaper()) {
             org.bukkit.event.player.PlayerLoginEvent.getHandlerList().unregister(connectionListener);
             logger.info("Unregistered PlayerLoginEvent listener to avoid HorriblePlayerLoginEventHack");
         }
@@ -264,6 +264,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // phase, before AuthMe's own handler shows a blocking preJoin dialog.
         registerPaperConfigureListener();
 
+        // Paper startup/admission checks run here instead of PlayerLoginEvent.
         // On Paper, profile.complete(true) is called right after AsyncPlayerPreLoginEvent.
         // This listener sets the skin during the event so that complete(true) sees textures
         // and skips Paper's filledProfileCache (which may hold a stale skin).

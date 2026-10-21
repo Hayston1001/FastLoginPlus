@@ -251,14 +251,16 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         ConnectionListener connectionListener = new ConnectionListener(this);
         pluginManager.registerEvents(connectionListener, this);
 
-        if (bungeeManager.isEnabled()) {
-            org.bukkit.event.player.PlayerLoginEvent.getHandlerList().unregister(connectionListener);
-            logger.info("Unregistered PlayerLoginEvent listener to avoid HorriblePlayerLoginEventHack");
-        }
+        // PlayerLoginEvent is Spigot-only: any listener disables Paper's configure API
+        // through HorriblePlayerLoginEventHack. Folia is Paper-based, even without a proxy.
+        // Startup is checked in async pre-login; pending login/kick delivery remains at join time.
+        org.bukkit.event.player.PlayerLoginEvent.getHandlerList().unregister(connectionListener);
+        logger.info("Unregistered PlayerLoginEvent listener to avoid HorriblePlayerLoginEventHack");
 
         registerPaperConfigureListener();
 
-        // Folia is based on Paper — register PaperCacheListener to set skin during
+        // Folia startup/admission checks run here instead of PlayerLoginEvent.
+        // Folia is based on Paper - register PaperCacheListener to set skin during
         // AsyncPlayerPreLoginEvent before profile.complete(true) pulls from filledProfileCache.
         // forwardSkin is checked inside the listener — when false, skin setting is skipped.
         pluginManager.registerEvents(
