@@ -690,7 +690,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         return geyserService;
     }
 
-    private boolean isPaper() {
+    public boolean isPaper() {
         return isClassAvailable("com.destroystokyo.paper.PaperConfig").isPresent()
                 || isClassAvailable("io.papermc.paper.configuration.Configuration").isPresent();
     }
@@ -1236,8 +1236,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         boolean rejected = isUntrustedPremiumConnection(bungeeManager.isEnabled(),
                 bungeeManager.isSignedForwarding(), connectionUuid, trustedClaim);
         if (rejected) {
-            logger.warn("Refusing login for {} with connection UUID {}: unsigned forwarding requires "
-                    + "a validated flp_identity claim from allowed-proxies.txt", playerName, connectionUuid);
+            logger.warn("Refusing login for {} with connection UUID {}: no signature matched any of the {} "
+                    + "loaded proxy IDs, or the signed claim did not prove this connection's premium identity. "
+                    + "Restart the backend if allowed-proxies.txt changed.",
+                    playerName, connectionUuid, bungeeManager.getAllowedProxyIds().size());
         }
         return rejected;
     }

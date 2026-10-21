@@ -12,6 +12,7 @@ import com.github.games647.fastlogin.bukkit.task.FloodgateAuthTask;
 import com.github.games647.fastlogin.bukkit.task.ForceLoginTask;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -44,18 +45,24 @@ public class ConnectionListener implements Listener {
         if (denied != null) {
             // a login refused by the login-method decision during the
             // configuration phase: kick before the player ever joins
-            loginEvent.disallow(Result.KICK_OTHER, denied);
+            loginEvent.disallow(Result.KICK_OTHER, loginKickMessage(denied));
             return;
         }
         if (loginEvent.getResult() == Result.ALLOWED && !plugin.isServerFullyStarted()) {
-            loginEvent.disallow(Result.KICK_OTHER, plugin.getCore().getMessage("not-started"));
+            loginEvent.disallow(Result.KICK_OTHER, loginKickMessage(plugin.getCore().getMessage("not-started")));
         }
         if (loginEvent.getResult() == Result.ALLOWED) {
             if (!plugin.observeSpigotIdentity("PlayerLoginEvent", loginEvent.getPlayer().getName(),
                     loginEvent.getPlayer(), true)) {
-                loginEvent.disallow(Result.KICK_OTHER, plugin.getCore().getMessage("proxy-claim-required"));
+                loginEvent.disallow(Result.KICK_OTHER,
+                        loginKickMessage(plugin.getCore().getMessage("proxy-claim-required")));
             }
         }
+    }
+
+    private String loginKickMessage(String message) {
+        // Spigot treats this event's reason as literal text, including legacy color codes.
+        return plugin.isPaper() ? message : ChatColor.stripColor(message);
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)

@@ -76,7 +76,7 @@ class ProxyAdmissionTest {
         assertRejected(profile(claim(NAME, uuid, null)));
         assertRejected(profile(claim(NAME, uuid, UUID.randomUUID())));
         assertRejected(new Object());
-        verify(logger, times(8)).warn(contains("Refusing login"), eq(NAME), eq(uuid));
+        verify(logger, times(8)).warn(contains("Refusing login"), eq(NAME), eq(uuid), eq(1));
         verifyNoMoreInteractions(logger);
     }
 
@@ -85,7 +85,7 @@ class ProxyAdmissionTest {
         assertRejected(signedProfile(claim(IdentityClaim.Decision.OFFLINE, NAME, uuid, null, null), proxy));
         assertRejected(signedProfile(claim(IdentityClaim.Decision.PREMIUM_VERIFIED, NAME, uuid,
                 UUID.randomUUID(), null), proxy));
-        verify(logger, times(2)).warn(contains("Refusing login"), eq(NAME), eq(uuid));
+        verify(logger, times(2)).warn(contains("Refusing login"), eq(NAME), eq(uuid), eq(1));
         verifyNoMoreInteractions(logger);
     }
 
@@ -141,7 +141,9 @@ class ProxyAdmissionTest {
         AsyncPlayerPreLoginEvent event = event(profile());
         new PaperCacheListener(plugin).onAsyncPlayerPreLogin(event);
         verify(event).disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, KICK);
-        verify(logger).warn(contains("Refusing login"), eq(NAME), eq(uuid));
+        verify(logger).warn(argThat((String message) -> message.contains(
+                "no signature matched any of the {} loaded proxy IDs")
+                && message.contains("Restart the backend if allowed-proxies.txt changed.")), eq(NAME), eq(uuid), eq(1));
         verifyNoMoreInteractions(logger);
         verify(core, never()).getAuthPluginHook();
     }

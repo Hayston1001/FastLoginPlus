@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.LongSupplier;
 
 import org.slf4j.Logger;
 
@@ -76,11 +77,14 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     /** How long one session-server reachability answer is reused. */
     static final long SESSION_PROBE_CACHE_MS = 60_000L;
 
+    static final long VERIFICATION_GRACE_MS = 30_000L;
+
     private volatile Map<String, String> localeMessages = Collections.emptyMap();
 
     // One pending mark per case-insensitive name. Per-key compute operations
     // serialize settlement and success so a late success clears counted failures.
-    private final ConcurrentMap<String, Boolean> pendingVerifications = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, PendingVerification> pendingVerifications = new ConcurrentHashMap<>();
+    private final LongSupplier verificationClock;
 
     // Settled definitive "not premium" verdicts — the only thing
     // that counts towards the same-name cracked observation. Bounded with a
@@ -134,7 +138,12 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     private UpdateChecker updateChecker;
 
     public FastLoginCore(T plugin) {
+        this(plugin, System::currentTimeMillis);
+    }
+
+    FastLoginCore(T plugin, LongSupplier verificationClock) {
         this.plugin = plugin;
+        this.verificationClock = verificationClock;
     }
 
     public void load() {
@@ -531,13 +540,13 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Records a requested verification for settlement on the next sweep or reconnect.
-     * Repeated requests before settlement share one pending mark.
+     * Records a requested verification for settlement after the authentication grace period.
+     * Repeated requests within one connection share the original start time.
      *
      * @param username exact login name of the attempt
      */
     public void markPendingVerification(String username) {
-        pendingVerifications.putIfAbsent(attemptKey(username), Boolean.TRUE);
+        pendingVerifications.putIfAbsent(attemptKey(username), new PendingVerification(verificationClock.getAsLong()));
     }
 
     /**
@@ -591,7 +600,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Settles pending verifications on the next sweep, without a grace period.
+     * Settles pending verifications only after the authentication grace period.
      * The settlement is the moment the attempt is judged failed, and
      * it decides with a session-server reachability probe of that moment: the
      * server answers (the client itself could not verify) -> count one
@@ -599,23 +608,28 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      * drop the attempt without counting and without any action.
      */
     public void settlePendingVerifications() {
-        if (pendingVerifications.isEmpty() || sessionProbe == null) {
+        long now = verificationClock.getAsLong();
+        if (sessionProbe == null || pendingVerifications.values().stream().noneMatch(pending -> pending.isDue(now))) {
             return;
         }
 
-        settlePendingVerifications(sessionProbe.isReachable());
+        settlePendingVerifications(sessionProbe.isReachable(), now);
     }
 
     /**
      * Settles only this name's previous attempt before routing a new connection.
+     * A previous attempt inside the grace period is dropped without counting.
      * The new attempt is marked later, only if routing requests verification.
      *
      * @param username exact login name of the returning player
      */
     public void settlePendingVerification(String username) {
         String key = attemptKey(username);
-        if (sessionProbe != null && pendingVerifications.containsKey(key)) {
-            settlePendingVerification(key, sessionProbe.isReachable());
+        PendingVerification pending = pendingVerifications.get(key);
+        if (pending != null) {
+            long now = verificationClock.getAsLong();
+            boolean reachable = pending.isDue(now) && sessionProbe != null && sessionProbe.isReachable();
+            settlePendingVerification(key, pending, reachable, now, true);
         }
     }
 
@@ -626,13 +640,24 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      * @param sessionServerReachable whether the session server answered the probe
      */
     void settlePendingVerifications(boolean sessionServerReachable) {
-        for (String username : pendingVerifications.keySet()) {
-            settlePendingVerification(username, sessionServerReachable);
-        }
+        settlePendingVerifications(sessionServerReachable, verificationClock.getAsLong());
     }
 
-    private void settlePendingVerification(String username, boolean sessionServerReachable) {
+    private void settlePendingVerifications(boolean sessionServerReachable, long now) {
+        pendingVerifications.forEach((username, pending) ->
+                settlePendingVerification(username, pending, sessionServerReachable, now, false));
+    }
+
+    private void settlePendingVerification(String username, PendingVerification attempt,
+                                           boolean sessionServerReachable, long now, boolean reconnect) {
         pendingVerifications.computeIfPresent(username, (key, pending) -> {
+            // A probe result for an old attempt must not consume a replacement.
+            if (pending != attempt) {
+                return pending;
+            }
+            if (!pending.isDue(now)) {
+                return reconnect ? null : pending;
+            }
             if (sessionServerReachable) {
                 definiteFailures.merge(key, 1, Integer::sum);
                 plugin.getLog().warn("Premium verification for {} never completed while the session "
@@ -643,6 +668,18 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             }
             return null;
         });
+    }
+
+    private static final class PendingVerification {
+        private final long startedAt;
+
+        private PendingVerification(long startedAt) {
+            this.startedAt = startedAt;
+        }
+
+        private boolean isDue(long now) {
+            return now - startedAt >= VERIFICATION_GRACE_MS;
+        }
     }
 
     /**

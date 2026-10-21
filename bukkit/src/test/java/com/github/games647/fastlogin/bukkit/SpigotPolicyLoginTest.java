@@ -21,6 +21,8 @@ import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedStatic;
 import org.slf4j.Logger;
 
@@ -155,9 +157,38 @@ class SpigotPolicyLoginTest {
         assertEquals("proxy-claim-required", event.getKickMessage());
         verify(integrator, never()).markPlayerAsPremium(anyString(), any());
         verify(integrator, never()).applyProxyAutoLogin(anyBoolean());
-        verify(logger).warn(contains("Refusing login"), eq(NAME), eq(uuid));
+        verify(logger).warn(contains("Refusing login"), eq(NAME), eq(uuid), eq(1));
         verify(logger, never()).warn(anyString(), any(Object.class));
         verify(plugin, never()).applyPremiumAtPreLogin(anyString(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void claimDenialStripsLegacyColorsOnlyOnSpigot(boolean paper) {
+        doReturn(paper).when(plugin).isPaper();
+        doReturn(false).when(plugin).observeSpigotIdentity(anyString(), anyString(), any(), eq(true));
+        when(core.getMessage("proxy-claim-required")).thenReturn("\u00a74Proxy claim required");
+        PlayerLoginEvent event = login();
+
+        new ConnectionListener(plugin).onPlayerLogin(event);
+
+        assertEquals(PlayerLoginEvent.Result.KICK_OTHER, event.getResult());
+        assertEquals(paper ? "\u00a74Proxy claim required" : "Proxy claim required", event.getKickMessage());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void notStartedDenialStripsLegacyColorsOnlyOnSpigot(boolean paper) {
+        doReturn(paper).when(plugin).isPaper();
+        doReturn(false).when(plugin).isServerFullyStarted();
+        when(core.getMessage("not-started")).thenReturn("\u00a74Server not started\u00a7r");
+        PlayerLoginEvent event = login();
+
+        new ConnectionListener(plugin).onPlayerLogin(event);
+
+        assertEquals(PlayerLoginEvent.Result.KICK_OTHER, event.getResult());
+        assertEquals(paper ? "\u00a74Server not started" : "Server not started", event.getKickMessage());
+        verify(plugin, never()).observeSpigotIdentity(anyString(), anyString(), any(), eq(true));
     }
 
     @Test

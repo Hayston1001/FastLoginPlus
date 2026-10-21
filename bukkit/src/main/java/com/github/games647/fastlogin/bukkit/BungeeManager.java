@@ -8,7 +8,6 @@ package com.github.games647.fastlogin.bukkit;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
@@ -48,6 +47,8 @@ public class BungeeManager {
 
     private final FastLoginBukkit plugin;
     private boolean enabled;
+    private boolean signedForwarding;
+    private boolean initialized;
 
     private final Collection<UUID> firedJoinEvents = new HashSet<>();
 
@@ -102,10 +103,16 @@ public class BungeeManager {
     }
 
     public void initialize() {
+        if (initialized) {
+            return;
+        }
+        initialized = true;
         enabled = detectProxy();
 
         if (enabled) {
             proxyIds = loadBungeeCordIds();
+            plugin.getLog().info("Loaded {} proxy IDs from allowed-proxies.txt. "
+                    + "Changing this file requires a backend restart.", proxyIds.size());
             if (proxyIds.isEmpty()) {
                 // an empty or unparsable allowed-proxies.txt makes
                 // every incoming proxy ID untrusted — surface this at ERROR
@@ -134,14 +141,12 @@ public class BungeeManager {
         }
     }
 
-    private boolean isProxySupported(String className, String fieldName)
+    boolean isProxySupported(String className, String fieldName)
         throws ClassNotFoundException, NoSuchFieldException, IllegalAccessException {
         return Class.forName(className).getDeclaredField(fieldName).getBoolean(null);
     }
 
-    private boolean isVelocityEnabled()
-        throws NoSuchFieldException, IllegalArgumentException, IllegalAccessException, ClassNotFoundException,
-        NoSuchMethodException, InvocationTargetException {
+    boolean isVelocityEnabled() throws ReflectiveOperationException {
         try {
             Class<?> globalConfig = Class.forName("io.papermc.paper.configuration.GlobalConfiguration");
             Object global = globalConfig.getDeclaredMethod("get").invoke(null);
@@ -153,12 +158,13 @@ public class BungeeManager {
             return velocityConfig.getClass().getDeclaredField("enabled").getBoolean(velocityConfig);
         } catch (ClassNotFoundException classNotFoundException) {
             // try again using the older Paper configuration, because the old class file still exists in newer versions
-            if (isProxySupported("com.destroystokyo.paper.PaperConfig", "velocitySupport")) {
-                return true;
+            try {
+                return isProxySupported("com.destroystokyo.paper.PaperConfig", "velocitySupport");
+            } catch (ClassNotFoundException spigot) {
+                // Paper-only configuration classes are normally absent on Spigot.
+                return false;
             }
         }
-
-        return false;
     }
 
     /**
@@ -174,36 +180,39 @@ public class BungeeManager {
      * @return true when forwarded attributes are signature-protected
      */
     public boolean isSignedForwarding() {
-        try {
-            return isVelocityEnabled() && !isProxySupported("org.spigotmc.SpigotConfig", "bungee");
-        } catch (Exception unavailable) {
-            // undetectable: fall back to the stricter legacy handling
-            plugin.getLog().warn("Cannot check the proxy forwarding setup", unavailable);
-            return false;
-        }
+        return signedForwarding;
     }
 
     private boolean detectProxy() {
+        boolean bungeeEnabled = false;
+        boolean legacyKnown = false;
+        boolean velocityEnabled = false;
+        Exception failure = null;
         try {
-            if (isProxySupported("org.spigotmc.SpigotConfig", "bungee")) {
-                return true;
+            bungeeEnabled = isProxySupported("org.spigotmc.SpigotConfig", "bungee");
+            legacyKnown = true;
+        } catch (ClassNotFoundException classNotFoundException) {
+            // No supported legacy forwarding configuration is available.
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            failure = ex;
+        }
+
+        try {
+            velocityEnabled = isVelocityEnabled();
+        } catch (ClassNotFoundException classNotFoundException) {
+            // Missing Paper classes are expected on Spigot.
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            if (failure == null) {
+                failure = ex;
             }
-        } catch (ClassNotFoundException classNotFoundException) {
-            // leave stacktrace for class not found out
-            plugin.getLog().warn("Cannot check for BungeeCord support: {}", classNotFoundException.getMessage());
-        } catch (NoSuchFieldException | IllegalAccessException ex) {
-            plugin.getLog().warn("Cannot check for BungeeCord support", ex);
         }
 
-        try {
-            return isVelocityEnabled();
-        } catch (ClassNotFoundException classNotFoundException) {
-            plugin.getLog().warn("Cannot check for Velocity support in Paper: {}", classNotFoundException.getMessage());
-        } catch (NoSuchFieldException | IllegalAccessException | NoSuchMethodException | InvocationTargetException ex) {
-            plugin.getLog().warn("Cannot check for Velocity support in Paper", ex);
+        if (failure != null) {
+            plugin.getLog().warn("Cannot check the proxy forwarding setup; using strict legacy claim validation",
+                    failure);
         }
-
-        return false;
+        signedForwarding = velocityEnabled && legacyKnown && !bungeeEnabled;
+        return bungeeEnabled || velocityEnabled;
     }
 
     private void registerPluginChannels() {

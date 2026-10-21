@@ -13,11 +13,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
@@ -29,8 +33,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -78,6 +85,45 @@ class SQLStorageUpsertLockTest {
                      "SELECT COUNT(*) FROM `premium` WHERE lower(`Name`) = lower('" + name + "')")) {
             rs.next();
             return rs.getInt(1);
+        }
+    }
+
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "not-a-uuid", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"})
+    void malformedOrNullUuidPreservesTheProfileAndDatabaseValue(String storedUuid) throws Exception {
+        String dbPath = tempDir.resolve("FastLogin.db").toString();
+        try (Connection con = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
+             PreparedStatement stmt = con.prepareStatement("INSERT INTO premium "
+                     + "(UUID, Name, Premium, Floodgate, SameNameCracked, LastIp) VALUES (?, ?, ?, ?, ?, ?)")) {
+            stmt.setString(1, storedUuid);
+            stmt.setString(2, "Steve");
+            stmt.setBoolean(3, true);
+            stmt.setInt(4, FloodgateState.FALSE.getValue());
+            stmt.setBoolean(5, true);
+            stmt.setString(6, "1.2.3.4");
+            stmt.executeUpdate();
+        }
+
+        StoredProfile loaded = storage.loadProfile("Steve");
+        assertNotNull(loaded);
+        assertTrue(loaded.isExistingPlayer());
+        assertNull(loaded.getId());
+        assertEquals("Steve", loaded.getName());
+        assertTrue(loaded.isOnlinemodePreferred());
+        assertTrue(loaded.isSameNameCracked());
+        assertEquals("1.2.3.4", loaded.getLastIp());
+        verify(plugin.getLog(), times(storedUuid == null ? 0 : 1)).warn(
+                "Invalid UUID column for player {} (UserID {}): using no UUID; database row unchanged",
+                "Steve", loaded.getRowId());
+
+        try (Connection con = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
+             Statement stmt = con.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT UUID, Premium FROM premium WHERE Name = 'Steve'")) {
+            assertTrue(rs.next());
+            assertEquals(storedUuid, rs.getString("UUID"), "loading must not repair or clear the stored value");
+            assertTrue(rs.getBoolean("Premium"));
+            assertFalse(rs.next());
         }
     }
 

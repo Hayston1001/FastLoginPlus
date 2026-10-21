@@ -203,9 +203,18 @@ public abstract class SQLStorage implements AuthStorage {
         if (resultSet.next()) {
             long userId = resultSet.getInt("UserID");
 
-            UUID uuid = Optional.ofNullable(resultSet.getString("UUID")).map(UUIDAdapter::parseId).orElse(null);
-
             String name = resultSet.getString("Name");
+            String storedUuid = resultSet.getString("UUID");
+            UUID uuid = null;
+            if (storedUuid != null) {
+                try {
+                    uuid = UUIDAdapter.parseId(storedUuid);
+                } catch (IllegalArgumentException invalidUuid) {
+                    log.warn("Invalid UUID column for player {} (UserID {}): using no UUID; database row unchanged",
+                            name, userId);
+                }
+            }
+
             boolean premium = resultSet.getBoolean("Premium");
             // NULL (rows older than the column) reads as "not observed"
             boolean sameNameCracked = resultSet.getBoolean("SameNameCracked");

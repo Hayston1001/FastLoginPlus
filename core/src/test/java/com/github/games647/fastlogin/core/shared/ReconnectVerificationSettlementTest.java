@@ -29,9 +29,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -53,12 +55,13 @@ class ReconnectVerificationSettlementTest {
     private MojangResolver resolver;
     private StoredProfile profile;
     private TestJoinManagement management;
+    private final AtomicLong now = new AtomicLong();
 
     @BeforeEach
     void setUp() throws Exception {
         PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
         when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
-        core = spy(new FastLoginCore<>(plugin));
+        core = spy(new FastLoginCore<>(plugin, now::get));
         storage = mock(SQLStorage.class);
         resolver = mock(MojangResolver.class);
         Configuration config = new Configuration();
@@ -86,19 +89,20 @@ class ReconnectVerificationSettlementTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    void immediateReconnectSettlesBeforeLoadingExistingOrNewProfile(boolean existing) {
+    void expiredReconnectSettlesBeforeLoadingExistingOrNewProfile(boolean existing) {
         if (!existing) {
             profile = new StoredProfile(null, NAME, false, FloodgateState.FALSE, "127.0.0.1");
         }
         management.onLogin(NAME, new TestSource());
         assertEquals(1, management.premiumRequests);
         assertEquals(0, core.getDefiniteFailures(NAME));
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         when(storage.loadProfile(NAME)).thenAnswer(call -> {
             assertEquals(1, core.getDefiniteFailures(NAME), "settlement precedes the profile load");
             return profile;
         });
 
-        // No sweep or sleep occurs between the two connections.
+        // No sweep occurs between the two connections.
         management.onLogin(NAME, new TestSource());
 
         assertEquals(1, management.premiumRequests);
@@ -110,8 +114,32 @@ class ReconnectVerificationSettlementTest {
     }
 
     @Test
+    void freshReconnectGetsItsOwnGraceWithoutHidingAnEventualFailure() throws Exception {
+        management.onLogin(NAME, new TestSource());
+        now.set(FastLoginCore.VERIFICATION_GRACE_MS - 1);
+
+        management.onLogin(NAME, new TestSource());
+
+        assertEquals(0, core.getDefiniteFailures(NAME));
+        assertEquals(2, management.premiumRequests);
+        assertEquals(0, management.crackedSessions);
+        assertFalse(profile.isSameNameCracked(), "a retry during grace must not create a cracked observation");
+        verify(resolver, never()).hasJoined(anyString(), anyString(), any());
+        now.incrementAndGet();
+        core.settlePendingVerifications();
+        assertEquals(0, core.getDefiniteFailures(NAME), "the retry has a fresh grace period");
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS - 1);
+        core.settlePendingVerifications();
+        assertEquals(1, core.getDefiniteFailures(NAME), "an abandoned retry still expires without another login");
+        management.onLogin(NAME, new TestSource());
+        assertEquals(1, management.crackedSessions);
+        assertTrue(profile.isSameNameCracked());
+    }
+
+    @Test
     void unreachableSessionServerDoesNotChargeThePreviousAttempt() throws Exception {
         management.onLogin(NAME, new TestSource());
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         when(resolver.hasJoined(anyString(), anyString(), any())).thenThrow(new IOException("unreachable"));
 
         management.onLogin(NAME, new TestSource());
@@ -121,6 +149,7 @@ class ReconnectVerificationSettlementTest {
         assertEquals(0, management.crackedSessions);
         // Discard the new attempt, then prove the dropped old attempt cannot reappear.
         core.dropPendingVerification(NAME);
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         core.settlePendingVerifications(true);
         assertEquals(0, core.getDefiniteFailures(NAME));
     }
@@ -128,10 +157,12 @@ class ReconnectVerificationSettlementTest {
     @Test
     void lateSuccessClearsTheFailureSettledByReconnect() {
         core.markPendingVerification(NAME);
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         management.onLogin(NAME, new TestSource());
         assertEquals(1, core.getDefiniteFailures(NAME));
 
         core.resetVerificationState(NAME.toUpperCase(Locale.ROOT));
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         core.settlePendingVerifications();
 
         assertEquals(0, core.getDefiniteFailures(NAME));
@@ -141,6 +172,7 @@ class ReconnectVerificationSettlementTest {
     void reconnectSettlesOnlyItsOwnCaseInsensitiveNameAndReusesTheProbeCache() throws Exception {
         core.markPendingVerification(NAME.toLowerCase(Locale.ROOT));
         core.markPendingVerification("OtherUser");
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
 
         management.onLogin(NAME, new TestSource());
 
@@ -157,6 +189,7 @@ class ReconnectVerificationSettlementTest {
     @Test
     void sweepBeforeReconnectDoesNotChargeTheSameAttemptTwice() {
         core.markPendingVerification(NAME);
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         core.settlePendingVerifications();
 
         management.onLogin(NAME, new TestSource());
@@ -172,6 +205,7 @@ class ReconnectVerificationSettlementTest {
         try {
             for (int attempt = 0; attempt < 200; attempt++) {
                 core.markPendingVerification(NAME);
+                now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
                 CyclicBarrier start = new CyclicBarrier(2);
                 Future<?> reconnect = pool.submit(() -> {
                     start.await(5, TimeUnit.SECONDS);
@@ -202,13 +236,17 @@ class ReconnectVerificationSettlementTest {
         assertEquals(0, core.getDefiniteFailures(NAME));
         verify(resolver, never()).hasJoined(anyString(), anyString(), any());
         core.settlePendingVerifications();
-        assertEquals(1, core.getDefiniteFailures(NAME), "only a later settlement may consume the new mark");
+        assertEquals(0, core.getDefiniteFailures(NAME), "a fresh attempt must not be consumed by a sweep");
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
+        core.settlePendingVerifications();
+        assertEquals(1, core.getDefiniteFailures(NAME), "a settlement after grace may consume the new mark");
     }
 
     @Test
     void settlementRunsBeforeTheBedrockEarlyReturn() {
         BedrockService<?> bedrock = mock(BedrockService.class);
         core.markPendingVerification(NAME);
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         when(bedrock.isBedrockConnection(NAME)).thenAnswer(call -> {
             assertEquals(1, core.getDefiniteFailures(NAME));
             return true;

@@ -17,6 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,10 +33,12 @@ import static org.mockito.Mockito.when;
  */
 class FastLoginCoreTest {
 
+    private final AtomicLong now = new AtomicLong();
+
     @Test
     void pendingConfirmsAddShouldHaveSingleWinnerUnderConcurrency() throws Exception {
         PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
-        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin, now::get);
         UUID player = UUID.randomUUID();
         int threads = 16;
 
@@ -82,14 +85,16 @@ class FastLoginCoreTest {
     void settleCountsOnlyWhenTheSessionServerAnswers() {
         PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
         when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
-        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin, now::get);
 
         core.markPendingVerification("TestUser");
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         core.settlePendingVerifications(true);
         assertEquals(1, core.getDefiniteFailures("TestUser"),
                 "the session server answers: the client itself could not verify");
 
         core.markPendingVerification("OtherUser");
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         core.settlePendingVerifications(false);
         assertEquals(0, core.getDefiniteFailures("OtherUser"),
                 "an authentication outage is not a failed identity");
@@ -99,15 +104,21 @@ class FastLoginCoreTest {
     }
 
     @Test
-    void firstSweepCountsFreshPendingWithoutWaiting() {
+    void sweepWaitsForGraceThenCountsOnlyOnce() {
         PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
         when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
-        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin, now::get);
 
         core.markPendingVerification("TestUser");
         core.settlePendingVerifications(true);
 
-        assertEquals(1, core.getDefiniteFailures("TestUser"), "the next sweep settles even a fresh attempt");
+        assertEquals(0, core.getDefiniteFailures("TestUser"), "a fresh attempt must be allowed to finish");
+        now.set(FastLoginCore.VERIFICATION_GRACE_MS - 1);
+        core.settlePendingVerifications(true);
+        assertEquals(0, core.getDefiniteFailures("TestUser"));
+        now.incrementAndGet();
+        core.settlePendingVerifications(true);
+        assertEquals(1, core.getDefiniteFailures("TestUser"));
         core.settlePendingVerifications(true);
         assertEquals(1, core.getDefiniteFailures("TestUser"), "a sweep must not charge the same attempt twice");
     }
@@ -117,10 +128,12 @@ class FastLoginCoreTest {
         // Repeated requests share a mark and cannot postpone settlement.
         PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
         when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
-        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin, now::get);
 
         core.markPendingVerification("TestUser");
+        now.set(FastLoginCore.VERIFICATION_GRACE_MS - 1);
         core.markPendingVerification("TESTUSER");
+        now.incrementAndGet();
         core.settlePendingVerifications(true);
 
         assertEquals(1, core.getDefiniteFailures("TestUser"));
@@ -129,7 +142,7 @@ class FastLoginCoreTest {
     @Test
     void definiteVerdictCountsAndClearsThePending() {
         PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
-        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin, now::get);
 
         core.markPendingVerification("TestUser");
         core.recordDefiniteFailure("TestUser");
@@ -137,6 +150,7 @@ class FastLoginCoreTest {
                 "a definitive verdict is name-keyed and case-insensitive");
 
         // the settlement must not count it a second time
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         core.settlePendingVerifications(true);
         assertEquals(1, core.getDefiniteFailures("TestUser"));
     }
@@ -144,10 +158,11 @@ class FastLoginCoreTest {
     @Test
     void droppedAttemptsAndVerificationsCountNothing() {
         PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
-        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin, now::get);
 
         core.markPendingVerification("Dropped");
         core.dropPendingVerification("Dropped");
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         core.settlePendingVerifications(true);
         assertEquals(0, core.getDefiniteFailures("Dropped"), "a dropped attempt counts nothing");
 
@@ -161,14 +176,16 @@ class FastLoginCoreTest {
     void lateSuccessClearsSettledAndExplicitFailuresAndPendingRetries() {
         PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
         when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
-        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin, now::get);
 
         core.markPendingVerification("TestUser");
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         core.settlePendingVerifications(true);
         core.recordDefiniteFailure("TESTUSER");
         assertEquals(2, core.getDefiniteFailures("testuser"));
         core.markPendingVerification("TestUser");
         core.resetVerificationState("TESTUSER");
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
         core.settlePendingVerifications(true);
 
         assertEquals(0, core.getDefiniteFailures("TestUser"), "late success refutes every recorded failure");
@@ -178,11 +195,12 @@ class FastLoginCoreTest {
     void successAndSettlementCannotLeaveAStaleFailureUnderConcurrency() throws Exception {
         PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
         when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
-        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin, now::get);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         try {
             for (int attempt = 0; attempt < 200; attempt++) {
                 core.markPendingVerification("TestUser");
+                now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
                 CyclicBarrier start = new CyclicBarrier(2);
                 Future<?> settlement = pool.submit(() -> {
                     start.await(5, TimeUnit.SECONDS);
