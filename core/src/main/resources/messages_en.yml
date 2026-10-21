@@ -64,6 +64,7 @@ authme-premium-blocked: '&cPlease use /flp premium'
 authme-freemium-blocked: '&cPlease use /flp cracked'
 
 # Proxy communication
+proxy-claim-required: '&4This server could not verify that you connected through its proxy. Please connect through the proxy.'
 wait-on-proxy: '&6Sending the request to your proxy. If there is no response, ask an admin to check proxy-backend communication.'
 account-state-checking: '&6Confirming your account state, please wait. If a password or registration prompt appears afterwards, follow its instructions.'
 

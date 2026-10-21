@@ -24,8 +24,8 @@ import com.github.games647.fastlogin.protocol.IdentityClaim;
  * the proxy can inject the same property. The backend therefore reads this as "the proxy attests",
  * never "FLP attests". The capability is not new either: the configure-phase auto-register already
  * trusted the payload's connection UUID, which a holder of the forwarding secret could set to the
- * victim's Mojang UUID. That is also why the property carries no second signature scheme — one
- * would not close the pre-existing path anyway.</p>
+ * victim's Mojang UUID. Modern forwarding therefore needs no second signature. Legacy
+ * identity claims instead carry a separate HMAC keyed by the existing proxy UUID.</p>
  *
  * <p><b>Two transports, two names.</b> BungeeCord's legacy forwarding appends the login profile's
  * properties to the handshake's host field as JSON, so the same attestation can ride it — but Paper
@@ -37,6 +37,9 @@ public final class ForwardingAttributes {
 
     /** Fabric backend identity claim, authenticated by the forwarding transport. */
     public static final String IDENTITY = IdentityClaim.PROPERTY_NAME;
+
+    /** Legacy claim HMAC; fits Paper's 16-character property-name limit. */
+    public static final String IDENTITY_SIGNATURE = IdentityClaim.SIGNATURE_PROPERTY_NAME;
 
     /**
      * Carries the Mojang UUID the proxy verified for this connection, over Velocity's modern

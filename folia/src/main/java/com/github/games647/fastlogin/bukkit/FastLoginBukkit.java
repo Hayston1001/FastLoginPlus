@@ -995,8 +995,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * channel). Trust depends on the chain: signature-protected forwarding
      * (Velocity modern forwarding) proves the declaration already, while legacy
      * forwarding (BungeeCord) is unsigned, so its claims must carry this proxy's
-     * ID token and pass the proxy allowlist. Anything that fails falls closed to
-     * "no facts", and the late message decides instead.
+     * ID token and pass the proxy allowlist. Invalid claims provide no facts.
+     * Unsigned v4 connections additionally require a valid claim at admission.
      *
      * @param profile        the forwarded profile
      * @param playerName     the logging-in player's name
@@ -1006,31 +1006,91 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private com.github.games647.fastlogin.protocol.IdentityClaim readIdentityDeclaration(
             Object profile, String playerName, java.util.UUID connectionUuid) {
         try {
-            java.util.List<String> values = new java.util.ArrayList<>();
-            Object properties = profile.getClass().getMethod("getProperties").invoke(profile);
-            for (Object property : (Iterable<?>) properties) {
-                String name = (String) property.getClass().getMethod("getName").invoke(property);
-                if (com.github.games647.fastlogin.protocol.IdentityClaim.PROPERTY_NAME.equals(name)) {
-                    values.add((String) property.getClass().getMethod("getValue").invoke(property));
-                }
-            }
+            SpigotProfileReader.Snapshot snapshot = SpigotProfileReader.readProfile(profile, "profile");
+            return validateIdentityDeclaration(snapshot.claims, snapshot.signatures, playerName, connectionUuid);
+        } catch (Exception untrustworthy) {
+            return null;
+        }
+    }
+
+    private com.github.games647.fastlogin.protocol.IdentityClaim validateIdentityDeclaration(
+            java.util.List<String> values, String playerName, UUID connectionUuid) {
+        return validateIdentityDeclaration(values, java.util.Collections.emptyList(), playerName, connectionUuid);
+    }
+
+    private com.github.games647.fastlogin.protocol.IdentityClaim validateIdentityDeclaration(
+            java.util.List<String> values, java.util.List<String> signatures, String playerName, UUID connectionUuid) {
+        try {
             com.github.games647.fastlogin.protocol.IdentityClaim claim =
                     com.github.games647.fastlogin.protocol.IdentityClaim.parseExactlyOne(
                             values, playerName, connectionUuid);
             if (!bungeeManager.isSignedForwarding()) {
-                java.util.UUID proxyId = claim.getProxyId();
-                if (proxyId == null || !bungeeManager.isProxyAllowed(proxyId)) {
-                    logger.warn("Ignoring the identity facts of {}: the proxy ID token is missing or "
-                            + "not in allowed-proxies.txt; the late message decides instead", playerName);
+                if (signatures.size() != 1) {
+                    return null;
+                }
+                boolean verified = false;
+                for (UUID proxyId : bungeeManager.getAllowedProxyIds()) {
+                    verified |= com.github.games647.fastlogin.protocol.IdentityClaim.verifySignature(
+                            values.get(0), signatures.get(0), proxyId);
+                }
+                if (!verified) {
                     return null;
                 }
             }
             return claim;
         } catch (Exception untrustworthy) {
-            // no claim, a malformed one, or one bound to another profile: fail
-            // closed to "no facts" and let the late message decide
+            // No claim, a malformed one, or one bound to another profile supplies no facts.
             return null;
         }
+    }
+
+    /**
+     * Pure admission decision for the UUID branch AuthMe trusts as premium.
+     *
+     * @param proxyMode whether this server is a proxy backend
+     * @param signedForwarding whether forwarding authenticates the connection
+     * @param connectionUuid the UUID carried by this connection
+     * @param trustedClaim whether exactly one connection-bound claim passed validation
+     * @return whether the connection must be refused before AuthMe handles it
+     */
+    static boolean isUntrustedPremiumConnection(boolean proxyMode, boolean signedForwarding,
+            UUID connectionUuid, boolean trustedClaim) {
+        return proxyMode && !signedForwarding && connectionUuid != null
+                && connectionUuid.version() == 4 && !trustedClaim;
+    }
+
+    /**
+     * Rejects unsigned premium UUIDs before AuthMe can trust the handshake UUID.
+     *
+     * @param profile the current connection's forwarded profile
+     * @param playerName the logging-in name
+     * @param connectionUuid the connection UUID
+     * @return whether admission must be refused
+     */
+    public boolean isUntrustedPremiumConnection(Object profile, String playerName, UUID connectionUuid) {
+        if (!isUntrustedPremiumConnection(bungeeManager.isEnabled(), bungeeManager.isSignedForwarding(),
+                connectionUuid, false)) {
+            return false;
+        }
+        return rejectUntrustedPremiumConnection(playerName, connectionUuid,
+                readIdentityDeclaration(profile, playerName, connectionUuid));
+    }
+
+    private boolean rejectUntrustedPremiumConnection(String playerName, UUID connectionUuid,
+            com.github.games647.fastlogin.protocol.IdentityClaim claim) {
+        // A valid signature must also prove this connection's premium identity.
+        boolean trustedClaim = claim != null
+                && claim.getDecision()
+                        == com.github.games647.fastlogin.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED
+                && connectionUuid != null
+                && connectionUuid.equals(claim.getVerifiedMojangUuid());
+        boolean rejected = isUntrustedPremiumConnection(bungeeManager.isEnabled(),
+                bungeeManager.isSignedForwarding(), connectionUuid, trustedClaim);
+        if (rejected) {
+            logger.warn("Refusing login for {} with connection UUID {}: unsigned forwarding requires "
+                    + "a validated flp_identity claim from allowed-proxies.txt", playerName, connectionUuid);
+        }
+        return rejected;
     }
 
     /**

@@ -39,6 +39,12 @@ public class PaperCacheListener implements Listener {
             return;
         }
 
+        // Before configuration/preJoin: AuthMe must not trust an unsigned handshake's v4 UUID.
+        if (plugin.isUntrustedPremiumConnection(event.getPlayerProfile(), event.getName(), event.getUniqueId())) {
+            event.disallow(Result.KICK_OTHER, plugin.getCore().getMessage("proxy-claim-required"));
+            return;
+        }
+
         if (!plugin.getConfig().getBoolean("forwardSkin")) {
             return;
         }

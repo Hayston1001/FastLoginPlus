@@ -27,6 +27,9 @@ class ForwardingAttributesTest {
 
     @Test
     void legacyNameSurvivesPapersLegacyForwardingFilter() {
+        assertTrue(ForwardingAttributes.IDENTITY.matches(LEGACY_NAME_PATTERN));
+        assertTrue(ForwardingAttributes.IDENTITY_SIGNATURE.matches(LEGACY_NAME_PATTERN));
+        org.junit.jupiter.api.Assertions.assertEquals(16, ForwardingAttributes.IDENTITY_SIGNATURE.length());
         assertTrue(ForwardingAttributes.PREMIUM_UUID_LEGACY.matches(LEGACY_NAME_PATTERN),
                 "the BungeeCord property name must match Paper's legacy property filter,"
                         + " otherwise it is dropped without a trace");

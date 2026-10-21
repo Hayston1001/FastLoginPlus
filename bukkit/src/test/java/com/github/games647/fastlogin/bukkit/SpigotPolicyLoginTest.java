@@ -26,7 +26,6 @@ import org.slf4j.Logger;
 
 import java.lang.reflect.Field;
 import java.net.InetAddress;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -69,7 +68,9 @@ class SpigotPolicyLoginTest {
         when(manager.isEnabled()).thenReturn(true);
         when(manager.isSignedForwarding()).thenReturn(false);
         when(manager.isProxyAllowed(proxy)).thenReturn(true);
+        when(manager.getAllowedProxyIds()).thenReturn(java.util.Collections.singleton(proxy));
         when(core.isDebug()).thenReturn(true);
+        when(core.getMessage("proxy-claim-required")).thenReturn("proxy-claim-required");
         when(core.getAuthPluginHook()).thenReturn(hook);
         when(hook.inspectAccount(NAME)).thenReturn(LoginMethodDecider.AccountState.PREMIUM_OWNED);
         player = mock(Player.class, withSettings().extraInterfaces(LiveProfileCarrier.class));
@@ -110,7 +111,9 @@ class SpigotPolicyLoginTest {
     @Test
     void enabledPolicyRetainsPremiumPrecreationBeforeJoin() throws Exception {
         giveClaim(true, proxy, uuid);
-        new ConnectionListener(plugin).onPlayerLogin(login());
+        PlayerLoginEvent event = login();
+        new ConnectionListener(plugin).onPlayerLogin(event);
+        assertEquals(PlayerLoginEvent.Result.ALLOWED, event.getResult());
         org.mockito.InOrder order = inOrder(integrator);
         order.verify(integrator).applyProxyAutoLogin(true);
         order.verify(integrator).isAuthMePremiumEnabled();
@@ -131,9 +134,13 @@ class SpigotPolicyLoginTest {
     @Test
     void untrustedOrWrongConnectionClaimsCannotSetTheGlobalPolicy() throws Exception {
         giveClaim(false, UUID.randomUUID(), uuid);
-        new ConnectionListener(plugin).onPlayerLogin(login());
+        PlayerLoginEvent untrusted = login();
+        new ConnectionListener(plugin).onPlayerLogin(untrusted);
+        assertEquals(PlayerLoginEvent.Result.KICK_OTHER, untrusted.getResult());
         giveClaim(false, proxy, UUID.randomUUID());
-        new ConnectionListener(plugin).onPlayerLogin(login());
+        PlayerLoginEvent mismatched = login();
+        new ConnectionListener(plugin).onPlayerLogin(mismatched);
+        assertEquals(PlayerLoginEvent.Result.KICK_OTHER, mismatched.getResult());
         verify(integrator, never()).applyProxyAutoLogin(anyBoolean());
         verify(integrator, never()).markPlayerAsPremium(anyString(), any());
         verify(core, never()).resetVerificationState(anyString());
@@ -142,10 +149,44 @@ class SpigotPolicyLoginTest {
     @Test
     void missingDeclarationDiscardsUnsignedV4AtTheLiveLoginHook() throws Exception {
         when(((LiveProfileCarrier) player).getProfile()).thenReturn(new BeanProfile(null));
-        new ConnectionListener(plugin).onPlayerLogin(login());
+        PlayerLoginEvent event = login();
+        new ConnectionListener(plugin).onPlayerLogin(event);
+        assertEquals(PlayerLoginEvent.Result.KICK_OTHER, event.getResult());
+        assertEquals("proxy-claim-required", event.getKickMessage());
         verify(integrator, never()).markPlayerAsPremium(anyString(), any());
         verify(integrator, never()).applyProxyAutoLogin(anyBoolean());
-        verify(logger).warn(contains("unsigned forwarding has no validated flp_identity"), eq(NAME));
+        verify(logger).warn(contains("Refusing login"), eq(NAME), eq(uuid));
+        verify(logger, never()).warn(anyString(), any(Object.class));
+        verify(plugin, never()).applyPremiumAtPreLogin(anyString(), any());
+    }
+
+    @Test
+    void unavailableLiveProfileAlsoRefusesUnsignedV4() throws Exception {
+        when(((LiveProfileCarrier) player).getProfile()).thenThrow(new IllegalStateException("unavailable"));
+        PlayerLoginEvent event = login();
+        new ConnectionListener(plugin).onPlayerLogin(event);
+        assertEquals(PlayerLoginEvent.Result.KICK_OTHER, event.getResult());
+        verifyNoInteractions(integrator);
+    }
+
+    @Test
+    void alreadyDeniedLoginSkipsClaimAdmission() {
+        PlayerLoginEvent event = login();
+        event.disallow(PlayerLoginEvent.Result.KICK_OTHER, "other-plugin");
+        new ConnectionListener(plugin).onPlayerLogin(event);
+        assertEquals("other-plugin", event.getKickMessage());
+        verify(plugin, never()).observeSpigotIdentity(anyString(), anyString(), any(), eq(true));
+    }
+
+    @Test
+    void offlineLoginDoesNotRequireAClaim() {
+        when(player.getUniqueId()).thenReturn(UUID.nameUUIDFromBytes(
+                ("OfflinePlayer:" + NAME).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        when(((LiveProfileCarrier) player).getProfile()).thenReturn(new BeanProfile(null));
+        PlayerLoginEvent event = login();
+        new ConnectionListener(plugin).onPlayerLogin(event);
+        assertEquals(PlayerLoginEvent.Result.ALLOWED, event.getResult());
+        verifyNoInteractions(integrator);
     }
 
     @Test
@@ -175,8 +216,9 @@ class SpigotPolicyLoginTest {
     private void giveClaim(boolean enabled, UUID source, UUID forwarded) {
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
                 NAME, forwarded, forwarded,
-                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, enabled, true, false), source);
-        when(((LiveProfileCarrier) player).getProfile()).thenReturn(new BeanProfile(claim.encode()));
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, enabled, true, false), null);
+        when(((LiveProfileCarrier) player).getProfile()).thenReturn(
+                new BeanProfile(claim.encode(), IdentityClaim.sign(claim.encode(), source)));
     }
 
     private PlayerLoginEvent login() {
@@ -195,10 +237,16 @@ class SpigotPolicyLoginTest {
 
     public static final class BeanProfile {
         private final String claim;
-        public BeanProfile(String claim) { this.claim = claim; }
+        private final String signature;
+        public BeanProfile(String claim) { this(claim, null); }
+        public BeanProfile(String claim, String signature) { this.claim = claim; this.signature = signature; }
         public Collection<BeanProperty> getProperties() {
-            return claim == null ? java.util.Collections.emptyList()
-                    : Arrays.asList(new BeanProperty(IdentityClaim.PROPERTY_NAME, claim));
+            java.util.List<BeanProperty> properties = new java.util.ArrayList<>();
+            if (claim != null) { properties.add(new BeanProperty(IdentityClaim.PROPERTY_NAME, claim)); }
+            if (signature != null) {
+                properties.add(new BeanProperty(IdentityClaim.SIGNATURE_PROPERTY_NAME, signature));
+            }
+            return properties;
         }
     }
 

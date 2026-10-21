@@ -64,6 +64,7 @@ authme-premium-blocked: '&c请使用 /flp premium'
 authme-freemium-blocked: '&c请使用 /flp cracked'
 
 # 代理通信
+proxy-claim-required: '&4服务器无法确认你通过代理连接, 请使用代理进入服务器.'
 wait-on-proxy: '&6正在向代理发送请求. 若没有响应, 请联系管理员检查代理与后端的通信配置.'
 account-state-checking: '&6正在确认账号状态, 请稍候. 若随后出现密码或注册提示, 请按提示操作.'
 

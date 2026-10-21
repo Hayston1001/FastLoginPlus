@@ -7,16 +7,24 @@
 package com.github.games647.fastlogin.protocol;
 
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.util.Base64;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
 /** A versioned identity claim carried in one authenticated forwarding profile property. */
 public final class IdentityClaim {
 
     public static final String PROPERTY_NAME = "flp_identity";
+    public static final String SIGNATURE_PROPERTY_NAME = "flp_identity_sig";
     public static final int VERSION = 1;
+    private static final String SIGNATURE_DOMAIN = "fastloginplus:flp_identity:v1\0";
     private static final Pattern PLAYER_NAME = Pattern.compile("[A-Za-z0-9_]{3,16}");
     private static final Pattern UUID_TEXT = Pattern.compile(
             "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
@@ -225,8 +233,9 @@ public final class IdentityClaim {
     }
 
     /**
-     * The proxy whose verified login produced this claim, used by early-channel
-     * consumers to check the claim against their proxy allowlist.
+     * Historical plaintext proxy identifier, retained only for wire compatibility.
+     * It does not authenticate legacy forwarding. New Bungee senders omit it and
+     * sign the claim with the existing proxy UUID instead.
      *
      * @return the proxy UUID, or null when the sender declared none
      */
@@ -248,6 +257,53 @@ public final class IdentityClaim {
                 + (facts.autoLogin() ? "Y" : "N") + ":" + (facts.autoRegisterUnknown() ? "Y" : "N") + ":"
                 + (facts.offlineWhitelist() ? "Y" : "N") + ":"
                 + (proxyId == null ? "-" : proxyId.toString());
+    }
+
+    /**
+     * Signs the exact legacy-forwarded value using the existing proxy UUID as the key.
+     * This authenticates the claim, not its freshness; captured claims can still be replayed.
+     * The UUID must remain private even though it is not a dedicated forwarding secret.
+     *
+     * @param value exact encoded claim, without normalization
+     * @param proxyId existing allowed proxy UUID
+     * @return URL-safe Base64 HMAC-SHA256 without padding
+     */
+    public static String sign(String value, UUID proxyId) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(signature(value, proxyId));
+    }
+
+    /**
+     * Verifies a legacy claim signature with a constant-time MAC comparison.
+     *
+     * @param value exact received claim value
+     * @param signature URL-safe Base64 signature without padding
+     * @param proxyId candidate allowed proxy UUID
+     * @return false for absent, malformed or nonmatching signatures
+     */
+    public static boolean verifySignature(String value, String signature, UUID proxyId) {
+        if (value == null || proxyId == null || signature == null
+                || !signature.matches("[A-Za-z0-9_-]{43}")) {
+            return false;
+        }
+        try {
+            byte[] received = Base64.getUrlDecoder().decode(signature);
+            return MessageDigest.isEqual(signature(value, proxyId), received);
+        } catch (IllegalArgumentException malformed) {
+            return false;
+        }
+    }
+
+    private static byte[] signature(String value, UUID proxyId) {
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(proxyId, "proxyId");
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(proxyId.toString().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            mac.update(SIGNATURE_DOMAIN.getBytes(StandardCharsets.UTF_8));
+            return mac.doFinal(value.getBytes(StandardCharsets.UTF_8));
+        } catch (GeneralSecurityException unavailable) {
+            throw new IllegalStateException("Identity signature unavailable", unavailable);
+        }
     }
 
     /**

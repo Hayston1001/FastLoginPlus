@@ -81,8 +81,7 @@ class UnverifiedSenderTest {
             listener.onLogin(login);
             listener.onServerConnected(connected);
         }
-        verify(log, times(1)).warn(startsWith("First early unverified declaration injection failure."),
-                any(Throwable.class));
+        verify(log, times(1)).warn(startsWith("First early unverified declaration injection failure."));
         verify(login, never()).setCancelled(true);
         assertSame(session, sessions.get(connection));
         ArgumentCaptor<LoginActionMessage> message = ArgumentCaptor.forClass(LoginActionMessage.class);

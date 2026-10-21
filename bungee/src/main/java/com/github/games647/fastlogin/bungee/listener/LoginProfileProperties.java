@@ -6,6 +6,9 @@
  */
 package com.github.games647.fastlogin.bungee.listener;
 
+import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
+import com.github.games647.fastlogin.protocol.IdentityClaim;
+
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -32,8 +35,8 @@ import java.util.UUID;
  * provide (the signature stays unset, which is what an unsigned property means).</p>
  *
  * <p>Every entry point reports failure through the given reporter instead of throwing: the
- * property list is an optimisation for the backend, never a requirement for the login, and a
- * proxy shape we do not recognise must not cost the player their connection.</p>
+ * proxy continues the login on an unsupported shape. Backends may still refuse an unsigned
+ * premium UUID when its authenticated identity claim could not be attached.</p>
  */
 final class LoginProfileProperties {
 
@@ -43,6 +46,22 @@ final class LoginProfileProperties {
     private static final String NAME_GETTER = "getName";
 
     private LoginProfileProperties() {
+    }
+
+    static boolean attachIdentity(Object profile, IdentityClaim claim, String proxyId,
+                                  Consumer<Throwable> onFailure) {
+        try {
+            if (profile == null) {
+                throw new IllegalStateException("Missing identity profile");
+            }
+            String value = claim.encode();
+            String signature = IdentityClaim.sign(value, UUID.fromString(proxyId));
+            return attach(profile, ForwardingAttributes.IDENTITY, value, onFailure)
+                    && attach(profile, ForwardingAttributes.IDENTITY_SIGNATURE, signature, onFailure);
+        } catch (RuntimeException | LinkageError failure) {
+            onFailure.accept(failure);
+            return false;
+        }
     }
 
     /**

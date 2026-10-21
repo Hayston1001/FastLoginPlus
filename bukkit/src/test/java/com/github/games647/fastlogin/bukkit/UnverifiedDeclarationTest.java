@@ -75,6 +75,7 @@ class UnverifiedDeclarationTest {
         when(manager.isEnabled()).thenReturn(true);
         when(manager.isSignedForwarding()).thenReturn(true);
         when(manager.isProxyAllowed(proxy)).thenReturn(true);
+        when(manager.getAllowedProxyIds()).thenReturn(java.util.Collections.singleton(proxy));
         when(hook.inspectAccount("TestUser")).thenReturn(LoginMethodDecider.AccountState.PREMIUM_OWNED);
         player = mock(Player.class);
         when(player.getName()).thenReturn("TestUser");
@@ -145,7 +146,7 @@ class UnverifiedDeclarationTest {
     void configureOfflineClaimRejectsBeforeLegacyPremiumShortcuts() throws Exception {
         when(manager.isSignedForwarding()).thenReturn(false);
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, "TestUser", uuid, null, facts(), proxy);
-        ConfigureConnection connection = new ConfigureConnection(new Profile(uuid, claim.encode()));
+        ConfigureConnection connection = new ConfigureConnection(new Profile(uuid, claim.encode()).signed(proxy));
         Method configure = FastLoginBukkit.class.getDeclaredMethod("onPlayerConfigure", Object.class);
         configure.setAccessible(true);
         configure.invoke(plugin, new ConfigureEvent(connection));
@@ -249,16 +250,16 @@ class UnverifiedDeclarationTest {
     }
 
     @Test
-    void unsignedEarlyDeclarationRequiresTheSameProxyTokenAllowlist() throws Exception {
+    void unsignedEarlyDeclarationRequiresAnAllowlistedSignature() throws Exception {
         when(manager.isSignedForwarding()).thenReturn(false);
-        when(manager.isProxyAllowed(proxy)).thenReturn(false);
+        when(manager.getAllowedProxyIds()).thenReturn(java.util.Collections.emptySet());
         Profile profile = new Profile(uuid, new IdentityClaim(IdentityClaim.Decision.OFFLINE,
-                "TestUser", uuid, null, facts(), proxy).encode());
+                "TestUser", uuid, null, facts(), null).encode()).signed(proxy);
         Method read = FastLoginBukkit.class.getDeclaredMethod("readIdentityDeclaration", Object.class,
                 String.class, UUID.class);
         read.setAccessible(true);
         assertNull(read.invoke(plugin, profile, "TestUser", uuid));
-        when(manager.isProxyAllowed(proxy)).thenReturn(true);
+        when(manager.getAllowedProxyIds()).thenReturn(java.util.Collections.singleton(proxy));
         assertEquals(IdentityClaim.Decision.OFFLINE,
                 ((IdentityClaim) read.invoke(plugin, profile, "TestUser", uuid)).getDecision());
     }
@@ -396,7 +397,7 @@ class UnverifiedDeclarationTest {
         when(hook.inspectAccount("TestUser")).thenReturn(LoginMethodDecider.AccountState.PASSWORD_ACCOUNT);
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, "TestUser", uuid, null,
                 new IdentityClaim.Facts(false, true, IdentityClaim.Consent.NO, true, true, false), proxy);
-        configureWithLookup(new Profile(uuid, claim.encode(), UUID.randomUUID()), UUID.randomUUID());
+        configureWithLookup(new Profile(uuid, claim.encode(), UUID.randomUUID()).signed(proxy), UUID.randomUUID());
         assertNoPremiumGrant();
         verify(core, never()).getResolver();
     }
@@ -416,8 +417,8 @@ class UnverifiedDeclarationTest {
         String rewrittenClaim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
                 "TestUser", uuid, premium,
                 new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, true, true, false), proxy).encode();
-        configureWithLookup(new Profile(uuid, rewrittenClaim, premium), premium);
-        configureWithLookup(new Profile(premium, verifiedClaim(premium, proxy), null), premium);
+        configureWithLookup(new Profile(uuid, rewrittenClaim, premium).signed(proxy), premium);
+        configureWithLookup(new Profile(premium, verifiedClaim(premium, null), null).signed(proxy), premium);
         verify(integrator, times(2)).markPlayerAsPremium("TestUser", premium);
         verify(core, never()).getResolver();
     }
@@ -499,6 +500,8 @@ class UnverifiedDeclarationTest {
         private final String claim;
         private final UUID premium;
         private boolean duplicate;
+        private String signature;
+        public Profile signed(UUID proxy) { signature = IdentityClaim.sign(claim, proxy); return this; }
         public Profile(UUID uuid, String claim) { this(uuid, claim, UUID.randomUUID()); }
         public Profile(UUID uuid, String claim, UUID premium) {
             this.uuid = uuid; this.claim = claim; this.premium = premium;
@@ -513,6 +516,9 @@ class UnverifiedDeclarationTest {
             }
             if (premium != null) {
                 properties.add(new Property(ForwardingAttributes.PREMIUM_UUID_LEGACY, premium.toString()));
+            }
+            if (signature != null) {
+                properties.add(new Property(IdentityClaim.SIGNATURE_PROPERTY_NAME, signature));
             }
             return properties;
         }

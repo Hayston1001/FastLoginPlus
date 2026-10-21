@@ -8,6 +8,8 @@ package com.github.games647.fastlogin.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -16,6 +18,34 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class IdentityClaimTest {
+
+    @Test
+    void legacySignatureAuthenticatesExactBytesWithoutDisclosingTheProxyId() throws Exception {
+        UUID proxy = UUID.randomUUID();
+        String value = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                "TestUser", MOJANG, MOJANG).encode();
+        String signature = IdentityClaim.sign(value, proxy);
+        assertTrue(signature.matches("[A-Za-z0-9_-]{43}"));
+        assertFalse(value.contains(proxy.toString()));
+        assertTrue(IdentityClaim.verifySignature(value, signature, proxy));
+        assertFalse(IdentityClaim.verifySignature(value, signature, UUID.randomUUID()));
+        assertFalse(IdentityClaim.verifySignature(value + " ", signature, proxy));
+        assertFalse(IdentityClaim.verifySignature(value, null, proxy));
+        assertFalse(IdentityClaim.verifySignature(value, "", proxy));
+        assertFalse(IdentityClaim.verifySignature(value, "%%%", proxy));
+        assertFalse(IdentityClaim.verifySignature(value, signature + "=", proxy));
+        String plaintext = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                "TestUser", MOJANG, MOJANG, IdentityClaim.Facts.defaults(), proxy).encode();
+        assertFalse(IdentityClaim.verifySignature(plaintext, null, proxy));
+        assertFalse(IdentityClaim.verifySignature(plaintext, signature, proxy));
+
+        // Pin the interoperable key representation, domain separator and exact signed bytes.
+        javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+        mac.init(new javax.crypto.spec.SecretKeySpec(proxy.toString().getBytes(StandardCharsets.UTF_8),
+                "HmacSHA256"));
+        assertEquals(java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal(
+                ("fastloginplus:flp_identity:v1\0" + value).getBytes(StandardCharsets.UTF_8))), signature);
+    }
 
     private static final UUID FORWARDED = UUID.fromString("12345678-1234-1234-1234-123456789abc");
     private static final UUID MOJANG = UUID.fromString("abcdefab-cdef-cdef-cdef-abcdefabcdef");

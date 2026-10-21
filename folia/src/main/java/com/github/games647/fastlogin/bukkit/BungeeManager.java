@@ -165,11 +165,11 @@ public class BungeeManager {
      * Whether the forwarded profile attributes arrive over a signature-protected
      * channel (Velocity modern forwarding signs the whole forwarding payload with
      * the shared secret). Legacy forwarding (BungeeCord) carries unsigned
-     * attributes, so their claims need the proxy ID token instead.
+     * attributes, so their claims need an HMAC keyed by an allowed proxy UUID instead.
      *
      * <p>Both mechanisms enabled at once (a migration or a misconfiguration) is
      * handled as the legacy chain, the stricter side: only signature-protected
-     * forwarding may skip the token check.</p>
+     * forwarding may skip the claim HMAC check.</p>
      *
      * @return true when forwarded attributes are signature-protected
      */
@@ -256,6 +256,15 @@ public class BungeeManager {
 
     public boolean isProxyAllowed(UUID proxyId) {
         return proxyIds != null && proxyIds.contains(proxyId);
+    }
+
+    /**
+     * Returns the existing proxy allowlist without exposing a mutable collection.
+     *
+     * @return allowed proxy UUIDs, or an empty set before initialization
+     */
+    public Set<UUID> getAllowedProxyIds() {
+        return proxyIds == null ? Collections.emptySet() : Collections.unmodifiableSet(proxyIds);
     }
 
     /**

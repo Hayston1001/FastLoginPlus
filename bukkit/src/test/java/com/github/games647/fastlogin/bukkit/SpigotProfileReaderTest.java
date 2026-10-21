@@ -24,6 +24,8 @@ class SpigotProfileReaderTest {
     @Test
     void recordAccessorsAndFlattenedPropertyMapAreSupportedWithoutAuthlibLinkage() throws Exception {
         assertEquals(Arrays.asList("one", "two"), SpigotProfileReader.claimValues(new RecordProfile()));
+        assertEquals(Arrays.asList("signature"),
+                SpigotProfileReader.readProfile(new RecordProfile(), "profile").signatures);
     }
 
     @Test
@@ -44,7 +46,8 @@ class SpigotProfileReaderTest {
         public Collection<RecordProperty> values() {
             return Arrays.asList(new RecordProperty("textures", "not-a-claim"),
                     new RecordProperty(IdentityClaim.PROPERTY_NAME, "one"),
-                    new RecordProperty(IdentityClaim.PROPERTY_NAME, "two"));
+                    new RecordProperty(IdentityClaim.PROPERTY_NAME, "two"),
+                    new RecordProperty(IdentityClaim.SIGNATURE_PROPERTY_NAME, "signature"));
         }
     }
 

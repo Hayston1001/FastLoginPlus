@@ -21,6 +21,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class BungeeManagerStampTest {
 
+    @Test
+    void allowedIdsAreEmptyBeforeInitializationAndCannotBeMutated() throws Exception {
+        BungeeManager manager = new BungeeManager(null);
+        assertTrue(manager.getAllowedProxyIds().isEmpty());
+        java.lang.reflect.Field field = BungeeManager.class.getDeclaredField("proxyIds");
+        field.setAccessible(true);
+        Set<UUID> allowed = new HashSet<>();
+        allowed.add(first);
+        field.set(manager, allowed);
+        assertEquals(allowed, manager.getAllowedProxyIds());
+        org.junit.jupiter.api.Assertions.assertThrows(UnsupportedOperationException.class,
+                () -> manager.getAllowedProxyIds().add(second));
+    }
+
     private final UUID first = UUID.fromString("0f6f2f66-bc5d-4d9a-a1f1-3b0a2c1c6b31");
     private final UUID second = UUID.fromString("1f6f2f66-bc5d-4d9a-a1f1-3b0a2c1c6b32");
 

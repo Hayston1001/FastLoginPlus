@@ -51,8 +51,10 @@ public class ConnectionListener implements Listener {
             loginEvent.disallow(Result.KICK_OTHER, plugin.getCore().getMessage("not-started"));
         }
         if (loginEvent.getResult() == Result.ALLOWED) {
-            plugin.observeSpigotIdentity("PlayerLoginEvent", loginEvent.getPlayer().getName(),
-                    loginEvent.getPlayer(), true);
+            if (!plugin.observeSpigotIdentity("PlayerLoginEvent", loginEvent.getPlayer().getName(),
+                    loginEvent.getPlayer(), true)) {
+                loginEvent.disallow(Result.KICK_OTHER, plugin.getCore().getMessage("proxy-claim-required"));
+            }
         }
     }
 

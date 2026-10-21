@@ -17,17 +17,19 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class EarlyDeclarationSupportTest {
+    private final UUID proxy = UUID.randomUUID();
     @Test
     void unavailableCapabilityWarnsAtStartupAndOnlyAtFirstActualFailure() {
         Logger log = mock(Logger.class);
         EarlyDeclarationSupport support = new EarlyDeclarationSupport(Object.class, log);
         verify(log).warn(startsWith("This proxy version cannot carry early unverified declarations."),
                 any(Throwable.class));
-        assertFalse(support.attach(new Object(), offlineClaim()));
-        assertFalse(support.attach(new Object(), offlineClaim()));
-        verify(log).warn(startsWith("First early unverified declaration injection failure."), any(Throwable.class));
+        assertFalse(support.attach(new Object(), offlineClaim(), proxy.toString()));
+        assertFalse(support.attach(new Object(), offlineClaim(), proxy.toString()));
+        verify(log).warn(startsWith("First early unverified declaration injection failure."));
         ArgumentCaptor<String> warnings = ArgumentCaptor.forClass(String.class);
-        verify(log, times(2)).warn(warnings.capture(), any(Throwable.class));
+        verify(log).warn(warnings.capture(), any(Throwable.class));
+        verify(log).warn(warnings.capture());
         for (String warning : warnings.getAllValues()) {
             assertTrue(warning.contains("after joining"));
             assertTrue(warning.contains("Paper + AuthMe 6"));
@@ -42,11 +44,14 @@ class EarlyDeclarationSupportTest {
         EarlyDeclarationSupport support = new EarlyDeclarationSupport(Connection.class, log);
         Connection connection = new Connection();
         IdentityClaim claim = offlineClaim();
-        assertTrue(support.attach(connection, claim));
+        assertTrue(support.attach(connection, claim, proxy.toString()));
         assertEquals(claim.encode(), connection.loginProfile.properties[0].value);
         assertEquals("flp_identity", connection.loginProfile.properties[0].name);
-        assertTrue(support.attach(connection, claim));
-        assertEquals(1, connection.loginProfile.properties.length);
+        assertEquals("flp_identity_sig", connection.loginProfile.properties[1].name);
+        assertTrue(IdentityClaim.verifySignature(claim.encode(), connection.loginProfile.properties[1].value, proxy));
+        assertNull(claim.getProxyId());
+        assertTrue(support.attach(connection, claim, proxy.toString()));
+        assertEquals(2, connection.loginProfile.properties.length);
         verifyNoInteractions(log);
     }
 
@@ -55,16 +60,28 @@ class EarlyDeclarationSupportTest {
         Logger log = mock(Logger.class);
         EarlyDeclarationSupport support = new EarlyDeclarationSupport(BrokenConnection.class, log);
         verifyNoInteractions(log);
-        assertFalse(support.attach(new BrokenConnection(), offlineClaim()));
-        assertFalse(support.attach(new BrokenConnection(), offlineClaim()));
-        verify(log, times(1)).warn(startsWith("First early unverified"), any(Throwable.class));
+        assertFalse(support.attach(new BrokenConnection(), offlineClaim(), proxy.toString()));
+        assertFalse(support.attach(new BrokenConnection(), offlineClaim(), proxy.toString()));
+        verify(log, times(1)).warn(startsWith("First early unverified"));
         verifyNoMoreInteractions(log);
     }
 
     private static IdentityClaim offlineClaim() {
         return new IdentityClaim(IdentityClaim.Decision.OFFLINE, "TestUser", UUID.randomUUID(), null,
                 new IdentityClaim.Facts(false, true, IdentityClaim.Consent.NO, false, false, false),
-                UUID.randomUUID());
+                null);
+    }
+
+    @Test
+    void malformedKeyFailureDoesNotLogKeyMaterial() {
+        Logger log = mock(Logger.class);
+        EarlyDeclarationSupport support = new EarlyDeclarationSupport(Connection.class, log);
+        String invalidKey = "sensitive-invalid-proxy-id";
+        assertFalse(support.attach(new Connection(), offlineClaim(), invalidKey));
+        ArgumentCaptor<String> warning = ArgumentCaptor.forClass(String.class);
+        verify(log).warn(warning.capture());
+        assertFalse(warning.getValue().contains(invalidKey));
+        verifyNoMoreInteractions(log);
     }
 
     public static class Connection {

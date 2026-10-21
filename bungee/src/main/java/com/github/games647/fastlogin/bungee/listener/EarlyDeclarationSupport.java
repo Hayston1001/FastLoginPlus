@@ -5,7 +5,6 @@
  */
 package com.github.games647.fastlogin.bungee.listener;
 
-import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.protocol.IdentityClaim;
 import org.slf4j.Logger;
 
@@ -31,9 +30,10 @@ final class EarlyDeclarationSupport {
      *
      * @param connection the actual proxy login connection
      * @param claim the unverified connection declaration
+     * @param proxyId existing proxy UUID used to sign the declaration
      * @return whether the property was attached
      */
-    boolean attach(Object connection, IdentityClaim claim) {
+    boolean attach(Object connection, IdentityClaim claim, String proxyId) {
         try {
             if (!LoginProfileProperties.ensureOfflineProfile(connection, claim.getPlayerName(),
                     claim.getForwardedUuid(), this::reportFailure)) {
@@ -43,8 +43,7 @@ final class EarlyDeclarationSupport {
             if (profile == null) {
                 throw new IllegalStateException("Login profile getter returned null");
             }
-            return LoginProfileProperties.attach(profile, ForwardingAttributes.IDENTITY,
-                    claim.encode(), this::reportFailure);
+            return LoginProfileProperties.attachIdentity(profile, claim, proxyId, this::reportFailure);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError failure) {
             reportFailure(failure);
             return false;
@@ -53,7 +52,9 @@ final class EarlyDeclarationSupport {
 
     private void reportFailure(Throwable failure) {
         if (failedOnce.compareAndSet(false, true)) {
-            logger.warn("First early unverified declaration injection failure. " + CONSEQUENCE, failure);
+            // Exception messages can contain the UUID supplied as key material.
+            logger.warn("First early unverified declaration injection failure. " + CONSEQUENCE
+                    + " Failure type: " + failure.getClass().getSimpleName());
         }
     }
 }

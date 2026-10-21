@@ -279,11 +279,10 @@ public class ConnectListener implements Listener {
                     && session.getIdentityDecision() == IdentityClaim.Decision.OFFLINE) {
                 session.computeFacts(plugin.getCore());
                 IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, connection.getName(),
-                        connection.getUniqueId(), null, session.getFacts(),
-                        UUID.fromString(ProxyServer.getInstance().getConfig().getUuid()));
+                        connection.getUniqueId(), null, session.getFacts(), null);
                 // Try early, warn once on failure, keep admission and the
                 // onServerConnected late sender intact. Never reject all offline players.
-                earlyDeclarations.attach(connection, claim);
+                earlyDeclarations.attach(connection, claim, ProxyServer.getInstance().getConfig().getUuid());
             }
         }
     }
@@ -336,8 +335,8 @@ public class ConnectListener implements Listener {
     /**
      * Hands the backend the identity facts for this verified login as a login
      * profile property (the early channel is the forwarded attributes on both
-     * proxy kinds), together with this proxy's ID token, which early-channel
-     * consumers check against their proxy allowlist.
+     * proxy kinds), with an HMAC keyed by the existing proxy UUID. The key itself
+     * is not included in the forwarded claim.
      *
      * @param connection   the login connection being established
      * @param username     the player name
@@ -349,12 +348,11 @@ public class ConnectListener implements Listener {
         session.computeFacts(plugin.getCore());
         IdentityClaim claim = new IdentityClaim(verifiedUUID == null ? IdentityClaim.Decision.OFFLINE
                 : IdentityClaim.Decision.PREMIUM_VERIFIED,
-                username, connection.getUniqueId(), verifiedUUID, session.getFacts(),
-                UUID.fromString(ProxyServer.getInstance().getConfig().getUuid()));
-        boolean attached = LoginProfileProperties.attach(loginProfile(connection),
-                ForwardingAttributes.IDENTITY, claim.encode(),
+                username, connection.getUniqueId(), verifiedUUID, session.getFacts(), null);
+        boolean attached = LoginProfileProperties.attachIdentity(loginProfile(connection), claim,
+                ProxyServer.getInstance().getConfig().getUuid(),
                 failure -> plugin.getLog().warn("Could not attach the identity facts for {}"
-                        + " to the login profile: {}", username, failure.toString()));
+                        + " to the login profile. Failure type: {}", username, failure.getClass().getSimpleName()));
         if (attached && plugin.getCore().isDebug()) {
             plugin.getLog().info("Attaching identity facts for {} to the forwarded profile", username);
         }
