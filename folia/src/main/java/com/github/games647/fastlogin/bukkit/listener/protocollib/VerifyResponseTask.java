@@ -115,6 +115,10 @@ public class VerifyResponseTask implements Runnable {
             return;
         }
 
+        if (!installEncryption(loginKey)) {
+            return;
+        }
+
         String serverId = EncryptionUtil.getServerIdHashString("", loginKey, serverKey.getPublic());
 
         String requestedUsername = session.getRequestUsername();
@@ -144,7 +148,7 @@ public class VerifyResponseTask implements Runnable {
             try {
                 Optional<Verification> response = resolver.hasJoined(requestedUsername, serverId, address);
                 if (response.isPresent()) {
-                    encryptConnection(session, requestedUsername, response.get(), loginKey);
+                    completeLogin(session, requestedUsername, response.get());
                     return;
                 }
 
@@ -206,8 +210,29 @@ public class VerifyResponseTask implements Runnable {
         }
     }
 
-    private void encryptConnection(BukkitLoginSession session, String requestedUsername,
-                                   Verification verification, SecretKey loginKey) {
+    private boolean installEncryption(SecretKey loginKey) {
+        Channel channel = ProtocolLibCompat.getChannel(plugin.getLog(), plugin.getCore().isDebug(), player);
+        if (channel == null || !channel.isActive()) {
+            plugin.getCore().dropPendingVerification(session.getRequestUsername());
+            return false;
+        }
+
+        try {
+            // ProtocolLib holds the intercepted original packet until run() cancels and signals it.
+            // Mutate the pipeline on its event loop, but wait only on this async worker. Even an
+            // interrupted worker must not send a disconnect before cipher installation finishes.
+            if (channel.eventLoop().inEventLoop()) {
+                return channel.isActive() && enableEncryption(loginKey);
+            }
+            return channel.eventLoop().submit(() -> channel.isActive() && enableEncryption(loginKey))
+                    .syncUninterruptibly().getNow();
+        } catch (Exception ex) {
+            disconnect("error-kick", "Cannot enable encryption for {}", session.getRequestUsername(), ex);
+            return false;
+        }
+    }
+
+    private void completeLogin(BukkitLoginSession session, String requestedUsername, Verification verification) {
         if (plugin.getCore().isDebug()) {
             plugin.getLog().info("Profile {} has a verified premium account", requestedUsername);
         }
@@ -261,11 +286,8 @@ public class VerifyResponseTask implements Runnable {
             }
         }
 
-        // Schedule Netty pipeline modifications on the channel's event loop thread.
-        // This avoids a race condition where enableEncryption() modifies the pipeline from an async
-        // thread while the vanilla handler is still processing the original ENCRYPTION_BEGIN packet.
-        // All pipeline work (encryption, UUID spoof, fake START injection) runs serially on the
-        // event loop, after ProtocolLib has cancelled the original packet and released the vanilla handler.
+        // Encryption was installed before contacting Mojang. Keep the remaining pipeline work
+        // (UUID spoof and fake START injection) on the event loop without installing it again.
         Channel channel = ProtocolLibCompat.getChannel(plugin.getLog(), plugin.getCore().isDebug(), player);
         if (channel == null || !channel.isActive()) {
             disconnect("error-kick", "Channel unavailable for {}", requestedUsername);
@@ -276,12 +298,7 @@ public class VerifyResponseTask implements Runnable {
         UUID uuid = verification.getId();
         ClientPublicKey clientKey = session.getClientPublicKey();
         channel.eventLoop().execute(() -> {
-            try {
-                if (!enableEncryption(loginKey)) {
-                    return;
-                }
-            } catch (Exception ex) {
-                disconnect("error-kick", "Cannot enable encryption for {}", username, ex);
+            if (!channel.isActive()) {
                 return;
             }
 
@@ -316,7 +333,7 @@ public class VerifyResponseTask implements Runnable {
         return accessor.get(injectorContainer);
     }
 
-    private boolean enableEncryption(SecretKey loginKey) throws IllegalArgumentException {
+    boolean enableEncryption(SecretKey loginKey) throws IllegalArgumentException {
         if (plugin.getCore().isDebug()) {
             plugin.getLog().info("Enabling onlinemode encryption for {}", player.getAddress());
         }
@@ -381,7 +398,7 @@ public class VerifyResponseTask implements Runnable {
     }
 
     @SuppressWarnings("deprecation") // kickPlayer needed — login state, kick(Component) won't work
-    private void kickPlayer(String reason) {
+    void kickPlayer(String reason) {
         try {
             PacketContainer kickPacket = new PacketContainer(DISCONNECT);
             kickPacket.getChatComponents().write(0, WrappedChatComponent.fromText(reason));
@@ -402,7 +419,7 @@ public class VerifyResponseTask implements Runnable {
     }
 
     //fake a new login packet in order to let the server handle all the other stuff
-    private void receiveFakeStartPacket(String username, ClientPublicKey clientKey, UUID uuid) {
+    void receiveFakeStartPacket(String username, ClientPublicKey clientKey, UUID uuid) {
         PacketContainer startPacket;
         if (new MinecraftVersion(1, 20, 2).atOrAbove()) {
             startPacket = new PacketContainer(START);

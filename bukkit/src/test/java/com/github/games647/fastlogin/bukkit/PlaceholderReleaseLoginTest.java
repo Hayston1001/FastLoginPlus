@@ -154,11 +154,21 @@ class PlaceholderReleaseLoginTest {
     }
 
     @Test
-    void passwordAccountKeepsPasswordNoticeWithoutRelease() throws Exception {
+    void verifiedPasswordAccountKeepsNoticeWhenAutoLoginIsDisabled() throws Exception {
         when(hook.inspectAccount("TestUser")).thenReturn(AccountState.PASSWORD_ACCOUNT);
         assertFalse(decide(true, false, owner));
         assertEquals("premium-password-login", notices.getIfPresent(address));
         verifyNoInteractions(integrator);
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void crackedPasswordAccountDoesNotQueuePremiumNotice(boolean autoLogin) throws Exception {
+        when(hook.inspectAccount("TestUser")).thenReturn(AccountState.PASSWORD_ACCOUNT);
+        assertFalse(decide(false, autoLogin, null));
+        assertNull(notices.getIfPresent(address));
+        verifyNoInteractions(integrator);
+        verify(hook, never()).forceLogin(any());
     }
 
     @Test

@@ -1193,7 +1193,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 && outcome != com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.AUTO_LOGIN) {
             debugLog("Keeping the auth plugin's own login flow for {} (decision {})",
                     playerName, outcome);
-            if (facts != null && address != null
+            if (verified && facts != null && address != null
                     && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
                             .AccountState.PASSWORD_ACCOUNT) {
                 passwordNotices.put(address, "premium-password-login");
