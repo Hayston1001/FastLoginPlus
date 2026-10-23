@@ -161,6 +161,73 @@ class ProxyBedrockPreLoginTest {
         verifyNoMoreInteractions(plugins);
     }
 
+    private Player boundPlayer() {
+        Player player = mock(Player.class);
+        when(player.getName()).thenReturn(NAME);
+        when(player.getUniqueId()).thenReturn(uuid);
+        Player.Spigot spigot = mock(Player.Spigot.class);
+        when(player.spigot()).thenReturn(spigot);
+        when(spigot.getRawAddress()).thenReturn(raw);
+        return player;
+    }
+
+    @Test
+    void unsupportedAuthMeOwnsDecisionButNeverRequestsAuthenticationOrCreatesAnAccount() throws Exception {
+        when(auth.isPreLoginForceLoginSupported()).thenReturn(false);
+        configure(profile("true", "true"));
+        Player player = boundPlayer();
+        assertTrue(bridge.isHandled(player));
+        assertEquals(com.github.games647.fastlogin.core.hooks.bedrock.FloodgatePreLoginAuth.Outcome.UNSUPPORTED,
+                bridge.getOutcome(player));
+        assertFalse(bridge.isAuthenticationRequested(player));
+        verify(auth, never()).isRegistered(anyString());
+        verify(auth, never()).registerPlayer(anyString(), anyString());
+        verify(auth, never()).forceLoginFromProxy(anyString());
+        rejectLateActions(player);
+    }
+
+    @Test
+    void malformedAndPolicyDeniedDeclarationsOwnDecisionWithoutAuthentication() throws Exception {
+        configure(new Profile("invalid"));
+        Player malformed = boundPlayer();
+        assertTrue(bridge.isHandled(malformed));
+        assertFalse(bridge.isAuthenticationRequested(malformed));
+        rejectLateActions(malformed);
+        configure(profile("false", "true"));
+        Player denied = boundPlayer();
+        assertTrue(bridge.isHandled(denied));
+        assertFalse(bridge.isAuthenticationRequested(denied));
+        assertEquals(com.github.games647.fastlogin.core.hooks.bedrock.FloodgatePreLoginAuth.Outcome.NO_AUTO_LOGIN,
+                bridge.getOutcome(denied));
+        rejectLateActions(denied);
+        new com.github.games647.fastlogin.bukkit.task.ForceLoginTask(core, denied,
+                new BukkitLoginSession(NAME, true)).run();
+        verify(auth, never()).registerPlayer(anyString(), anyString());
+        verify(auth, never()).forceLoginFromProxy(anyString());
+    }
+
+    @Test
+    void acceptedRequestIsNotConfusedWithOwnershipOrCompletedAuthentication() throws Exception {
+        configure(profile("true", "true"));
+        Player player = boundPlayer();
+        assertTrue(bridge.isHandled(player));
+        assertTrue(bridge.isAuthenticationRequested(player));
+        assertEquals(com.github.games647.fastlogin.core.hooks.bedrock.FloodgatePreLoginAuth.Outcome
+                .REGISTERED_AND_LOGIN_REQUESTED, bridge.getOutcome(player));
+        verify(auth, never()).isAuthenticated(any());
+    }
+
+    private void rejectLateActions(Player player) {
+        for (LoginActionMessage.Type type : new LoginActionMessage.Type[]{
+                LoginActionMessage.Type.REGISTER, LoginActionMessage.Type.LOGIN}) {
+            ByteArrayDataOutput output = ByteStreams.newDataOutput();
+            new LoginActionMessage(type, NAME, proxy, null).writeTo(output);
+            new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player, output.toByteArray());
+        }
+        verify(auth, never()).forceRegister(any(), anyString());
+        verify(auth, never()).forceLogin(any());
+    }
+
     public final class Profile {
         private final List<Property> properties = new ArrayList<>();
         Profile(String... wires) {

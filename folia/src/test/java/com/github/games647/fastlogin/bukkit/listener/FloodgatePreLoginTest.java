@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -90,7 +91,7 @@ class FloodgatePreLoginTest {
         verify(floodgate).rememberPreLoginRequest(bedrock, NAME);
         verify(plugin, never()).getAuthMePremiumIntegrator();
         verify(core, never()).sendLocaleMessage(anyString(), any());
-        assertEquals(EventPriority.LOWEST, FloodgatePreLoginListener.class
+        assertEquals(EventPriority.NORMAL, FloodgatePreLoginListener.class
                 .getMethod("onAsyncPlayerPreLogin", AsyncPlayerPreLoginEvent.class)
                 .getAnnotation(EventHandler.class).priority());
     }
@@ -125,6 +126,38 @@ class FloodgatePreLoginTest {
         when(plugin.getProxyBedrockPreLogin()).thenReturn(proxy);
         when(proxy.hasDeclaration(NAME, uuid)).thenReturn(true);
         listener.onAsyncPlayerPreLogin(event);
+        verifyNoInteractions(hook, floodgate);
+    }
+
+    @Test
+    void priorityOrdersCaptureBeforeFallbackEvenWhenFallbackIsRegisteredFirst() throws Exception {
+        com.github.games647.fastlogin.bukkit.ProxyBedrockPreLogin proxy =
+                mock(com.github.games647.fastlogin.bukkit.ProxyBedrockPreLogin.class);
+        when(plugin.getProxyBedrockPreLogin()).thenReturn(proxy);
+        java.util.concurrent.atomic.AtomicBoolean captured = new java.util.concurrent.atomic.AtomicBoolean();
+        org.mockito.Mockito.doAnswer(call -> {
+            captured.set(true);
+            return null;
+        }).when(proxy).capture(eq(NAME), eq(uuid), any());
+        when(proxy.hasDeclaration(NAME, uuid)).thenAnswer(call -> captured.get());
+        java.lang.reflect.Method capture = ProxyBedrockPreLoginListener.class
+                .getMethod("onPreLogin", AsyncPlayerPreLoginEvent.class);
+        java.lang.reflect.Method fallback = FloodgatePreLoginListener.class
+                .getMethod("onAsyncPlayerPreLogin", AsyncPlayerPreLoginEvent.class);
+        EventPriority capturePriority = capture.getAnnotation(EventHandler.class).priority();
+        EventPriority fallbackPriority = fallback.getAnnotation(EventHandler.class).priority();
+        assertEquals(EventPriority.LOWEST, capturePriority);
+        assertTrue(capturePriority.getSlot() < fallbackPriority.getSlot());
+        assertTrue(fallbackPriority.getSlot() < EventPriority.HIGHEST.getSlot());
+        // Supply B first, then dispatch using Bukkit's priority slots, never registration order.
+        java.util.List<java.lang.reflect.Method> handlers = java.util.Arrays.asList(fallback, capture);
+        handlers.sort(java.util.Comparator.comparingInt(
+                method -> method.getAnnotation(EventHandler.class).priority().getSlot()));
+        for (java.lang.reflect.Method handler : handlers) {
+            handler.invoke(handler == capture ? new ProxyBedrockPreLoginListener(plugin) : listener, event);
+        }
+        verify(proxy).capture(NAME, uuid, null);
+        verify(proxy).hasDeclaration(NAME, uuid);
         verifyNoInteractions(hook, floodgate);
     }
 

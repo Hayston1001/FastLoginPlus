@@ -52,6 +52,14 @@ public class ConnectionListener implements Listener {
             loginEvent.disallow(Result.KICK_OTHER, loginKickMessage(plugin.getCore().getMessage("not-started")));
         }
         if (loginEvent.getResult() == Result.ALLOWED) {
+            Player player = loginEvent.getPlayer();
+            if (plugin.getProxyBedrockPreLogin() != null && plugin.getProxyBedrockPreLogin().inspectSpigot(player)) {
+                if (!plugin.getProxyBedrockPreLogin().isTrustedSpigot(player)) {
+                    loginEvent.disallow(Result.KICK_OTHER,
+                            loginKickMessage(plugin.getCore().getMessage("proxy-claim-required")));
+                }
+                return;
+            }
             if (!plugin.observeSpigotIdentity("PlayerLoginEvent", loginEvent.getPlayer().getName(),
                     loginEvent.getPlayer(), true)) {
                 loginEvent.disallow(Result.KICK_OTHER,

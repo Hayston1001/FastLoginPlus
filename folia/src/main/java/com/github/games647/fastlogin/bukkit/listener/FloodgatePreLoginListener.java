@@ -22,8 +22,9 @@ import org.geysermc.floodgate.api.player.FloodgatePlayer;
 /**
  * Compatibility auto-auth for backends with Floodgate and no proxy Bedrock declaration.
  *
- * <p>Runs at {@link EventPriority#LOWEST}: AuthMe's own pre-login checks run at
- * HIGHEST, and its pre-join dialog/login timeout starts during the configuration
+ * <p>Runs at {@link EventPriority#NORMAL}, after proxy declaration capture at LOWEST,
+ * independent of listener registration order. AuthMe's account-dependent pre-login checks run at
+ * HIGHEST (its fast protection checks remain at LOWEST), and its pre-join dialog starts in configuration
  * phase. Creating the record and queueing the force login here means AuthMe can
  * skip the dialog and auto-login when the player actually joins.
  *
@@ -46,7 +47,7 @@ public class FloodgatePreLoginListener implements Listener {
         this.preLoginAuth = preLoginAuth;
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
+    @EventHandler(priority = EventPriority.NORMAL)
     public void onAsyncPlayerPreLogin(AsyncPlayerPreLoginEvent event) {
         if (event.getLoginResult() != Result.ALLOWED || !plugin.isServerFullyStarted()) {
             return;

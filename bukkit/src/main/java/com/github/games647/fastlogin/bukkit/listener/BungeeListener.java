@@ -73,7 +73,7 @@ public class BungeeListener implements PluginMessageListener {
             plugin.getLog().warn("Received proxy id: {} that doesn't exist in the proxy file", sourceId);
             return;
         }
-        // Do not replace a backend-requested Bedrock login with late Java identity policy.
+        // Declaration ownership includes denied/invalid/unsupported attempts, not just accepted logins.
         if (loginMessage.getType() != Type.CRACKED && isBackendFloodgateLoginHandled(targetPlayer)) {
             if (plugin.getCore().isDebug()) {
                 plugin.getLog().info("Ignoring late proxy action {} for backend-handled Bedrock player {}",
@@ -114,12 +114,11 @@ public class BungeeListener implements PluginMessageListener {
     }
 
     /**
-     * Whether a proxy action targets a Bedrock connection that the backend
-     * pre-login path already handled. Only then may the duplicate be
-     * ignored; Java players keep the existing message handling.
+     * Whether a declaration owns this connection, or backend Floodgate already requested login.
+     * Ownership also suppresses actions when authentication was denied or unsupported.
      *
      * @param player the message's target player
-     * @return true when this connection has a pending request or AuthMe already accepts it
+     * @return true when alternatives must not override this connection's Bedrock decision
      */
     boolean isBackendFloodgateLoginHandled(Player player) {
         if (plugin.getProxyBedrockPreLogin() != null && plugin.getProxyBedrockPreLogin().isHandled(player)) {

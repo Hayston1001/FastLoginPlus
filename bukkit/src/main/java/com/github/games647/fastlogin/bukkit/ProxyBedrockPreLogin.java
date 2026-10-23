@@ -19,16 +19,16 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-/** Paper/Folia proxy-first AuthMe bridge. No optional Floodgate API is linked here. */
+/** Proxy-first AuthMe bridge. No optional Floodgate API is linked here. */
 public final class ProxyBedrockPreLogin {
     private final FastLoginBukkit plugin;
     private final Cache<String, Capture> captures = CacheBuilder.newBuilder().maximumSize(4096)
             .expireAfterWrite(2, TimeUnit.MINUTES).build();
     private final Cache<UUID, Boolean> usedNonces = CacheBuilder.newBuilder()
             .expireAfterWrite(125, TimeUnit.SECONDS).build();
-    private final Cache<String, Pending> pending = CacheBuilder.newBuilder().maximumSize(4096)
+    private final Cache<String, Decision> decisions = CacheBuilder.newBuilder().maximumSize(4096)
             .expireAfterWrite(2, TimeUnit.MINUTES).build();
-    private final Cache<Player, Boolean> handledPlayers = CacheBuilder.newBuilder().weakKeys()
+    private final Cache<Player, Decision> handledPlayers = CacheBuilder.newBuilder().weakKeys()
             .maximumSize(4096).build();
 
     public ProxyBedrockPreLogin(FastLoginBukkit plugin) {
@@ -38,7 +38,7 @@ public final class ProxyBedrockPreLogin {
     // Capture the live, pre-cache profile. Absence clears every reconnect's old pending state.
     public void capture(String name, UUID uuid, Object profile) {
         captures.invalidate(name);
-        pending.invalidate(name);
+        decisions.invalidate(name);
         if (!plugin.getBungeeManager().isEnabled()) {
             return;
         }
@@ -74,11 +74,16 @@ public final class ProxyBedrockPreLogin {
         try {
             values = SpigotProfileReader.readProfile(profile, "configure").bedrock;
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            if (captured != null) {
+                decisions.put(name, new Decision(uuid, address));
+            }
             return captured != null;
         }
         if (captured == null && values.isEmpty()) {
             return false;
         }
+        Decision decision = new Decision(uuid, address);
+        decisions.put(name, decision);
         if (captured == null || captured.claim == null || !captured.uuid.equals(uuid) || values.size() != 1
                 || !captured.wire.equals(values.get(0)) || verify(captured.wire, name, uuid) == null) {
             debug("Rejected unbound, unsigned or stale proxy Bedrock facts for {}", name);
@@ -88,33 +93,127 @@ public final class ProxyBedrockPreLogin {
             debug("Rejected replayed proxy Bedrock facts for {}", name);
             return true;
         }
-        // This marker is a policy decision, not proof of authentication. Suppress late Java actions
-        // even when Bedrock policy denies auto-auth, or AuthMe rejects this attempt.
-        pending.put(name, new Pending(uuid, address));
+        execute(name, captured.claim, decision);
+        return true;
+    }
+
+    private void execute(String name, BedrockClaim claim, Decision decision) {
         AuthPlugin<Player> hook = plugin.getCore().getAuthPluginHook();
-        if (hook instanceof PreLoginAuthPlugin && plugin.isServerFullyStarted()) {
-            BedrockClaim claim = captured.claim;
-            FloodgatePreLoginAuth.Outcome outcome = new FloodgatePreLoginAuth(plugin.getCore()).handle(name,
+        if (!(hook instanceof PreLoginAuthPlugin)) {
+            decision.outcome = FloodgatePreLoginAuth.Outcome.UNSUPPORTED;
+        } else if (plugin.isServerFullyStarted()) {
+            decision.outcome = new FloodgatePreLoginAuth(plugin.getCore()).handle(name,
                     new BedrockSession(claim.isLinked(), claim.getAutoLogin(), claim.getAutoRegister(),
                             claim.getAllowConflict()), (PreLoginAuthPlugin) hook);
-            debug("Proxy Bedrock pre-login for {}: {}", name, outcome);
+            debug("Proxy Bedrock pre-login for {}: {}", name, decision.outcome);
+        }
+    }
+
+    /**
+     * Ownership suppresses alternatives; it does not mean authentication was requested or completed.
+     *
+     * @param player the actual connection's player
+     * @return whether a Bedrock declaration owns this connection's decision
+     */
+    public boolean isHandled(Player player) {
+        return decision(player) != null;
+    }
+
+    public FloodgatePreLoginAuth.Outcome getOutcome(Player player) {
+        Decision decision = decision(player);
+        return decision == null ? null : decision.outcome;
+    }
+
+    public boolean isAuthenticationRequested(Player player) {
+        FloodgatePreLoginAuth.Outcome outcome = getOutcome(player);
+        return outcome == FloodgatePreLoginAuth.Outcome.LOGIN_REQUESTED
+                || outcome == FloodgatePreLoginAuth.Outcome.REGISTERED_AND_LOGIN_REQUESTED;
+    }
+
+    private Decision decision(Player player) {
+        if (handledPlayers.getIfPresent(player) != null) {
+            return handledPlayers.getIfPresent(player);
+        }
+        // Spigot has no usable PLAY connection during PlayerLoginEvent. Only Paper's configure
+        // decisions need the full-address handoff; Spigot binds the actual Player directly.
+        if (!plugin.isPaper()) {
+            return null;
+        }
+        Decision request = decisions.getIfPresent(player.getName());
+        if (request != null && request.uuid.equals(player.getUniqueId())
+                && request.address != null && request.address.equals(player.spigot().getRawAddress())) {
+            handledPlayers.put(player, request);
+            decisions.asMap().remove(player.getName(), request);
+            return request;
+        }
+        return null;
+    }
+
+    /**
+     * Inspect the actual Spigot login Player before Java admission or local Floodgate policy.
+     *
+     * @param player the live login player, not a cached profile carrier
+     * @return whether a declaration was found, or profile access failed closed
+     */
+    public boolean inspectSpigot(Player player) {
+        if (plugin.isPaper() || !plugin.getBungeeManager().isEnabled()) {
+            return false;
+        }
+        if (handledPlayers.getIfPresent(player) != null) {
+            return true;
+        }
+        List<String> values;
+        try {
+            values = SpigotProfileReader.read(player).bedrock;
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            // An unreadable live profile cannot prove absence of a declaration.
+            handledPlayers.put(player, new Decision(player.getUniqueId(), null));
+            return true;
+        }
+        if (values.isEmpty()) {
+            return false;
+        }
+        Decision decision = new Decision(player.getUniqueId(), null);
+        handledPlayers.put(player, decision);
+        String wire = values.size() == 1 ? values.get(0) : null;
+        BedrockClaim claim = verify(wire, player.getName(), player.getUniqueId());
+        if (claim != null && consumeNonce(claim.getNonce())) {
+            decision.claim = claim;
+            decision.wire = wire;
         }
         return true;
     }
 
-    // Bind the pending full-address request to the live Player, never a name-only reconnect.
-    public boolean isHandled(Player player) {
-        if (handledPlayers.getIfPresent(player) != null) {
+    public boolean isTrustedSpigot(Player player) {
+        Decision decision = handledPlayers.getIfPresent(player);
+        return decision != null && decision.claim != null && decision.uuid.equals(player.getUniqueId());
+    }
+
+    /**
+     * Called only after all login admission checks; never invokes a Player-based auth API.
+     *
+     * @param player the admitted connection's player
+     * @return whether declaration ownership excludes the compatibility fallback
+     */
+    public boolean loginSpigot(Player player) {
+        Decision decision = handledPlayers.getIfPresent(player);
+        if (decision == null) {
+            return false;
+        }
+        if (!isTrustedSpigot(player) || decision.executed) {
             return true;
         }
-        Pending request = pending.getIfPresent(player.getName());
-        if (request != null && request.uuid.equals(player.getUniqueId())
-                && request.address != null && request.address.equals(player.spigot().getRawAddress())) {
-            handledPlayers.put(player, Boolean.TRUE);
-            pending.asMap().remove(player.getName(), request);
-            return true;
+        decision.executed = true;
+        try {
+            List<String> values = SpigotProfileReader.read(player).bedrock;
+            if (values.size() == 1 && decision.wire.equals(values.get(0))
+                    && verify(decision.wire, player.getName(), player.getUniqueId()) != null) {
+                execute(player.getName(), decision.claim, decision);
+            }
+        } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            debug("Could not revalidate live Bedrock facts for {}", player.getName());
         }
-        return false;
+        return true;
     }
 
     private BedrockClaim verify(String wire, String name, UUID uuid) {
@@ -153,11 +252,15 @@ public final class ProxyBedrockPreLogin {
         }
     }
 
-    private static final class Pending {
+    private static final class Decision {
         private final UUID uuid;
         private final SocketAddress address;
+        private volatile FloodgatePreLoginAuth.Outcome outcome;
+        private BedrockClaim claim;
+        private String wire;
+        private boolean executed;
 
-        private Pending(UUID uuid, SocketAddress address) {
+        private Decision(UUID uuid, SocketAddress address) {
             this.uuid = uuid;
             this.address = address;
         }

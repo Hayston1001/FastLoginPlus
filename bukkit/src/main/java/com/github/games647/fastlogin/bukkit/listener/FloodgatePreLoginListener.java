@@ -22,8 +22,9 @@ import org.geysermc.floodgate.api.player.FloodgatePlayer;
 /**
  * Compatibility auto-auth for backends with Floodgate and no proxy Bedrock declaration.
  *
- * <p>Runs at {@link EventPriority#LOWEST}: AuthMe's own pre-login checks run at
- * HIGHEST, and its pre-join dialog/login timeout starts during the configuration
+ * <p>Runs at {@link EventPriority#NORMAL}, after proxy declaration capture at LOWEST,
+ * independent of listener registration order. AuthMe's account-dependent pre-login checks run at
+ * HIGHEST (its fast protection checks remain at LOWEST), and its pre-join dialog starts in configuration
  * phase. Creating the record and queueing the force login here means AuthMe can
  * skip the dialog and auto-login when the player actually joins.
  *
@@ -46,9 +47,13 @@ public class FloodgatePreLoginListener implements Listener {
         this.preLoginAuth = preLoginAuth;
     }
 
-    @EventHandler(priority = EventPriority.LOWEST)
+    @EventHandler(priority = EventPriority.NORMAL)
     public void onAsyncPlayerPreLogin(AsyncPlayerPreLoginEvent event) {
         if (event.getLoginResult() != Result.ALLOWED || !plugin.isServerFullyStarted()) {
+            return;
+        }
+        if (!plugin.isPaper() && plugin.getBungeeManager().isEnabled()) {
+            // Spigot exposes the live signed profile later, at PlayerLoginEvent. B must wait for A.
             return;
         }
         if (plugin.getProxyBedrockPreLogin() != null
@@ -56,12 +61,22 @@ public class FloodgatePreLoginListener implements Listener {
             return;
         }
 
+        handle(event.getName(), event.getUniqueId());
+    }
+
+    void onSpigotLogin(Player player) {
+        if (!plugin.getProxyBedrockPreLogin().isHandled(player)) {
+            handle(player.getName(), player.getUniqueId());
+        }
+    }
+
+    private void handle(String name, java.util.UUID uuid) {
         FloodgateService floodgateService = plugin.getFloodgateService();
         if (floodgateService == null) {
             return;
         }
 
-        FloodgatePlayer floodgatePlayer = floodgateService.getBedrockPlayer(event.getUniqueId());
+        FloodgatePlayer floodgatePlayer = floodgateService.getBedrockPlayer(uuid);
         if (floodgatePlayer == null) {
             return;
         }
@@ -72,11 +87,11 @@ public class FloodgatePreLoginListener implements Listener {
         }
 
         FloodgatePreLoginAuth.Outcome outcome = preLoginAuth.handle(
-                event.getName(), BedrockSession.fromConfig(plugin.getCore().getConfig(),
+                name, BedrockSession.fromConfig(plugin.getCore().getConfig(),
                         floodgatePlayer.getLinkedPlayer() != null), (PreLoginAuthPlugin) authPlugin);
         if (outcome == FloodgatePreLoginAuth.Outcome.REGISTERED_AND_LOGIN_REQUESTED
                 || outcome == FloodgatePreLoginAuth.Outcome.LOGIN_REQUESTED) {
-            floodgateService.rememberPreLoginRequest(floodgatePlayer, event.getName());
+            floodgateService.rememberPreLoginRequest(floodgatePlayer, name);
         }
     }
 

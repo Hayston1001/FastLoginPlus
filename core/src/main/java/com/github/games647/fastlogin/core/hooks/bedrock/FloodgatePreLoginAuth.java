@@ -74,8 +74,8 @@ public class FloodgatePreLoginAuth {
      */
     public Outcome handle(String username, BedrockSession session, PreLoginAuthPlugin auth) {
         if (!auth.isPreLoginForceLoginSupported()) {
-            // Do not create an account we cannot log in to. The existing proxy
-            // path remains the fallback when the AuthMe API is too old.
+            // Do not create an account we cannot log in to. Declaration owners must still suppress
+            // alternative auto-auth; only no-declaration compatibility callers may use a legacy path.
             return Outcome.UNSUPPORTED;
         }
 

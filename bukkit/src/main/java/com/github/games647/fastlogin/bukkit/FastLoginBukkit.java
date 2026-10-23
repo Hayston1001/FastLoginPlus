@@ -722,6 +722,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         if (isPaper()) {
             pluginManager.registerEvents(
                     new com.github.games647.fastlogin.bukkit.listener.ProxyBedrockPreLoginListener(this), this);
+        } else {
+            pluginManager.registerEvents(
+                    new com.github.games647.fastlogin.bukkit.listener.SpigotBedrockPreLoginListener(this), this);
         }
         if (hasBackendFloodgate()) {
             pluginManager.registerEvents(new FloodgatePreLoginListener(this), this);

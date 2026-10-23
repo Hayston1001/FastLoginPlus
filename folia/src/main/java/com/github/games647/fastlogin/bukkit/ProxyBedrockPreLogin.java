@@ -26,9 +26,9 @@ public final class ProxyBedrockPreLogin {
             .expireAfterWrite(2, TimeUnit.MINUTES).build();
     private final Cache<UUID, Boolean> usedNonces = CacheBuilder.newBuilder()
             .expireAfterWrite(125, TimeUnit.SECONDS).build();
-    private final Cache<String, Pending> pending = CacheBuilder.newBuilder().maximumSize(4096)
+    private final Cache<String, Decision> decisions = CacheBuilder.newBuilder().maximumSize(4096)
             .expireAfterWrite(2, TimeUnit.MINUTES).build();
-    private final Cache<Player, Boolean> handledPlayers = CacheBuilder.newBuilder().weakKeys()
+    private final Cache<Player, Decision> handledPlayers = CacheBuilder.newBuilder().weakKeys()
             .maximumSize(4096).build();
 
     public ProxyBedrockPreLogin(FastLoginBukkit plugin) {
@@ -38,7 +38,7 @@ public final class ProxyBedrockPreLogin {
     // Capture the live, pre-cache profile. Absence clears every reconnect's old pending state.
     public void capture(String name, UUID uuid, Object profile) {
         captures.invalidate(name);
-        pending.invalidate(name);
+        decisions.invalidate(name);
         if (!plugin.getBungeeManager().isEnabled()) {
             return;
         }
@@ -74,11 +74,16 @@ public final class ProxyBedrockPreLogin {
         try {
             values = SpigotProfileReader.readProfile(profile, "configure").bedrock;
         } catch (ReflectiveOperationException | RuntimeException unavailable) {
+            if (captured != null) {
+                decisions.put(name, new Decision(uuid, address));
+            }
             return captured != null;
         }
         if (captured == null && values.isEmpty()) {
             return false;
         }
+        Decision decision = new Decision(uuid, address);
+        decisions.put(name, decision);
         if (captured == null || captured.claim == null || !captured.uuid.equals(uuid) || values.size() != 1
                 || !captured.wire.equals(values.get(0)) || verify(captured.wire, name, uuid) == null) {
             debug("Rejected unbound, unsigned or stale proxy Bedrock facts for {}", name);
@@ -88,33 +93,55 @@ public final class ProxyBedrockPreLogin {
             debug("Rejected replayed proxy Bedrock facts for {}", name);
             return true;
         }
-        // This marker is a policy decision, not proof of authentication. Suppress late Java actions
-        // even when Bedrock policy denies auto-auth, or AuthMe rejects this attempt.
-        pending.put(name, new Pending(uuid, address));
-        AuthPlugin<Player> hook = plugin.getCore().getAuthPluginHook();
-        if (hook instanceof PreLoginAuthPlugin && plugin.isServerFullyStarted()) {
-            BedrockClaim claim = captured.claim;
-            FloodgatePreLoginAuth.Outcome outcome = new FloodgatePreLoginAuth(plugin.getCore()).handle(name,
-                    new BedrockSession(claim.isLinked(), claim.getAutoLogin(), claim.getAutoRegister(),
-                            claim.getAllowConflict()), (PreLoginAuthPlugin) hook);
-            debug("Proxy Bedrock pre-login for {}: {}", name, outcome);
-        }
+        execute(name, captured.claim, decision);
         return true;
     }
 
-    // Bind the pending full-address request to the live Player, never a name-only reconnect.
-    public boolean isHandled(Player player) {
-        if (handledPlayers.getIfPresent(player) != null) {
-            return true;
+    private void execute(String name, BedrockClaim claim, Decision decision) {
+        AuthPlugin<Player> hook = plugin.getCore().getAuthPluginHook();
+        if (!(hook instanceof PreLoginAuthPlugin)) {
+            decision.outcome = FloodgatePreLoginAuth.Outcome.UNSUPPORTED;
+        } else if (plugin.isServerFullyStarted()) {
+            decision.outcome = new FloodgatePreLoginAuth(plugin.getCore()).handle(name,
+                    new BedrockSession(claim.isLinked(), claim.getAutoLogin(), claim.getAutoRegister(),
+                            claim.getAllowConflict()), (PreLoginAuthPlugin) hook);
+            debug("Proxy Bedrock pre-login for {}: {}", name, decision.outcome);
         }
-        Pending request = pending.getIfPresent(player.getName());
+    }
+
+    /**
+     * Ownership suppresses alternatives; it does not mean authentication was requested or completed.
+     *
+     * @param player the actual connection's player
+     * @return whether a Bedrock declaration owns this connection's decision
+     */
+    public boolean isHandled(Player player) {
+        return decision(player) != null;
+    }
+
+    public FloodgatePreLoginAuth.Outcome getOutcome(Player player) {
+        Decision decision = decision(player);
+        return decision == null ? null : decision.outcome;
+    }
+
+    public boolean isAuthenticationRequested(Player player) {
+        FloodgatePreLoginAuth.Outcome outcome = getOutcome(player);
+        return outcome == FloodgatePreLoginAuth.Outcome.LOGIN_REQUESTED
+                || outcome == FloodgatePreLoginAuth.Outcome.REGISTERED_AND_LOGIN_REQUESTED;
+    }
+
+    private Decision decision(Player player) {
+        if (handledPlayers.getIfPresent(player) != null) {
+            return handledPlayers.getIfPresent(player);
+        }
+        Decision request = decisions.getIfPresent(player.getName());
         if (request != null && request.uuid.equals(player.getUniqueId())
                 && request.address != null && request.address.equals(player.spigot().getRawAddress())) {
-            handledPlayers.put(player, Boolean.TRUE);
-            pending.asMap().remove(player.getName(), request);
-            return true;
+            handledPlayers.put(player, request);
+            decisions.asMap().remove(player.getName(), request);
+            return request;
         }
-        return false;
+        return null;
     }
 
     private BedrockClaim verify(String wire, String name, UUID uuid) {
@@ -153,11 +180,12 @@ public final class ProxyBedrockPreLogin {
         }
     }
 
-    private static final class Pending {
+    private static final class Decision {
         private final UUID uuid;
         private final SocketAddress address;
+        private volatile FloodgatePreLoginAuth.Outcome outcome;
 
-        private Pending(UUID uuid, SocketAddress address) {
+        private Decision(UUID uuid, SocketAddress address) {
             this.uuid = uuid;
             this.address = address;
         }

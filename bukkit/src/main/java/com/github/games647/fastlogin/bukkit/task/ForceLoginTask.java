@@ -36,6 +36,9 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
     public void run() {
         // block this target player for BungeeCord ID brute force attacks
         FastLoginBukkit plugin = core.getPlugin();
+        if (plugin.getProxyBedrockPreLogin() != null && plugin.getProxyBedrockPreLogin().isHandled(player)) {
+            return;
+        }
         player.setMetadata(core.getPlugin().getName(), new FixedMetadataValue(plugin, true));
 
         if (session != null && !session.getUsername().equals(player.getName())) {

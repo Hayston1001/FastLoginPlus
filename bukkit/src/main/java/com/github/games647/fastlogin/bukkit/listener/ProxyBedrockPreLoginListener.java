@@ -12,7 +12,7 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 
-/** Registered only on Paper/Folia, before the optional backend Floodgate listener. */
+/** Paper/Folia capture at LOWEST precedes backend Floodgate at NORMAL regardless of registration order. */
 public final class ProxyBedrockPreLoginListener implements Listener {
     private final FastLoginBukkit plugin;
 
