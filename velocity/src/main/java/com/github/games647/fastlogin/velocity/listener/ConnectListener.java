@@ -342,11 +342,12 @@ public class ConnectListener {
             throw new IllegalArgumentException("Cannot attach identity claim without a forwarded UUID");
         }
 
-        // Clear any profile property with our reserved name. Exactly one value may be
+        // Clear any profile property with our reserved names. Exactly one value may be
         // forwarded; malformed or repeated values must never survive as an alternate claim.
         List<Property> properties = new ArrayList<>(profile.getProperties().size());
         for (Property property : profile.getProperties()) {
             if (!ForwardingAttributes.IDENTITY.equals(property.getName())
+                    && !ForwardingAttributes.IDENTITY_SIGNATURE.equals(property.getName())
                     && !CrackedNoticeClaim.PROPERTY_NAME.equals(property.getName())) {
                 properties.add(property);
             }
@@ -365,7 +366,13 @@ public class ConnectListener {
         } catch (IllegalArgumentException invalidProfile) {
             throw new IllegalArgumentException("Cannot attach identity claim for an invalid profile", invalidProfile);
         }
-        properties.add(new Property(ForwardingAttributes.IDENTITY, claim.encode(), ""));
+        String identityValue = claim.encode();
+        properties.add(new Property(ForwardingAttributes.IDENTITY, identityValue, ""));
+        // Legacy and BungeeGuard forwarding do not sign the profile, so the backend
+        // authenticates flp_identity with this HMAC keyed by the shared proxy id.
+        // Modern forwarding signs the whole payload and ignores the extra property.
+        properties.add(new Property(ForwardingAttributes.IDENTITY_SIGNATURE,
+                IdentityClaim.sign(identityValue, plugin.getProxyId()), ""));
         if (claim.getDecision() == IdentityClaim.Decision.OFFLINE && claim.isSameNameCracked()) {
             try {
                 CrackedNoticeClaim notice = plugin.getCrackedNoticeDelivery().prepare(

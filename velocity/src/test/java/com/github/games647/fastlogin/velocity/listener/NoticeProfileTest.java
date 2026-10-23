@@ -61,9 +61,11 @@ class NoticeProfileTest {
     @ParameterizedTest
     @CsvSource({"false,false", "true,false", "true,true"})
     void onlyRealPendingDebtAddsPropertyAndIncomingReservedPropertiesAreStripped(boolean owed, boolean failure) {
+        UUID proxyId = UUID.randomUUID();
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
         FastLoginCore core = mock(FastLoginCore.class);
         when(plugin.getCore()).thenReturn(core);
+        when(plugin.getProxyId()).thenReturn(proxyId);
         when(plugin.getName()).thenReturn("fastloginplus");
         when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
         when(core.hasSameNameCrackedNotice("TestUser")).thenReturn(owed);
@@ -94,17 +96,30 @@ class NoticeProfileTest {
         when(event.getGameProfile()).thenReturn(new GameProfile(id, "TestUser", Arrays.asList(
                 new GameProfile.Property(CrackedNoticeClaim.PROPERTY_NAME, "forged", ""),
                 new GameProfile.Property(IdentityClaim.PROPERTY_NAME, "forged", ""),
+                new GameProfile.Property(IdentityClaim.SIGNATURE_PROPERTY_NAME, "forged", ""),
+                new GameProfile.Property(IdentityClaim.SIGNATURE_PROPERTY_NAME, "forged-second", ""),
                 new GameProfile.Property("textures", "skin", ""))));
         new ConnectListener(plugin, null).onGameProfileRequest(event);
         ArgumentCaptor<GameProfile> captured = ArgumentCaptor.forClass(GameProfile.class);
         verify(event).setGameProfile(captured.capture());
         List<GameProfile.Property> properties = captured.getValue().getProperties();
-        IdentityClaim identity = IdentityClaim.parseExactlyOne(properties.stream()
-                .filter(value -> IdentityClaim.PROPERTY_NAME.equals(value.getName())).map(GameProfile.Property::getValue)
-                .collect(Collectors.toList()), "TestUser", id);
+        List<String> identityValues = properties.stream()
+                .filter(value -> IdentityClaim.PROPERTY_NAME.equals(value.getName()))
+                .map(GameProfile.Property::getValue).collect(Collectors.toList());
+        assertEquals(1, identityValues.size());
+        IdentityClaim identity = IdentityClaim.parseExactlyOne(identityValues, "TestUser", id);
         assertFalse(identity.isAutoLogin());
         assertEquals(IdentityClaim.Decision.OFFLINE, identity.getDecision());
         assertEquals(12, identity.encode().split(":").length);
+        assertEquals(identityValues.get(0), identity.encode());
+        List<String> signatures = properties.stream()
+                .filter(value -> IdentityClaim.SIGNATURE_PROPERTY_NAME.equals(value.getName()))
+                .map(GameProfile.Property::getValue).collect(Collectors.toList());
+        assertEquals(1, signatures.size());
+        assertNotEquals("forged", signatures.get(0));
+        assertTrue(IdentityClaim.verifySignature(identity.encode(), signatures.get(0), proxyId));
+        assertTrue(IdentityClaim.verifySignature(identityValues.get(0), signatures.get(0), proxyId));
+        assertFalse(IdentityClaim.verifySignature(identity.encode(), signatures.get(0), UUID.randomUUID()));
         CrackedNoticeClaim notice = CrackedNoticeClaim.parse(properties.stream()
                 .filter(value -> CrackedNoticeClaim.PROPERTY_NAME.equals(value.getName()))
                 .map(GameProfile.Property::getValue).collect(Collectors.toList()), "TestUser", id);
