@@ -181,6 +181,79 @@ final class EasyAuth344Bridge {
         }
     }
 
+    record BedrockOwner(BedrockAccount account, Object cached) {
+    }
+
+    BedrockOwner beforeBedrock(MinecraftServer server, String name, UUID uuid) {
+        verifyPolicy();
+        try {
+            return server.submit(() -> {
+                // Public read API only. Null includes read failure and always denies automatic login.
+                Object db = field(easyAuth, null, "DB");
+                BedrockAccount stored = BedrockAccount.read(entryType,
+                        invoke(db, "getUserData", String.class, name));
+                Object cached = invoke(playersCache, null, "get", String.class, name);
+                return stored != null && stored.owns(name, uuid)
+                        && stored.equals(BedrockAccount.read(entryType, cached))
+                        ? new BedrockOwner(stored, cached) : null;
+            }).get(3, TimeUnit.SECONDS);
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("EasyAuth Bedrock account check interrupted", failure);
+        } catch (ExecutionException | TimeoutException failure) {
+            throw new IllegalStateException("EasyAuth Bedrock account check failed", failure);
+        }
+    }
+
+    void onBedrockJoin(ServerPlayer player, BedrockOwner owner) {
+        verifyPolicy();
+        String name = player.getGameProfile().name();
+        UUID uuid = player.getGameProfile().id();
+        if (!playerAuth.isInstance(player) || !player.getUUID().equals(uuid)
+                || player.connection.player != player
+                || !player.connection.isAcceptingMessages()
+                || Boolean.TRUE.equals(invoke(player, "easyAuth$isAuthenticated"))) {
+            throw FabricMessages.failure("bedrock-unsupported");
+        }
+        Object entry = invoke(player, "easyAuth$getPlayerEntryV1");
+        Object db = field(easyAuth, null, "DB");
+        BedrockAccount stored = BedrockAccount.read(entryType, invoke(db, "getUserData", String.class, name));
+        if (!owner.account().owns(name, uuid) || entry != owner.cached()
+                || entry != invoke(playersCache, null, "get", String.class, name)
+                || !owner.account().equals(stored)
+                || !owner.account().equals(BedrockAccount.read(entryType, entry))) {
+            throw FabricMessages.failure("bedrock-unsupported");
+        }
+        Object config = field(easyAuth, null, "config");
+        String oldIp = (String) field(entryType, entry, "lastIp");
+        String ip = (String) invoke(player, "easyAuth$getIpAddress");
+        var context = new EasyAuthLoginFlow.LoginContext(ZonedDateTime.now(),
+                (ZonedDateTime) field(entryType, entry, "lastKickedDate"),
+                number(config, "resetLoginAttemptsTimeout"), ip, oldIp);
+        EasyAuthLoginFlow.authenticateBedrock(entryType, entry, context,
+                candidate -> Boolean.TRUE.equals(invoke(db, "updateUserData", entryType, candidate)), () -> {
+                    if (!player.connection.isAcceptingMessages() || player.connection.player != player
+                            || !uuid.equals(player.getUUID())
+                            || !name.equals(player.getGameProfile().name())
+                            || !uuid.equals(player.getGameProfile().id())
+                            || entry != invoke(player, "easyAuth$getPlayerEntryV1")
+                            || entry != invoke(playersCache, null, "get", String.class, name)
+                            || !owner.account().equals(BedrockAccount.read(entryType, entry))) {
+                        throw new IllegalStateException("Bedrock connection or account changed before authentication");
+                    }
+                    invoke(ipLimit, null, "invalidateCache", String.class, oldIp);
+                    if (!oldIp.equals(ip)) {
+                        invoke(ipLimit, null, "invalidateCache", String.class, ip);
+                    }
+                    invoke(player, "easyAuth$restoreTrueLocation");
+                    invoke(player, "easyAuth$setAuthenticated", boolean.class, true);
+                    if (!Boolean.TRUE.equals(invoke(player, "easyAuth$isAuthenticated"))) {
+                        throw new IllegalStateException("EasyAuth did not accept Bedrock authentication");
+                    }
+                    player.sendSystemMessage(FabricMessages.text("authenticated"));
+                });
+    }
+
     private RenameFollow.Row renameRow(Object entry) {
         return new RenameFollow.Row((String) field(entryType, entry, "username"),
                 (String) field(entryType, entry, "password"),

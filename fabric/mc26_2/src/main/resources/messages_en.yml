@@ -7,7 +7,7 @@ ownership-conflict: "FastLoginPlus: this account does not match this connection'
 rename-conflict: "FastLoginPlus: multiple EasyAuth accounts match your verified identity. Contact an admin to resolve the duplicate accounts before reconnecting."
 rename-failed: "FastLoginPlus: EasyAuth could not finish following your name change. Try reconnecting later; if this continues, ask an admin to check the backend logs and storage."
 invalid-identity: "FastLoginPlus: the proxy identity is missing or invalid. Reconnect through the trusted proxy; if this continues, contact an admin."
-bedrock-unsupported: "FastLoginPlus: Fabric mode does not support Bedrock/Floodgate connections. Please join with Minecraft Java Edition."
+bedrock-unsupported: "FastLoginPlus: this Bedrock connection is not eligible for automatic login. A trusted proxy claim and an existing completed EasyAuth account with the same Floodgate UUID are required. Linked accounts are not supported. Contact an admin."
 auth-unavailable: "FastLoginPlus: EasyAuth account verification or saving failed. Reconnect and try again; if this continues, ask an admin to check the backend logs and EasyAuth settings."
 binding-login-required: "FastLoginPlus: log in to your EasyAuth password account first, then run /flp premium."
 binding-identity-required: "FastLoginPlus: this connection has no usable verified or offline identity. Reconnect through the trusted proxy and retry /flp premium."

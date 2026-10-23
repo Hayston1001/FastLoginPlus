@@ -93,6 +93,26 @@ final class EasyAuthAccountUpdate {
         persist(entryType, entry, verifiedUuid, new LoginUpdate(now, ip), update);
     }
 
+    static void authenticateBedrock(Class<?> type, Object entry, ZonedDateTime now,
+                                    String ip, StorageUpdate update) {
+        Object oldDate = get(type, entry, "lastAuthenticatedDate");
+        Object oldTries = get(type, entry, "loginTries");
+        Object oldIp = get(type, entry, "lastIp");
+        try {
+            set(type, entry, "lastAuthenticatedDate", now);
+            set(type, entry, "loginTries", 0L);
+            set(type, entry, "lastIp", ip);
+            if (!update.save(entry)) {
+                throw new IllegalStateException("EasyAuth Bedrock account update failed");
+            }
+        } catch (RuntimeException failure) {
+            set(type, entry, "lastAuthenticatedDate", oldDate);
+            set(type, entry, "loginTries", oldTries);
+            set(type, entry, "lastIp", oldIp);
+            throw failure;
+        }
+    }
+
     private record LoginUpdate(ZonedDateTime now, String ip) {
     }
 

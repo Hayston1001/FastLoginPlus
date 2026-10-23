@@ -16,6 +16,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.networking.v1.ServerConfigurationConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.fabricmc.fabric.api.networking.v1.context.PacketContext;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -43,13 +44,15 @@ public final class FastLoginFabric implements ModInitializer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("fastloginplus_fabric");
     private static ScheduledExecutorService updateExecutor;
+    private static final FabricBedrockLogin BEDROCK_LOGIN = new FabricBedrockLogin();
 
     @Override
     public void onInitialize() {
         LOGGER.info("FastLoginPlus Fabric {} | EasyAuth {}",
                 modVersion("fastloginplus_fabric"), modVersion("easyauth"));
         EasyAuth344Bridge bridge = new EasyAuth344Bridge();
-        LOGGER.info("Fabric mode supports Java identities only; Bedrock/Floodgate connections will be rejected.");
+        LOGGER.info("Fabric Bedrock auto-login requires a signed proxy claim "
+                + "and an existing completed EasyAuth account.");
         FabricCrackedNotice crackedNotice = new FabricCrackedNotice();
         crackedNotice.register();
         BindingConsentWriter.register();
@@ -73,6 +76,10 @@ public final class FastLoginFabric implements ModInitializer {
                 beforeConfigure(listener, server, bridge, crackedNotice));
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 onJoin(handler, bridge, crackedNotice));
+        ServerConfigurationConnectionEvents.DISCONNECT.register((handler, server) ->
+                BEDROCK_LOGIN.disconnect(handler.getPacketContext().orElseThrow(PacketContext.CONNECTION)));
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) ->
+                BEDROCK_LOGIN.disconnect(handler.getPacketContext().orElseThrow(PacketContext.CONNECTION)));
     }
 
     static void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, EasyAuth344Bridge bridge) {
@@ -169,6 +176,17 @@ public final class FastLoginFabric implements ModInitializer {
     static void beforeConfigure(ServerConfigurationPacketListenerImpl listener, MinecraftServer server,
                                 EasyAuth344Bridge bridge, FabricCrackedNotice crackedNotice) {
         GameProfile profile = listener.getOwner();
+        if (FabricBedrockLogin.hasClaim(profile)) {
+            try {
+                BEDROCK_LOGIN.capture(listener.getPacketContext().orElseThrow(PacketContext.CONNECTION),
+                        profile, FabricConfig.startup().allowedProxyIds(), System.currentTimeMillis(),
+                        () -> bridge.beforeBedrock(server, profile.name(), profile.id()));
+            } catch (RuntimeException rejected) {
+                LOGGER.warn("Rejected Bedrock account verification for {}: {}", profile.name(), rejected.getMessage());
+                listener.disconnect(FabricMessages.reason(rejected, "invalid-identity"));
+            }
+            return;
+        }
         if (BedrockBoundary.isBedrock(profile.name(), profile.id())) {
             if (FabricConfig.isDebug()) {
                 LOGGER.info("Rejecting unsupported Bedrock/Floodgate identity: name={} uuid={}",
@@ -198,6 +216,19 @@ public final class FastLoginFabric implements ModInitializer {
     static void onJoin(ServerGamePacketListenerImpl handler, EasyAuth344Bridge bridge,
                        FabricCrackedNotice crackedNotice) {
         GameProfile profile = handler.player.getGameProfile();
+        if (FabricBedrockLogin.hasClaim(profile)) {
+            try {
+                var attempt = BEDROCK_LOGIN.take(handler.getPacketContext().orElseThrow(PacketContext.CONNECTION),
+                        handler.player, profile, System.currentTimeMillis());
+                if (attempt != null) {
+                    bridge.onBedrockJoin(handler.player, attempt.owner);
+                }
+            } catch (RuntimeException rejected) {
+                LOGGER.warn("Rejected Bedrock login for {}: {}", profile.name(), rejected.getMessage());
+                handler.disconnect(FabricMessages.reason(rejected, "auth-unavailable"));
+            }
+            return;
+        }
         if (BedrockBoundary.isBedrock(profile.name(), profile.id())) {
             if (FabricConfig.isDebug()) {
                 LOGGER.info("Rejecting unsupported Bedrock/Floodgate identity: name={} uuid={}",

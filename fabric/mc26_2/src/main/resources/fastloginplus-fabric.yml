@@ -3,7 +3,9 @@
 # Copyright (c) 2026 Hayston1001
 
 # FastLoginPlus Fabric configuration (backend-local keys only).
-# This mode rejects Bedrock/Floodgate connections.
+# Bedrock auto-login requires a signed proxy claim and an existing completed
+# EasyAuth account with the same Floodgate UUID and a non-empty stored credential.
+# No Bedrock account creation, linked login, native Floodgate bypass or premium conversion.
 #
 # Effect scope: policy keys (autoRegister, autoLogin, offline-whitelist,
 # premium-warning, kick-toggle, auto-register-unknown, ...) live on the proxy
@@ -41,6 +43,8 @@ update-check-interval: 24
 # Comma-separated UUIDs of trusted proxies (from each proxy's proxyId.txt).
 # YAML block lists and flow lists are also accepted; startup rewrites them as
 # a comma-separated string. This list is frozen until the backend restarts.
+# Bedrock claims are verified against this list; empty/unreadable trust denies
+# Bedrock auto-login. Claim replay protection is process-local, not restart-persistent.
 # The proxy refuses unauthenticated upgrade consent messages. With an empty list,
 # /flp premium can queue an upgrade but the consent never reaches the proxy, so
 # binding can never complete. Fill this in on every backend running /flp premium.

@@ -86,10 +86,11 @@ class FabricMessagesTest {
     void bedrockRefusalIsPresentAndHasNoPlaceholdersInBothLanguages() throws Exception {
         String english = bundled("en").get("bedrock-unsupported");
         String chinese = bundled("zh").get("bedrock-unsupported");
-        assertTrue(english.contains("Fabric mode does not support Bedrock/Floodgate"));
-        assertTrue(english.contains("Java Edition"));
-        assertTrue(chinese.contains("Fabric 模式不支持基岩版/Floodgate"));
-        assertTrue(chinese.contains("Java 版"));
+        assertTrue(english.contains("existing completed EasyAuth account"));
+        assertTrue(english.contains("same Floodgate UUID"));
+        assertTrue(english.contains("Linked accounts are not supported"));
+        assertTrue(chinese.contains("已完成注册的 EasyAuth 账号"));
+        assertTrue(chinese.contains("暂不支持关联账号"));
         for (String message : new String[]{english, chinese}) {
             assertTrue(!message.contains("{") && !message.contains("}") && !message.contains("%"));
         }
