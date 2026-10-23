@@ -38,6 +38,7 @@ import com.github.games647.fastlogin.bukkit.command.FlpCommand;
 import com.github.games647.fastlogin.bukkit.listener.AuthMeCommandGuard;
 import com.github.games647.fastlogin.bukkit.listener.AuthMeTakeoverListener;
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
+import com.github.games647.fastlogin.bukkit.listener.FloodgatePreLoginListener;
 import com.github.games647.fastlogin.bukkit.listener.PaperCacheListener;
 import com.github.games647.fastlogin.bukkit.listener.PreLoginPremiumListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.ProtocolLibListener;
@@ -263,6 +264,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // This lets us pre-create AuthMe premium records during the configuration
         // phase, before AuthMe's own handler shows a blocking preJoin dialog.
         registerPaperConfigureListener();
+
+        // Backend-assisted Floodgate auto-auth runs at LOWEST pre-login, before
+        // AuthMe's login gate. It is inert unless Floodgate is installed here and
+        // identifies the connection; proxy-only deployments are unaffected.
+        pluginManager.registerEvents(new FloodgatePreLoginListener(this), this);
 
         // Paper startup/admission checks run here instead of PlayerLoginEvent.
         // On Paper, profile.complete(true) is called right after AsyncPlayerPreLoginEvent.

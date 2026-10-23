@@ -14,6 +14,7 @@ import com.github.games647.fastlogin.core.shared.FloodgateState;
 import com.github.games647.fastlogin.core.shared.LoginSource;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.google.common.base.Ticker;
 import net.md_5.bungee.config.Configuration;
 import org.geysermc.floodgate.api.FloodgateApi;
 import org.geysermc.floodgate.api.player.FloodgatePlayer;
@@ -26,6 +27,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -220,6 +223,34 @@ class FloodgateServiceTest {
     }
 
     // --- helpers ---
+
+    @Test
+    void pendingLoginMarkerCannotFollowAReplacementConnectionOrAnotherName() {
+        FloodgatePlayer oldConnection = mockFloodgatePlayer("Bedrock");
+        FloodgatePlayer replacement = mockFloodgatePlayer("Bedrock");
+        service.rememberPreLoginRequest(oldConnection, "Bedrock");
+
+        assertTrue(service.hasPreLoginRequest(oldConnection, "Bedrock"));
+        assertFalse(service.hasPreLoginRequest(replacement, "Bedrock"));
+        assertFalse(service.hasPreLoginRequest(oldConnection, "AnotherName"));
+    }
+
+    @Test
+    void pendingLoginMarkerExpiresWithAuthMesQueueLifetime() {
+        AtomicLong nanos = new AtomicLong();
+        service = new FloodgateService(floodgateApi, core, new Ticker() {
+            @Override
+            public long read() {
+                return nanos.get();
+            }
+        });
+        FloodgatePlayer connection = mockFloodgatePlayer("Bedrock");
+        service.rememberPreLoginRequest(connection, "Bedrock");
+        nanos.set(TimeUnit.SECONDS.toNanos(14));
+        assertTrue(service.hasPreLoginRequest(connection, "Bedrock"));
+        nanos.set(TimeUnit.SECONDS.toNanos(15));
+        assertFalse(service.hasPreLoginRequest(connection, "Bedrock"));
+    }
 
     private FloodgatePlayer mockFloodgatePlayer(String name) {
         FloodgatePlayer player = mock(FloodgatePlayer.class);

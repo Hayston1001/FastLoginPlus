@@ -11,6 +11,8 @@ import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.bukkit.task.ForceLoginTask;
 import com.github.games647.fastlogin.core.PremiumStatus;
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
+import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin;
+import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.message.LoginActionMessage;
 import com.github.games647.fastlogin.core.message.LoginActionMessage.Type;
 import com.google.common.io.ByteArrayDataInput;
@@ -19,6 +21,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.messaging.PluginMessageListener;
 import org.jetbrains.annotations.NotNull;
+import org.geysermc.floodgate.api.player.FloodgatePlayer;
 
 import java.util.UUID;
 
@@ -73,6 +76,14 @@ public class BungeeListener implements PluginMessageListener {
             plugin.getLog().warn("Received proxy id: {} that doesn't exist in the proxy file", sourceId);
             return;
         }
+        // Do not replace a backend-requested Bedrock login with late Java identity policy.
+        if (loginMessage.getType() != Type.CRACKED && isBackendFloodgateLoginHandled(targetPlayer)) {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Ignoring late proxy action {} for backend-handled Bedrock player {}",
+                        loginMessage.getType(), targetPlayer.getName());
+            }
+            return;
+        }
         // If the earlier live-profile claim was unavailable, an already authenticated carrier
         // can deliver the first policy fact. That late fallback only protects later connections.
         plugin.synchronizeAuthMePremiumPolicy(loginMessage.getFacts());
@@ -103,6 +114,30 @@ public class BungeeListener implements PluginMessageListener {
         } else {
             readMessage(targetPlayer, loginMessage);
         }
+    }
+
+    /**
+     * Whether a proxy action targets a Bedrock connection that the backend
+     * pre-login path already handled. Only then may the duplicate be
+     * ignored; Java players keep the existing message handling.
+     *
+     * @param player the message's target player
+     * @return true when this connection has a pending request or AuthMe already accepts it
+     */
+    boolean isBackendFloodgateLoginHandled(Player player) {
+        FloodgateService floodgateService = plugin.getFloodgateService();
+        if (floodgateService == null) {
+            return false;
+        }
+        FloodgatePlayer bedrock = floodgateService.getBedrockPlayer(player.getUniqueId());
+        if (bedrock == null) {
+            return false;
+        }
+
+        AuthPlugin<Player> authPlugin = plugin.getCore().getAuthPluginHook();
+        return authPlugin instanceof PreLoginAuthPlugin
+                && (floodgateService.hasPreLoginRequest(bedrock, player.getName())
+                || authPlugin.isAuthenticated(player));
     }
 
     private void readMessage(Player player, LoginActionMessage message) {

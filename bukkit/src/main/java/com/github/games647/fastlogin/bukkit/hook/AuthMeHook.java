@@ -9,6 +9,7 @@ package com.github.games647.fastlogin.bukkit.hook;
 import com.github.games647.fastlogin.bukkit.BukkitLoginSession;
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
+import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin;
 import fr.xephi.authme.api.v3.AuthMeApi;
 import fr.xephi.authme.events.RestoreSessionEvent;
 import fr.xephi.authme.process.Management;
@@ -20,6 +21,8 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * GitHub: <a href="https://github.com/Xephi/AuthMeReloaded/">...</a>
@@ -30,12 +33,16 @@ import java.lang.reflect.Field;
  * <p>
  * <a href="https://www.spigotmc.org/resources/authme-reloaded.6269/">Spigot</a>
  */
-public class AuthMeHook implements AuthPlugin<Player>, Listener {
+public class AuthMeHook implements AuthPlugin<Player>, PreLoginAuthPlugin, Listener {
 
     private final FastLoginBukkit plugin;
 
     private final AuthMeApi authmeAPI;
     private Management authmeManagement;
+
+    private volatile Method forceLoginFromProxyMethod;
+    private volatile boolean forceLoginFromProxyResolved;
+    private final AtomicBoolean preLoginUnsupportedLogged = new AtomicBoolean();
 
     public AuthMeHook(FastLoginBukkit plugin) {
         this.plugin = plugin;
@@ -99,6 +106,108 @@ public class AuthMeHook implements AuthPlugin<Player>, Listener {
     @Override
     public boolean isRegistered(String playerName) {
         return authmeAPI.isRegistered(playerName);
+    }
+
+    @Override
+    public boolean isAuthenticated(Player player) {
+        return authmeAPI != null && authmeAPI.isAuthenticated(player);
+    }
+
+    @Override
+    public boolean isPreLoginForceLoginSupported() {
+        if (resolveForceLoginFromProxy() != null) {
+            return true;
+        }
+        if (preLoginUnsupportedLogged.compareAndSet(false, true)) {
+            plugin.getLog().error(
+                    "AuthMe does not expose forceLoginFromProxy(String); the backend Floodgate "
+                            + "pre-login path requires AuthMe 6.0.1+ and stays disabled");
+        }
+        return false;
+    }
+
+    @Override
+    public boolean registerPlayer(String playerName, String password) {
+        if (authmeAPI == null) {
+            return false;
+        }
+        try {
+            return authmeAPI.registerPlayer(playerName, password);
+        } catch (RuntimeException registrationError) {
+            // The external message may carry database details. Keep the type.
+            plugin.getLog().error(
+                    "AuthMe registerPlayer failed for {} during backend Floodgate pre-login "
+                            + "(errorType={})",
+                    playerName, registrationError.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    @Override
+    public boolean unregisterPlayer(String playerName) {
+        if (authmeAPI == null) {
+            return false;
+        }
+        try {
+            // Use AuthMe's public API, not its database or private login state.
+            authmeAPI.getClass().getMethod("forceUnregister", String.class).invoke(authmeAPI, playerName);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException cleanupError) {
+            plugin.getLog().error(
+                    "AuthMe name-based cleanup unavailable or failed for {} (errorType={})",
+                    playerName, cleanupError.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    @Override
+    public boolean forceLoginFromProxy(String playerName) {
+        Method method = resolveForceLoginFromProxy();
+        if (method == null) {
+            return false;
+        }
+        try {
+            method.invoke(authmeAPI, playerName);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException invocationError) {
+            plugin.getLog().error(
+                    "AuthMe forceLoginFromProxy failed for {} during backend Floodgate pre-login "
+                            + "(errorType={})",
+                    playerName, invocationError.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    /**
+     * Resolves AuthMe's name-based force login once. AuthMe 5.x does not have
+     * the method; the caller must not create an account in that case because the
+     * generated password is never delivered to the Bedrock player.
+     *
+     * @return the method, or null when this AuthMe version cannot do a pre-join login
+     */
+    private Method resolveForceLoginFromProxy() {
+        if (!forceLoginFromProxyResolved) {
+            synchronized (this) {
+                if (!forceLoginFromProxyResolved) {
+                    Method resolved = null;
+                    if (authmeAPI != null) {
+                        try {
+                            resolved = authmeAPI.getClass()
+                                    .getMethod("forceLoginFromProxy", String.class);
+                        } catch (NoSuchMethodException missing) {
+                            if (plugin.getCore().isDebug()) {
+                                plugin.getLog().info(
+                                        "AuthMe API has no forceLoginFromProxy(String) - backend "
+                                                + "Floodgate auto-login is unavailable");
+                            }
+                        }
+                    }
+                    forceLoginFromProxyMethod = resolved;
+                    forceLoginFromProxyResolved = true;
+                }
+            }
+        }
+        return forceLoginFromProxyMethod;
     }
 
     @Override

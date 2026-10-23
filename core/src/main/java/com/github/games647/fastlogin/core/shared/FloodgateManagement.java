@@ -183,6 +183,23 @@ public abstract class FloodgateManagement<P extends C, C, L extends LoginSession
      * @return true if the Player can be registered automatically
      */
     protected boolean isAutoAuthAllowed(String configValue) {
+        return isAutoAuthAllowed(configValue, isLinked);
+    }
+
+    /**
+     * Decides if the player can be automatically registered or logged in.
+     * <p>
+     * This is the same decision as {@link #isAutoAuthAllowed(String)} without
+     * requiring a player object. The backend pre-login Floodgate path has no
+     * {@code Player} yet and reuses it so both paths read the config values the
+     * same way.
+     *
+     * @param configValue the value of either 'autoLoginFloodgate' or
+     *                    'autoRegisterFloodgate' from config.yml
+     * @param isLinked whether the current Bedrock connection is linked to a Java account
+     * @return true if the Player can be registered automatically
+     */
+    public static boolean isAutoAuthAllowed(String configValue, boolean isLinked) {
         return "true".equals(configValue)
                 || "no-conflict".equals(configValue) // this was checked before
                 || ("linked".equals(configValue) && isLinked);

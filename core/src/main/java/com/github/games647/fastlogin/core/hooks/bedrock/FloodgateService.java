@@ -9,19 +9,52 @@ package com.github.games647.fastlogin.core.hooks.bedrock;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.LoginSource;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.google.common.base.Ticker;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import org.geysermc.floodgate.api.FloodgateApi;
 import org.geysermc.floodgate.api.player.FloodgatePlayer;
 
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 public class FloodgateService extends BedrockService<FloodgatePlayer> {
 
     private final FloodgateApi floodgate;
+    private final Cache<FloodgatePlayer, String> preLoginRequests;
 
     public FloodgateService(FloodgateApi floodgate, FastLoginCore<?, ?, ?> core) {
+        this(floodgate, core, Ticker.systemTicker());
+    }
+
+    FloodgateService(FloodgateApi floodgate, FastLoginCore<?, ?, ?> core, Ticker ticker) {
         super(core);
         this.floodgate = floodgate;
+        // Match AuthMe 6.0.1's request lifetime. Weak identity keys cannot follow a reconnect.
+        this.preLoginRequests = CacheBuilder.newBuilder().weakKeys().maximumSize(4096)
+                .expireAfterWrite(15, TimeUnit.SECONDS).ticker(ticker).build();
+    }
+
+    /**
+     * Remembers an accepted request solely to suppress late proxy duplicates.
+     *
+     * @param player the Floodgate object for this connection
+     * @param username the backend name whose login was requested
+     */
+    public void rememberPreLoginRequest(FloodgatePlayer player, String username) {
+        preLoginRequests.put(player, username);
+    }
+
+    /**
+     * Checks a pending request, not authentication. New connection objects never inherit it.
+     *
+     * @param player the current Floodgate connection
+     * @param username the current backend name
+     * @return whether the same connection recently queued this name's login
+     */
+    public boolean hasPreLoginRequest(FloodgatePlayer player, String username) {
+        return username.equals(preLoginRequests.getIfPresent(player));
     }
 
     /**

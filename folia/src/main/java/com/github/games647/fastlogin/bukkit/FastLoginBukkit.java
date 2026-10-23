@@ -39,6 +39,7 @@ import com.github.games647.fastlogin.bukkit.command.FlpCommand;
 import com.github.games647.fastlogin.bukkit.listener.AuthMeCommandGuard;
 import com.github.games647.fastlogin.bukkit.listener.AuthMeTakeoverListener;
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
+import com.github.games647.fastlogin.bukkit.listener.FloodgatePreLoginListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.ProtocolLibListener;
 import com.github.games647.fastlogin.bukkit.listener.protocolsupport.ProtocolSupportListener;
 import com.github.games647.fastlogin.bukkit.listener.UpdateNotifyListener;
@@ -258,6 +259,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         logger.info("Unregistered PlayerLoginEvent listener to avoid HorriblePlayerLoginEventHack");
 
         registerPaperConfigureListener();
+
+        // Backend-assisted Floodgate auto-auth runs at LOWEST pre-login, before
+        // AuthMe's login gate. It is inert unless Floodgate is installed here and
+        // identifies the connection; proxy-only deployments are unaffected.
+        pluginManager.registerEvents(new FloodgatePreLoginListener(this), this);
 
         // Folia startup/admission checks run here instead of PlayerLoginEvent.
         // Folia is based on Paper - register PaperCacheListener to set skin during

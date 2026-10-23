@@ -28,6 +28,21 @@ public interface AuthPlugin<P> {
     boolean forceLogin(P player);
 
     /**
+     * Whether the auth plugin already considers this player authenticated.
+     * <p>
+     * The backend Floodgate pre-login path can authenticate a Bedrock player
+     * before the proxy's own force message arrives. A hook that can answer lets
+     * the duplicate message be ignored instead of running a second force login.
+     * Hooks that cannot answer keep the previous behaviour.
+     *
+     * @param player the online player
+     * @return true when no further force login is needed
+     */
+    default boolean isAuthenticated(P player) {
+        return false;
+    }
+
+    /**
      * Forces a register in order to protect the paid account.
      * <p>
      * <strong>This operation will be performed async while the player successfully
