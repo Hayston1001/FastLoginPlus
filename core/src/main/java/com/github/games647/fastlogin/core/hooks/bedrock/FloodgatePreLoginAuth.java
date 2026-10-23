@@ -9,22 +9,16 @@ import com.github.games647.craftapi.model.Profile;
 import com.github.games647.craftapi.resolver.RateLimitException;
 import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
-import com.github.games647.fastlogin.core.shared.FloodgateManagement;
-import org.geysermc.floodgate.api.player.FloodgatePlayer;
 
 import java.io.IOException;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
  * Registers and logs in a Floodgate player before AuthMe's login gate starts.
  *
- * <p>This experimental path only runs when Floodgate is installed on the
- * backend and shares the proxy's {@code key.pem}, so
- * {@link FloodgateService#getBedrockPlayer(java.util.UUID)} can identify the
- * connection during {@code AsyncPlayerPreLoginEvent}. Proxy-only deployments do
- * not enter this path; their existing Floodgate handling is unchanged.
+ * <p>Both signed proxy facts and the optional backend Floodgate API supply a
+ * trusted Bedrock session to the same decision and cleanup logic.
  *
  * <p>AuthMe 6.0.1 exposes name-based
  * {@code AuthMeApi#registerPlayer(String, String)} and
@@ -62,10 +56,6 @@ public class FloodgatePreLoginAuth {
         LOGIN_REQUESTED
     }
 
-    private static final String AUTO_LOGIN_KEY = "autoLoginFloodgate";
-    private static final String AUTO_REGISTER_KEY = "autoRegisterFloodgate";
-    private static final String ALLOW_CONFLICT_KEY = "allowFloodgateNameConflict";
-
     private final FastLoginCore<?, ?, ?> core;
 
     public FloodgatePreLoginAuth(FastLoginCore<?, ?, ?> core) {
@@ -78,21 +68,21 @@ public class FloodgatePreLoginAuth {
      * player and that {@code auth} is the backend's auth hook.
      *
      * @param username the name the backend will see
-     * @param floodgatePlayer the Floodgate session for this connection
+     * @param session the trusted Bedrock facts and policy for this connection
      * @param auth the backend auth plugin, behind its Floodgate pre-login bridge
      * @return what happened; never null
      */
-    public Outcome handle(String username, FloodgatePlayer floodgatePlayer, PreLoginAuthPlugin auth) {
+    public Outcome handle(String username, BedrockSession session, PreLoginAuthPlugin auth) {
         if (!auth.isPreLoginForceLoginSupported()) {
             // Do not create an account we cannot log in to. The existing proxy
             // path remains the fallback when the AuthMe API is too old.
             return Outcome.UNSUPPORTED;
         }
 
-        String autoLogin = configValue(AUTO_LOGIN_KEY);
-        String autoRegister = configValue(AUTO_REGISTER_KEY);
-        String allowConflict = configValue(ALLOW_CONFLICT_KEY);
-        boolean linked = floodgatePlayer.getLinkedPlayer() != null;
+        String autoLogin = session.getAutoLogin();
+        String autoRegister = session.getAutoRegister();
+        String allowConflict = session.getAllowConflict();
+        boolean linked = session.isLinked();
 
         if (core.isDebug()) {
             core.getPlugin().getLog().info(
@@ -120,7 +110,7 @@ public class FloodgatePreLoginAuth {
         }
 
         if (registered) {
-            if (!FloodgateManagement.isAutoAuthAllowed(autoLogin, linked)) {
+            if (!BedrockSession.isAutoAuthAllowed(autoLogin, linked)) {
                 if (core.isDebug()) {
                     core.getPlugin().getLog().info(
                             "Skipping backend Floodgate auto-login for {}: "
@@ -145,7 +135,7 @@ public class FloodgatePreLoginAuth {
             return Outcome.LOGIN_REQUESTED;
         }
 
-        if (!FloodgateManagement.isAutoAuthAllowed(autoRegister, linked)) {
+        if (!BedrockSession.isAutoAuthAllowed(autoRegister, linked)) {
             if (core.isDebug()) {
                 core.getPlugin().getLog().info(
                         "Skipping backend Floodgate auto-register for {}: "
@@ -155,7 +145,7 @@ public class FloodgatePreLoginAuth {
             return Outcome.NO_AUTO_REGISTER;
         }
 
-        if (!FloodgateManagement.isAutoAuthAllowed(autoLogin, linked)) {
+        if (!BedrockSession.isAutoAuthAllowed(autoLogin, linked)) {
             if (core.isDebug()) {
                 core.getPlugin().getLog().info(
                         "Skipping backend Floodgate registration for {}: auto-login is disallowed", username);
@@ -179,7 +169,7 @@ public class FloodgatePreLoginAuth {
             // registerPlayer also reports false in a race where the row appeared
             // between our check and the insert. Only a still-absent row is a
             // failure; never force a login against a missing record.
-            if (!isRegisteredNow(username, auth) || !FloodgateManagement.isAutoAuthAllowed(autoLogin, linked)) {
+            if (!isRegisteredNow(username, auth) || !BedrockSession.isAutoAuthAllowed(autoLogin, linked)) {
                 core.getPlugin().getLog().warn(
                         "AuthMe did not create an account for Bedrock player {}; "
                                 + "keeping the existing login flow", username);
@@ -276,8 +266,4 @@ public class FloodgatePreLoginAuth {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
-    private String configValue(String key) {
-        Object value = core.getConfig().get(key);
-        return value == null ? "false" : value.toString().toLowerCase(Locale.ROOT);
-    }
 }

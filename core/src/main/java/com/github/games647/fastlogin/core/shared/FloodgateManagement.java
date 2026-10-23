@@ -200,9 +200,8 @@ public abstract class FloodgateManagement<P extends C, C, L extends LoginSession
      * @return true if the Player can be registered automatically
      */
     public static boolean isAutoAuthAllowed(String configValue, boolean isLinked) {
-        return "true".equals(configValue)
-                || "no-conflict".equals(configValue) // this was checked before
-                || ("linked".equals(configValue) && isLinked);
+        return com.github.games647.fastlogin.core.hooks.bedrock.BedrockSession
+                .isAutoAuthAllowed(configValue, isLinked);
     }
 
     /**

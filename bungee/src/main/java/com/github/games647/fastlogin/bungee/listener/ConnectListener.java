@@ -21,6 +21,8 @@ import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.github.games647.fastlogin.protocol.IdentityClaim;
+import com.github.games647.fastlogin.protocol.BedrockClaim;
+import com.github.games647.fastlogin.core.hooks.bedrock.BedrockSession;
 import com.google.common.base.Throwables;
 import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.TextComponent;
@@ -283,6 +285,46 @@ public class ConnectListener implements Listener {
                 // Try early, warn once on failure, keep admission and the
                 // onServerConnected late sender intact. Never reject all offline players.
                 earlyDeclarations.attach(connection, claim, ProxyServer.getInstance().getConfig().getUuid());
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onBedrockLogin(LoginEvent event) {
+        if (event.isCancelled() || plugin.getFloodgateService() == null) {
+            return;
+        }
+        PendingConnection connection = event.getConnection();
+        attachBedrockClaim(connection);
+    }
+
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void refreshBedrockClaim(net.md_5.bungee.api.event.ServerConnectEvent event) {
+        if (!event.isCancelled() && plugin.getFloodgateService() != null) {
+            attachBedrockClaim(event.getPlayer().getPendingConnection());
+        }
+    }
+
+    private void attachBedrockClaim(PendingConnection connection) {
+        org.geysermc.floodgate.api.player.FloodgatePlayer player =
+                plugin.getFloodgateService().getBedrockPlayer(connection.getUniqueId());
+        if (player == null) {
+            return;
+        }
+        BedrockSession policy = BedrockSession.fromConfig(plugin.getCore().getConfig(),
+                player.getLinkedPlayer() != null);
+        BedrockClaim claim = new BedrockClaim(connection.getName(), connection.getUniqueId(), policy.isLinked(),
+                policy.getAutoLogin(), policy.getAutoRegister(), policy.getAllowConflict(),
+                System.currentTimeMillis(), UUID.randomUUID());
+        java.util.function.Consumer<Throwable> failure = error -> plugin.getLog().warn(
+                "Could not attach proxy Bedrock facts for {} (errorType={})",
+                connection.getName(), error.getClass().getSimpleName());
+        if (LoginProfileProperties.ensureOfflineProfile(connection, connection.getName(),
+                connection.getUniqueId(), failure)) {
+            boolean attached = LoginProfileProperties.attach(loginProfile(connection), BedrockClaim.PROPERTY_NAME,
+                    claim.encode(UUID.fromString(ProxyServer.getInstance().getConfig().getUuid())), failure);
+            if (attached && plugin.getCore().isDebug()) {
+                plugin.getLog().info("Attached signed proxy Bedrock facts for {}", connection.getName());
             }
         }
     }

@@ -6,6 +6,7 @@
 package com.github.games647.fastlogin.bukkit;
 
 import com.github.games647.fastlogin.protocol.IdentityClaim;
+import com.github.games647.fastlogin.protocol.BedrockClaim;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -39,15 +40,18 @@ final class SpigotProfileReader {
         }
         List<String> values = new ArrayList<>();
         List<String> signatures = new ArrayList<>();
+        List<String> bedrock = new ArrayList<>();
         for (Object property : (Iterable<?>) properties) {
             Object name = accessor(property, "getName", "name");
             if (IdentityClaim.PROPERTY_NAME.equals(name)) {
                 values.add((String) accessor(property, "getValue", "value"));
             } else if (IdentityClaim.SIGNATURE_PROPERTY_NAME.equals(name)) {
                 signatures.add((String) accessor(property, "getValue", "value"));
+            } else if (BedrockClaim.PROPERTY_NAME.equals(name)) {
+                bedrock.add((String) accessor(property, "getValue", "value"));
             }
         }
-        return new Snapshot(source, values, signatures);
+        return new Snapshot(source, values, signatures, bedrock);
     }
 
     private static Object accessor(Object target, String bean, String record) throws ReflectiveOperationException {
@@ -64,11 +68,13 @@ final class SpigotProfileReader {
         final String source;
         final List<String> claims;
         final List<String> signatures;
+        final List<String> bedrock;
 
-        private Snapshot(String source, List<String> claims, List<String> signatures) {
+        private Snapshot(String source, List<String> claims, List<String> signatures, List<String> bedrock) {
             this.source = source;
             this.claims = claims;
             this.signatures = signatures;
+            this.bedrock = bedrock;
         }
     }
 }

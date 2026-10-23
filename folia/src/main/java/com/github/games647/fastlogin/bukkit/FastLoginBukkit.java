@@ -91,6 +91,15 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * that never reaches configuration leaves at most one stale entry behind.
      */
     private final ConcurrentMap<String, UUID> preLoginAttestations = new ConcurrentHashMap<>();
+    private final ProxyBedrockPreLogin proxyBedrockPreLogin = new ProxyBedrockPreLogin(this);
+
+    public ProxyBedrockPreLogin getProxyBedrockPreLogin() {
+        return proxyBedrockPreLogin;
+    }
+
+    public boolean hasBackendFloodgate() {
+        return getFloodgateService() != null;
+    }
 
     /**
      * How long an administrator's {@code /flp cracked} keeps suppressing premium marking for the
@@ -260,10 +269,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         registerPaperConfigureListener();
 
-        // Backend-assisted Floodgate auto-auth runs at LOWEST pre-login, before
-        // AuthMe's login gate. It is inert unless Floodgate is installed here and
-        // identifies the connection; proxy-only deployments are unaffected.
-        pluginManager.registerEvents(new FloodgatePreLoginListener(this), this);
+        // Capture proxy Bedrock declarations before the optional backend Floodgate
+        // compatibility listener, so backend policy cannot override declared policy.
+        registerBedrockListeners(pluginManager);
 
         // Folia startup/admission checks run here instead of PlayerLoginEvent.
         // Folia is based on Paper - register PaperCacheListener to set skin during
@@ -654,6 +662,14 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         return geyserService;
     }
 
+    void registerBedrockListeners(PluginManager pluginManager) {
+        pluginManager.registerEvents(
+                new com.github.games647.fastlogin.bukkit.listener.ProxyBedrockPreLoginListener(this), this);
+        if (hasBackendFloodgate()) {
+            pluginManager.registerEvents(new FloodgatePreLoginListener(this), this);
+        }
+    }
+
     private void registerPaperConfigureListener() {
         logger.info("Attempting to register Paper configure listener...");
         try {
@@ -677,8 +693,27 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
     }
 
+    private boolean handleProxyBedrockConfigure(Object event) {
+        try {
+            Object connection = event.getClass().getMethod("getConnection").invoke(event);
+            Object profile = connection.getClass().getMethod("getProfile").invoke(connection);
+            String name = (String) profile.getClass().getMethod("getName").invoke(profile);
+            UUID uuid = (UUID) profile.getClass().getMethod("getId").invoke(profile);
+            java.net.SocketAddress raw = (java.net.SocketAddress) connection.getClass()
+                    .getMethod("getAddress").invoke(connection);
+            return proxyBedrockPreLogin.configure(profile, name, uuid, raw);
+        } catch (ReflectiveOperationException failure) {
+            debugLog("Could not read proxy Bedrock configure profile (errorType={})",
+                    failure.getClass().getSimpleName());
+            return false;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private void onPlayerConfigure(Object event) {
+        if (bungeeManager.isEnabled() && handleProxyBedrockConfigure(event)) {
+            return;
+        }
         if (!runsProxyPremiumPath(bungeeManager.isEnabled(), getConfig().getBoolean("autoRegister"))) {
             return;
         }
@@ -1076,6 +1111,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * @return whether admission must be refused
      */
     public boolean isUntrustedPremiumConnection(Object profile, String playerName, UUID connectionUuid) {
+        if (proxyBedrockPreLogin.hasTrustedDeclaration(playerName, connectionUuid)) {
+            return false;
+        }
         if (!isUntrustedPremiumConnection(bungeeManager.isEnabled(), bungeeManager.isSignedForwarding(),
                 connectionUuid, false)) {
             return false;

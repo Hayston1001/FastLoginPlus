@@ -70,6 +70,7 @@ class FloodgatePreLoginTest {
         config.set("allowFloodgateNameConflict", true);
         when(plugin.isServerFullyStarted()).thenReturn(true);
         when(plugin.getFloodgateService()).thenReturn(floodgate);
+        when(plugin.hasBackendFloodgate()).thenReturn(true);
         when(core.getAuthPluginHook()).thenReturn(hook);
         when(event.getName()).thenReturn(NAME);
         when(event.getUniqueId()).thenReturn(uuid);
@@ -113,6 +114,16 @@ class FloodgatePreLoginTest {
     @Test
     void missingBackendFloodgateLeavesProxyOnlyPathAlone() {
         when(plugin.getFloodgateService()).thenReturn(null);
+        listener.onAsyncPlayerPreLogin(event);
+        verifyNoInteractions(hook, floodgate);
+    }
+
+    @Test
+    void proxyDeclarationTakesPrecedenceOverBackendPolicy() {
+        com.github.games647.fastlogin.bukkit.ProxyBedrockPreLogin proxy =
+                mock(com.github.games647.fastlogin.bukkit.ProxyBedrockPreLogin.class);
+        when(plugin.getProxyBedrockPreLogin()).thenReturn(proxy);
+        when(proxy.hasDeclaration(NAME, uuid)).thenReturn(true);
         listener.onAsyncPlayerPreLogin(event);
         verifyNoInteractions(hook, floodgate);
     }

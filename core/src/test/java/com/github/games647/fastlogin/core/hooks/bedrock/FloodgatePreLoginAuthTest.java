@@ -11,7 +11,6 @@ import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 import net.md_5.bungee.config.Configuration;
-import org.geysermc.floodgate.api.player.FloodgatePlayer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,7 +38,7 @@ class FloodgatePreLoginAuthTest {
     private static final String NAME = "Bedrock";
     private final FastLoginCore core = mock(FastLoginCore.class);
     private final PreLoginAuthPlugin auth = mock(PreLoginAuthPlugin.class);
-    private final FloodgatePlayer player = mock(FloodgatePlayer.class);
+    private final BedrockSession player = mock(BedrockSession.class);
     private final MojangResolver resolver = mock(MojangResolver.class);
     private final Configuration config = new Configuration();
     private final FloodgatePreLoginAuth handler = new FloodgatePreLoginAuth(core);
@@ -55,6 +54,9 @@ class FloodgatePreLoginAuthTest {
         config.set("autoRegisterFloodgate", true);
         config.set("autoLoginFloodgate", true);
         config.set("allowFloodgateNameConflict", true);
+        when(player.getAutoLogin()).thenAnswer(call -> config.get("autoLoginFloodgate").toString());
+        when(player.getAutoRegister()).thenAnswer(call -> config.get("autoRegisterFloodgate").toString());
+        when(player.getAllowConflict()).thenAnswer(call -> config.get("allowFloodgateNameConflict").toString());
         when(auth.isPreLoginForceLoginSupported()).thenReturn(true);
         when(auth.registerPlayer(eq(NAME), anyString())).thenReturn(true);
         when(auth.forceLoginFromProxy(NAME)).thenReturn(true);
@@ -81,7 +83,7 @@ class FloodgatePreLoginAuthTest {
         config.set("autoLoginFloodgate", registered ? option : true);
         when(auth.isRegistered(NAME)).thenReturn(registered);
         if (linked) {
-            when(player.getLinkedPlayer()).thenAnswer(invocation -> mock(invocation.getMethod().getReturnType()));
+            when(player.isLinked()).thenReturn(true);
         }
         assertEquals(expected, handler.handle(NAME, player, auth));
         if (registered || expected == NO_AUTO_REGISTER) {
@@ -147,7 +149,7 @@ class FloodgatePreLoginAuthTest {
     void linkedJavaNameIsExemptEvenWhenConflictsAreDisallowed(boolean registered) throws Exception {
         config.set("allowFloodgateNameConflict", false);
         when(auth.isRegistered(NAME)).thenReturn(registered);
-        when(player.getLinkedPlayer()).thenAnswer(invocation -> mock(invocation.getMethod().getReturnType()));
+        when(player.isLinked()).thenReturn(true);
         when(resolver.findProfile(NAME)).thenReturn(Optional.of(new Profile(UUID.randomUUID(), NAME)));
 
         assertEquals(registered ? LOGIN_REQUESTED : REGISTERED_AND_LOGIN_REQUESTED,

@@ -17,6 +17,8 @@ import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.github.games647.fastlogin.protocol.IdentityClaim;
 import com.github.games647.fastlogin.protocol.CrackedNoticeClaim;
+import com.github.games647.fastlogin.protocol.BedrockClaim;
+import com.github.games647.fastlogin.core.hooks.bedrock.BedrockSession;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
 import com.github.games647.fastlogin.velocity.VelocityLoginSession;
 import com.github.games647.fastlogin.velocity.task.AsyncPremiumCheck;
@@ -34,6 +36,7 @@ import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.event.connection.PreLoginEvent.PreLoginComponentResult;
 import com.velocitypowered.api.event.player.GameProfileRequestEvent;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
+import com.velocitypowered.api.event.player.ServerPreConnectEvent;
 import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.proxy.InboundConnection;
 import com.velocitypowered.api.proxy.Player;
@@ -216,7 +219,7 @@ public class ConnectListener {
         }
     }
 
-    @Subscribe
+    @Subscribe(order = PostOrder.LAST)
     public void onGameProfileRequest(GameProfileRequestEvent event) {
         LoginSession claimSession = plugin.getSession().get(event.getConnection().getRemoteAddress());
         if (event.isOnlineMode()) {
@@ -282,6 +285,54 @@ public class ConnectListener {
         earlyDeclarations.attempt(event.isOnlineMode() ? EarlyDeclarationSupport.FailureKind.PREMIUM_CLAIM
                 : EarlyDeclarationSupport.FailureKind.UNVERIFIED_DECLARATION,
                 () -> attachIdentityClaim(event, claimSession));
+        earlyDeclarations.attempt(EarlyDeclarationSupport.FailureKind.UNVERIFIED_DECLARATION,
+                () -> attachBedrockClaim(event));
+    }
+
+    void attachBedrockClaim(GameProfileRequestEvent event) {
+        GameProfile profile = event.getGameProfile();
+        List<Property> properties = new ArrayList<>(profile.getProperties());
+        boolean stripped = properties.removeIf(property -> BedrockClaim.PROPERTY_NAME.equals(property.getName()));
+        FloodgatePlayer player = null;
+        if (plugin.getFloodgateService() != null) {
+            player = getFloodgatePlayer(event.getConnection());
+            if (player == null) {
+                player = plugin.getFloodgateService().getBedrockPlayer(profile.getId());
+            }
+        }
+        if (player != null) {
+            BedrockSession policy = BedrockSession.fromConfig(plugin.getCore().getConfig(),
+                    player.getLinkedPlayer() != null);
+            BedrockClaim claim = new BedrockClaim(profile.getName(), profile.getId(), policy.isLinked(),
+                    policy.getAutoLogin(), policy.getAutoRegister(), policy.getAllowConflict(),
+                    System.currentTimeMillis(), UUID.randomUUID());
+            properties.add(new Property(BedrockClaim.PROPERTY_NAME, claim.encode(plugin.getProxyId()), ""));
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Attached signed proxy Bedrock facts for {}", profile.getName());
+            }
+        }
+        if (player != null || stripped) {
+            event.setGameProfile(profile.withProperties(properties));
+        }
+    }
+
+    @Subscribe(order = PostOrder.LAST)
+    public void refreshBedrockClaim(ServerPreConnectEvent event) {
+        Player player = event.getPlayer();
+        FloodgatePlayer bedrock = plugin.getFloodgateService() == null ? null
+                : plugin.getFloodgateService().getBedrockPlayer(player.getUniqueId());
+        if (bedrock == null) {
+            return;
+        }
+        BedrockSession policy = BedrockSession.fromConfig(plugin.getCore().getConfig(),
+                bedrock.getLinkedPlayer() != null);
+        List<Property> properties = new ArrayList<>(player.getGameProfileProperties());
+        properties.removeIf(property -> BedrockClaim.PROPERTY_NAME.equals(property.getName()));
+        BedrockClaim claim = new BedrockClaim(player.getUsername(), player.getUniqueId(), policy.isLinked(),
+                policy.getAutoLogin(), policy.getAutoRegister(), policy.getAllowConflict(),
+                System.currentTimeMillis(), UUID.randomUUID());
+        properties.add(new Property(BedrockClaim.PROPERTY_NAME, claim.encode(plugin.getProxyId()), ""));
+        player.setGameProfileProperties(properties);
     }
 
     private void attachIdentityClaim(GameProfileRequestEvent event, LoginSession session) {
@@ -395,6 +446,11 @@ public class ConnectListener {
      * @return the Floodgate username or null if not found
      */
     private String getFloodgateUsername(InboundConnection connection) {
+        FloodgatePlayer player = getFloodgatePlayer(connection);
+        return player == null ? null : player.getCorrectUsername();
+    }
+
+    private FloodgatePlayer getFloodgatePlayer(InboundConnection connection) {
         try {
             // get floodgate's event handler
             Object floodgateEventHandler = getFloodgateHandler();
@@ -415,7 +471,7 @@ public class ConnectListener {
                 return null;
             }
 
-            return floodgatePlayer.getCorrectUsername();
+            return floodgatePlayer;
         } catch (Exception ex) {
             plugin.getLog().error("Failed to fetch current floodgate username", ex);
         }

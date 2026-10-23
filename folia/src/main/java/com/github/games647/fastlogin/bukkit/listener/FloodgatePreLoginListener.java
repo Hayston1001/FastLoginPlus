@@ -10,6 +10,7 @@ import com.github.games647.fastlogin.core.hooks.AuthPlugin;
 import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgatePreLoginAuth;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
+import com.github.games647.fastlogin.core.hooks.bedrock.BedrockSession;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -19,16 +20,16 @@ import org.bukkit.event.player.AsyncPlayerPreLoginEvent.Result;
 import org.geysermc.floodgate.api.player.FloodgatePlayer;
 
 /**
- * Applies the backend-assisted Floodgate auto-auth before AuthMe's login gate.
+ * Compatibility auto-auth for backends with Floodgate and no proxy Bedrock declaration.
  *
  * <p>Runs at {@link EventPriority#LOWEST}: AuthMe's own pre-login checks run at
  * HIGHEST, and its pre-join dialog/login timeout starts during the configuration
  * phase. Creating the record and queueing the force login here means AuthMe can
  * skip the dialog and auto-login when the player actually joins.
  *
- * <p>The listener is inert unless Floodgate is installed on this backend and
- * identifies the connection as a Bedrock player. Normal proxy-only deployments
- * keep their existing proxy-side Floodgate path.
+ * <p>This fallback identifies the connection using backend Floodgate and reads
+ * backend policy. A proxy declaration takes precedence, including when it is
+ * rejected; local policy must not override the proxy-first path.
  */
 public class FloodgatePreLoginListener implements Listener {
 
@@ -50,6 +51,10 @@ public class FloodgatePreLoginListener implements Listener {
         if (event.getLoginResult() != Result.ALLOWED || !plugin.isServerFullyStarted()) {
             return;
         }
+        if (plugin.getProxyBedrockPreLogin() != null
+                && plugin.getProxyBedrockPreLogin().hasDeclaration(event.getName(), event.getUniqueId())) {
+            return;
+        }
 
         FloodgateService floodgateService = plugin.getFloodgateService();
         if (floodgateService == null) {
@@ -67,10 +72,19 @@ public class FloodgatePreLoginListener implements Listener {
         }
 
         FloodgatePreLoginAuth.Outcome outcome = preLoginAuth.handle(
-                event.getName(), floodgatePlayer, (PreLoginAuthPlugin) authPlugin);
+                event.getName(), BedrockSession.fromConfig(plugin.getCore().getConfig(),
+                        floodgatePlayer.getLinkedPlayer() != null), (PreLoginAuthPlugin) authPlugin);
         if (outcome == FloodgatePreLoginAuth.Outcome.REGISTERED_AND_LOGIN_REQUESTED
                 || outcome == FloodgatePreLoginAuth.Outcome.LOGIN_REQUESTED) {
             floodgateService.rememberPreLoginRequest(floodgatePlayer, event.getName());
         }
+    }
+
+    public static boolean isHandled(FastLoginBukkit plugin, Player player) {
+        FloodgateService service = plugin.getFloodgateService();
+        FloodgatePlayer bedrock = service == null ? null : service.getBedrockPlayer(player.getUniqueId());
+        AuthPlugin<Player> hook = plugin.getCore().getAuthPluginHook();
+        return bedrock != null && hook instanceof PreLoginAuthPlugin
+                && (service.hasPreLoginRequest(bedrock, player.getName()) || hook.isAuthenticated(player));
     }
 }

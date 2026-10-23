@@ -47,6 +47,7 @@ class ProxyAdmissionTest {
         logger = mock(Logger.class);
         set("core", core);
         set("bungeeManager", manager);
+        set("proxyBedrockPreLogin", new ProxyBedrockPreLogin(plugin));
         set("logger", logger);
         when(manager.isEnabled()).thenReturn(true);
         when(manager.isProxyAllowed(proxy)).thenReturn(true);

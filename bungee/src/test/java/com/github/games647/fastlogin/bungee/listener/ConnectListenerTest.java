@@ -32,6 +32,67 @@ class ConnectListenerTest {
 
     @Test
     @SuppressWarnings({"rawtypes", "unchecked"})
+    void onlyActualFloodgateConnectionsReceiveSeparateSignedBedrockFacts() throws Exception {
+        UUID proxyId = UUID.randomUUID();
+        UUID uuid = UUID.randomUUID();
+        BungeeCord proxy = mock(BungeeCord.class);
+        Configuration proxyConfig = mock(Configuration.class);
+        when(proxy.getConfig()).thenReturn(proxyConfig);
+        when(proxyConfig.getUuid()).thenReturn(proxyId.toString());
+        try (org.mockito.MockedStatic<ProxyServer> server = mockStatic(ProxyServer.class)) {
+            server.when(ProxyServer::getInstance).thenReturn(proxy);
+            FastLoginBungee plugin = mock(FastLoginBungee.class);
+            FastLoginCore core = mock(FastLoginCore.class);
+            when(plugin.getCore()).thenReturn(core);
+            when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
+            net.md_5.bungee.config.Configuration policy = new net.md_5.bungee.config.Configuration();
+            policy.set("autoLoginFloodgate", "linked");
+            policy.set("autoRegisterFloodgate", true);
+            policy.set("allowFloodgateNameConflict", false);
+            when(core.getConfig()).thenReturn(policy);
+            com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService floodgate =
+                    mock(com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService.class);
+            when(plugin.getFloodgateService()).thenReturn(floodgate);
+            org.geysermc.floodgate.api.player.FloodgatePlayer bedrock =
+                    mock(org.geysermc.floodgate.api.player.FloodgatePlayer.class);
+            when(bedrock.getLinkedPlayer()).thenAnswer(call -> mock(call.getMethod().getReturnType()));
+            InitialHandler connection = mock(InitialHandler.class);
+            when(connection.getUniqueId()).thenReturn(uuid);
+            when(connection.getName()).thenReturn("Bedrock");
+            Field profileField = InitialHandler.class.getDeclaredField("loginProfile");
+            profileField.setAccessible(true);
+            Class<?> type = profileField.getType();
+            Field propertiesField = type.getDeclaredField("properties");
+            propertiesField.setAccessible(true);
+            Object profile = type.getConstructor(String.class, String.class, propertiesField.getType())
+                    .newInstance(uuid.toString().replace("-", ""), "Bedrock", null);
+            profileField.set(connection, profile);
+            doReturn(profile).when(connection).getLoginProfile();
+            LoginEvent event = mock(LoginEvent.class);
+            when(event.getConnection()).thenReturn(connection);
+            ConnectListener listener = new ConnectListener(plugin, null);
+            listener.onBedrockLogin(event);
+            assertNull(propertiesField.get(profile));
+            when(floodgate.getBedrockPlayer(uuid)).thenReturn(bedrock);
+            listener.onBedrockLogin(event);
+            Object property = Array.get(propertiesField.get(profile), 0);
+            assertEquals(com.github.games647.fastlogin.protocol.BedrockClaim.PROPERTY_NAME,
+                    property.getClass().getMethod("getName").invoke(property));
+            String wire = (String) property.getClass().getMethod("getValue").invoke(property);
+            com.github.games647.fastlogin.protocol.BedrockClaim claim =
+                    com.github.games647.fastlogin.protocol.BedrockClaim.verify(wire, "Bedrock", uuid,
+                            Collections.singleton(proxyId), System.currentTimeMillis());
+            assertTrue(claim.isLinked());
+            assertEquals("linked", claim.getAutoLogin());
+            assertEquals("true", claim.getAutoRegister());
+            assertEquals("false", claim.getAllowConflict());
+            listener.onBedrockLogin(event);
+            assertEquals(1, Array.getLength(propertiesField.get(profile)));
+        }
+    }
+
+    @Test
+    @SuppressWarnings({"rawtypes", "unchecked"})
     void onlineAndOfflineLoginAttachExactlyOneClaimAndSignatureWithoutAProxyId() throws Exception {
         UUID proxyId = UUID.randomUUID();
         BungeeCord proxy = mock(BungeeCord.class);

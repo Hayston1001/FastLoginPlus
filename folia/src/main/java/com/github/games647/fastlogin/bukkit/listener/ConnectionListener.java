@@ -79,6 +79,10 @@ public class ConnectionListener implements Listener {
     }
 
     private void delayForceLogin(Player player) {
+        if (plugin.getProxyBedrockPreLogin() != null && plugin.getProxyBedrockPreLogin().isHandled(player)) {
+            plugin.getBungeeManager().markJoinEventFired(player);
+            return;
+        }
         if (!player.isOnline() || !plugin.deliverPendingLogin(player)) {
             return;
         }

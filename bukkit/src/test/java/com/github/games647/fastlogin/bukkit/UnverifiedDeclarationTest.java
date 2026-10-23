@@ -64,6 +64,7 @@ class UnverifiedDeclarationTest {
         set("core", core);
         set("logger", mock(Logger.class));
         set("bungeeManager", manager);
+        set("proxyBedrockPreLogin", new ProxyBedrockPreLogin(plugin));
         set("preLoginAttestations", new ConcurrentHashMap<String, UUID>());
         set("crackedOverrides", new ConcurrentHashMap<String, Long>());
         doReturn(plugin).when(core).getPlugin();
