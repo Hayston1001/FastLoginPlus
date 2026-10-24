@@ -181,9 +181,14 @@ public final class FastLoginFabric implements ModInitializer {
                 BEDROCK_LOGIN.capture(listener.getPacketContext().orElseThrow(PacketContext.CONNECTION),
                         profile, FabricConfig.startup().allowedProxyIds(), System.currentTimeMillis(),
                         () -> bridge.beforeBedrock(server, profile.name(), profile.id()));
-            } catch (RuntimeException rejected) {
+            } catch (IllegalArgumentException rejected) {
+                // claim shape, signature, age or binding: the declaration itself is unusable
                 LOGGER.warn("Rejected Bedrock account verification for {}: {}", profile.name(), rejected.getMessage());
                 listener.disconnect(FabricMessages.reason(rejected, "invalid-identity"));
+            } catch (RuntimeException unavailable) {
+                // account storage or API failure: the declaration is fine, the backend is not
+                LOGGER.warn("Could not verify the Bedrock account of {}: {}", profile.name(), unavailable.getMessage());
+                listener.disconnect(FabricMessages.reason(unavailable, "auth-unavailable"));
             }
             return;
         }
