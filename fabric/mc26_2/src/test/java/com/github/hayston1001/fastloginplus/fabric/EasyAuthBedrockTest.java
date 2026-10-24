@@ -140,7 +140,7 @@ class EasyAuthBedrockTest {
             case "actual-uuid" -> when(player.getUUID()).thenReturn(UUID.randomUUID());
             default -> throw new AssertionError(change);
         }
-        assertThrows(RuntimeException.class, () -> bridge.onBedrockJoin(player, owner));
+        assertThrows(FabricMessages.PlayerFailure.class, () -> bridge.onBedrockJoin(player, owner));
         assertEquals(0, EasyAuth.DB.writes);
         verify(auth, never()).easyAuth$setAuthenticated(true);
     }
@@ -151,7 +151,7 @@ class EasyAuthBedrockTest {
         var owner = prepare();
         ZonedDateTime oldDate = Cache.entry.lastAuthenticatedDate;
         EasyAuth.DB.failure = failure;
-        assertThrows(RuntimeException.class, () -> bridge.onBedrockJoin(player, owner));
+        assertThrows(AuthUnavailableException.class, () -> bridge.onBedrockJoin(player, owner));
         assertEquals(oldDate, Cache.entry.lastAuthenticatedDate);
         assertEquals("127.0.0.1", Cache.entry.lastIp);
         assertEquals(2L, Cache.entry.loginTries);
@@ -164,25 +164,25 @@ class EasyAuthBedrockTest {
     @Test
     void nativeFloodgateRemainsDisabledAndCannotSubstituteForThisPath() {
         EasyAuth.config.floodgateAutoLogin = true;
-        assertThrows(RuntimeException.class, this::prepare);
+        assertThrows(AuthUnavailableException.class, this::prepare);
         verifyNoInteractions(server);
     }
 
     @Test
     void accountReadFailureDoesNotUseCachedOwner() {
         EasyAuth.DB.readFailure = true;
-        assertThrows(RuntimeException.class, this::prepare);
+        assertThrows(AuthUnavailableException.class, this::prepare);
         assertEquals(0, EasyAuth.DB.writes);
     }
 
     @Test
     void closedStorageAndActiveLockCannotUnlock() {
         EasyAuth.DB.closed = true;
-        assertThrows(RuntimeException.class, this::prepare);
+        assertThrows(AuthUnavailableException.class, this::prepare);
         EasyAuth.DB.closed = false;
         var owner = prepare();
         Cache.entry.lastKickedDate = ZonedDateTime.now();
-        assertThrows(RuntimeException.class, () -> bridge.onBedrockJoin(player, owner));
+        assertThrows(AuthUnavailableException.class, () -> bridge.onBedrockJoin(player, owner));
         assertEquals(0, EasyAuth.DB.writes);
         verify(auth, never()).easyAuth$setAuthenticated(true);
     }
@@ -196,7 +196,7 @@ class EasyAuthBedrockTest {
     void failureAfterSaveDoesNotDeleteOrConvertAccount() {
         var owner = prepare();
         doThrow(new IllegalStateException("restore failed")).when(auth).easyAuth$restoreTrueLocation();
-        assertThrows(RuntimeException.class, () -> bridge.onBedrockJoin(player, owner));
+        assertThrows(AuthUnavailableException.class, () -> bridge.onBedrockJoin(player, owner));
         assertEquals(1, EasyAuth.DB.writes);
         assertEquals(Kind.UNKNOWN, Cache.entry.onlineAccount);
         assertEquals("hash", Cache.entry.password);
@@ -208,7 +208,7 @@ class EasyAuthBedrockTest {
     void cacheReplacementDuringPersistenceCannotUnlockOldPlayer() {
         var owner = prepare();
         EasyAuth.DB.afterSave = () -> Cache.entry = new Entry();
-        assertThrows(RuntimeException.class, () -> bridge.onBedrockJoin(player, owner));
+        assertThrows(AuthUnavailableException.class, () -> bridge.onBedrockJoin(player, owner));
         verify(auth, never()).easyAuth$setAuthenticated(true);
         assertEquals(1, EasyAuth.DB.writes);
     }

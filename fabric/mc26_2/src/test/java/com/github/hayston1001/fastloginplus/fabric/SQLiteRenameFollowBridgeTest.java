@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -31,6 +32,7 @@ import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SQLiteRenameFollowBridgeTest {
     private static final UUID VERIFIED = UUID.fromString("abcdef12-abcd-4abc-8def-123456789abc");
@@ -125,6 +127,25 @@ class SQLiteRenameFollowBridgeTest {
             assertInstanceOf(SQLException.class, rootCause(failure));
             assertEquals(List.of(), PARSED);
             assertEquals("UNKNOWN", Cache.entry.onlineAccount);
+        }
+    }
+
+    @Test
+    void sqliteBedrockReadFailureIsAuthUnavailable() throws Exception {
+        try (var connection = DriverManager.getConnection("jdbc:sqlite::memory:")) {
+            EasyAuth.DB = new SQLite(connection, "missing_table");
+            when(server.submit(any(Supplier.class))).thenAnswer(call -> {
+                try {
+                    return CompletableFuture.completedFuture(((Supplier<?>) call.getArgument(0)).get());
+                } catch (Exception error) {
+                    return CompletableFuture.failedFuture(error);
+                }
+            });
+
+            var failure = assertThrows(AuthUnavailableException.class,
+                    () -> bridge.beforeBedrock(server, NAME, UUID.randomUUID()));
+
+            assertInstanceOf(SQLException.class, rootCause(failure));
         }
     }
 

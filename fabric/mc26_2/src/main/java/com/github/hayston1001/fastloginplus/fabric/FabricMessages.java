@@ -187,5 +187,9 @@ final class FabricMessages {
             super(key);
             this.key = key;
         }
+
+        String key() {
+            return key;
+        }
     }
 }

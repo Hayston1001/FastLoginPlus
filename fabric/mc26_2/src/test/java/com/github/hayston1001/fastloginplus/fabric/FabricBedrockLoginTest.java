@@ -67,21 +67,22 @@ class FabricBedrockLoginTest {
     @ParameterizedTest
     @ValueSource(strings = {"false", "linked"})
     void proxyPolicyCannotBeOverriddenByRegistrationOrConflict(String policy) {
-        assertThrows(RuntimeException.class, () -> capture(profile(claim(false, policy, NOW))));
+        assertThrows(FabricMessages.PlayerFailure.class, () -> capture(profile(claim(false, policy, NOW))));
     }
 
     @Test
     void linkedAccountNeverAuthorizesThisSubset() {
-        assertThrows(RuntimeException.class, () -> capture(profile(claim(true, "true", NOW))));
+        assertThrows(FabricMessages.PlayerFailure.class, () -> capture(profile(claim(true, "true", NOW))));
     }
 
     @Test
     void absentAccountAndPlaceholderNeverBecomePending() {
         var profile = profile(claim(false, "true", NOW));
-        assertThrows(RuntimeException.class, () -> login.capture(connection, profile, PROXY.toString(), NOW, () -> null));
-        assertThrows(RuntimeException.class, () -> login.take(connection, new Object(), profile, NOW));
+        assertThrows(FabricMessages.PlayerFailure.class,
+                () -> login.capture(connection, profile, PROXY.toString(), NOW, () -> null));
+        assertThrows(FabricMessages.PlayerFailure.class, () -> login.take(connection, new Object(), profile, NOW));
         var empty = new EasyAuth344Bridge.BedrockOwner(new BedrockAccount(".Name", UUID_B, "", "UNKNOWN", null), new Object());
-        assertThrows(RuntimeException.class, () -> login.capture(connection,
+        assertThrows(FabricMessages.PlayerFailure.class, () -> login.capture(connection,
                 profile(claim(false, "true", NOW)), PROXY.toString(), NOW, () -> empty));
     }
 
@@ -95,13 +96,26 @@ class FabricBedrockLoginTest {
                 profile(claim(false, "true", NOW - BedrockClaim.MAX_AGE_MILLIS - 1)),
                 profile(claim(false, "true", NOW + 5_001)), profile(valid.replace(":true:", ":false:")));
         for (var profile : profiles) {
-            assertThrows(RuntimeException.class, () -> login.capture(connection, profile, PROXY.toString(), NOW,
+            assertThrows(BedrockClaimException.class, () -> login.capture(connection, profile, PROXY.toString(), NOW,
                     () -> { reads.incrementAndGet(); return owner(); }));
         }
-        assertThrows(RuntimeException.class, () -> login.capture(connection, profile(valid), "", NOW,
+        assertThrows(AuthUnavailableException.class, () -> login.capture(connection, profile(valid), "", NOW,
                 () -> { reads.incrementAndGet(); return owner(); }));
-        assertThrows(RuntimeException.class, () -> login.capture(connection, profile(valid), UUID.randomUUID().toString(), NOW,
-                () -> { reads.incrementAndGet(); return owner(); }));
+        assertThrows(BedrockClaimException.class, () -> login.capture(connection, profile(valid),
+                UUID.randomUUID().toString(), NOW, () -> { reads.incrementAndGet(); return owner(); }));
+        assertThrows(AuthUnavailableException.class, () -> login.capture(connection, profile(valid),
+                "not-a-proxy-id", NOW, () -> { reads.incrementAndGet(); return owner(); }));
+        assertEquals(0, reads.get());
+    }
+
+    @Test
+    void replayedClaimIsAnInvalidClaimButStillNeverReadsAnAccount() {
+        GameProfile profile = profile(claim(false, "true", NOW));
+        capture(profile);
+        AtomicInteger reads = new AtomicInteger();
+
+        assertThrows(BedrockClaimException.class, () -> login.capture(new Object(), profile,
+                PROXY.toString(), NOW, () -> { reads.incrementAndGet(); return owner(); }));
         assertEquals(0, reads.get());
     }
 
@@ -110,8 +124,8 @@ class FabricBedrockLoginTest {
         GameProfile profile = profile(claim(false, "true", NOW));
         capture(profile);
         login.disconnect(connection);
-        assertThrows(RuntimeException.class, () -> login.take(connection, new Object(), profile, NOW));
-        assertThrows(RuntimeException.class, () -> login.capture(new Object(), profile, PROXY.toString(), NOW,
+        assertThrows(FabricMessages.PlayerFailure.class, () -> login.take(connection, new Object(), profile, NOW));
+        assertThrows(BedrockClaimException.class, () -> login.capture(new Object(), profile, PROXY.toString(), NOW,
                 FabricBedrockLoginTest::owner));
         Object next = new Object();
         var fresh = profile(claim(false, "true", NOW));
@@ -123,19 +137,19 @@ class FabricBedrockLoginTest {
     void ageIsRecheckedAtJoinAndWrongProfileCannotConsumeTheOwner() {
         var old = profile(claim(false, "true", NOW - BedrockClaim.MAX_AGE_MILLIS + 1));
         capture(old);
-        assertThrows(RuntimeException.class, () -> login.take(connection, new Object(), old, NOW + 2));
+        assertThrows(BedrockClaimException.class, () -> login.take(connection, new Object(), old, NOW + 2));
         var fresh = profile(claim(false, "true", NOW));
         capture(fresh);
-        assertThrows(RuntimeException.class, () -> login.take(connection, new Object(),
+        assertThrows(FabricMessages.PlayerFailure.class, () -> login.take(connection, new Object(),
                 new GameProfile(UUID.randomUUID(), ".Name"), NOW));
     }
 
     @Test
     void unreadableAccountCannotLeavePendingState() {
         var profile = profile(claim(false, "true", NOW));
-        assertThrows(RuntimeException.class, () -> login.capture(connection, profile, PROXY.toString(), NOW,
-                () -> { throw new IllegalStateException("unreadable"); }));
-        assertThrows(RuntimeException.class, () -> login.take(connection, new Object(), profile, NOW));
+        assertThrows(AuthUnavailableException.class, () -> login.capture(connection, profile, PROXY.toString(), NOW,
+                () -> { throw new AuthUnavailableException("SQLITE_BUSY: database is locked"); }));
+        assertThrows(FabricMessages.PlayerFailure.class, () -> login.take(connection, new Object(), profile, NOW));
     }
 
     @Test

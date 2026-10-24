@@ -133,8 +133,8 @@ final class EasyAuth344Bridge {
     }
 
     void beforeConfigure(MinecraftServer server, IdentityClaim claim) {
-        verifyPolicy();
         try {
+            verifyPolicy();
             server.submit(() -> {
                 Object entry = invoke(playersCache, null, "get", String.class, claim.getPlayerName());
                 if (entry == null || !entryType.isInstance(entry)) {
@@ -175,9 +175,14 @@ final class EasyAuth344Bridge {
             }).get(3, TimeUnit.SECONDS);
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("EasyAuth account check was interrupted", error);
-        } catch (ExecutionException | TimeoutException error) {
-            throw new IllegalStateException("EasyAuth account check failed before configuration", error);
+            throw new AuthUnavailableException("EasyAuth account check was interrupted", error);
+        } catch (ExecutionException error) {
+            throw authUnavailable("EasyAuth account check failed before configuration",
+                    error.getCause() == null ? error : error.getCause());
+        } catch (TimeoutException error) {
+            throw new AuthUnavailableException("EasyAuth account check timed out before configuration", error);
+        } catch (RuntimeException error) {
+            throw authUnavailable("EasyAuth account check failed before configuration", error);
         }
     }
 
@@ -185,13 +190,12 @@ final class EasyAuth344Bridge {
     }
 
     BedrockOwner beforeBedrock(MinecraftServer server, String name, UUID uuid) {
-        verifyPolicy();
         try {
+            verifyPolicy();
             return server.submit(() -> {
-                // Public read API only. Null includes read failure and always denies automatic login.
+                // Read the pinned SQLite row directly; its SQL failures must not look like an absent account.
                 Object db = field(easyAuth, null, "DB");
-                BedrockAccount stored = BedrockAccount.read(entryType,
-                        invoke(db, "getUserData", String.class, name));
+                BedrockAccount stored = BedrockAccount.read(entryType, readAccount(db, name));
                 Object cached = invoke(playersCache, null, "get", String.class, name);
                 return stored != null && stored.owns(name, uuid)
                         && stored.equals(BedrockAccount.read(entryType, cached))
@@ -199,13 +203,31 @@ final class EasyAuth344Bridge {
             }).get(3, TimeUnit.SECONDS);
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("EasyAuth Bedrock account check interrupted", failure);
-        } catch (ExecutionException | TimeoutException failure) {
-            throw new IllegalStateException("EasyAuth Bedrock account check failed", failure);
+            throw new AuthUnavailableException("EasyAuth Bedrock account check was interrupted", failure);
+        } catch (ExecutionException failure) {
+            throw authUnavailable("EasyAuth Bedrock account check failed",
+                    failure.getCause() == null ? failure : failure.getCause());
+        } catch (TimeoutException failure) {
+            throw new AuthUnavailableException("EasyAuth Bedrock account check timed out", failure);
+        } catch (RuntimeException failure) {
+            throw authUnavailable("EasyAuth Bedrock account check failed", failure);
         }
     }
 
     void onBedrockJoin(ServerPlayer player, BedrockOwner owner) {
+        try {
+            applyBedrockLogin(player, owner);
+        } catch (FabricMessages.PlayerFailure denied) {
+            throw denied;
+        } catch (AuthUnavailableException unavailable) {
+            throw unavailable;
+        } catch (IllegalStateException unavailable) {
+            // EasyAuth's reflective helpers and storage layer report through IllegalStateException.
+            throw new AuthUnavailableException("EasyAuth Bedrock login failed", unavailable);
+        }
+    }
+
+    private void applyBedrockLogin(ServerPlayer player, BedrockOwner owner) {
         verifyPolicy();
         String name = player.getGameProfile().name();
         UUID uuid = player.getGameProfile().id();
@@ -217,7 +239,7 @@ final class EasyAuth344Bridge {
         }
         Object entry = invoke(player, "easyAuth$getPlayerEntryV1");
         Object db = field(easyAuth, null, "DB");
-        BedrockAccount stored = BedrockAccount.read(entryType, invoke(db, "getUserData", String.class, name));
+        BedrockAccount stored = BedrockAccount.read(entryType, readAccount(db, name));
         if (!owner.account().owns(name, uuid) || entry != owner.cached()
                 || entry != invoke(playersCache, null, "get", String.class, name)
                 || !owner.account().equals(stored)
@@ -252,6 +274,21 @@ final class EasyAuth344Bridge {
                     }
                     player.sendSystemMessage(FabricMessages.text("authenticated"));
                 });
+    }
+
+    private static RuntimeException authUnavailable(String message, Throwable failure) {
+        boolean wrappedByEasyAuth = false;
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof FabricMessages.PlayerFailure || cause instanceof AuthUnavailableException) {
+                return (RuntimeException) cause;
+            }
+            wrappedByEasyAuth |= cause instanceof IllegalStateException;
+        }
+        if (failure instanceof RuntimeException unexpected && !wrappedByEasyAuth) {
+            // Programming/runtime failures outside EasyAuth's storage and API wrappers stay unexpected.
+            return unexpected;
+        }
+        return new AuthUnavailableException(message, failure);
     }
 
     private RenameFollow.Row renameRow(Object entry) {
@@ -432,6 +469,19 @@ final class EasyAuth344Bridge {
     }
 
     void onJoin(ServerPlayer player, IdentityClaim claim) {
+        try {
+            applyJoin(player, claim);
+        } catch (FabricMessages.PlayerFailure denied) {
+            throw denied;
+        } catch (AuthUnavailableException unavailable) {
+            throw unavailable;
+        } catch (IllegalStateException unavailable) {
+            // EasyAuth's reflective helpers and storage layer report through IllegalStateException.
+            throw new AuthUnavailableException("EasyAuth login failed", unavailable);
+        }
+    }
+
+    private void applyJoin(ServerPlayer player, IdentityClaim claim) {
         verifyPolicy();
         if (!playerAuth.isInstance(player)) {
             throw new IllegalStateException("EasyAuth did not attach PlayerAuth to the player");

@@ -178,17 +178,17 @@ public final class FastLoginFabric implements ModInitializer {
         GameProfile profile = listener.getOwner();
         if (FabricBedrockLogin.hasClaim(profile)) {
             try {
+                String allowedProxyIds;
+                try {
+                    allowedProxyIds = FabricConfig.startup().allowedProxyIds();
+                } catch (RuntimeException unavailable) {
+                    throw new AuthUnavailableException("Fabric configuration is unavailable", unavailable);
+                }
                 BEDROCK_LOGIN.capture(listener.getPacketContext().orElseThrow(PacketContext.CONNECTION),
-                        profile, FabricConfig.startup().allowedProxyIds(), System.currentTimeMillis(),
+                        profile, allowedProxyIds, System.currentTimeMillis(),
                         () -> bridge.beforeBedrock(server, profile.name(), profile.id()));
-            } catch (IllegalArgumentException rejected) {
-                // claim shape, signature, age or binding: the declaration itself is unusable
-                LOGGER.warn("Rejected Bedrock account verification for {}: {}", profile.name(), rejected.getMessage());
-                listener.disconnect(FabricMessages.reason(rejected, "invalid-identity"));
-            } catch (RuntimeException unavailable) {
-                // account storage or API failure: the declaration is fine, the backend is not
-                LOGGER.warn("Could not verify the Bedrock account of {}: {}", profile.name(), unavailable.getMessage());
-                listener.disconnect(FabricMessages.reason(unavailable, "auth-unavailable"));
+            } catch (RuntimeException failure) {
+                FabricLoginFailure.reject(LOGGER, profile.name(), failure, listener::disconnect);
             }
             return;
         }
@@ -201,7 +201,11 @@ public final class FastLoginFabric implements ModInitializer {
             return;
         }
         try {
-            bridge.verifyPolicy();
+            try {
+                bridge.verifyPolicy();
+            } catch (RuntimeException unavailable) {
+                throw new AuthUnavailableException("EasyAuth policy check failed", unavailable);
+            }
             IdentityClaim claim = parseClaim(profile);
             bridge.beforeConfigure(server, claim);
             crackedNotice.beforeConfigure(listener, claim);
@@ -209,12 +213,8 @@ public final class FastLoginFabric implements ModInitializer {
                 LOGGER.info("Validated {} forwarding claim for {}; profile property names={}",
                         claim.getDecision(), profile.name(), profile.properties().keySet().size());
             }
-        } catch (IllegalArgumentException invalidClaim) {
-            LOGGER.warn("Invalid forwarding identity for {}: {}", profile.name(), invalidClaim.getMessage());
-            listener.disconnect(FabricMessages.text("invalid-identity"));
-        } catch (RuntimeException invalidEnvironment) {
-            LOGGER.error("EasyAuth policy rejected the connection", invalidEnvironment);
-            listener.disconnect(FabricMessages.reason(invalidEnvironment, "auth-unavailable"));
+        } catch (RuntimeException failure) {
+            FabricLoginFailure.reject(LOGGER, profile.name(), failure, listener::disconnect);
         }
     }
 
@@ -228,9 +228,8 @@ public final class FastLoginFabric implements ModInitializer {
                 if (attempt != null) {
                     bridge.onBedrockJoin(handler.player, attempt.owner);
                 }
-            } catch (RuntimeException rejected) {
-                LOGGER.warn("Rejected Bedrock login for {}: {}", profile.name(), rejected.getMessage());
-                handler.disconnect(FabricMessages.reason(rejected, "auth-unavailable"));
+            } catch (RuntimeException failure) {
+                FabricLoginFailure.reject(LOGGER, profile.name(), failure, handler::disconnect);
             }
             return;
         }
@@ -246,9 +245,8 @@ public final class FastLoginFabric implements ModInitializer {
             IdentityClaim claim = parseClaim(profile);
             bridge.onJoin(handler.player, claim);
             crackedNotice.onJoin(handler.player, claim);
-        } catch (RuntimeException rejected) {
-            LOGGER.warn("Rejecting Fabric player {}: {}", profile.name(), rejected.getMessage());
-            handler.disconnect(FabricMessages.reason(rejected, "auth-unavailable"));
+        } catch (RuntimeException failure) {
+            FabricLoginFailure.reject(LOGGER, profile.name(), failure, handler::disconnect);
         }
     }
 

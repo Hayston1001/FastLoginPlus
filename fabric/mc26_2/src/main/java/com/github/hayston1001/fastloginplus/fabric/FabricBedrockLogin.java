@@ -11,6 +11,7 @@ import com.mojang.authlib.GameProfile;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -64,17 +65,18 @@ final class FabricBedrockLogin {
                          java.util.function.Supplier<EasyAuth344Bridge.BedrockOwner> account, Object ticket) {
         var properties = profile.properties().get(BedrockClaim.PROPERTY_NAME);
         if (properties.size() != 1) {
-            throw new IllegalArgumentException("Exactly one signed Bedrock claim is required");
+            throw new BedrockClaimException("Exactly one signed Bedrock claim is required");
         }
-        var allowed = Arrays.stream(allowedIds.split(",")).map(String::trim)
-                .filter(value -> !value.isEmpty()).map(UUID::fromString).toList();
+        List<UUID> allowed = allowedProxyIds(allowedIds);
         String encoded = properties.iterator().next().value();
-        BedrockClaim claim = BedrockClaim.verify(encoded,
-                profile.name(), profile.id(), allowed, now);
+        BedrockClaim claim = verify(encoded, profile.name(), profile.id(), allowed, now);
         synchronized (this) {
             nonces.values().removeIf(expiry -> expiry < now);
-            if (nonces.containsKey(claim.getNonce()) || nonces.size() >= 10_000) {
-                throw new IllegalArgumentException("Replayed Bedrock claim or replay cache capacity exceeded");
+            if (nonces.containsKey(claim.getNonce())) {
+                throw new BedrockClaimException("Replayed Bedrock claim");
+            }
+            if (nonces.size() >= 10_000) {
+                throw new AuthUnavailableException("Bedrock claim replay cache is full");
             }
             // Retain even denied nonces. A policy/account failure never makes a claim reusable.
             long deadline = now + BedrockClaim.MAX_AGE_MILLIS + 5_000L;
@@ -110,8 +112,33 @@ final class FabricBedrockLogin {
         }
         // Consume before account reads/persistence, including every failure path.
         attempt.player = player;
-        BedrockClaim.verify(attempt.encoded, profile.name(), profile.id(), attempt.allowed, now);
+        verify(attempt.encoded, profile.name(), profile.id(), attempt.allowed, now);
         return attempt;
+    }
+
+    private static List<UUID> allowedProxyIds(String allowedIds) {
+        try {
+            List<UUID> allowed = Arrays.stream(allowedIds.split(",")).map(String::trim)
+                    .filter(value -> !value.isEmpty()).map(UUID::fromString).toList();
+            if (allowed.isEmpty()) {
+                throw new AuthUnavailableException("allowed-proxy-ids is empty");
+            }
+            return allowed;
+        } catch (AuthUnavailableException unavailable) {
+            throw unavailable;
+        } catch (RuntimeException invalid) {
+            throw new AuthUnavailableException("Invalid allowed-proxy-ids configuration", invalid);
+        }
+    }
+
+    private static BedrockClaim verify(String encoded, String name, UUID uuid, List<UUID> allowed, long now) {
+        try {
+            return BedrockClaim.verify(encoded, name, uuid, allowed, now);
+        } catch (IllegalArgumentException malformed) {
+            throw new BedrockClaimException("Invalid signed Bedrock claim", malformed);
+        } catch (IllegalStateException unavailable) {
+            throw new AuthUnavailableException("Bedrock claim verification is unavailable", unavailable);
+        }
     }
 
     synchronized void disconnect(Object connection) {
