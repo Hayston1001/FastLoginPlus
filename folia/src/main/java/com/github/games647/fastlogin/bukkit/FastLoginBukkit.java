@@ -1237,10 +1237,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 && outcome != com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.AUTO_LOGIN) {
             debugLog("Keeping the auth plugin's own login flow for {} (decision {})",
                     playerName, outcome);
-            if (verified && facts != null && address != null
+            if (verified && facts != null
                     && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
                             .AccountState.PASSWORD_ACCOUNT) {
-                passwordNotices.put(address, "premium-password-login");
+                queuePasswordNotice(address, playerName, "premium-password-login");
+                debugLog("Queued premium-password-login for {} (address={})", playerName, address);
             } else if (outcome == com.github.games647.fastlogin.core.shared.LoginMethodDecider.Outcome.PASSWORD
                     && verified && !autoLogin
                     && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
@@ -1253,15 +1254,11 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                         : integrator.releaseUnusablePlaceholder(playerName, verifiedPremiumUuid);
                 if (release == AuthMePremiumIntegrator.ReleaseOutcome.RELEASED
                         || release == AuthMePremiumIntegrator.ReleaseOutcome.ALREADY_ABSENT) {
-                    if (address != null) {
-                        passwordNotices.invalidate(address);
-                    }
+                    clearPasswordNotice(address, playerName);
                     integrator.closePreJoinRegisterDialog(connectionUuid, connection);
                     integrator.closePreJoinLoginDialog(connectionUuid, connection);
                 } else if (release == AuthMePremiumIntegrator.ReleaseOutcome.UUID_MISMATCH) {
-                    if (address != null) {
-                        passwordNotices.invalidate(address);
-                    }
+                    clearPasswordNotice(address, playerName);
                     integrator.closePreJoinRegisterDialog(connectionUuid, connection);
                     integrator.closePreJoinLoginDialog(connectionUuid, connection);
                     String reason = core.getMessage("ownership-conflict");
@@ -1270,8 +1267,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     } else {
                         denyLogin(playerName, reason);
                     }
-                } else if (facts != null && address != null) {
-                    passwordNotices.put(address, "premium-policy-disabled");
+                } else if (facts != null) {
+                    queuePasswordNotice(address, playerName, "premium-policy-disabled");
                 }
             }
             return false;
@@ -1306,6 +1303,42 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private final com.google.common.cache.Cache<java.net.InetSocketAddress, String> passwordNotices =
             com.google.common.cache.CacheBuilder.newBuilder().maximumSize(10000)
                     .expireAfterWrite(2, java.util.concurrent.TimeUnit.MINUTES).build();
+
+    /** Fallback key for platforms that reach login before a socket address exists (Spigot). */
+    private final com.google.common.cache.Cache<String, String> passwordNoticesByName =
+            com.google.common.cache.CacheBuilder.newBuilder().maximumSize(10000)
+                    .expireAfterWrite(2, java.util.concurrent.TimeUnit.MINUTES).build();
+
+    private void clearPasswordNotice(java.net.InetSocketAddress address, String playerName) {
+        if (address != null) {
+            passwordNotices.invalidate(address);
+        }
+        passwordNoticesByName.invalidate(playerName.toLowerCase(java.util.Locale.ROOT));
+    }
+
+    /**
+     * Queues the explanation for delivery at join. The client socket address carries the port and
+     * is only readable once the connection is attached; a platform without a configuration phase
+     * reaches login before that, so the player name is the fallback key.
+     *
+     * @param address the client address, or null when it is not readable yet
+     * @param playerName the connecting player name
+     * @param key the message key to deliver
+     */
+    private void queuePasswordNotice(java.net.InetSocketAddress address, String playerName, String key) {
+        if (address != null) {
+            passwordNotices.put(address, key);
+        } else {
+            passwordNoticesByName.put(playerName.toLowerCase(java.util.Locale.ROOT), key);
+        }
+    }
+
+    private String takePasswordNotice(org.bukkit.entity.Player player) {
+        java.net.InetSocketAddress address = player.getAddress();
+        String notice = address == null ? null : passwordNotices.asMap().remove(address);
+        return notice != null ? notice
+                : passwordNoticesByName.asMap().remove(player.getName().toLowerCase(java.util.Locale.ROOT));
+    }
 
     /**
      * Sends the explanation at most once for this player connection.
@@ -1345,7 +1378,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             player.kickPlayer(denied);
             return false;
         }
-        String notice = passwordNotices.asMap().remove(player.getAddress());
+        String notice = takePasswordNotice(player);
+        debugLog("Pending login notice for {} at {}: {}", player.getName(), player.getAddress(), notice);
         if ("premium-policy-disabled".equals(notice)) {
             sendPremiumPolicyNotice(player);
         } else if (notice != null) {

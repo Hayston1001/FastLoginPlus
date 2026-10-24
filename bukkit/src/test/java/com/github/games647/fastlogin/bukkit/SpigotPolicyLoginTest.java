@@ -62,6 +62,8 @@ class SpigotPolicyLoginTest {
         set("authMePremiumIntegrator", integrator);
         set("bungeeManager", manager);
         set("pendingKicks", new ConcurrentHashMap<String, String>());
+        set("passwordNotices", com.google.common.cache.CacheBuilder.newBuilder().build());
+        set("passwordNoticesByName", com.google.common.cache.CacheBuilder.newBuilder().build());
         set("crackedOverrides", new ConcurrentHashMap<String, Long>());
         doReturn(true).when(plugin).isServerFullyStarted();
         doReturn("FastLoginPlus").when(plugin).getName();
@@ -242,6 +244,70 @@ class SpigotPolicyLoginTest {
         giveClaim(false, proxy, uuid);
         new ConnectionListener(plugin).onPlayerLogin(login());
         verifyNoInteractions(integrator);
+    }
+
+    @Test
+    void verifiedPremiumWithAPasswordAccountIsExplainedEvenWhenTheUuidStaysOffline() throws Exception {
+        // premiumUuid: false -> the connection carries the offline UUID, so no record work happens,
+        // but the player still gets asked for a password and must be told why.
+        UUID offline = UUID.nameUUIDFromBytes("OfflinePlayer:TestUser".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                NAME, offline, offline,
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false), null);
+        when(((LiveProfileCarrier) player).getProfile()).thenReturn(
+                new BeanProfile(claim.encode(), IdentityClaim.sign(claim.encode(), proxy)));
+        when(player.getUniqueId()).thenReturn(offline);
+        when(hook.inspectAccount(NAME)).thenReturn(LoginMethodDecider.AccountState.PASSWORD_ACCOUNT);
+        com.google.common.cache.Cache<String, String> byName = com.google.common.cache.CacheBuilder.newBuilder().build();
+        set("passwordNoticesByName", byName);
+        set("passwordNotices", com.google.common.cache.CacheBuilder.newBuilder().build());
+
+        PlayerLoginEvent event = login();
+        new ConnectionListener(plugin).onPlayerLogin(event);
+
+        assertEquals("premium-password-login", byName.getIfPresent(NAME.toLowerCase(java.util.Locale.ROOT)));
+        verify(integrator, never()).markPlayerAsPremium(anyString(), any());
+        verify(integrator, never()).injectVerifiedUuid(anyString(), any());
+    }
+
+    @Test
+    void unreadableAccountNeverQueuesThePasswordExplanation() throws Exception {
+        UUID offline = UUID.nameUUIDFromBytes("OfflinePlayer:TestUser".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                NAME, offline, offline,
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false), null);
+        when(((LiveProfileCarrier) player).getProfile()).thenReturn(
+                new BeanProfile(claim.encode(), IdentityClaim.sign(claim.encode(), proxy)));
+        when(player.getUniqueId()).thenReturn(offline);
+        when(hook.inspectAccount(NAME)).thenThrow(new IllegalStateException("database closed"));
+        com.google.common.cache.Cache<String, String> byName = com.google.common.cache.CacheBuilder.newBuilder().build();
+        set("passwordNoticesByName", byName);
+        set("passwordNotices", com.google.common.cache.CacheBuilder.newBuilder().build());
+
+        new ConnectionListener(plugin).onPlayerLogin(login());
+
+        assertNull(byName.getIfPresent(NAME.toLowerCase(java.util.Locale.ROOT)));
+        verify(integrator, never()).markPlayerAsPremium(anyString(), any());
+    }
+
+    @Test
+    void premiumOwnedAccountWithoutAPasswordGetsNoPasswordExplanation() throws Exception {
+        UUID offline = UUID.nameUUIDFromBytes("OfflinePlayer:TestUser".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                NAME, offline, offline,
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false), null);
+        when(((LiveProfileCarrier) player).getProfile()).thenReturn(
+                new BeanProfile(claim.encode(), IdentityClaim.sign(claim.encode(), proxy)));
+        when(player.getUniqueId()).thenReturn(offline);
+        when(hook.inspectAccount(NAME)).thenReturn(LoginMethodDecider.AccountState.PREMIUM_OWNED);
+        com.google.common.cache.Cache<String, String> byName = com.google.common.cache.CacheBuilder.newBuilder().build();
+        set("passwordNoticesByName", byName);
+        set("passwordNotices", com.google.common.cache.CacheBuilder.newBuilder().build());
+
+        new ConnectionListener(plugin).onPlayerLogin(login());
+
+        assertNull(byName.getIfPresent(NAME.toLowerCase(java.util.Locale.ROOT)));
+        verify(integrator, never()).markPlayerAsPremium(anyString(), any());
     }
 
     private void giveClaim(boolean enabled, UUID source, UUID forwarded) {

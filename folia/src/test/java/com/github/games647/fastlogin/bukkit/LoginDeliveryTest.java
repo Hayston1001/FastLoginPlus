@@ -100,6 +100,7 @@ class LoginDeliveryTest {
         set(plugin, "pendingKicks", new ConcurrentHashMap<String, String>());
         Cache<InetSocketAddress, String> notices = CacheBuilder.newBuilder().build();
         set(plugin, "passwordNotices", notices);
+        set(plugin, "passwordNoticesByName", CacheBuilder.newBuilder().build());
         FileConfiguration config = mock(FileConfiguration.class);
         doReturn(config).when(plugin).getConfig();
         when(config.getBoolean("autoLogin")).thenReturn(!policyDisabled);
@@ -188,9 +189,46 @@ class LoginDeliveryTest {
         verify(connection, never()).disconnect(any());
     }
 
+    @Test
+    void byNameNoticeIsDeliveredAtJoinEvenWithoutASocketAddress() throws Exception {
+        FastLoginBukkit plugin = mock(FastLoginBukkit.class, CALLS_REAL_METHODS);
+        FastLoginCore core = mock(FastLoginCore.class);
+        set(plugin, "core", core);
+        set(plugin, "logger", mock(Logger.class));
+        set(plugin, "pendingKicks", new ConcurrentHashMap<String, String>());
+        set(plugin, "passwordNotices", CacheBuilder.newBuilder().build());
+        Cache<String, String> byName = CacheBuilder.newBuilder().build();
+        set(plugin, "passwordNoticesByName", byName);
+        byName.put("testuser", "premium-password-login");
+        Player player = mock(Player.class);
+        when(player.getName()).thenReturn("TestUser");
+        // Spigot reaches join without an attached connection address in this path
+        when(player.getAddress()).thenReturn(null);
+        assertTrue(plugin.deliverPendingLogin(player));
+        verify(core).sendLocaleMessage("premium-password-login", player);
+        assertNull(byName.getIfPresent("testuser"));
+        assertTrue(plugin.deliverPendingLogin(player));
+        verify(core, times(1)).sendLocaleMessage("premium-password-login", player);
+    }
+
     private static void set(Object target, String name, Object value) throws Exception {
         Field field = FastLoginBukkit.class.getDeclaredField(name);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    @Test
+    void noticeQueuesByPlayerNameWhenNoSocketAddressIsReadable() throws Exception {
+        FastLoginBukkit plugin = mock(FastLoginBukkit.class, CALLS_REAL_METHODS);
+        Cache<String, String> byName = CacheBuilder.newBuilder().build();
+        set(plugin, "passwordNotices", CacheBuilder.newBuilder().build());
+        set(plugin, "passwordNoticesByName", byName);
+        Method queue = FastLoginBukkit.class.getDeclaredMethod("queuePasswordNotice",
+                InetSocketAddress.class, String.class, String.class);
+        queue.setAccessible(true);
+        queue.invoke(plugin, null, "TestUser", "premium-password-login");
+        assertEquals("premium-password-login", byName.getIfPresent("testuser"));
+        queue.invoke(plugin, null, "TestUser", "premium-policy-disabled");
+        assertEquals("premium-policy-disabled", byName.getIfPresent("testuser"));
     }
 }

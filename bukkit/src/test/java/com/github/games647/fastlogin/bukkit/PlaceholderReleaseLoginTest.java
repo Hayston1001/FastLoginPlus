@@ -54,6 +54,7 @@ class PlaceholderReleaseLoginTest {
         set("logger", mock(Logger.class));
         set("authMePremiumIntegrator", integrator);
         set("passwordNotices", notices);
+        set("passwordNoticesByName", CacheBuilder.newBuilder().build());
         doReturn(mock(FileConfiguration.class)).when(plugin).getConfig();
         doNothing().when(plugin).denyLogin(anyString(), any());
         when(core.getAuthPluginHook()).thenReturn(hook);

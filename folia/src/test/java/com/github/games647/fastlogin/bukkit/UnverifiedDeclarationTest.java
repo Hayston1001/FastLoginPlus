@@ -63,6 +63,7 @@ class UnverifiedDeclarationTest {
         when(relays.getToggle(anyString())).thenReturn(null);
         set("pendingRelayStore", relays);
         set("passwordNotices", com.google.common.cache.CacheBuilder.newBuilder().build());
+        set("passwordNoticesByName", com.google.common.cache.CacheBuilder.newBuilder().build());
         set("core", core);
         set("logger", mock(Logger.class));
         set("bungeeManager", manager);
