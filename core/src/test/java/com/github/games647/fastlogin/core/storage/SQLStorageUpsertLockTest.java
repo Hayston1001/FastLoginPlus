@@ -7,7 +7,11 @@
 package com.github.games647.fastlogin.core.storage;
 
 import com.github.games647.fastlogin.core.shared.FloodgateState;
+import com.github.games647.fastlogin.core.shared.FastLoginCore;
+import com.github.games647.fastlogin.core.shared.JoinManagement;
+import com.github.games647.fastlogin.core.shared.LoginSource;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
+import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
 import com.zaxxer.hikari.HikariConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,11 +23,15 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 
 import java.nio.file.Path;
+import java.net.InetSocketAddress;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
@@ -39,6 +47,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.anyString;
 
 /**
  * the upsert insert path, the row-id backfill of the update branch
@@ -114,8 +124,9 @@ class SQLStorageUpsertLockTest {
         assertTrue(loaded.isSameNameCracked());
         assertEquals("1.2.3.4", loaded.getLastIp());
         verify(plugin.getLog(), times(storedUuid == null ? 0 : 1)).warn(
-                "Invalid UUID column for player {} (UserID {}): using no UUID; database row unchanged",
-                "Steve", loaded.getRowId());
+                "Invalid UUID column for player {} (UserID {}): using no UUID; {}",
+                "Steve", loaded.getRowId(), "premium login and profile saves blocked until operator repair");
+        assertEquals(storedUuid != null, loaded.isUuidRepairRequired());
 
         try (Connection con = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
              Statement stmt = con.createStatement();
@@ -124,6 +135,85 @@ class SQLStorageUpsertLockTest {
             assertEquals(storedUuid, rs.getString("UUID"), "loading must not repair or clear the stored value");
             assertTrue(rs.getBoolean("Premium"));
             assertFalse(rs.next());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void corruptUuidLoginAndSavePreserveOwnershipAndUnrelatedRows(boolean premium) throws Exception {
+        storage.save(newProfile("Steve", premium, "1.2.3.4"));
+        storage.save(newProfile("Other", true, "5.6.7.8"));
+        try (Connection con = DriverManager.getConnection("jdbc:sqlite:" + tempDir.resolve("FastLogin.db"));
+             Statement stmt = con.createStatement()) {
+            stmt.executeUpdate("UPDATE premium SET UUID='', LastLogin='2000-01-01 00:00:00' WHERE Name='Steve'");
+        }
+        List<Object> before = row("Steve");
+        List<Object> other = row("Other");
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = mock(FastLoginCore.class);
+        when(core.getStorage()).thenReturn(storage);
+        LoginSource source = mock(LoginSource.class);
+        when(source.getAddress()).thenReturn(new InetSocketAddress("127.0.0.1", 12345));
+        AtomicBoolean passwordLogin = new AtomicBoolean();
+        JoinManagement<Object, Object, LoginSource> management =
+                new JoinManagement<Object, Object, LoginSource>(core, null, null) {
+            @Override
+            public FastLoginPreLoginEvent callFastLoginPreLoginEvent(String name, LoginSource src,
+                                                                     StoredProfile profile) {
+                return null;
+            }
+
+            @Override
+            public void requestPremiumLogin(LoginSource src, StoredProfile profile, String name, boolean registered) {
+                throw new AssertionError("A corrupt UUID must not request premium authentication");
+            }
+
+            @Override
+            public void startCrackedSession(LoginSource src, StoredProfile profile, String name) {
+                assertNull(profile.getId());
+                passwordLogin.set(true);
+                assertTrue(storage.saveQuietly(profile));
+            }
+        };
+        management.onLogin("Steve", source);
+        verify(plugin.getLog()).warn("Invalid UUID column for player {} (UserID {}): using no UUID; {}",
+                "Steve", ((Number) before.get(0)).longValue(),
+                premium ? "premium login and profile saves blocked until operator repair"
+                        : "raw UUID preserved on password-login saves");
+        assertEquals(!premium, passwordLogin.get());
+        if (premium) {
+            verify(source).kick("FastLoginPlus: invalid premium UUID; contact the server administrator");
+            StoredProfile loaded = storage.loadProfile("Steve");
+            // Even a later callback assigning a verified UUID or clearing consent cannot repair this row.
+            loaded.setId(UUID.randomUUID());
+            loaded.setOnlinemodePreferred(false);
+            loaded.setLastIp("9.9.9.9");
+            assertFalse(storage.saveQuietly(loaded));
+            assertEquals(before, row("Steve"));
+        } else {
+            verify(source, never()).kick(anyString());
+            List<Object> after = row("Steve");
+            assertEquals("", after.get(1), "normal password login must preserve the raw invalid UUID");
+            assertEquals("127.0.0.1", after.get(4));
+            assertNotEquals(before.get(5), after.get(5), "normal login still updates LastLogin");
+            after.set(4, before.get(4));
+            after.set(5, before.get(5));
+            assertEquals(before, after, "no other target-row fields change");
+        }
+        assertEquals(other, row("Other"), "no unrelated row changes");
+    }
+
+    private List<Object> row(String name) throws Exception {
+        try (Connection con = DriverManager.getConnection("jdbc:sqlite:" + tempDir.resolve("FastLogin.db"));
+             PreparedStatement stmt = con.prepareStatement("SELECT * FROM premium WHERE Name=?")) {
+            stmt.setString(1, name);
+            try (ResultSet rs = stmt.executeQuery()) {
+                assertTrue(rs.next());
+                List<Object> values = new ArrayList<>();
+                for (int column = 1; column <= rs.getMetaData().getColumnCount(); column++) {
+                    values.add(rs.getObject(column));
+                }
+                return values;
+            }
         }
     }
 

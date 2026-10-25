@@ -440,6 +440,7 @@ public class ConnectListener {
     @Subscribe
     public void onDisconnect(DisconnectEvent disconnectEvent) {
         Player player = disconnectEvent.getPlayer();
+        plugin.getCore().dropDisconnectedVerification(player.getUsername());
         plugin.getCrackedNoticeDelivery().disconnected(player);
         plugin.getCore().getPendingConfirms().remove(player.getUniqueId());
 

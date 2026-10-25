@@ -61,7 +61,7 @@ public class AsyncPremiumCheck extends JoinManagement<ProxiedPlayer, CommandSend
         source.enableOnlinemode();
         plugin.getSession().put(source.getConnection(), new BungeeLoginSession(username, registered, profile));
 
-        plugin.getCore().markPendingVerification(username);
+        plugin.getCore().markPendingVerification(username, source.getConnection(), source.getConnection()::isConnected);
     }
 
     @Override

@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
 
 import org.slf4j.Logger;
@@ -546,7 +547,22 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      * @param username exact login name of the attempt
      */
     public void markPendingVerification(String username) {
-        pendingVerifications.putIfAbsent(attemptKey(username), new PendingVerification(verificationClock.getAsLong()));
+        pendingVerifications.putIfAbsent(attemptKey(username),
+                new PendingVerification(verificationClock.getAsLong(), null, () -> true));
+    }
+
+    /**
+     * Binds a proxy attempt to its original connection, including the pre-player phase.
+     * Only repeated requests by the same owner retain their original grace period.
+     *
+     * @param username login name
+     * @param owner connection identity token
+     * @param connected live connection check, not a name-based player lookup
+     */
+    public void markPendingVerification(String username, Object owner, BooleanSupplier connected) {
+        pendingVerifications.compute(attemptKey(username), (key, pending) ->
+                pending != null && pending.owner == owner ? pending
+                        : new PendingVerification(verificationClock.getAsLong(), owner, connected));
     }
 
     /**
@@ -572,6 +588,22 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      */
     public void dropPendingVerification(String username) {
         pendingVerifications.remove(attemptKey(username));
+    }
+
+    public void dropPendingVerification(String username, Object owner) {
+        pendingVerifications.computeIfPresent(attemptKey(username), (key, pending) ->
+                pending.owner == owner ? null : pending);
+    }
+
+    /**
+     * Velocity replaces its inbound wrapper with a Player before DisconnectEvent.
+     * Check the captured original connection instead of cancelling by player name.
+     *
+     * @param username disconnected player's name
+     */
+    public void dropDisconnectedVerification(String username) {
+        pendingVerifications.computeIfPresent(attemptKey(username), (key, pending) ->
+                pending.connected.getAsBoolean() ? pending : null);
     }
 
     /**
@@ -608,6 +640,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      * drop the attempt without counting and without any action.
      */
     public void settlePendingVerifications() {
+        pendingVerifications.keySet().forEach(this::dropDisconnectedVerification);
         long now = verificationClock.getAsLong();
         if (sessionProbe == null || pendingVerifications.values().stream().noneMatch(pending -> pending.isDue(now))) {
             return;
@@ -624,6 +657,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      * @param username exact login name of the returning player
      */
     public void settlePendingVerification(String username) {
+        dropDisconnectedVerification(username);
         String key = attemptKey(username);
         PendingVerification pending = pendingVerifications.get(key);
         if (pending != null) {
@@ -655,6 +689,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             if (pending != attempt) {
                 return pending;
             }
+            // Also recheck after a potentially slow session-server probe.
+            if (!pending.connected.getAsBoolean()) {
+                return null;
+            }
             if (!pending.isDue(now)) {
                 return reconnect ? null : pending;
             }
@@ -672,9 +710,13 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     private static final class PendingVerification {
         private final long startedAt;
+        private final Object owner;
+        private final BooleanSupplier connected;
 
-        private PendingVerification(long startedAt) {
+        private PendingVerification(long startedAt, Object owner, BooleanSupplier connected) {
             this.startedAt = startedAt;
+            this.owner = owner;
+            this.connected = connected;
         }
 
         private boolean isDue(long now) {

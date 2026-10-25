@@ -460,6 +460,7 @@ public class ConnectListener implements Listener {
     @EventHandler
     public void onDisconnect(PlayerDisconnectEvent disconnectEvent) {
         ProxiedPlayer player = disconnectEvent.getPlayer();
+        plugin.getCore().dropPendingVerification(player.getName(), player.getPendingConnection());
         plugin.getSession().remove(player.getPendingConnection());
         plugin.getCore().getPendingConfirms().remove(player.getUniqueId());
     }

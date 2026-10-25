@@ -30,6 +30,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -226,6 +227,89 @@ class ReconnectVerificationSettlementTest {
             pool.shutdownNow();
             pool.awaitTermination(5, TimeUnit.SECONDS);
         }
+    }
+
+    @Test
+    void prePlayerDisconnectDropsBeforeSettlementWithoutProbing() throws Exception {
+        AtomicBoolean connected = new AtomicBoolean(true);
+        core.markPendingVerification(NAME, new Object(), connected::get);
+        connected.set(false);
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
+        core.settlePendingVerifications();
+        assertEquals(0, core.getDefiniteFailures(NAME));
+        verify(resolver, never()).hasJoined(anyString(), anyString(), any());
+        connected.set(true);
+        core.settlePendingVerifications();
+        assertEquals(0, core.getDefiniteFailures(NAME), "disconnected attempts cannot reappear");
+    }
+
+    @Test
+    void oldDisconnectCannotDropNewSameNameAttempt() {
+        Object old = new Object();
+        Object current = new Object();
+        core.markPendingVerification(NAME, old, () -> false);
+        now.set(FastLoginCore.VERIFICATION_GRACE_MS - 1);
+        core.markPendingVerification(NAME.toLowerCase(Locale.ROOT), current, () -> true);
+        core.dropPendingVerification(NAME, old);
+        core.dropDisconnectedVerification(NAME);
+        now.incrementAndGet();
+        core.settlePendingVerifications();
+        assertEquals(0, core.getDefiniteFailures(NAME), "the replacement has its own full grace period");
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS - 1);
+        core.settlePendingVerifications();
+        assertEquals(1, core.getDefiniteFailures(NAME), "new live owner still settles a genuine timeout");
+    }
+
+    @Test
+    void ownerDisconnectIsNotCountedAndCannotAffectOtherNames() {
+        Object owner = new Object();
+        core.markPendingVerification(NAME, owner, () -> true);
+        core.markPendingVerification("OtherUser", new Object(), () -> true);
+        core.dropPendingVerification(NAME, owner);
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
+        core.settlePendingVerifications();
+        assertEquals(0, core.getDefiniteFailures(NAME));
+        assertEquals(1, core.getDefiniteFailures("OtherUser"));
+    }
+
+    @Test
+    void sameOwnerKeepsGraceAndOutageStillDropsWithoutCounting() throws Exception {
+        Object owner = new Object();
+        core.markPendingVerification(NAME, owner, () -> true);
+        now.set(FastLoginCore.VERIFICATION_GRACE_MS - 1);
+        core.markPendingVerification(NAME, owner, () -> true);
+        core.settlePendingVerifications();
+        verify(resolver, never()).hasJoined(anyString(), anyString(), any());
+        when(resolver.hasJoined(anyString(), anyString(), any())).thenThrow(new IOException("outage"));
+        now.incrementAndGet();
+        core.settlePendingVerifications();
+        verify(resolver).hasJoined(anyString(), anyString(), any());
+        core.settlePendingVerifications(true);
+        assertEquals(0, core.getDefiniteFailures(NAME));
+    }
+
+    @Test
+    void disconnectDuringProbeIsNotCounted() throws Exception {
+        AtomicBoolean connected = new AtomicBoolean(true);
+        core.markPendingVerification(NAME, new Object(), connected::get);
+        when(resolver.hasJoined(anyString(), anyString(), any())).thenAnswer(call -> {
+            connected.set(false);
+            return Optional.empty();
+        });
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
+        core.settlePendingVerifications();
+        assertEquals(0, core.getDefiniteFailures(NAME));
+    }
+
+    @Test
+    void disconnectedExpiredAttemptIsDroppedBeforeReconnectRouting() throws Exception {
+        core.markPendingVerification(NAME, new Object(), () -> false);
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
+        management.onLogin(NAME, new TestSource());
+        assertEquals(1, management.premiumRequests);
+        assertEquals(0, management.crackedSessions);
+        assertEquals(0, core.getDefiniteFailures(NAME));
+        verify(resolver, never()).hasJoined(anyString(), anyString(), any());
     }
 
     @Test

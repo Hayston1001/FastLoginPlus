@@ -206,12 +206,12 @@ public abstract class SQLStorage implements AuthStorage {
             String name = resultSet.getString("Name");
             String storedUuid = resultSet.getString("UUID");
             UUID uuid = null;
+            boolean invalid = false;
             if (storedUuid != null) {
                 try {
                     uuid = UUIDAdapter.parseId(storedUuid);
                 } catch (IllegalArgumentException invalidUuid) {
-                    log.warn("Invalid UUID column for player {} (UserID {}): using no UUID; database row unchanged",
-                            name, userId);
+                    invalid = true;
                 }
             }
 
@@ -231,6 +231,12 @@ public abstract class SQLStorage implements AuthStorage {
             String lastIp = resultSet.getString("LastIp");
             Instant lastLogin = resultSet.getTimestamp("LastLogin").toInstant();
             StoredProfile profile = new StoredProfile(userId, uuid, name, premium, floodgate, lastIp, lastLogin);
+            if (invalid) {
+                profile.retainInvalidUuid(storedUuid);
+                log.warn("Invalid UUID column for player {} (UserID {}): using no UUID; {}", name, userId,
+                        premium ? "premium login and profile saves blocked until operator repair"
+                                : "raw UUID preserved on password-login saves");
+            }
             profile.setSameNameCracked(sameNameCracked);
             return Optional.of(profile);
         }
@@ -250,11 +256,17 @@ public abstract class SQLStorage implements AuthStorage {
      * on the UNIQUE(Name) constraint nor lose the profile.
      *
      * @param playerProfile profile to persist
-     * @return true on success; false on a SQL error (already logged)
+     * @return true on success; false on a SQL error or a corrupt premium UUID (already logged)
      */
     public boolean saveQuietly(StoredProfile playerProfile) {
+        if (playerProfile.isUuidRepairRequired()) {
+            log.warn("Refusing to save corrupt premium UUID row for {} (UserID {}): operator repair required",
+                    playerProfile.getName(), playerProfile.getRowId());
+            return false;
+        }
         try (Connection con = dataSource.getConnection()) {
-            String uuid = playerProfile.getOptId().map(UUIDAdapter::toMojangId).orElse(null);
+            String uuid = playerProfile.getOptId().map(UUIDAdapter::toMojangId)
+                    .orElse(playerProfile.getInvalidUuid());
 
             playerProfile.getSaveLock().lock();
             try {

@@ -25,6 +25,8 @@ public class StoredProfile extends Profile {
     private FloodgateState floodgate;
     private String lastIp;
     private Instant lastLogin;
+    private String invalidUuid;
+    private boolean uuidRepairRequired;
 
     public StoredProfile(long rowId, UUID uuid, String playerName, boolean premium, FloodgateState floodgate,
                          String lastIp, Instant lastLogin) {
@@ -48,6 +50,25 @@ public class StoredProfile extends Profile {
 
     public ReentrantLock getSaveLock() {
         return saveLock;
+    }
+
+    synchronized void retainInvalidUuid(String rawUuid) {
+        invalidUuid = rawUuid;
+        uuidRepairRequired = premium;
+    }
+
+    synchronized String getInvalidUuid() {
+        return invalidUuid;
+    }
+
+    /**
+     * A corrupt premium-owned row stays blocked even if a callback changes its UUID or consent.
+     * SQL NULL is a supported absence and does not set this flag.
+     *
+     * @return whether the loaded row requires operator repair before login or saving
+     */
+    public synchronized boolean isUuidRepairRequired() {
+        return uuidRepairRequired;
     }
 
     public synchronized boolean isExistingPlayer() {

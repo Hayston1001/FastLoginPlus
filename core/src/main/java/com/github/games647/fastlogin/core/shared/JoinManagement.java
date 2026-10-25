@@ -54,6 +54,10 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             if (profile == null) {
                 return null;
             }
+            if (profile.isUuidRepairRequired()) {
+                source.kick("FastLoginPlus: invalid premium UUID; contact the server administrator");
+                return null;
+            }
 
             if (profile.isFloodgateMigrated()) {
                 if (profile.getFloodgate() == FloodgateState.TRUE) {
