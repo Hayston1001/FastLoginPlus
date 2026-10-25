@@ -71,6 +71,7 @@ account-state-checking: '&6Confirming your account state, please wait. If a pass
 # Error messages
 error-kick: '&4Error occurred'
 ownership-conflict: '&4Account ownership does not match this connection. Login refused. Please contact an admin.'
+corrupt-premium-uuid: '&4This account has a corrupt premium UUID and cannot be logged in. Please contact an administrator.'
 account-state-unavailable: '&6Your account state could not be confirmed, so the automatic premium login was skipped. Use your password to log in.'
 premium-password-login: '&eYour premium identity was verified. This account already has a password, so passwordless login is skipped for this session. After logging in you may run &b/flp premium&e to enable passwordless login.'
 premium-policy-disabled: '&eThe server has disabled automatic premium login. This premium-owned account has no usable password. Contact an administrator or reset the password according to the server policy.'

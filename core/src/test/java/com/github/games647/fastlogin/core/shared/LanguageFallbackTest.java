@@ -48,6 +48,7 @@ class LanguageFallbackTest {
 
         assertNotNull(core.getMessage("ownership-conflict"));
         assertTrue(core.getMessage("ownership-conflict").contains("此连接不符合"));
+        assertTrue(core.getMessage("corrupt-premium-uuid").contains("正版 UUID"));
         assertArrayEquals(invalid, Files.readAllBytes(file));
         verify(log).error(contains("Invalid language file"), eq(file), any(Throwable.class));
         verify(log).warn("Loaded bundled language fallback for {}", file);
@@ -63,6 +64,7 @@ class LanguageFallbackTest {
         assertDoesNotThrow(() -> core.loadLanguageMessages("messages_unknown.yml", "messages_en.yml"));
 
         assertTrue(core.getMessage("ownership-conflict").contains("Account ownership does not match"));
+        assertTrue(core.getMessage("corrupt-premium-uuid").contains("corrupt premium UUID"));
         assertArrayEquals(invalid, Files.readAllBytes(file));
     }
 

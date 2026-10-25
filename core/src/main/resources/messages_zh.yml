@@ -71,6 +71,7 @@ account-state-checking: '&6正在确认账号状态, 请稍候. 若随后出现�
 # 错误消息
 error-kick: '&4发生错误'
 ownership-conflict: '&4此连接不符合该账号的归属要求, 已拒绝登录. 请联系管理员.'
+corrupt-premium-uuid: '&4该账号的正版 UUID 数据已损坏, 无法登录, 请联系管理员修复.'
 account-state-unavailable: '&6暂时无法确认你的账号状态，已跳过正版自动登录，请使用密码登录。'
 premium-password-login: '&e正版身份已验证. 该账号已存在密码, 本次不进行免密登录. 可选择登录后执行 &b/flp premium&e 以启用免密登录'
 premium-policy-disabled: '&e服务器已关闭正版自动登录. 此已转正账号没有可用密码, 请联系管理员或按服务器策略重新设置密码.'

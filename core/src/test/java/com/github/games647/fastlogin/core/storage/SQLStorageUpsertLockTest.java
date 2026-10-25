@@ -151,6 +151,7 @@ class SQLStorageUpsertLockTest {
         List<Object> other = row("Other");
         FastLoginCore<Object, Object, PlatformPlugin<Object>> core = mock(FastLoginCore.class);
         when(core.getStorage()).thenReturn(storage);
+        when(core.getMessage("corrupt-premium-uuid")).thenReturn("corrupt-premium-uuid");
         LoginSource source = mock(LoginSource.class);
         when(source.getAddress()).thenReturn(new InetSocketAddress("127.0.0.1", 12345));
         AtomicBoolean passwordLogin = new AtomicBoolean();
@@ -181,7 +182,7 @@ class SQLStorageUpsertLockTest {
                         : "raw UUID preserved on password-login saves");
         assertEquals(!premium, passwordLogin.get());
         if (premium) {
-            verify(source).kick("FastLoginPlus: invalid premium UUID; contact the server administrator");
+            verify(source).kick("corrupt-premium-uuid");
             StoredProfile loaded = storage.loadProfile("Steve");
             // Even a later callback assigning a verified UUID or clearing consent cannot repair this row.
             loaded.setId(UUID.randomUUID());

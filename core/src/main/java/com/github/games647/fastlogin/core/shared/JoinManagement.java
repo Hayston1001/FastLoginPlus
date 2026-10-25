@@ -55,7 +55,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                 return null;
             }
             if (profile.isUuidRepairRequired()) {
-                source.kick("FastLoginPlus: invalid premium UUID; contact the server administrator");
+                source.kick(core.getMessage("corrupt-premium-uuid"));
                 return null;
             }
 
