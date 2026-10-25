@@ -183,6 +183,9 @@ public class PluginMessageListener implements Listener {
             carrier.sendMessage(TextComponent.fromLegacyText(message));
         } else {
             ProxyServer.getInstance().getConsole().sendMessage(TextComponent.fromLegacyText(message));
+            // For an in-game admin command the carrier is the admin, so show
+            // the final proxy result there as well as on the proxy console.
+            carrier.sendMessage(TextComponent.fromLegacyText(message));
             // mirror the delete result to the backend console that issued the
             // relayed command (over the carrier player's server connection)
             Server server = carrier.getServer();

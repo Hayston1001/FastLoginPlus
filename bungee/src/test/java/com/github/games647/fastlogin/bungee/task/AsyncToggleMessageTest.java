@@ -10,10 +10,13 @@ import com.github.games647.fastlogin.bungee.FastLoginBungee;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import net.md_5.bungee.api.CommandSender;
+import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.chat.BaseComponent;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.MockedStatic;
 
 import java.util.Optional;
 
@@ -22,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -97,5 +101,43 @@ class AsyncToggleMessageTest {
         verify(core, never()).getMessage("remove-premium");
         verify(core, never()).getConfig();
         verifyNoInteractions(plugin);
+    }
+
+    @Test
+    void adminOtherResultIsAlsoSentToTheCarrier() {
+        FastLoginCore core = mock(FastLoginCore.class);
+        FastLoginBungee plugin = mock(FastLoginBungee.class);
+        SQLStorage storage = mock(SQLStorage.class);
+        ProxiedPlayer carrier = mock(ProxiedPlayer.class);
+        StoredProfile profile = mock(StoredProfile.class);
+        CommandSender console = mock(CommandSender.class);
+        ProxyServer proxy = mock(ProxyServer.class);
+
+        when(core.getStorage()).thenReturn(storage);
+        when(core.getPlugin()).thenReturn(plugin);
+        when(core.isDebug()).thenReturn(false);
+        when(core.getMessage("already-exists-other")).thenReturn("already premium");
+        when(carrier.getName()).thenReturn("Admin");
+        when(storage.loadProfile("Target")).thenReturn(profile);
+        when(profile.isOnlinemodePreferred()).thenReturn(true);
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(1)).run();
+            return null;
+        }).when(storage).withNameLock(eq("Target"), any(Runnable.class));
+
+        try (MockedStatic<ProxyServer> globals = mockStatic(ProxyServer.class)) {
+            globals.when(ProxyServer::getInstance).thenReturn(proxy);
+            when(proxy.getConsole()).thenReturn(console);
+
+            new AsyncToggleMessage(core, carrier, "Target", true, false).run();
+
+            ArgumentCaptor<BaseComponent[]> consoleMessage = ArgumentCaptor.forClass(BaseComponent[].class);
+            verify(console).sendMessage(consoleMessage.capture());
+            assertEquals("already premium", BaseComponent.toPlainText(consoleMessage.getValue()));
+
+            ArgumentCaptor<BaseComponent[]> carrierMessage = ArgumentCaptor.forClass(BaseComponent[].class);
+            verify(carrier).sendMessage(carrierMessage.capture());
+            assertEquals("already premium", BaseComponent.toPlainText(carrierMessage.getValue()));
+        }
     }
 }

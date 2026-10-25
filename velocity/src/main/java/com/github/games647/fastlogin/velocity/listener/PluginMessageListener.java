@@ -183,6 +183,9 @@ public class PluginMessageListener {
         } else {
             core.getPlugin().getProxy().getConsoleCommandSource()
                 .sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+            // For an in-game admin command the carrier is the admin, so show
+            // the final proxy result there as well as on the proxy console.
+            carrier.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
             // mirror the delete result to the backend console that issued the
             // relayed command (over the carrier player's server connection)
             Optional<ServerConnection> server = carrier.getCurrentServer();

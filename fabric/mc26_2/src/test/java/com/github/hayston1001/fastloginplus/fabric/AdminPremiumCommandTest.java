@@ -71,7 +71,7 @@ class AdminPremiumCommandTest {
     void lowPermissionCannotSelectCarrierOrCallBridge(int level) throws Exception {
         when(source.permissions()).thenReturn(LevelBasedPermissionSet.forLevel(PermissionLevel.byId(level)));
         assertEquals(0, dispatcher.execute("flp premium OtherUser", source));
-        assertEquals(List.of(FabricMessages.text("admin-premium-permission").getString()), feedback);
+        assertEquals(List.of(FabricMessages.text("admin-command-permission").getString()), feedback);
         verifyNoInteractions(bridge, server);
     }
 
@@ -110,7 +110,7 @@ class AdminPremiumCommandTest {
         when(server.getPlayerList()).thenReturn(players);
         when(players.getPlayers()).thenReturn(List.of());
         assertEquals(0, dispatcher.execute("flp premium OtherUser", source));
-        assertEquals(List.of(FabricMessages.text("admin-premium-no-carrier").getString()), feedback);
+        assertEquals(List.of(FabricMessages.text("admin-command-no-carrier").getString()), feedback);
         verifyNoInteractions(bridge);
     }
 

@@ -203,6 +203,10 @@ public class AsyncToggleMessage implements Runnable {
         } else {
             ConsoleCommandSource console = core.getPlugin().getProxy().getConsoleCommandSource();
             console.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+            // The carrier is the admin's connection for an in-game
+            // /flp ... <target> command, so mirror the proxy's final result
+            // there instead of leaving it in the proxy log only.
+            sender.sendMessage(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
             // route the result back to the backend console that issued the
             // relayed command (over the carrier player's server connection)
             sendFeedbackToBackend(localeId);

@@ -10,7 +10,9 @@ import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
+import com.velocitypowered.api.proxy.ConsoleCommandSource;
 import com.velocitypowered.api.proxy.Player;
+import com.velocitypowered.api.proxy.ProxyServer;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 import org.junit.jupiter.api.Test;
 
@@ -94,5 +96,38 @@ class AsyncToggleMessageTest {
         verify(core, never()).getMessage("remove-premium");
         verify(core, never()).getConfig();
         verifyNoInteractions(plugin);
+    }
+
+    @Test
+    void adminOtherResultIsAlsoSentToTheCarrier() {
+        FastLoginCore core = mock(FastLoginCore.class);
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        ProxyServer proxy = mock(ProxyServer.class);
+        ConsoleCommandSource console = mock(ConsoleCommandSource.class);
+        SQLStorage storage = mock(SQLStorage.class);
+        Player carrier = mock(Player.class);
+        StoredProfile profile = mock(StoredProfile.class);
+
+        when(core.getStorage()).thenReturn(storage);
+        when(core.getPlugin()).thenReturn(plugin);
+        when(plugin.getProxy()).thenReturn(proxy);
+        when(proxy.getConsoleCommandSource()).thenReturn(console);
+        when(core.isDebug()).thenReturn(false);
+        when(core.getMessage("already-exists-other")).thenReturn("already premium");
+        when(carrier.getUsername()).thenReturn("Admin");
+        when(carrier.getCurrentServer()).thenReturn(Optional.empty());
+        when(storage.loadProfile("Target")).thenReturn(profile);
+        when(profile.isOnlinemodePreferred()).thenReturn(true);
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(1)).run();
+            return null;
+        }).when(storage).withNameLock(eq("Target"), any(Runnable.class));
+
+        new AsyncToggleMessage(core, carrier, "Target", true, false).run();
+
+        verify(console).sendMessage(argThat(component -> "already premium".equals(
+                LegacyComponentSerializer.legacyAmpersand().serialize(component))));
+        verify(carrier).sendMessage(argThat(component -> "already premium".equals(
+                LegacyComponentSerializer.legacyAmpersand().serialize(component))));
     }
 }

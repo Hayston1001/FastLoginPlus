@@ -712,7 +712,9 @@ final class EasyAuth344Bridge {
                 feedback.accept(FabricMessages.text("delete-premium-denied", "{player}", targetName));
                 return;
             }
-            // Always relayed: the final result belongs to the proxy console, not the carrier.
+            // Always relayed: the proxy reports the final result to the
+            // relaying carrier and its console; the backend feedback above is
+            // only the request hand-off.
             DeleteConsentWriter.send(carrier, targetName, false, commandProxyIds(carrier));
             sent = true;
             feedback.accept(FabricMessages.text("delete-requested", "{player}", targetName));

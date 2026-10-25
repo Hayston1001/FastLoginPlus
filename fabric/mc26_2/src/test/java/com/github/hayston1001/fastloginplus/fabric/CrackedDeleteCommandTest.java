@@ -99,7 +99,7 @@ class CrackedDeleteCommandTest {
         when(server.getPlayerList()).thenReturn(list);
         when(list.getPlayers()).thenReturn(List.of());
         assertEquals(0, dispatcher.execute("flp " + command + " TargetUser", source));
-        assertEquals(List.of(FabricMessages.text("admin-premium-no-carrier").getString()), feedback);
+        assertEquals(List.of(FabricMessages.text("admin-command-no-carrier").getString()), feedback);
         verifyNoInteractions(bridge);
     }
 

@@ -139,7 +139,7 @@ public final class FastLoginFabric implements ModInitializer {
         if (carrier == null) {
             var players = source.getServer().getPlayerList().getPlayers();
             if (players.isEmpty()) {
-                source.sendSuccess(() -> FabricMessages.text("admin-premium-no-carrier"), false);
+                source.sendSuccess(() -> FabricMessages.text("admin-command-no-carrier"), false);
                 return 0;
             }
             carrier = players.getFirst();
@@ -156,14 +156,14 @@ public final class FastLoginFabric implements ModInitializer {
 
     private static int adminPremium(CommandSourceStack source, String targetName, EasyAuth344Bridge bridge) {
         if (!source.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER)) {
-            source.sendSuccess(() -> FabricMessages.text("admin-premium-permission"), false);
+            source.sendSuccess(() -> FabricMessages.text("admin-command-permission"), false);
             return 0;
         }
         var carrier = source.getPlayer();
         if (carrier == null) {
             var players = source.getServer().getPlayerList().getPlayers();
             if (players.isEmpty()) {
-                source.sendSuccess(() -> FabricMessages.text("admin-premium-no-carrier"), false);
+                source.sendSuccess(() -> FabricMessages.text("admin-command-no-carrier"), false);
                 return 0;
             }
             carrier = players.getFirst();

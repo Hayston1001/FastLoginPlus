@@ -125,21 +125,29 @@ class FabricMessagesTest {
     void adminMessagesExplainTheRequestAndRemainReadableInBothLanguages() throws Exception {
         for (String language : new String[]{"en", "zh"}) {
             Map<String, String> messages = bundled(language);
-            for (String suffix : new String[]{"permission", "no-carrier", "already", "open", "requested"}) {
+            for (String suffix : new String[]{"already", "open", "requested"}) {
                 String key = "admin-premium-" + suffix;
                 String value = messages.get(key);
                 assertTrue(value != null && !value.isBlank(), key);
                 assertFalse(value.contains("\n") || value.contains("\r"), key);
                 assertFalse(value.matches(".*[\\uFF0C\\u3002\\uFF1B\\uFF1A\\uFF01\\uFF1F\\uFF08\\uFF09].*"), key);
                 assertEquals(value, FabricMessages.load(language, directory).get(key));
-                assertEquals(!java.util.Set.of("permission", "no-carrier").contains(suffix),
-                        value.contains("{player}"), key);
+                assertTrue(value.contains("{player}"), key);
                 assertFalse(value.contains("{uuid}"), key);
+            }
+            for (String key : new String[]{"admin-command-permission", "admin-command-no-carrier"}) {
+                String value = messages.get(key);
+                assertTrue(value != null && !value.isBlank(), key);
+                assertFalse(value.contains("{player}"), key);
+                assertFalse(value.contains("{uuid}"), key);
+                assertEquals(value, FabricMessages.load(language, directory).get(key));
             }
             String requested = messages.get("admin-premium-requested");
             assertTrue(requested.contains("reconnect manually") || requested.contains("手动重连"));
             assertTrue(requested.contains("password is retained but not used")
                     || requested.contains("密码保留, 但 premium 期间不使用"));
+            assertTrue(requested.contains("this is not the final result")
+                    || requested.contains("此提示不代表最终结果"));
             assertFalse(requested.contains("ten minutes") || requested.contains("十分钟"));
         }
     }
@@ -151,7 +159,7 @@ class FabricMessagesTest {
             for (String key : new String[]{"cracked-requested", "admin-cracked-requested", "cracked-release-confirm",
                     "cracked-release-requested", "admin-cracked-release-requested", "cracked-release-failed",
                     "delete-requested", "delete-premium-denied", "admin-command-permission",
-                    "cracked-login-required", "cracked-save-failed"}) {
+                    "admin-command-no-carrier", "cracked-login-required", "cracked-save-failed"}) {
                 String value = messages.get(key);
                 assertTrue(value != null && !value.isBlank(), key);
                 assertFalse(value.matches(".*[\uFF0C\u3002\uFF1B\uFF1A\uFF01\uFF1F\uFF08\uFF09].*"), key);
