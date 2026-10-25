@@ -144,20 +144,17 @@ public class AuthMeHook implements AuthPlugin<Player>, PreLoginAuthPlugin, Liste
     }
 
     @Override
-    public boolean unregisterPlayer(String playerName) {
-        if (authmeAPI == null) {
-            return false;
-        }
-        try {
-            // Use AuthMe's public API, not its database or private login state.
-            authmeAPI.getClass().getMethod("forceUnregister", String.class).invoke(authmeAPI, playerName);
-            return true;
-        } catch (ReflectiveOperationException | RuntimeException cleanupError) {
-            plugin.getLog().error(
-                    "AuthMe name-based cleanup unavailable or failed for {} (errorType={})",
-                    playerName, cleanupError.getClass().getSimpleName());
-            return false;
-        }
+    public Registration captureRegistration(String playerName) {
+        com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+                plugin.getAuthMePremiumIntegrator();
+        return integrator == null ? null : integrator.captureRegistration(playerName);
+    }
+
+    @Override
+    public boolean deleteRegistration(Registration registration) {
+        com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
+                plugin.getAuthMePremiumIntegrator();
+        return integrator != null && integrator.deleteRegistration(registration);
     }
 
     @Override

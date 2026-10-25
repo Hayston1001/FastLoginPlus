@@ -9,6 +9,7 @@ import com.github.games647.fastlogin.bukkit.BungeeManager;
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.bukkit.hook.AuthMeHook;
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
+import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin.Registration;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgatePreLoginAuth;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.message.LoginActionMessage;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InOrder;
 import org.slf4j.Logger;
 
@@ -43,6 +45,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
@@ -209,13 +212,24 @@ class FloodgatePreLoginTest {
         verify(floodgate, never()).rememberPreLoginRequest(any(), anyString());
     }
 
-    @Test
-    void failedNewLoginRequestsCleanupWithoutRememberingSuccess() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void failedNewLoginNeverRemembersSuccessEvenAfterVerifiedCleanup(boolean deleted) {
+        Registration registration = new Registration(NAME, "hash", null, uuid, 1234L, null, 0L);
+        when(hook.captureRegistration(NAME)).thenReturn(registration);
+        when(hook.deleteRegistration(registration)).thenReturn(deleted);
         when(hook.forceLoginFromProxy(NAME)).thenReturn(false);
-        when(hook.unregisterPlayer(NAME)).thenReturn(true);
         listener.onAsyncPlayerPreLogin(event);
+        verify(hook).isPreLoginForceLoginSupported();
+        verify(hook).isRegistered(NAME);
         verify(hook).registerPlayer(eq(NAME), anyString());
-        verify(hook).unregisterPlayer(NAME);
+        verify(hook).captureRegistration(NAME);
+        verify(hook).forceLoginFromProxy(NAME);
+        verify(hook).deleteRegistration(registration);
+        verifyNoMoreInteractions(hook);
+        if (!deleted) {
+            verify(plugin.getLog()).error(org.mockito.ArgumentMatchers.contains("Operator repair is required"), eq(NAME));
+        }
         verify(floodgate, never()).rememberPreLoginRequest(any(), anyString());
     }
 

@@ -8,9 +8,11 @@ package com.github.games647.fastlogin.core.hooks.bedrock;
 import com.github.games647.craftapi.model.Profile;
 import com.github.games647.craftapi.resolver.RateLimitException;
 import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin;
+import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin.Registration;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 
 import java.io.IOException;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,9 +46,9 @@ public class FloodgatePreLoginAuth {
         NO_AUTO_LOGIN,
         /** AuthMe did not create the account. */
         REGISTRATION_FAILED,
-        /** The account was created but AuthMe did not accept the force login. */
+        /** Login failed, but the captured new account was synchronously removed and read back as absent. */
         REGISTERED_LOGIN_FAILED,
-        /** Login and the cleanup request failed; the new account needs operator attention. */
+        /** Login failed and safe cleanup is unavailable; the account needs operator repair. */
         REGISTERED_LOGIN_CLEANUP_FAILED,
         /** The account exists but AuthMe did not accept the force login. */
         FORCE_LOGIN_FAILED,
@@ -165,6 +167,7 @@ public class FloodgatePreLoginAuth {
             return Outcome.REGISTRATION_FAILED;
         }
 
+        Registration registration = created ? captureRegistration(username, auth) : null;
         if (!created) {
             // registerPlayer also reports false in a race where the row appeared
             // between our check and the insert. Only a still-absent row is a
@@ -182,7 +185,7 @@ public class FloodgatePreLoginAuth {
                 // A false insert never establishes ownership of the record for cleanup.
                 return Outcome.FORCE_LOGIN_FAILED;
             }
-            return cleanupFailedRegistration(username, auth);
+            return cleanupFailedRegistration(username, registration, auth);
         }
 
         if (core.isDebug()) {
@@ -192,25 +195,39 @@ public class FloodgatePreLoginAuth {
         return created ? Outcome.REGISTERED_AND_LOGIN_REQUESTED : Outcome.LOGIN_REQUESTED;
     }
 
-    private Outcome cleanupFailedRegistration(String username, PreLoginAuthPlugin auth) {
-        boolean accepted = false;
+    private Registration captureRegistration(String username, PreLoginAuthPlugin auth) {
         try {
-            accepted = auth.unregisterPlayer(username);
+            Registration registration = auth.captureRegistration(username);
+            if (registration != null
+                    && username.toLowerCase(Locale.ROOT).equals(registration.getPlayerName())) {
+                return registration;
+            }
+        } catch (RuntimeException captureError) {
+            core.getPlugin().getLog().error(
+                    "Backend Floodgate registration snapshot failed for {} (errorType={})",
+                    username, captureError.getClass().getSimpleName());
+        }
+        return null;
+    }
+
+    private Outcome cleanupFailedRegistration(String username, Registration registration, PreLoginAuthPlugin auth) {
+        boolean deleted = false;
+        try {
+            deleted = registration != null && auth.deleteRegistration(registration);
         } catch (RuntimeException cleanupError) {
-            // External exception messages can contain credentials. Log only the type.
             core.getPlugin().getLog().error(
                     "Backend Floodgate account cleanup failed for {} (errorType={})",
                     username, cleanupError.getClass().getSimpleName());
         }
-        if (!accepted) {
+        if (!deleted) {
             core.getPlugin().getLog().error(
-                    "Backend Floodgate pre-join login failed for {}; cleanup of the newly created AuthMe "
-                            + "account was unavailable or failed. Operator repair is required", username);
+                    "Backend Floodgate pre-join login failed for {}; snapshot-checked AuthMe cleanup "
+                            + "was unavailable or could not be verified. Operator repair is required", username);
             return Outcome.REGISTERED_LOGIN_CLEANUP_FAILED;
         }
         core.getPlugin().getLog().warn(
-                "Backend Floodgate pre-join login failed for {}; requested cleanup of the newly created "
-                        + "AuthMe account. Deletion completion must be verified", username);
+                "Backend Floodgate pre-join login failed for {}; the captured AuthMe registration "
+                        + "was synchronously deleted and read back as absent", username);
         return Outcome.REGISTERED_LOGIN_FAILED;
     }
 

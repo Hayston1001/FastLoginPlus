@@ -7,6 +7,7 @@
 package com.github.games647.fastlogin.bukkit.compat;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
+import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin.Registration;
 import com.github.games647.fastlogin.core.shared.AuthMeProxyPin;
 import com.google.common.util.concurrent.Striped;
 
@@ -500,6 +501,57 @@ public final class AuthMePremiumIntegrator {
             return com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.PREMIUM_OWNED;
         }
         return com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.PASSWORD_ACCOUNT;
+    }
+
+    /**
+     * Captures immutable account fields immediately after a successful pre-login registration.
+     *
+     * @param playerName the name this attempt registered
+     * @return the row fingerprint, or null when unsupported, absent or unreadable
+     */
+    public Registration captureRegistration(String playerName) {
+        if (!versionDetector.isAuthMe6() || playerName == null) {
+            return null;
+        }
+        String name = playerName.toLowerCase(java.util.Locale.ROOT);
+        synchronized (placeholderLocks.get(name)) {
+            try {
+                Object ds = getDataSource();
+                return ds == null ? null : AuthMeRegistrationCleanup.capture(ds, name);
+            } catch (Exception | LinkageError error) {
+                plugin.getLog().error("AuthMe registration snapshot failed for {} (errorType={})",
+                        name, error.getClass().getSimpleName());
+                return null;
+            }
+        }
+    }
+
+    /**
+     * Deletes a still-matching registration on this thread and verifies removal and cache cleanup.
+     * The monitor does not turn independent cached/SQL writers into a database transaction.
+     *
+     * @param registration the fingerprint captured immediately after this attempt's successful insert
+     * @return true only after successful removal, cache cleanup and absent readback
+     */
+    public boolean deleteRegistration(Registration registration) {
+        if (!versionDetector.isAuthMe6() || registration == null) {
+            return false;
+        }
+        String name = registration.getPlayerName();
+        synchronized (placeholderLocks.get(name)) {
+            try {
+                Object ds = getDataSource();
+                Object players = getPlayerCache();
+                Object pending = getPendingPremiumCache();
+                Object verifier = getPremiumLoginVerifier();
+                return ds != null && players != null && pending != null && verifier != null
+                        && AuthMeRegistrationCleanup.delete(ds, registration, players, pending, verifier);
+            } catch (Exception | LinkageError error) {
+                plugin.getLog().error("AuthMe registration cleanup failed for {} (errorType={})",
+                        name, error.getClass().getSimpleName());
+                return false;
+            }
+        }
     }
 
     /**

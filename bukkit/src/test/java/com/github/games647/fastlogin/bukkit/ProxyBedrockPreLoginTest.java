@@ -11,6 +11,7 @@ import com.github.games647.fastlogin.bukkit.listener.ProxyBedrockPreLoginListene
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
 import com.github.games647.fastlogin.bukkit.listener.SpigotBedrockPreLoginListener;
 import com.github.games647.fastlogin.bukkit.task.ForceLoginTask;
+import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin.Registration;
 import com.github.games647.fastlogin.core.hooks.bedrock.FloodgatePreLoginAuth.Outcome;
 import com.github.games647.fastlogin.core.message.LoginActionMessage;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
@@ -30,6 +31,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 
 import java.lang.reflect.Field;
@@ -84,7 +86,6 @@ class ProxyBedrockPreLoginTest {
         when(auth.isPreLoginForceLoginSupported()).thenReturn(true);
         when(auth.registerPlayer(eq(NAME), anyString())).thenReturn(true);
         when(auth.forceLoginFromProxy(NAME)).thenReturn(true);
-        when(auth.unregisterPlayer(NAME)).thenReturn(true);
     }
 
     private void set(String name, Object value) throws Exception {
@@ -179,11 +180,27 @@ class ProxyBedrockPreLoginTest {
         verify(auth).forceLoginFromProxy(NAME);
     }
 
-    @Test
-    void failedNewLoginCleansOnlyTheNewAccount() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void failedNewLoginNeverRemembersAuthenticationEvenAfterVerifiedCleanup(boolean deleted) throws Exception {
+        Registration registration = new Registration(NAME, "hash", null, uuid, 1234L, null, 0L);
+        when(auth.captureRegistration(NAME)).thenReturn(registration);
+        when(auth.deleteRegistration(registration)).thenReturn(deleted);
         when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
         configure(profile("true", "true"));
-        verify(auth).unregisterPlayer(NAME);
+        Player player = paperPlayer();
+        assertEquals(deleted ? Outcome.REGISTERED_LOGIN_FAILED : Outcome.REGISTERED_LOGIN_CLEANUP_FAILED,
+                bridge.getOutcome(player));
+        assertTrue(bridge.isHandled(player));
+        assertFalse(bridge.isAuthenticationRequested(player));
+        verify(auth).isPreLoginForceLoginSupported();
+        verify(auth).isRegistered(NAME);
+        verify(auth).registerPlayer(eq(NAME), anyString());
+        verify(auth).captureRegistration(NAME);
+        verify(auth).forceLoginFromProxy(NAME);
+        verify(auth).deleteRegistration(registration);
+        verifyNoMoreInteractions(auth);
+        sendLateActions(player);
     }
 
     @Test
@@ -191,7 +208,11 @@ class ProxyBedrockPreLoginTest {
         when(auth.isRegistered(NAME)).thenReturn(true);
         when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
         configure(profile("true", "true"));
-        verify(auth, never()).unregisterPlayer(anyString());
+        verify(auth, never()).registerPlayer(anyString(), anyString());
+        verify(auth).isPreLoginForceLoginSupported();
+        verify(auth).isRegistered(NAME);
+        verify(auth).forceLoginFromProxy(NAME);
+        verifyNoMoreInteractions(auth);
     }
 
     @Test

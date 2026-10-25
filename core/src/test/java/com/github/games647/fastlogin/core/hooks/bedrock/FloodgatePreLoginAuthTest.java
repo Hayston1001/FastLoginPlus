@@ -8,6 +8,7 @@ package com.github.games647.fastlogin.core.hooks.bedrock;
 import com.github.games647.craftapi.model.Profile;
 import com.github.games647.craftapi.resolver.MojangResolver;
 import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin;
+import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin.Registration;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
 import net.md_5.bungee.config.Configuration;
@@ -25,12 +26,16 @@ import java.util.UUID;
 import static com.github.games647.fastlogin.core.hooks.bedrock.FloodgatePreLoginAuth.Outcome.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
@@ -43,6 +48,8 @@ class FloodgatePreLoginAuthTest {
     private final Configuration config = new Configuration();
     private final FloodgatePreLoginAuth handler = new FloodgatePreLoginAuth(core);
     private final Logger logger = mock(Logger.class);
+    private final Registration registration = new Registration(NAME, "private hash", "private salt",
+            UUID.randomUUID(), 1234L, null, 0L);
 
     @BeforeEach
     void setUp() throws Exception {
@@ -59,8 +66,9 @@ class FloodgatePreLoginAuthTest {
         when(player.getAllowConflict()).thenAnswer(call -> config.get("allowFloodgateNameConflict").toString());
         when(auth.isPreLoginForceLoginSupported()).thenReturn(true);
         when(auth.registerPlayer(eq(NAME), anyString())).thenReturn(true);
+        when(auth.captureRegistration(NAME)).thenReturn(registration);
+        when(auth.deleteRegistration(registration)).thenReturn(true);
         when(auth.forceLoginFromProxy(NAME)).thenReturn(true);
-        when(auth.unregisterPlayer(NAME)).thenReturn(true);
         when(resolver.findProfile(NAME)).thenReturn(Optional.empty());
     }
 
@@ -137,11 +145,18 @@ class FloodgatePreLoginAuthTest {
     }
 
     @Test
-    void failedLoginRequestsCleanupOfOnlyTheNewAccount() {
+    void failedNewLoginDeletesOnlyTheSnapshotCapturedBeforeForceLogin() throws Exception {
         when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
         assertEquals(REGISTERED_LOGIN_FAILED, handler.handle(NAME, player, auth));
-        verify(auth).unregisterPlayer(NAME);
-        verify(logger).warn(contains("Deletion completion must be verified"), eq(NAME));
+        org.mockito.InOrder order = inOrder(auth);
+        order.verify(auth).registerPlayer(eq(NAME), anyString());
+        order.verify(auth).captureRegistration(NAME);
+        order.verify(auth).forceLoginFromProxy(NAME);
+        order.verify(auth).deleteRegistration(registration);
+        verify(logger).warn(contains("synchronously deleted and read back as absent"), eq(NAME));
+        verify(auth).isPreLoginForceLoginSupported();
+        verify(auth).isRegistered(NAME);
+        verifyNoMoreInteractions(auth);
     }
 
     @ParameterizedTest
@@ -167,23 +182,60 @@ class FloodgatePreLoginAuthTest {
     }
 
     @Test
-    void unavailableCleanupIsReportedAsFailure() {
+    void failedDeletionRequiresOperatorRepair() {
+        when(auth.deleteRegistration(registration)).thenReturn(false);
         when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
-        when(auth.unregisterPlayer(NAME)).thenReturn(false);
         assertEquals(REGISTERED_LOGIN_CLEANUP_FAILED, handler.handle(NAME, player, auth));
-        verify(auth).unregisterPlayer(NAME);
+        verify(auth).deleteRegistration(registration);
         verify(logger).error(contains("Operator repair is required"), eq(NAME));
     }
 
     @Test
-    void cleanupExceptionDoesNotLeakItsMessage() {
+    void absentSnapshotNeverAuthorizesDeletion() {
+        when(auth.captureRegistration(NAME)).thenReturn(null);
         when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
-        when(auth.unregisterPlayer(NAME)).thenThrow(new IllegalStateException("private credential"));
         assertEquals(REGISTERED_LOGIN_CLEANUP_FAILED, handler.handle(NAME, player, auth));
-        verify(auth).unregisterPlayer(NAME);
+        verify(auth, never()).deleteRegistration(any());
+        verify(logger).error(contains("Operator repair is required"), eq(NAME));
+    }
+
+    @Test
+    void wrongNameSnapshotNeverAuthorizesDeletion() {
+        when(auth.captureRegistration(NAME)).thenReturn(new Registration("Another", "hash", null,
+                null, 1234L, null, 0L));
+        when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
+        assertEquals(REGISTERED_LOGIN_CLEANUP_FAILED, handler.handle(NAME, player, auth));
+        verify(auth, never()).deleteRegistration(any());
+    }
+
+    @Test
+    void captureExceptionKeepsTheRowAndReportsOnlyTheErrorType() {
+        when(auth.captureRegistration(NAME)).thenThrow(new IllegalStateException("private credential"));
+        when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
+        assertEquals(REGISTERED_LOGIN_CLEANUP_FAILED, handler.handle(NAME, player, auth));
+        verify(auth, never()).deleteRegistration(any());
+        verify(logger).error("Backend Floodgate registration snapshot failed for {} (errorType={})",
+                NAME, "IllegalStateException");
+    }
+
+    @Test
+    void deletionExceptionIsNotCleanupSuccessAndDoesNotLeakSecrets() {
+        when(auth.deleteRegistration(registration)).thenThrow(new IllegalStateException("private credential"));
+        when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
+        assertEquals(REGISTERED_LOGIN_CLEANUP_FAILED, handler.handle(NAME, player, auth));
         verify(logger).error("Backend Floodgate account cleanup failed for {} (errorType={})",
                 NAME, "IllegalStateException");
         verify(logger).error(contains("Operator repair is required"), eq(NAME));
+    }
+
+    @Test
+    void successfulLoginCapturesImmediatelyButNeverDeletes() {
+        assertEquals(REGISTERED_AND_LOGIN_REQUESTED, handler.handle(NAME, player, auth));
+        org.mockito.InOrder order = inOrder(auth);
+        order.verify(auth).registerPlayer(eq(NAME), anyString());
+        order.verify(auth).captureRegistration(NAME);
+        order.verify(auth).forceLoginFromProxy(NAME);
+        verify(auth, never()).deleteRegistration(any());
     }
 
     @Test
@@ -191,7 +243,13 @@ class FloodgatePreLoginAuthTest {
         when(auth.isRegistered(NAME)).thenReturn(true);
         when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
         assertEquals(FORCE_LOGIN_FAILED, handler.handle(NAME, player, auth));
-        verify(auth, never()).unregisterPlayer(anyString());
+        verify(auth, never()).registerPlayer(anyString(), anyString());
+        verify(auth, never()).captureRegistration(anyString());
+        verify(auth, never()).deleteRegistration(any());
+        verify(auth).isPreLoginForceLoginSupported();
+        verify(auth).isRegistered(NAME);
+        verify(auth).forceLoginFromProxy(NAME);
+        verifyNoMoreInteractions(auth);
     }
 
     @Test
@@ -200,6 +258,12 @@ class FloodgatePreLoginAuthTest {
         when(auth.registerPlayer(eq(NAME), anyString())).thenReturn(false);
         when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
         assertEquals(FORCE_LOGIN_FAILED, handler.handle(NAME, player, auth));
-        verify(auth, never()).unregisterPlayer(anyString());
+        verify(auth).isPreLoginForceLoginSupported();
+        verify(auth, times(2)).isRegistered(NAME);
+        verify(auth).registerPlayer(eq(NAME), anyString());
+        verify(auth).forceLoginFromProxy(NAME);
+        verify(auth, never()).captureRegistration(anyString());
+        verify(auth, never()).deleteRegistration(any());
+        verifyNoMoreInteractions(auth);
     }
 }

@@ -8,6 +8,8 @@ package com.github.games647.fastlogin.bukkit;
 import com.github.games647.fastlogin.bukkit.hook.AuthMeHook;
 import com.github.games647.fastlogin.bukkit.listener.BungeeListener;
 import com.github.games647.fastlogin.bukkit.listener.ProxyBedrockPreLoginListener;
+import com.github.games647.fastlogin.core.hooks.PreLoginAuthPlugin.Registration;
+import com.github.games647.fastlogin.core.hooks.bedrock.FloodgatePreLoginAuth.Outcome;
 import com.github.games647.fastlogin.core.message.LoginActionMessage;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.protocol.BedrockClaim;
@@ -19,6 +21,8 @@ import org.bukkit.entity.Player;
 import org.bukkit.plugin.PluginManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 
 import java.lang.reflect.Field;
@@ -169,6 +173,41 @@ class ProxyBedrockPreLoginTest {
         when(player.spigot()).thenReturn(spigot);
         when(spigot.getRawAddress()).thenReturn(raw);
         return player;
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void failedNewLoginNeverRemembersAuthenticationEvenAfterVerifiedCleanup(boolean deleted) throws Exception {
+        Registration registration = new Registration(NAME, "hash", null, uuid, 1234L, null, 0L);
+        when(auth.captureRegistration(NAME)).thenReturn(registration);
+        when(auth.deleteRegistration(registration)).thenReturn(deleted);
+        when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
+        configure(profile("true", "true"));
+        Player player = boundPlayer();
+        assertEquals(deleted ? Outcome.REGISTERED_LOGIN_FAILED : Outcome.REGISTERED_LOGIN_CLEANUP_FAILED,
+                bridge.getOutcome(player));
+        assertTrue(bridge.isHandled(player));
+        assertFalse(bridge.isAuthenticationRequested(player));
+        verify(auth).isPreLoginForceLoginSupported();
+        verify(auth).isRegistered(NAME);
+        verify(auth).registerPlayer(eq(NAME), anyString());
+        verify(auth).captureRegistration(NAME);
+        verify(auth).forceLoginFromProxy(NAME);
+        verify(auth).deleteRegistration(registration);
+        verifyNoMoreInteractions(auth);
+        rejectLateActions(player);
+    }
+
+    @Test
+    void failedExistingLoginNeverDeletesAccount() throws Exception {
+        when(auth.isRegistered(NAME)).thenReturn(true);
+        when(auth.forceLoginFromProxy(NAME)).thenReturn(false);
+        configure(profile("true", "true"));
+        verify(auth, never()).registerPlayer(anyString(), anyString());
+        verify(auth).isPreLoginForceLoginSupported();
+        verify(auth).isRegistered(NAME);
+        verify(auth).forceLoginFromProxy(NAME);
+        verifyNoMoreInteractions(auth);
     }
 
     @Test

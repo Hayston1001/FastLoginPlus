@@ -5,6 +5,10 @@
  */
 package com.github.games647.fastlogin.core.hooks;
 
+import java.util.Locale;
+import java.util.Objects;
+import java.util.UUID;
+
 /**
  * Name-based authentication operations that may run before the platform's
  * {@code Player} object exists.
@@ -15,6 +19,43 @@ package com.github.games647.fastlogin.core.hooks;
  * gaps instead of emulating login state through the database.
  */
 public interface PreLoginAuthPlugin {
+
+    /** Immutable row fingerprint. Deliberately retains Object.toString() to avoid exposing secrets. */
+    final class Registration {
+        private final String playerName;
+        private final String passwordHash;
+        private final String passwordSalt;
+        private final UUID uuid;
+        private final long registrationDate;
+        private final UUID premiumUuid;
+        private final Long lastLogin;
+
+        public Registration(String playerName, String passwordHash, String passwordSalt, UUID uuid,
+                            long registrationDate, UUID premiumUuid, Long lastLogin) {
+            this.playerName = Objects.requireNonNull(playerName).toLowerCase(Locale.ROOT);
+            this.passwordHash = Objects.requireNonNull(passwordHash);
+            this.passwordSalt = passwordSalt;
+            this.uuid = uuid;
+            this.registrationDate = registrationDate;
+            this.premiumUuid = premiumUuid;
+            this.lastLogin = lastLogin;
+            if (this.playerName.isEmpty() || passwordHash.isEmpty() || registrationDate <= 0) {
+                throw new IllegalArgumentException("Incomplete registration fingerprint");
+            }
+        }
+
+        public String getPlayerName() {
+            return playerName;
+        }
+
+        public boolean matches(Registration other) {
+            return other != null && playerName.equals(other.playerName)
+                    && passwordHash.equals(other.passwordHash)
+                    && Objects.equals(passwordSalt, other.passwordSalt)
+                    && Objects.equals(uuid, other.uuid) && registrationDate == other.registrationDate
+                    && Objects.equals(premiumUuid, other.premiumUuid) && Objects.equals(lastLogin, other.lastLogin);
+        }
+    }
 
     /**
      * Checks whether an account exists for this player name.
@@ -44,13 +85,20 @@ public interface PreLoginAuthPlugin {
     boolean registerPlayer(String playerName, String password);
 
     /**
-     * Requests name-based cleanup of an account created by this pre-login attempt.
-     * An accepted request does not prove an asynchronous deletion has completed.
+     * Captures the row immediately after this attempt's successful registration.
      *
-     * @param playerName the name this attempt just registered
-     * @return true if the cleanup request was accepted, false if unsupported or failed
+     * @param playerName the name this attempt registered
+     * @return an immutable fingerprint, or null when capture is unavailable or failed
      */
-    boolean unregisterPlayer(String playerName);
+    Registration captureRegistration(String playerName);
+
+    /**
+     * Synchronously deletes only a row matching the captured registration fingerprint.
+     *
+     * @param registration the snapshot from this attempt's successful registration
+     * @return true only after successful removal, cache cleanup and absent readback
+     */
+    boolean deleteRegistration(Registration registration);
 
     /**
      * Queues or approves a force login for a player who is not online yet.
