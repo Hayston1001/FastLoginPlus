@@ -181,7 +181,12 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     } else if (isOnlineMode() && !autoLogin
                             && account == LoginMethodDecider.AccountState.PREMIUM_OWNED) {
                         notifyPremiumPolicyDisabled();
-                    } else if (account == LoginMethodDecider.AccountState.PASSWORD_ACCOUNT) {
+                    } else if (isOnlineMode()
+                            && account == LoginMethodDecider.AccountState.PASSWORD_ACCOUNT) {
+                        // Only a connection that actually passed verification may be told
+                        // that its premium identity was verified. An unverified password
+                        // account keeps the auth plugin's own login/registration flow
+                        // without the premium notice.
                         notifyPasswordLogin();
                     }
                     return;

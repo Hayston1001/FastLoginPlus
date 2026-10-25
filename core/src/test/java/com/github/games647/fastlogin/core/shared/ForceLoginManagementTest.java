@@ -292,6 +292,27 @@ class ForceLoginManagementTest {
         assertPasswordFallback(IdentityClaim.Consent.UNKNOWN);
     }
 
+    @Test
+    void unverifiedPasswordAccountDoesNotGetThePremiumPasswordNotice() throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(authPlugin.inspectAccount("TestUser"))
+                .thenReturn(LoginMethodDecider.AccountState.PASSWORD_ACCOUNT);
+        StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
+        TestLoginSession session = new TestLoginSession("TestUser", true, profile);
+        session.setUuid(UUID.randomUUID()); // an injected UUID is not verification
+        session.setFacts(new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false));
+        TestForceLoginManagement mgmt = createManagement(session, false);
+        mgmt.run();
+        assertNull(mgmt.denied);
+        assertFalse(mgmt.premiumHandlingAllowed);
+        assertEquals(0, mgmt.ackCount);
+        verify(storage, never()).save(any());
+        verify(authPlugin, never()).forceLogin(any());
+        verify(authPlugin, never()).forceRegister(any(), anyString());
+        verify(core, never()).sendLocaleMessage(
+                org.mockito.ArgumentMatchers.eq("premium-password-login"), any());
+    }
+
     private void assertPasswordFallback(IdentityClaim.Consent consent) throws Exception {
         when(core.getAuthPluginHook()).thenReturn(authPlugin);
         when(authPlugin.inspectAccount("TestUser"))
