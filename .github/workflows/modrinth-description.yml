@@ -1,0 +1,88 @@
+name: Sync Modrinth description
+
+on:
+  push:
+    branches: [main]
+    paths: [README.md]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: modrinth-description
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'Hayston1001/FastLoginPlus' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Queued runs sync the latest main, not an outdated push snapshot.
+          ref: main
+
+      - name: Update Modrinth project body from README
+        env:
+          # Requires PROJECT_WRITE in addition to VERSION_CREATE for releases.
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import re
+          import sys
+          from urllib.error import HTTPError
+          from urllib.parse import quote, urljoin, urlsplit
+          from urllib.request import Request, urlopen
+
+          def modrinth_body(markdown, repository):
+              if not markdown.strip():
+                  raise ValueError("README.md is empty; refusing to clear the project description")
+              base = f"https://github.com/{repository}/blob/main/"
+              raw = f"https://raw.githubusercontent.com/{repository}/main/"
+
+              def absolute(target, image=False):
+                  if target.startswith(("#", "//")) or urlsplit(target).scheme:
+                      return target
+                  return urljoin(raw if image else base, target)
+
+              # Convert relative Markdown images first, then links (including badges).
+              markdown = re.sub(r"(!\[[^\]]*\]\()([^\s)]+)(\))",
+                                lambda m: m[1] + absolute(m[2], image=True) + m[3], markdown)
+              return re.sub(r"(\]\()([^\s)]+)(\))",
+                            lambda m: m[1] + absolute(m[2]) + m[3], markdown)
+
+          def main():
+              token = os.environ.get("MODRINTH_TOKEN", "").strip()
+              if not token:
+                  raise ValueError("Set MODRINTH_TOKEN with PROJECT_WRITE permission to sync the description")
+              config = json.loads(Path(".github/modrinth.json").read_text(encoding="utf-8"))
+              body = modrinth_body(Path("README.md").read_text(encoding="utf-8"), os.environ["GITHUB_REPOSITORY"])
+              request = Request(
+                  "https://api.modrinth.com/v2/project/" + quote(config["project_id"], safe=""),
+                  data=json.dumps({"body": body}, ensure_ascii=False).encode("utf-8"),
+                  method="PATCH",
+                  headers={
+                      "Authorization": token,
+                      "Content-Type": "application/json",
+                      "User-Agent": "Hayston1001/FastLoginPlus-readme-sync (https://github.com/Hayston1001/FastLoginPlus)",
+                  })
+              try:
+                  with urlopen(request, timeout=60) as response:
+                      if response.status != 204:
+                          raise RuntimeError(f"Unexpected Modrinth status: {response.status}")
+              except HTTPError as error:
+                  raise RuntimeError(
+                      f"Modrinth HTTP {error.code}: {error.reason}. Check PROJECT_WRITE and project edit permission.") from None
+              print("Modrinth project description synchronized from README.md")
+
+          if __name__ == "__main__":
+              try:
+                  main()
+              except (ValueError, RuntimeError, OSError) as error:
+                  sys.exit(str(error))
+          PY

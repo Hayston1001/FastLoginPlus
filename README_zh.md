@@ -1,6 +1,6 @@
 # FastLoginPlus
 
-[English](README.md) | 简体中文
+[English](https://github.com/Hayston1001/FastLoginPlus/blob/main/README.md) | 简体中文
 
 [![Modrinth downloads](https://img.shields.io/modrinth/dt/dmpkLjdL?style=flat-square&logo=modrinth&label=Modrinth&color=00AF5C)](https://modrinth.com/plugin/fastloginplus)
 [![Build](https://img.shields.io/github/actions/workflow/status/Hayston1001/FastLoginPlus/gradle.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=Build)](https://github.com/Hayston1001/FastLoginPlus/actions/workflows/gradle.yml)
