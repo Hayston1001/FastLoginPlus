@@ -67,5 +67,5 @@ desktop.ini
 
 # AI agent
 AGENTS.md
+.agents/skills/
 .hermes/
-.pi/
