@@ -219,7 +219,8 @@ Windows 下把 `./gradlew` 换成 `gradlew.bat`. 可安装的插件 JAR 位于�
 3. 用仓库提供的 [PR 模板](.github/pull_request_template.md) 向 `main` 开 PR: 清晰的改动摘要, 并引用相关 issue(`Fixes #123`).
 4. 如果工作还没做完, 直接开 **draft PR**, 不必等.
 5. CI 会对每个推送到 `main` 的提交/PR 做构建, 并对产物跑一次 CodeQL 安全扫描 —— 合并前 CI 必须是绿的.
-6. 面向用户的改动, 请在 [CHANGELOG.md](CHANGELOG.md) 的当前开发版本下补一条.
+6. 面向用户的改动, 请在 [CHANGELOG.md](CHANGELOG.md)(英文)和
+   [CHANGELOG_zh.md](CHANGELOG_zh.md)(简体中文)的当前开发版本下同步补充条目.
 7. 如果你的改动影响到 README 中描述的用户侧安装或行为, 请同时更新
    [README.md](README.md) 与 [README_zh.md](README_zh.md) —— 这两份是保持同步的.
 

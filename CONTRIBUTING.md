@@ -333,7 +333,8 @@ or areas (`storage`, `proxy-msg`, `config`, `changelog`).
 4. If the work is still in progress, open a **draft PR** rather than waiting.
 5. CI builds every push/PR to `main` and runs a CodeQL security scan on the
    result — green CI is required before merge.
-6. For user-visible changes, add an entry to [CHANGELOG.md](CHANGELOG.md)
+6. For user-visible changes, add matching entries to [CHANGELOG.md](CHANGELOG.md)
+   (English) and [CHANGELOG_zh.md](CHANGELOG_zh.md) (Simplified Chinese)
    under the current development version.
 7. If your change affects user-facing setup or behavior described in the
    README, update both [README.md](README.md) and

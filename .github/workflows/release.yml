@@ -6,14 +6,26 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v7
+
+      - name: Test release tooling
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
+
+      - name: Extract English changelog for this version
+        run: python3 .github/scripts/release_tools.py notes "$RUNNER_TEMP/release-notes.md"
 
       - name: Set up JDKs
         uses: actions/setup-java@v6
@@ -31,26 +43,36 @@ jobs:
           JAVA_HOME: ${{ env.JAVA_HOME_25_X64 }}
         run: bash ./gradlew release --parallel --no-daemon --console=plain
 
-      - name: Extract changelog for this version
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          # Extract the section between this version header and the next version header
-          echo "# ChangeLog" > /tmp/release-notes.md
-          echo "" >> /tmp/release-notes.md
-          sed -n "/^## ${TAG}/,/^## [v]/p" CHANGELOG.md | sed '$ d' >> /tmp/release-notes.md
-          # If extraction failed (empty), fallback to a simple message
-          if [ $(wc -l < /tmp/release-notes.md) -le 2 ]; then
-            echo "# ChangeLog" > /tmp/release-notes.md
-            echo "" >> /tmp/release-notes.md
-            echo "Release ${TAG}" >> /tmp/release-notes.md
-            echo "" >> /tmp/release-notes.md
-            echo "For detailed changes, see commits." >> /tmp/release-notes.md
-          fi
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          body_path: /tmp/release-notes.md
+          body_path: ${{ runner.temp }}/release-notes.md
+          prerelease: ${{ contains(github.ref_name, '-') }}
           fail_on_unmatched_files: true
           files: |
             build/release/*.jar
+
+  modrinth:
+    name: Modrinth (${{ matrix.platform }})
+    needs: release
+    if: github.repository == 'Hayston1001/FastLoginPlus' && vars.MODRINTH_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # Fabric remains available on GitHub only.
+        platform: [Bukkit, Folia, Bungee, Velocity]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the published GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern '*.jar' --dir build/release
+
+      - name: Publish platform to Modrinth
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          PLATFORM: ${{ matrix.platform }}
+        run: python3 .github/scripts/release_tools.py modrinth "$PLATFORM"
