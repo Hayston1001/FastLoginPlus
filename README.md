@@ -8,6 +8,7 @@ English | [简体中文](README_zh.md)
 [![MIT](https://img.shields.io/badge/License-MIT-2563EB?style=flat-square)](LICENSE)
 
 [![modrinth](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/modrinth_vector.svg)](https://modrinth.com/plugin/fastloginplus)
+[![documentation](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/documentation/gitbook_vector.svg)](https://hayston.gitbook.io/flp-wiki/zh/)
 
 **Connecting verified Minecraft identities with your server's authentication plugin.** An actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin).
 

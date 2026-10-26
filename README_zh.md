@@ -8,6 +8,7 @@
 [![MIT](https://img.shields.io/badge/License-MIT-2563EB?style=flat-square)](LICENSE)
 
 [![modrinth](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/modrinth_vector.svg)](https://modrinth.com/plugin/fastloginplus)
+[![documentation](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/documentation/gitbook_vector.svg)](https://hayston.gitbook.io/flp-wiki/zh/)
 
 **连接经过验证的 Minecraft 身份与服务器认证插件.** 基于 [FastLogin](https://github.com/TuxCoding/FastLogin) 的活跃维护分支.
 
