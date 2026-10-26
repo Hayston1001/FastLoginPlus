@@ -1,11 +1,12 @@
 # `craftapi/` — vendored CraftAPI (the Mojang API client)
 
-[中文→](../zh/CRAFTAPI-BASELINE.md)
+[Chinese reference](https://github.com/Hayston1001/FastLoginPlus/blob/main/docs/zh/CRAFTAPI-BASELINE.md)
 
-This module is **not FastLoginPlus code**. It is a vendored copy of the upstream
-[CraftAPI](https://github.com/games647/CraftAPI) library, which owns every HTTP interaction FLP has with
-Mojang: the name→UUID lookup, the session verification (`hasJoined`), the offline-UUID algorithm and the
-UUID storage format. FLP itself implements no Mojang request.
+This module is a maintained vendored copy of the upstream
+[CraftAPI](https://github.com/games647/CraftAPI) library. It provides the Mojang name-to-UUID lookup,
+standalone session verification (`hasJoined`), offline-UUID algorithm and UUID storage format.
+FLP owns routing, retry policy and account decisions; proxy-native session verification and
+FLP's reachability diagnostics are separate from this client's identity operations.
 
 The Gradle module is `:craftapi`; it is consumed through a project dependency and is not published separately.
 The Java **package names are unchanged** (`com.github.games647.craftapi`), so `core`, `bukkit`, `folia`,
@@ -38,7 +39,7 @@ unaffected: only `craftapi/src/main/resources` is packaged, so this file never r
 | Commit | `6f0ded9f` (2024-05-05) — the tree the shipped `craftapi-0.8.1.jar` was built from |
 | Java | `release 8`, bytecode `v52` (asserted by Gradle's `checkRuntimeBytecode`) |
 | Sources | 28 main files, 10 test files, one binary test resource (`yggdrasil_session_pubkey.der`) |
-| Licenses | [Unlicense](../../craftapi/src/main/resources/META-INF/LICENSE-CraftAPI-Unlicense.txt) (library, public domain) and [MIT](../../craftapi/src/main/resources/META-INF/LICENSE-FastUUID-MIT.txt) (FastUUID, © 2018 Jon Chambers). Both are packaged into every platform jar. |
+| Licenses | [Unlicense](https://github.com/Hayston1001/FastLoginPlus/blob/main/craftapi/src/main/resources/META-INF/LICENSE-CraftAPI-Unlicense.txt) (library, public domain) and [MIT](https://github.com/Hayston1001/FastLoginPlus/blob/main/craftapi/src/main/resources/META-INF/LICENSE-FastUUID-MIT.txt) (FastUUID, copyright 2018 Jon Chambers). Both are packaged into the four classic platform jars. |
 
 ## Local modifications
 
@@ -115,9 +116,13 @@ line. Before importing anything from upstream: re-check the channel/tag drift, t
 
 ## Verification
 
-- `./gradlew :craftapi:test` — 78 tests, no network access (upstream suite plus the offline `HttpServer` / raw-socket
-  suites and the golden vectors).
+- `./gradlew :craftapi:test` runs the upstream-derived suite, local `HttpServer` / raw-socket
+  suites and golden vectors without live Mojang calls. Run it again for each change; a historical test
+  count is not evidence that the current checkout passed.
 - Class parity with the shipped `craftapi-0.8.1.jar`: the same 32 class names; the only signature changes are
   the intentional ones above plus compiler-generated enum/lambda naming.
 - Every platform jar contains exactly one copy of the 32 classes, all `v52`, plus the two license files.
 - `./gradlew :core:dependencies --configuration compileClasspath` shows the local `:craftapi` project dependency.
+
+The vendored baseline/parity numbers above describe the recorded import, not a fresh artifact verification.
+Fabric does not embed this client; it consumes identities verified by Velocity. See [module boundaries](development/architecture.md).

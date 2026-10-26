@@ -1,0 +1,59 @@
+# Summary
+
+* [Welcome](README.md)
+
+## Understand FLP
+
+* [Features and boundaries](overview/introduction.md)
+* [Requirements and deployment choices](overview/requirements.md)
+
+## Install and deploy
+
+* [Standalone Spigot/Paper](installation/standalone.md)
+* [Standalone Folia](installation/folia.md)
+* [Velocity and classic backends](installation/velocity.md)
+* [BungeeCord and classic backends](installation/bungeecord.md)
+* [Velocity and Fabric/EasyAuth](installation/fabric.md)
+* [Verify and secure the installation](installation/verification.md)
+
+## Login and account management
+
+* [Login methods](accounts/login.md)
+* [Premium/cracked lists and admission](accounts/lists.md)
+* [Binding and switching](accounts/binding.md)
+* [UUIDs, name changes and player data](accounts/uuid.md)
+* [Commands and permissions](accounts/commands.md)
+
+## Configuration reference
+
+* [Files, defaults and scope](configuration/README.md)
+* [Java verification and login policies](configuration/java.md)
+* [Bedrock policies](configuration/bedrock.md)
+* [Anti-bot and Mojang networking](configuration/network.md)
+* [Database configuration](configuration/database.md)
+
+## Compatibility and integrations
+
+* [AuthMeReloaded](integrations/authme.md)
+* [EasyAuth](integrations/easyauth.md)
+* [Other authentication plugins](integrations/auth-plugins.md)
+* [Geyser and Floodgate](integrations/bedrock.md)
+* [Skins and SkinsRestorer](integrations/skins.md)
+* [PlaceholderAPI](integrations/placeholderapi.md)
+
+## Operations and troubleshooting
+
+* [Backup, upgrade and rollback](operations/upgrading.md)
+* [Languages, logs and update checks](operations/languages.md)
+* [Troubleshooting and FAQ](operations/troubleshooting.md)
+* [Report a problem](operations/reporting.md)
+
+## Developer documentation
+
+* [Build, test and contribute](development/build.md)
+* [Architecture and module boundaries](development/architecture.md)
+* [Login flow and identity trust](LOGIN-FLOW.md)
+* [Events and extension boundaries](development/extensions.md)
+* [ProtocolLib async design](PROTOCOLLIB-ASYNC-DESIGN.md)
+* [CraftAPI baseline](CRAFTAPI-BASELINE.md)
+* [Maintain and publish the Wiki](development/gitbook.md)

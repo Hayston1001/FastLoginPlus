@@ -1,53 +1,22 @@
-# Integration tests for authentication
+# Authentication integration testing
 
-## Description
+This directory currently contains documentation only, not an executable server/client integration suite. A successful Gradle test run must not be described as a real Minecraft login acceptance test on that basis.
 
-Projects require integration tests in order to check against errors that could only occur if connected to other
-components. However, they are heavier in terms of performance and require a more complex setup. Unit tests often make
-use of fake, mock, stubs, etc. implementations to test the unit in isolation and thus could hide issues across
-boundaries of a unit. Nevertheless, both are not replacement for each other.
+## What automated tests cover
 
-## Usage in this project
+Current module tests exercise account decisions, packet helpers, persistence and simulated platform interactions under their own test packages. Run the affected module tasks and inspect their reports. They do not automatically launch a public server, authenticate a paid account or validate every external plugin version.
 
-The authentication system is a core component, so it requires some kind of testing. Here we are going to
-spin up a Spigot server and test with the supported authentication schemes against the implementation of MCProtocolLib.
+## Real integration evidence
 
-### Goals
+Use the [installation verification checklist](https://github.com/Hayston1001/FastLoginPlus/blob/main/docs/en/installation/verification.md) for a staging server. Record:
 
-* OS platform independent
-* Reproducible, but not fixed to a specific image hash
-    * This is a dev container, so fixing it to feature/major version is enough instead of a version fixed by hash
-* Improve container spin up
-    * E.g. Remove/Reduce world generation
+- Exact FLP commit, server/proxy, auth plugin, packet library and Java versions.
+- Deployment, forwarding/trust setup, configuration and account preconditions.
+- Fresh/returning/password/bound identities and negative ownership cases.
+- Reconnect, disconnect during callbacks, duplicate requests and changed policy.
+- Failed account/FLP reads and writes, Mojang outages, restart and recovery.
+- Persistent account/list state as well as player-visible outcomes.
 
-### Note on automation
+Test credentials, forwarding secrets, proxy IDs, private keys, server data and personal information must not be committed. Use disposable accounts and consistent backups. Distinguish mocked tests, compilation, startup, actual client login and fault injection in reports.
 
-The simplest solution it to use the official Mojang session and authentication servers. However, this would require
-a spare Minecraft account. Mocking the auth servers would be a solution to avoid this.
-
-## Related
-
-Interest blog article about integration tests and why they are necessary.
-https://software.rajivprab.com/2019/04/28/rethinking-software-testing-perspectives-from-the-world-of-hardware/
-
-## Issues
-
-### Slow startup
-
-Tried a lot of optimizations like only loading a single world without the nether or the end. However, there the startup
-is still slow. If you have any ideas on how to tune the startup parameters of the Minecraft server or the JVM
-itself to reduce the startup time, please suggest it.
-
-### Checkpoint
-
-An idea to optimize the time is to use CRIU (checkpoint and restore). So to save the process at a certain stage and
-restore all data multiple times. This could cause a lot of issues like open files have to be present. However, the
-impact is significant and since it runs inside the container all files, pids (pid=1) should be matching. Potential
-checkpoint locations are:
-
-* Direct before loading the plugins
-  * Likely before binding the port to prevent issues
-* After loading the libraries
-
-Nevertheless, the current state requires to run it with root and the Java support is currently still in progress.
-
+If an automated container/client suite is introduced later, document its prerequisites, invoked task, external access, secrets and reproducible isolation here. Historical ideas about Spigot containers, MCProtocolLib or CRIU are not an existing supported test runner.

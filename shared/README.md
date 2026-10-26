@@ -14,4 +14,8 @@ Java 8 release compilation rejects newer JDK APIs; Fabric separately compiles re
 
 Configuration loaders are caller-supplied parser adapters, not authentication or platform models.
 The classic adapter continues to use the same Bungee Configuration provider and its default-value semantics.
-Language rendering keeps color translation, empty-message suppression and `/newline` conversion unchanged.
+Classic callers retain their color translation, empty-message suppression and `/newline` conversion conventions.
+Fabric's message parser/component behavior remains a caller concern, not a promise of identical rendering.
+
+See the [module architecture](https://github.com/Hayston1001/FastLoginPlus/blob/main/docs/en/development/architecture.md)
+and [language behavior](https://github.com/Hayston1001/FastLoginPlus/blob/main/docs/en/operations/languages.md).

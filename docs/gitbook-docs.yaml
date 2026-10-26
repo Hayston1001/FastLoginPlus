@@ -1,0 +1,19 @@
+$schema: https://api.gitbook.com/gitbook-docs.yaml
+site:
+  title: FastLoginPlus Wiki
+  structure:
+    - type: space
+      key: flp-en
+      title: English
+      path: en
+      default: true
+      content:
+        directory: ./en
+        language: en
+    - type: space
+      key: flp-zh
+      title: 简体中文
+      path: zh
+      content:
+        directory: ./zh
+        language: zh

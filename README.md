@@ -1,151 +1,56 @@
 # FastLoginPlus
 
-[中文→](README_zh.md)
+English | [简体中文](README_zh.md)
 
-> **Auto-detect and login premium Minecraft players on offline-mode servers** — no password needed, no client mods required. Actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin).
+[![Modrinth downloads](https://img.shields.io/modrinth/dt/dmpkLjdL?style=flat-square&logo=modrinth&label=Modrinth&color=00AF5C)](https://modrinth.com/plugin/fastloginplus)
+[![Build](https://img.shields.io/github/actions/workflow/status/Hayston1001/FastLoginPlus/gradle.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=Build)](https://github.com/Hayston1001/FastLoginPlus/actions/workflows/gradle.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/Hayston1001/FastLoginPlus/release.yml?style=flat-square&logo=githubactions&logoColor=white&label=Release)](https://github.com/Hayston1001/FastLoginPlus/actions/workflows/release.yml)
+[![MIT](https://img.shields.io/badge/License-MIT-2563EB?style=flat-square)](LICENSE)
 
-Many Minecraft servers run in "offline mode" (no Mojang authentication) to allow cracked clients, but this forces all players — including those with paid accounts — to type a password every time they join. FastLoginPlus checks each player against Mojang's API on login: if they own the game, they skip the auth plugin entirely and get their real UUID and skin automatically.
+[![modrinth](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/modrinth_vector.svg)](https://modrinth.com/plugin/fastloginplus)
 
-> Works with [ProtocolLib](https://github.com/dmulloy2/ProtocolLib). [ForDetails→](docs/en/PROTOCOLLIB-ASYNC-DESIGN.md)
+**Connecting verified Minecraft identities with your server's authentication plugin.** An actively maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin).
+
+FastLoginPlus can provide passwordless login for verified Java owners and supported Floodgate players while keeping password authentication for other accounts. Identity verification, server policy and local account ownership determine the login method; a premium username alone never proves ownership.
+
+> The documentation targets the forthcoming **1.0.0**. Older release artifacts may not include all documented features.
 
 ## Features
 
-### Core (from FastLogin)
+### Core features (from FastLogin)
 
-* Auto-detect premium accounts via Mojang API — skip auth plugin login
+* Automatically detect premium accounts through the Mojang API
+* Automatically register premium players
 * Premium UUID and skin forwarding
-* Auto-register new premium players
-* BungeeCord/Velocity proxy support
-* Bedrock player support via Geyser/Floodgate
 
-### Improvements (new in FastLoginPlus)
+### New features (from FastLoginPlus)
 
-* **AuthMeReloaded 6.0 compatibility** — auto-detects AuthMeReloaded version without user config
-* **Offline Whitelist** — block unknown cracked players, allow premium via Mojang API. Replaces upstream `switchMode` which kicked new premium players
-* **Multi-layer anti-bot** — per-IP rate limiting, burst detection, temporary IP ban, trusted IP whitelist, and `FastLoginAntiBotEvent` for plugin integration
-* **[Folia](https://papermc.io/downloads/folia) support** — dedicated module with Folia-compatible scheduler
-* **Auto update check** — checks GitHub Releases on startup and periodically; notifies OPs in-game when a new version is available
-* **Multi-language** — built-in English and Chinese, custom language files supported
-* **Per-platform config templates** — Bukkit/Folia and BungeeCord/Velocity each generate their own config file: proxies get a trimmed template without backend-only keys, and backend comments mark the keys that lose effect behind a proxy
-* **SQLite on proxy platforms** — BungeeCord and Velocity now bundle SQLite JDBC driver; upstream only supports MySQL/MariaDB on proxies
-* **Session retry** — Mojang verification retries on network errors instead of failing immediately
-* **[SkinsRestorer](https://modrinth.com/plugin/skinsrestorer) compatibility** — no longer overrides skins set via SkinsRestorer
-* **Log readability** — human-readable login flow messages instead of raw packet dumps
+* **[AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 compatibility**: Automatically detects the AuthMeReloaded version, with no user configuration required
+* **[SkinsRestorer](https://github.com/SkinsRestorer/SkinsRestorer) compatibility**: No longer overrides SkinsRestorer's custom skins
+* **Folia support**: A dedicated module using Folia-compatible schedulers
+* **Initial Fabric support**: Under development, with Velocity + [EasyAuth](https://github.com/NikitaCartes/EasyAuth) 3.4.x integration and gradually expanding coverage
+* **Proxy-side SQLite support**: BungeeCord and Velocity bundle the SQLite JDBC driver, suitable for small single-proxy servers
+* **Enhanced anti-bot protection**: Per-IP rate limits, burst detection, temporary bans and a trusted IP allowlist
+* **Multiple languages**: Supports switching between custom language files
+* **Platform-specific configuration templates**: Bukkit/Fabric and BungeeCord/Velocity each generate their own config files
+* **Session verification retries**: Automatically retries Mojang verification on network errors instead of failing immediately
 
-## Quick Start
+## Contribute and get help
 
-**Spigot/Paper**: drop `FastLoginPlusBukkit.jar`, an auth plugin and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
+[![Report a problem](https://img.shields.io/badge/Report%20a%20problem-D97706?style=flat-square&logo=github&logoColor=white)](docs/en/operations/reporting.md)
+[![Contributing](https://img.shields.io/badge/Contributing-2EA44F?style=flat-square&logo=github&logoColor=white)](CONTRIBUTING.md)
+[![Build from source](https://img.shields.io/badge/Build%20from%20source-0969DA?style=flat-square&logo=gradle&logoColor=white)](docs/en/development/build.md)
 
-**Folia**: drop `FastLoginPlusFolia.jar`, an auth plugin and [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) in `plugins/` → set `online-mode=false`
+## Star history
 
-### Proxy Configuration
-
-When running behind a proxy (BungeeCord or Velocity), the proxy must be configured to forward player information to backend servers. FLP relies on this to deliver login commands via plugin messages.
-
-<details>
-<summary>Proxy ID setup (click to expand)</summary>
-
-The backend only accepts login commands from trusted proxies. Each proxy has a unique UUID that must be added to the backend's whitelist:
-
-- **Velocity** — FLP auto-generates a UUID to `plugins/fastloginplus/proxyId.txt` on first start. Copy the UUID from that file.
-- **BungeeCord** — uses BungeeCord's own instance UUID, i.e. the `stats` value in BungeeCord's `config.yml` (BungeeCord writes it there on first start and reuses it; deleting that line makes it generate a new one, which invalidates every backend whitelist).
-
-Paste the UUID into `plugins/fastloginplus/allowed-proxies.txt` on every backend server, one UUID per line. Restart the backends after adding the UUID.
-
-</details>
-
-#### Velocity
-
-| Setting | Value | Why |
-|---------|-------|-----|
-| `velocity.toml` → `player-info-forwarding-mode` | `modern` | **Required**. Without this, Velocity does not forward UUIDs, skins, or IPs — FLP's plugin messages will never reach the backend. |
-| `velocity.toml` → `online-mode` | `false` | FLP handles authentication per-connection via `forceOnlineMode()`; the proxy should not authenticate by default. |
-| Backend `server.properties` → `online-mode` | `false` | The proxy handles authentication; the backend must not repeat it. |
-| Backend `paper-global.yml` → `proxies.velocity.online-mode` | `false` | Must match `velocity.toml`'s `online-mode`. |
-
-#### BungeeCord
-
-| Setting | Value | Why |
-|---------|-------|-----|
-| `config.yml` → `ip_forward` | `true` | **Required**. Without this, BungeeCord does not forward UUIDs, skins, or IPs — FLP's plugin messages will never reach the backend. |
-| `config.yml` → `online_mode` | `false` | FLP enables per-connection via `connection.setOnlineMode(true)`; the proxy should not authenticate by default. |
-| Backend `server.properties` → `online-mode` | `false` | The proxy handles authentication; the backend must not repeat it. |
-
-### Database Storage
-
-In **standalone mode** (no proxy), the database (`FastLogin.db` by default) is stored on each backend server under `plugins/fastloginplus/`.
-
-In **proxy mode** (BungeeCord/Velocity), the database is stored **only on the proxy**. Backend servers do not create a database — they simply execute the login/register commands sent by the proxy via plugin messages. `/flp premium` and `/flp cracked` commands on the backend forward to the proxy, and the proxy handles all profile reads and writes.
-
-### Configuration Templates
-
-FLP ships **two config templates**; each platform generates its `config.yml` from the one that matches its role:
-
-| Template | Used by | Contents |
-|----------|---------|----------|
-| `config.yml` (backend) | Bukkit, Folia | All keys. Comments mark which keys have no effect (or only partial effect) when the server runs **behind a proxy** — e.g. `database`, `anti-bot`, Floodgate keys are ignored on a proxy backend because the proxy owns those functions. |
-| `config-proxy.yml` (proxy) | BungeeCord, Velocity | Proxy-relevant keys only. Backend-only keys (`verifyClientKeys`, `respectIpLimit`) are omitted, and comments describe the proxy's role (decision maker: Mojang API queries, database, force-login forwarding). |
-
-The file on disk is always named `config.yml`. Copying a config file between a proxy and a backend is safe: each platform regenerates the file structure from its own template on startup while preserving your values, and keys missing from the new template are simply dropped (they had no effect there anyway).
-
-## Environment
-
-| Platform | Plugin floor | Server / proxy itself requires | Notes |
-|----------|--------------|-------------------------------|-------|
-| Spigot / Paper | Java 8+ | usually higher — Paper 1.20.5+ needs Java 21 | Requires [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
-| Folia | Java 21+ | Java 21 | Requires [ProtocolLib 5.3+](https://github.com/dmulloy2/ProtocolLib) |
-| BungeeCord / Waterfall | Java 17+ | the proxy's own requirement | — |
-| Velocity | Java 17+ | the proxy's own requirement (3.3+ needs Java 17+) | — |
-
-**Plugin floor** is the lowest JRE that can *load* our jar — a property of its bytecode,
-not of your server. Your server or proxy can require more, and that requirement wins: run
-the higher of the two.
-
-An auth plugin is required on the backend (e.g. AuthMe, LoginSecurity, CrazyLogin). [SeeFullList→](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)
-
-## [AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) Support (5.x / 6.0)
-
-FastLoginPlus supports both AuthMeReloaded 5.x and 6.0. AuthMeReloaded 6.0 adds the **preJoin dialogue (Paper) and the enablePremium configuration**. FLP automatically enables `enablePremium: true` and unregisters AuthMe's built-in premium verification listener.
-
-While FLP handles premium authentication, AuthMe's native `/premium` and `/freemium` commands are blocked. Players will be prompted to use `/flp premium` / `/flp cracked` instead.
-
-If AuthMe's proxy plugin (`AuthMeBungee` / `AuthMeVelocity`) is installed, FLP also locks `premium.keepOfflineUuidCompatibility` to `false` (AuthMe's default value). In other words, whether the backend receives a premium UUID or an offline UUID is solely determined by FLP's own `premiumUuid` configuration.
-
-## [Geyser](https://geysermc.org/)/[Floodgate](https://geysermc.org/floodgate/) Support
-
-FastLoginPlus works with Geyser to allow Bedrock players to join your offline-mode Java server.
-
-- **Geyser only** — Bedrock players join without Xbox authentication. FLP treats them as regular Java players; premium auto-login works if the username matches a paid Java account.
-- **Geyser + Floodgate** (recommended) — Bedrock players authenticate via Xbox Live, and their usernames are prefixed (e.g. `Steve` → `.Steve`). This prevents FLP from mistaking a Bedrock player for a premium Java account and avoids username conflicts between platforms.
-
-> **Recommendation:** Install Floodgate alongside Geyser for better security and identity separation. FLP does not require Floodgate to function, but it is strongly recommended when both Java and Bedrock players share the same server.
-
-> **Environment requirement (not a FastLoginPlus requirement):** Geyser requires **Java 21+** to run. Geyser-Spigot requires a Paper/Spigot server on **1.20.5 or above**. Servers below 1.20.5 can still use Geyser by installing [ViaVersion](https://viaversion.com/) on the backend and running Geyser on a proxy (Velocity/BungeeCord), or by using Geyser-Standalone with ViaVersion. ViaVersion allows the server to accept newer Java clients, which Geyser uses as the translation target. See [Geyser supported versions](https://geysermc.org/wiki/geyser/supported-versions/) for details.
-
-## Commands & Permissions
-
-| Command | Description | Permission | Default |
-|---------|-------------|------------|---------|
-| `/flp premium [player]` | Mark as premium | `fastloginplus.bukkit.command.premium` | true |
-| `/flp cracked [player]` | Mark as cracked | `fastloginplus.bukkit.command.cracked` | op |
-| `/flp delete <player>` | Delete player record | `fastloginplus.bukkit.command.delete` | op |
-
-Add `.other` suffix for targeting other players (default: op).
-
-- A bare `/flp` prints the version and usage, and requires server operator permission.
-- On Folia the permission prefix is `fastloginplus.folia.command.*` instead of `fastloginplus.bukkit.command.*`.
-
-> When a player switches from premium to cracked via `/flp cracked`, FLP will automatically purge the player’s records stored in AuthMeReloaded, ensuring the player can log in normally with their own password upon rejoining. Without this cleanup process, AuthMeReloaded will prompt the player for login credentials after they re-enter the server. However, when the player previously joined as a premium user, FLP automatically registered their account with a random password unknown to the player.  
-> For login plugins other than AuthMe, FLP does not have equivalent handling logic for the time being, requiring manual intervention.
-
-## PlaceholderAPI
-
-| Placeholder | Values | Description |
-|---|---|---|
-| `%fastloginplus_status%` | `Premium`, `Cracked`, `Unknown` | Authentication status |
-| `%fastloginplus_is_premium%` | `true`, `false` | Whether the player passed premium verification |
-| `%fastloginplus_floodgate%` | `Java`, `Bedrock`, `Linked`, `Unknown` | Connection platform (Java vs Bedrock via Geyser/Floodgate) |
+<a href="https://www.star-history.com/?repos=hayston1001%2Ffastloginplus&type=date&releases=&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=hayston1001/fastloginplus&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=hayston1001/fastloginplus&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=hayston1001/fastloginplus&type=date&legend=bottom-right" />
+ </picture>
+</a>
 
 ## License
 
-[MIT](LICENSE) · Originally by [games647](https://github.com/TuxCoding/FastLogin) · Maintained by [Hayston](https://github.com/Hayston1001)
+[MIT](LICENSE). Originally by [games647](https://github.com/TuxCoding), maintained by [Hayston1001](https://github.com/Hayston1001)
