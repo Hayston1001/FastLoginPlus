@@ -2,6 +2,9 @@
 #
 # Copyright (c) 2026 Hayston1001
 # UTF-8 player messages. Missing or blank overrides fall back to bundled values.
+# This is the Fabric message schema version, independent of the classic files.
+
+_messages-version: 1
 
 ownership-conflict: "FastLoginPlus: this account does not match this connection's verified identity. Reconnect with the correct account or contact an admin."
 rename-conflict: "FastLoginPlus: multiple EasyAuth accounts match your verified identity. Contact an admin to resolve the duplicate accounts before reconnecting."
@@ -16,18 +19,13 @@ binding-save-failed: "FastLoginPlus: EasyAuth could not confirm the premium acco
 admin-command-permission: "FastLoginPlus: this admin command requires operator level 2."
 admin-command-no-carrier: "FastLoginPlus: no player is online to relay the request to the proxy. Retry when a player is connected."
 admin-premium-already: "FastLoginPlus: {player} is already premium-bound. No request was sent."
-admin-premium-open: "FastLoginPlus: premium consent request for {player} was forwarded to the proxy; this is not the final result. The proxy reports success or failure to the relaying player and the proxy console. Their next login follows the proxy and EasyAuth registration policy. If still connected, they must reconnect; the proxy decides whether to kick them."
-admin-premium-requested: "FastLoginPlus: premium consent request for {player} was forwarded to the proxy; this is not the final result. The proxy reports success or failure to the relaying player and the proxy console. A verified premium reconnect enables passwordless login. Their password is retained but not used while premium is enabled. The proxy decides whether to kick them; otherwise they must reconnect manually."
 premium-requested: "FastLoginPlus: the premium consent request was handed to the proxy for processing. If a confirmation prompt appears, run /flp premium once more. Then reconnect with your premium account to enable passwordless login. Your password is retained but not used while premium is enabled."
 cracked-login-required: "FastLoginPlus: log in to your EasyAuth account first, then run /flp cracked."
 cracked-requested: "FastLoginPlus: disabling premium login requested. Any saved password is retained; after a successful local unbind, use it to log in again. The proxy decides whether to kick you; otherwise reconnect manually. Player data is not migrated between UUIDs."
-admin-cracked-requested: "FastLoginPlus: disabling premium login requested for {player}; this is not the final result. The proxy reports success or failure to the relaying player and the proxy console. Any saved password is retained; after a successful local unbind, they use it to log in again. The proxy decides whether to kick them; otherwise they must reconnect manually. Player data is not migrated between UUIDs."
 cracked-release-confirm: "FastLoginPlus: {player} is premium-bound without a saved password. Run the same command again within 30 seconds to release the binding and allow registration again. No request was sent and the account was not changed."
 cracked-release-requested: "FastLoginPlus: disabling premium login requested and the local binding released. Reconnect and use /register to set a password. The proxy decides whether to kick you; otherwise reconnect manually."
-admin-cracked-release-requested: "FastLoginPlus: disabling premium login requested for {player} and the local binding released; this is not the final result. The proxy reports success or failure to the relaying player and the proxy console. They must reconnect and use /register to set a password. The proxy decides whether to kick them; otherwise they must reconnect manually."
 cracked-release-failed: "FastLoginPlus: the proxy disable request was sent, but EasyAuth could not save the local release. Local account fields were restored and the premium binding remains locally. Ask an admin to check storage, then retry /flp cracked."
 cracked-save-failed: "FastLoginPlus: the proxy disable request was sent, but EasyAuth could not save the local unbind. Local account fields were restored and the password retained. Premium binding remains locally; ask an admin to check storage, then retry /flp cracked."
-delete-requested: "FastLoginPlus: proxy FLP profile deletion requested for {player}; this is not a deletion confirmation. The EasyAuth account and password are not deleted. The proxy reports success or failure to the relaying player and the proxy console."
 delete-premium-denied: "FastLoginPlus: {player} is premium-bound. Run /flp cracked first; an account without a saved password requires a second confirmation to allow registration again. The EasyAuth account is never deleted by /flp delete."
 binding-saved-reconnect: "FastLoginPlus: binding was saved but this login could not finish. Reconnect with your premium account for passwordless login."
 binding-consent-required: "FastLoginPlus: this name has not been switched to passwordless premium login. Log in with your existing password first, then run /flp premium to complete binding."

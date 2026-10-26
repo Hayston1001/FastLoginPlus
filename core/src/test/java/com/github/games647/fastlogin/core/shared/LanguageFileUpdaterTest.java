@@ -73,6 +73,28 @@ class LanguageFileUpdaterTest {
     }
 
     @Test
+    void versionUpgradePreservesCommentsAndKeyOrderWhileRefreshingValues() throws Exception {
+        Configuration english = provider.load("_messages-version: 2\nnotice: English new\nother: English\n");
+        Configuration chinese = provider.load("_messages-version: 2\nnotice: 中文新\nother: 中文\n");
+        Configuration previous = provider.load("notice: English old\nother: 中文旧\n");
+        Path file = directory.resolve("messages_zh.yml");
+        String original = "# Keep this comment\n_messages-version: 1\nnotice: English old\n"
+                + "# Comment for other\nother: 中文旧\n";
+        Files.write(file, original.getBytes(StandardCharsets.UTF_8));
+
+        LanguageFileUpdater.update(file, english, chinese, 2, previous);
+
+        java.util.List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+        assertEquals("# Keep this comment", lines.get(0));
+        assertEquals("_messages-version: 2", lines.get(1));
+        assertTrue(lines.get(2).startsWith("notice:"));
+        assertTrue(lines.get(2).contains("中文新"));
+        assertEquals("# Comment for other", lines.get(3));
+        assertTrue(lines.get(4).startsWith("other:"));
+        assertTrue(lines.get(4).contains("中文"));
+    }
+
+    @Test
     void englishDefaultsMigrateOnVersionUpgrade() throws Exception {
         Configuration english = provider.load("_messages-version: 2\n"
                 + "notice: English default\ncustom: English custom\n");

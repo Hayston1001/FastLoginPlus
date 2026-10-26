@@ -94,7 +94,11 @@ class CrackedDeleteBridgeTest {
             if (Cache.entry != null) {
                 assertPassword(Cache.entry);
             }
-            assertFeedback(self ? "cracked-requested" : "admin-cracked-requested");
+            if (self) {
+                assertFeedback("cracked-requested");
+            } else {
+                assertNoFeedback();
+            }
         }
     }
 
@@ -190,7 +194,11 @@ class CrackedDeleteBridgeTest {
             }
             assertEquals(AccountState.OPEN, bridge.accountStatus(NAME).state());
             assertEquals(0, pending().size());
-            assertFeedback(self ? "cracked-release-requested" : "admin-cracked-release-requested");
+            if (self) {
+                assertFeedback("cracked-release-requested");
+            } else {
+                assertNoFeedback();
+            }
         }
     }
 
@@ -322,7 +330,7 @@ class CrackedDeleteBridgeTest {
             assertSame(original, EasyAuth.DB.entry);
             assertEquals(0, EasyAuth.DB.writes);
             assertBound(Cache.entry);
-            assertFeedback("admin-cracked-requested");
+            assertNoFeedback();
         }
     }
 
@@ -389,7 +397,7 @@ class CrackedDeleteBridgeTest {
             config.when(FabricConfig::startup).thenReturn(new FabricConfig.StartupSettings(PROXY));
             delete();
             delete.verify(() -> DeleteConsentWriter.send(carrier, NAME, false, PROXY));
-            assertFeedback("delete-requested");
+            assertNoFeedback();
             assertEquals(0, EasyAuth.DB.writes);
             assertBound(Cache.entry);
         }
@@ -449,6 +457,10 @@ class CrackedDeleteBridgeTest {
 
     private void assertFeedback(String key) {
         assertEquals(List.of(FabricMessages.text(key, "{player}", NAME).getString()), feedback);
+    }
+
+    private void assertNoFeedback() {
+        assertEquals(List.of(), feedback);
     }
 
     private static void setState(String state) {

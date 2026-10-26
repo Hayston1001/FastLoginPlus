@@ -25,7 +25,9 @@
 # Backend-local player messages: en or zh. Unknown non-empty values warn at
 # startup and fall back to en. Changing the language requires a backend restart.
 # Optional UTF-8 overrides remain in config/fastloginplus-fabric/messages_en.yml
-# or messages_zh.yml. Missing message keys fall back to English.
+# or messages_zh.yml. Missing message keys are appended automatically and the
+# file carries a _messages-version marker. Extra keys are kept, not deleted, and
+# are reported in the backend log. Comments and key order are not rewritten.
 language: en
 
 # Enable verbose diagnostic logging for troubleshooting. Per-connection and

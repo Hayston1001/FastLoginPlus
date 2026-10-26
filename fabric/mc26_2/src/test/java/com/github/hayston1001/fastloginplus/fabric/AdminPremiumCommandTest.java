@@ -25,7 +25,6 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -77,18 +76,13 @@ class AdminPremiumCommandTest {
 
     @ParameterizedTest
     @ValueSource(ints = {2, 3, 4})
-    void authorizedPlayerUsesOwnConnectionAndReceivesFeedback(int level) throws Exception {
+    void authorizedPlayerUsesOwnConnectionAndDoesNotEmitTheHandoffMessage(int level) throws Exception {
         when(source.permissions()).thenReturn(LevelBasedPermissionSet.forLevel(PermissionLevel.byId(level)));
         ServerPlayer invoker = mock(ServerPlayer.class);
         when(source.getPlayer()).thenReturn(invoker);
-        doAnswer(call -> {
-            Consumer<Component> result = call.getArgument(3);
-            result.accept(Component.literal("requested"));
-            return null;
-        }).when(bridge).adminPremium(eq(invoker), eq("OtherUser"), eq("Admin"), any());
         assertEquals(1, dispatcher.execute("flp premium OtherUser", source));
         verify(bridge).adminPremium(eq(invoker), eq("OtherUser"), eq("Admin"), any());
-        assertEquals(List.of("requested"), feedback);
+        assertTrue(feedback.isEmpty());
         verifyNoInteractions(server);
     }
 

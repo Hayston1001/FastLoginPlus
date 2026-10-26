@@ -55,6 +55,25 @@ class LanguageFallbackTest {
     }
 
     @Test
+    void redundantUserLanguageKeysAreReportedWithoutDroppingCommentsOrOrder() throws Exception {
+        Path file = directory.resolve("messages_zh.yml");
+        String original = "# Keep this comment\n_messages-version: 2\ncustom: Keep this value\n";
+        Files.write(file, original.getBytes(StandardCharsets.UTF_8));
+        Logger log = mock(Logger.class);
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = core(log);
+        Method append = FastLoginCore.class.getDeclaredMethod("appendMissingKeys", String.class, String.class);
+        append.setAccessible(true);
+
+        append.invoke(core, "messages_zh.yml", "messages_en.yml");
+
+        String after = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+        assertTrue(after.startsWith(original));
+        assertTrue(after.contains("custom: Keep this value"));
+        verify(log).warn(contains("message keys not in the bundled defaults"),
+                eq("messages_zh.yml"), eq(1), contains("custom"));
+    }
+
+    @Test
     void unavailableBundledSelectionFallsBackToEnglishWithoutChangingTheOverride() throws Exception {
         Path file = directory.resolve("messages_unknown.yml");
         byte[] invalid = "notice: [unterminated\n".getBytes(StandardCharsets.UTF_8);

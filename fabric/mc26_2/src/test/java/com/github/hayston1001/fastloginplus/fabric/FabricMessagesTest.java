@@ -66,6 +66,8 @@ class FabricMessagesTest {
         Map<String, String> english = bundled("en");
         Map<String, String> chinese = bundled("zh");
         assertEquals(english.keySet(), chinese.keySet());
+        assertEquals("1", english.get("_messages-version"));
+        assertEquals("1", chinese.get("_messages-version"));
         assertNotEquals(english.get("premium-requested"), chinese.get("premium-requested"));
         assertEquals(chinese.get("premium-requested"),
                 FabricMessages.load("zh", directory).get("premium-requested"));
@@ -125,30 +127,25 @@ class FabricMessagesTest {
     void adminMessagesExplainTheRequestAndRemainReadableInBothLanguages() throws Exception {
         for (String language : new String[]{"en", "zh"}) {
             Map<String, String> messages = bundled(language);
-            for (String suffix : new String[]{"already", "open", "requested"}) {
-                String key = "admin-premium-" + suffix;
-                String value = messages.get(key);
-                assertTrue(value != null && !value.isBlank(), key);
-                assertFalse(value.contains("\n") || value.contains("\r"), key);
-                assertFalse(value.matches(".*[\\uFF0C\\u3002\\uFF1B\\uFF1A\\uFF01\\uFF1F\\uFF08\\uFF09].*"), key);
-                assertEquals(value, FabricMessages.load(language, directory).get(key));
-                assertTrue(value.contains("{player}"), key);
-                assertFalse(value.contains("{uuid}"), key);
+            String key = "admin-premium-already";
+            String value = messages.get(key);
+            assertTrue(value != null && !value.isBlank(), key);
+            assertFalse(value.contains("\n") || value.contains("\r"), key);
+            assertFalse(value.matches(".*[\\uFF0C\\u3002\\uFF1B\\uFF1A\\uFF01\\uFF1F\\uFF08\\uFF09].*"), key);
+            assertEquals(value, FabricMessages.load(language, directory).get(key));
+            assertTrue(value.contains("{player}"), key);
+            assertFalse(value.contains("{uuid}"), key);
+            for (String removed : new String[]{"admin-premium-open", "admin-premium-requested",
+                    "admin-cracked-requested", "admin-cracked-release-requested", "delete-requested"}) {
+                assertFalse(messages.containsKey(removed), removed);
             }
-            for (String key : new String[]{"admin-command-permission", "admin-command-no-carrier"}) {
-                String value = messages.get(key);
-                assertTrue(value != null && !value.isBlank(), key);
-                assertFalse(value.contains("{player}"), key);
-                assertFalse(value.contains("{uuid}"), key);
-                assertEquals(value, FabricMessages.load(language, directory).get(key));
+            for (String commandKey : new String[]{"admin-command-permission", "admin-command-no-carrier"}) {
+                String commandValue = messages.get(commandKey);
+                assertTrue(commandValue != null && !commandValue.isBlank(), commandKey);
+                assertFalse(commandValue.contains("{player}"), commandKey);
+                assertFalse(commandValue.contains("{uuid}"), commandKey);
+                assertEquals(commandValue, FabricMessages.load(language, directory).get(commandKey));
             }
-            String requested = messages.get("admin-premium-requested");
-            assertTrue(requested.contains("reconnect manually") || requested.contains("手动重连"));
-            assertTrue(requested.contains("password is retained but not used")
-                    || requested.contains("密码保留, 但 premium 期间不使用"));
-            assertTrue(requested.contains("this is not the final result")
-                    || requested.contains("此提示不代表最终结果"));
-            assertFalse(requested.contains("ten minutes") || requested.contains("十分钟"));
         }
     }
 
@@ -156,17 +153,16 @@ class FabricMessagesTest {
     void crackedAndDeleteMessagesKeepTheirScopeAndEnglishPunctuation() throws Exception {
         for (String language : new String[]{"en", "zh"}) {
             Map<String, String> messages = bundled(language);
-            for (String key : new String[]{"cracked-requested", "admin-cracked-requested", "cracked-release-confirm",
-                    "cracked-release-requested", "admin-cracked-release-requested", "cracked-release-failed",
-                    "delete-requested", "delete-premium-denied", "admin-command-permission",
+            for (String key : new String[]{"cracked-requested", "cracked-release-confirm",
+                    "cracked-release-requested", "cracked-release-failed",
+                    "delete-premium-denied", "admin-command-permission",
                     "admin-command-no-carrier", "cracked-login-required", "cracked-save-failed"}) {
                 String value = messages.get(key);
                 assertTrue(value != null && !value.isBlank(), key);
                 assertFalse(value.matches(".*[\uFF0C\u3002\uFF1B\uFF1A\uFF01\uFF1F\uFF08\uFF09].*"), key);
                 assertEquals(value, FabricMessages.load(language, directory).get(key));
-                assertEquals(java.util.Set.of("admin-cracked-requested", "cracked-release-confirm",
-                        "admin-cracked-release-requested",
-                        "delete-requested", "delete-premium-denied").contains(key), value.contains("{player}"));
+                assertEquals(java.util.Set.of("cracked-release-confirm", "delete-premium-denied").contains(key),
+                        value.contains("{player}"));
             }
             String cracked = messages.get("cracked-requested");
             assertTrue(cracked.contains("reconnect manually") || cracked.contains("手动重连"));
@@ -176,17 +172,16 @@ class FabricMessagesTest {
             assertTrue(confirm.contains("allow registration again") || confirm.contains("允许重新注册"));
             assertFalse(confirm.contains("UUID"));
             assertFalse(messages.containsKey("cracked-no-password"));
-            for (String key : new String[]{"cracked-release-requested", "admin-cracked-release-requested"}) {
-                String released = messages.get(key);
-                assertTrue(released.contains("/register"));
-                assertTrue(released.contains("reconnect") || released.contains("重新连接"));
-                assertFalse(released.contains("retained") || released.contains("保留"));
-            }
+            String released = messages.get("cracked-release-requested");
+            assertTrue(released.contains("/register"));
+            assertTrue(released.contains("reconnect") || released.contains("重新连接"));
+            assertFalse(released.contains("retained") || released.contains("保留"));
             String denied = messages.get("delete-premium-denied");
             assertTrue(denied.contains("second confirmation") || denied.contains("再次确认"));
-            String delete = messages.get("delete-requested");
-            assertTrue(delete.contains("proxy console") || delete.contains("代理控制台"));
-            assertTrue(delete.contains("not deleted") || delete.contains("不删除 EasyAuth"));
+            for (String removed : new String[]{"admin-cracked-requested",
+                    "admin-cracked-release-requested", "delete-requested"}) {
+                assertFalse(messages.containsKey(removed), removed);
+            }
         }
     }
 
@@ -207,8 +202,8 @@ class FabricMessagesTest {
                 messages.get("same-name-cracked-recorded"));
         assertEquals(bundled("en").get("premium-policy-disabled"),
                 messages.get("premium-policy-disabled"));
-        assertEquals(bundled("en").get("admin-premium-requested"),
-                messages.get("admin-premium-requested"));
+        assertEquals(bundled("en").get("admin-premium-already"),
+                messages.get("admin-premium-already"));
     }
 
     @Test
@@ -257,9 +252,9 @@ class FabricMessagesTest {
     @Test
     void missingChineseOverrideKeyFallsBackToEnglish() throws Exception {
         Files.writeString(directory.resolve("messages_zh.yml"),
-                "admin-premium-requested: \"Selected translation\"\n", StandardCharsets.UTF_8);
+                "admin-premium-already: \"Selected translation\"\n", StandardCharsets.UTF_8);
         Map<String, String> messages = FabricMessages.load("zh", directory);
-        assertEquals("Selected translation", messages.get("admin-premium-requested"));
+        assertEquals("Selected translation", messages.get("admin-premium-already"));
         assertEquals(bundled("en").get("binding-consent-required"),
                 messages.get("binding-consent-required"));
         assertEquals(bundled("en").get("same-name-cracked-recorded"),

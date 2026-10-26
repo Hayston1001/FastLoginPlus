@@ -609,8 +609,6 @@ final class EasyAuth344Bridge {
             String proxyIds = config.allowedProxyIds();
             sendAdminConsent(carrier, targetName, proxyIds);
             LOGGER.info("Admin premium authorization: actor={} target={} state={}", actor, targetName, state.state());
-            feedback.accept(FabricMessages.text(state.state() == AccountState.OPEN
-                    ? "admin-premium-open" : "admin-premium-requested", "{player}", targetName));
         } catch (RuntimeException failure) {
             adminPremiumFailure(actor, targetName, feedback, failure);
         }
@@ -684,8 +682,11 @@ final class EasyAuth344Bridge {
                 unbind.run();
                 unbound = true;
             }
-            String message = release ? "cracked-release-requested" : "cracked-requested";
-            feedback.accept(FabricMessages.text(sourceInvoker ? message : "admin-" + message, "{player}", name));
+            if (sourceInvoker) {
+                String message = release ? "cracked-release-requested" : "cracked-requested";
+                feedback.accept(FabricMessages.text(message, "{player}", name));
+            }
+            LOGGER.info("Cracked request forwarded: actor={} target={} release={}", actor, name, release);
         } catch (RuntimeException failure) {
             LOGGER.error("Cracked request failed: actor={} target={} proxyRequestSent={}", actor, name, sent, failure);
             feedback.accept(FabricMessages.reason(failure, "auth-unavailable"));
@@ -717,7 +718,7 @@ final class EasyAuth344Bridge {
             // only the request hand-off.
             DeleteConsentWriter.send(carrier, targetName, false, commandProxyIds(carrier));
             sent = true;
-            feedback.accept(FabricMessages.text("delete-requested", "{player}", targetName));
+            LOGGER.info("Profile deletion request forwarded: actor={} target={}", actor, targetName);
         } catch (RuntimeException failure) {
             LOGGER.error("Profile deletion request failed: actor={} target={}", actor, targetName, failure);
             feedback.accept(FabricMessages.reason(failure, "auth-unavailable"));

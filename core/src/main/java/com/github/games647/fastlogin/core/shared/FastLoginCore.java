@@ -55,6 +55,7 @@ import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.SQLiteStorage;
 import com.github.hayston1001.fastloginplus.shared.config.ConfigurationFiles;
 import com.github.hayston1001.fastloginplus.shared.config.ConfigRefresher;
+import com.github.hayston1001.fastloginplus.shared.message.LanguageFileKeys;
 import com.github.hayston1001.fastloginplus.shared.message.LanguageMessages;
 import com.google.common.base.Ticker;
 import com.zaxxer.hikari.HikariConfig;
@@ -914,6 +915,18 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         if (result.refreshed > 0) {
             plugin.getLog().info("Refreshed {} unchanged message values to messages v{} in {}",
                     result.refreshed, currentVersion, userFile);
+        }
+        Set<String> knownKeys = new HashSet<>(defaults.getKeys());
+        knownKeys.addAll(localized.getKeys());
+        LanguageFileKeys.Diagnostics diagnostics = LanguageFileKeys.inspect(file, knownKeys);
+        if (!diagnostics.missing().isEmpty()) {
+            plugin.getLog().warn("Language file {} is missing {} message keys: {}", userFile,
+                    diagnostics.missing().size(), String.join(", ", diagnostics.missing()));
+        }
+        if (!diagnostics.redundant().isEmpty()) {
+            plugin.getLog().warn("Language file {} has {} message keys not in the bundled defaults "
+                            + "(kept, not deleted): {}", userFile,
+                    diagnostics.redundant().size(), String.join(", ", diagnostics.redundant()));
         }
     }
 

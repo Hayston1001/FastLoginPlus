@@ -39,6 +39,7 @@ final class FabricMessages {
 
     static Map<String, String> loadAndReportLanguage(String language, Path directory, org.slf4j.Logger logger) {
         Path file = directory.resolve("messages_" + effectiveLanguage(language) + ".yml");
+        FabricLanguageUpdater.update(file, bundled("en"), bundled(effectiveLanguage(language)), logger);
         LanguageMessages.Result<Map<String, String>> result = LanguageMessages.loadWithFallback(
                 file, defaults(language, file), bundledFallback(language), YAML_LOADER,
                 failure -> logger.error("Invalid Fabric message file {}; falling back to bundled messages",

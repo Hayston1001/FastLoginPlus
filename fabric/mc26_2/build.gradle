@@ -176,6 +176,9 @@ def verifyFabricJar = tasks.register('verifyFabricJar') {
             if (zip.getEntry('com/github/hayston1001/fastloginplus/fabric/shared/message/LanguageMessages.class') == null) {
                 throw new GradleException('Fabric jar is missing the relocated language loader')
             }
+            if (zip.getEntry('com/github/hayston1001/fastloginplus/fabric/shared/message/LanguageFileKeys.class') == null) {
+                throw new GradleException('Fabric jar is missing the relocated language key checker')
+            }
             if (zip.getEntry('com/github/hayston1001/fastloginplus/fabric/shared/update/VersionComparator.class') == null) {
                 throw new GradleException('Fabric jar is missing the relocated version comparator')
             }

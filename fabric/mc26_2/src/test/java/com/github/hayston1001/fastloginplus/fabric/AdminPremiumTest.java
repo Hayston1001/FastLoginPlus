@@ -90,7 +90,7 @@ class AdminPremiumTest {
         }
         try (var config = config(); var consent = mockStatic(BindingConsentWriter.class)) {
             request();
-            assertFeedback("admin-premium-open", "{player}", NAME);
+            assertEquals(List.of(), feedback);
             consent.verify(() -> BindingConsentWriter.sendForOther(carrier, NAME, PROXY));
             consent.verifyNoMoreInteractions();
             assertStartupOnly(config);
@@ -103,7 +103,7 @@ class AdminPremiumTest {
         EasyAuth.DB.entry.onlineAccount = kind;
         try (var config = config(); var consent = mockStatic(BindingConsentWriter.class)) {
             request();
-            assertFeedback("admin-premium-requested", "{player}", NAME);
+            assertEquals(List.of(), feedback);
             assertEquals(AccountState.PASSWORD, bridge.accountStatus(NAME).state());
             assertOriginal(kind);
             consent.verify(() -> BindingConsentWriter.sendForOther(carrier, NAME, PROXY));
