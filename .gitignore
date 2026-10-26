@@ -2,7 +2,7 @@
 .worktrees/
 .playwright-mcp/
 local-docs/
-dev_web_server.py
+scripts/
 
 # Eclipse
 .classpath

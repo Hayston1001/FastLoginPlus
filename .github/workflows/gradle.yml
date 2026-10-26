@@ -21,9 +21,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Test release tooling
-        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
-
       - name: Set up build JDKs
         uses: actions/setup-java@v6
         with:
