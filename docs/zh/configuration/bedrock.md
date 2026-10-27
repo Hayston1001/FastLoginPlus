@@ -19,7 +19,7 @@
 
 `allowFloodgateNameConflict` 应作为布尔冲突开关, 不当作另一个自动登录选择器. 强烈建议保留不与 Java 冲突的 Floodgate 前缀, 不要为了复用 Java 账号随意删除前缀.
 
-## Spigot, Paper 和 Folia
+## Spigot/Paper/Folia
 
 在受支持的 AuthMe 版本上, FLP 可以在登录对话框出现前为 Floodgate 玩家处理账号. 自动创建账号需要同时允许自动注册和自动登录. 不同认证插件的支持范围不同, 请查看[集成说明](../integrations/bedrock.md).
 

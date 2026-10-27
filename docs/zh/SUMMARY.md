@@ -25,8 +25,7 @@
 
 ## 配置参考
 
-* [Bukkit 配置](configuration/bukkit.md)
-* [Folia 配置](configuration/folia.md)
+* [Bukkit 和 Folia 配置](configuration/bukkit.md)
 * [Velocity 配置](configuration/velocity.md)
 * [BungeeCord 配置](configuration/bungeecord.md)
 * [Fabric 配置](configuration/fabric.md)

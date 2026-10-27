@@ -1,6 +1,8 @@
-# Bukkit 配置
+# Bukkit 和 Folia 配置
 
-文件: Spigot/Paper 的 `plugins/fastloginplus/config.yml`. 停服修改并重启. 此文件也存在于代理后端, 但表中标记为**独立服**的设置由代理控制, 修改后端副本不会改变代理策略.
+文件: Spigot, Paper 和 Folia 的 `plugins/fastloginplus/config.yml`. 三者使用相同模板和默认值. 停服修改并重启. 代理部署中, 表内标记为**独立服**的共享策略由代理控制, 修改后端副本不会改变代理策略.
+
+Folia 的账号命令使用 `fastloginplus.folia.command.*` 权限前缀, 而不是 Bukkit 前缀. 详见[命令与权限](../accounts/commands.md).
 
 ## 通用与登录
 

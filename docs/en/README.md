@@ -1,7 +1,5 @@
 # FastLoginPlus Wiki
 
-> This manual describes the forthcoming **1.0.0**, which has not been released. It documents the current implementation, not just changes since 0.7.0. An older release may not contain the features described here. Development builds can still carry the previous version number; identify them by commit as well.
-
 FastLoginPlus (FLP) connects verified Minecraft identities with your server's authentication system. It can let verified Java account owners and supported Floodgate players log in without entering a password, while keeping password authentication for other players. Whether an account can be created or opened depends on server policy and the local account state.
 
 ## Read these warnings first

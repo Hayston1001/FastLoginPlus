@@ -4,8 +4,7 @@ Choose the platform running FLP to find its file and options:
 
 | Platform | Configuration reference |
 | --- | --- |
-| Spigot/Paper | [Bukkit configuration](bukkit.md) |
-| Folia | [Folia configuration](folia.md) |
+| Spigot/Paper/Folia | [Bukkit and Folia configuration](bukkit.md) |
 | Velocity | [Velocity configuration](velocity.md) |
 | BungeeCord | [BungeeCord configuration](bungeecord.md) |
 | Fabric | [Fabric configuration](fabric.md) |

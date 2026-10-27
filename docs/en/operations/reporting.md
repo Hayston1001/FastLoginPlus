@@ -4,7 +4,7 @@ Open an issue in [FastLoginPlus](https://github.com/Hayston1001/FastLoginPlus/is
 
 Include:
 
-1. FLP version **and commit/build source**, especially for unreleased 1.0.0 development artifacts.
+1. FLP version **and commit/build source**, especially for development builds or a JAR copied from another server.
 2. Server/proxy type and exact version, Java runtime, auth plugin version, and relevant ProtocolLib/Floodgate/Fabric mods.
 3. Deployment: direct or proxy, forwarding mode, which side contains each plugin, and storage type. Do not reveal secrets.
 4. Account situation: new or existing, password or bound, Java or Bedrock/linked, expected UUID policy and recent commands/upgrades.

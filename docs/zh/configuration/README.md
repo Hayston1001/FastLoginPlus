@@ -4,8 +4,7 @@
 
 | 平台 | 配置参考 |
 | --- | --- |
-| Spigot/Paper | [Bukkit 配置](bukkit.md) |
-| Folia | [Folia 配置](folia.md) |
+| Spigot/Paper/Folia | [Bukkit 和 Folia 配置](bukkit.md) |
 | Velocity | [Velocity 配置](velocity.md) |
 | BungeeCord | [BungeeCord 配置](bungeecord.md) |
 | Fabric | [Fabric 配置](fabric.md) |

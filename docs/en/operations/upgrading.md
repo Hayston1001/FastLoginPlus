@@ -1,6 +1,6 @@
 # Backup, upgrade and rollback
 
-This manual targets unreleased 1.0.0. Do not assume a JAR labeled 0.7.0 contains all these behaviors; identify development artifacts by commit. Read the [release notes](https://github.com/Hayston1001/FastLoginPlus/releases) for the actual build being installed.
+This manual describes FLP 1.0.0. Older release artifacts do not contain all documented behaviors. Read the [release notes](https://github.com/Hayston1001/FastLoginPlus/releases) for the actual build being installed.
 
 ## Back up a consistent set
 

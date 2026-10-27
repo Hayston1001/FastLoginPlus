@@ -1,6 +1,6 @@
 # AuthMeReloaded
 
-AuthMe 安装在 Bukkit, Paper 或 Folia 服务器上. 代理网络中, 每个需要认证的后端都需要安装兼容版本的 AuthMe 和 FLP; 不要把后端 AuthMe 插件放进代理的 `plugins/`.
+AuthMe 安装在 Bukkit/Paper/Folia 服务器上. 代理网络中, 每个需要认证的后端都需要安装兼容版本的 AuthMe 和 FLP; 不要把后端 AuthMe 插件放进代理的 `plugins/`.
 
 ## 选择版本
 

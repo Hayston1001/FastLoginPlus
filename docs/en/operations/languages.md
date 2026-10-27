@@ -24,4 +24,4 @@ Turn diagnostics off after reproduction. Remove database passwords, forwarding s
 
 `check-update: true` enables background GitHub release checks. `update-check-interval: 24` is in **hours**. This does not download/install JARs or restart servers. Classic backends can notify operators; Fabric reports updates to its log. Network failure in the checker is not evidence that player authentication failed.
 
-A development build still carrying an older version label may not compare like the future 1.0.0 release. Record the actual commit when reporting it. See [reporting](reporting.md).
+A development build may carry a different version label from the release build. Record the actual version, commit and build source when reporting a problem. See [reporting](reporting.md).

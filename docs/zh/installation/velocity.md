@@ -1,6 +1,6 @@
 # Velocity 与 Spigot/Paper/Folia
 
-本页介绍 Velocity 连接 Spigot, Paper 或 Folia 服务器的安装方法. 如果后端是 Fabric, 请使用 [Fabric 指南](fabric.md).
+本页介绍 Velocity 连接 Spigot/Paper/Folia 服务器的安装方法. 如果后端是 Fabric, 请使用 [Fabric 指南](fabric.md).
 
 ## 安装前准备
 

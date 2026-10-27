@@ -25,8 +25,7 @@
 
 ## Configuration reference
 
-* [Bukkit configuration](configuration/bukkit.md)
-* [Folia configuration](configuration/folia.md)
+* [Bukkit and Folia configuration](configuration/bukkit.md)
 * [Velocity configuration](configuration/velocity.md)
 * [BungeeCord configuration](configuration/bungeecord.md)
 * [Fabric configuration](configuration/fabric.md)

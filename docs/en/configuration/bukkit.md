@@ -1,6 +1,8 @@
-# Bukkit configuration
+# Bukkit and Folia configuration
 
-File: `plugins/fastloginplus/config.yml` on Spigot/Paper. Stop the server to edit it, then restart. The same file exists behind a proxy, but options marked **standalone** are controlled on the proxy in that deployment.
+File: `plugins/fastloginplus/config.yml` on Spigot, Paper and Folia. They share the same template and defaults. Stop the server to edit it, then restart. Behind a proxy, shared policies marked **standalone** are controlled on the proxy instead.
+
+Folia account commands use the `fastloginplus.folia.command.*` permission prefix rather than the Bukkit prefix. See [commands and permissions](../accounts/commands.md).
 
 ## General and login
 
