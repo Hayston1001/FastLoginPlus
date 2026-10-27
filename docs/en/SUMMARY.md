@@ -11,10 +11,9 @@
 
 * [Standalone Spigot/Paper](installation/standalone.md)
 * [Standalone Folia](installation/folia.md)
-* [Velocity and classic backends](installation/velocity.md)
-* [BungeeCord and classic backends](installation/bungeecord.md)
+* [Velocity with Spigot/Paper/Folia](installation/velocity.md)
+* [BungeeCord with Spigot/Paper/Folia](installation/bungeecord.md)
 * [Velocity and Fabric/EasyAuth](installation/fabric.md)
-* [Verify and secure the installation](installation/verification.md)
 
 ## Login and account management
 
@@ -54,6 +53,3 @@
 * [Architecture and module boundaries](development/architecture.md)
 * [Login flow and identity trust](LOGIN-FLOW.md)
 * [Events and extension boundaries](development/extensions.md)
-* [ProtocolLib async design](PROTOCOLLIB-ASYNC-DESIGN.md)
-* [CraftAPI baseline](CRAFTAPI-BASELINE.md)
-* [Maintain and publish the Wiki](development/gitbook.md)

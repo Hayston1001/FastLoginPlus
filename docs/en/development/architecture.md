@@ -14,7 +14,7 @@
 
 These are plugin bytecode floors; the host software can require higher Java. All default builds include Fabric and run Gradle on JDK 25.
 
-## Responsibility is not "proxy decides, backend executes"
+## Proxy and backend
 
 The proxy decides verification routing, establishes Mojang/Floodgate identity, enforces network admission, owns FLP records and performs proxy-side writes/forwarding. The backend reads local auth-account state and makes the final auth-plugin action decision under the proxy's declared policies, then performs registration/login or leaves the password lock/rejects.
 
@@ -22,12 +22,12 @@ Neither side can replace the other's authority. The backend must not reconstruct
 
 ## Source boundaries
 
-`core` does not import platform APIs. `craftapi` does not own FLP business rules. `shared` has no production dependencies or bundled resources; callers supply parsers, resources and policy. Fabric consumes generated source copies of `protocol`/`shared` in its own namespace, not the classic platform classes or JARs. Its artifact must not contain old `com.github.games647.fastlogin` references.
+`core` does not import platform APIs, and `craftapi` does not own FLP business rules. Fabric uses `protocol` and `shared` sources rather than depending on Bukkit/Folia or proxy plugin JARs.
 
-Bukkit/Folia sources keep the existing `com.github.games647.fastlogin.bukkit` compatibility package. They are distinct files, with intentional scheduler/platform differences. Do not bulk-copy over Folia. Bungee implementation internals are accessed through the established reflection boundary, not static linkage to unreleased classes.
+Bukkit and Folia have separate source files with different scheduling and platform adaptations. Check both when changing shared behavior; do not copy Bukkit sources over Folia.
 
 ## Persistence boundaries
 
-Proxy FLP records are the network list authority; backend AuthMe/EasyAuth stores are local account authority. Protocol/profile facts, pending requests and account updates have different lifetimes. Per-name locking avoids some classic load/modify/save races but is not a distributed transaction or a global multi-proxy lock.
+Proxy FLP records are the source of the network list; backend AuthMe/EasyAuth stores hold local accounts. Updates to the two stores are not one database transaction, so success in one does not imply success in the other.
 
-The current default build has no `web` module. A WebUI feature branch is not a shipped 1.0.0 capability unless explicitly ported, built and accepted. Refer to [login flow](../LOGIN-FLOW.md), [extension boundaries](extensions.md) and the [shared module note](https://github.com/Hayston1001/FastLoginPlus/blob/main/shared/README.md).
+See also [login flow](../LOGIN-FLOW.md) and [events and extensions](extensions.md).

@@ -9,9 +9,7 @@
 | `true` | Mojang UUID |
 | `false` | Name-derived offline UUID |
 
-An unverified connection does not gain a premium identity by enabling this setting. In standalone mode FLP injects the premium UUID when enabled. On a proxy the verified profile already has the premium UUID, so disabling it rewrites the profile to the offline UUID. Configure this on the proxy in proxy mode.
-
-The verified Mojang UUID and connection UUID can therefore differ. AuthMe/EasyAuth integration uses verified identity facts for ownership, not the appearance of a UUID or a second name lookup. A version-4 UUID is not proof that forwarding was authenticated.
+This setting does not give an unverified player a premium identity. In proxy mode, configure it on the proxy.
 
 ## Before changing UUID policy
 

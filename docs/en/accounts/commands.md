@@ -21,7 +21,7 @@ There is **no implemented `delete.other` requirement**. Delete always takes a na
 
 Classic aliases are `prem`, `unpremium` and `del`. `/premium` is not an FLP alias. Self premium/cracked operations require a player; a console must supply the target name. Names in examples are literal targets, not UUIDs.
 
-In proxy mode an online backend player must carry plugin messages. When none is present, classic backends persist toggle/delete requests in `pending-relay.json`. Requests are per backend, survive a restart and wait for a carrier on that backend. There is no queue TTL; do not assume an abandoned request expired. Conflicting queued toggles use the current queued value. Inspect final proxy/backend feedback before issuing more commands.
+In proxy mode, a Bukkit/Folia backend needs an online player to send account changes to the proxy. When it is empty, requests are saved in `pending-relay.json` until a player joins that backend; restarting does not clear them. Sending a request does not mean it has completed. Check the final feedback before repeating an operation.
 
 ## Fabric
 

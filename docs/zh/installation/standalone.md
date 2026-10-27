@@ -11,17 +11,32 @@
 
 ## 安装步骤
 
-1. 停服. 把可安装的 **Bukkit** FLP JAR, 认证插件和数据包库放入 `plugins/`. 不使用 `-plain.jar`, Folia, 代理或 Fabric 产物.
-2. 在 `server.properties` 设置 `online-mode=false`. 这允许混合登录方式, 但未经验证的玩家仍必须接受密码认证.
-3. 确认真的是独立服后, 关闭转发: `spigot.yml` 中 `settings.bungeecord: false`, Paper 中关闭 Velocity 支持.
-4. 启动一次生成文件, 检查启动错误, 再停服编辑. 后端 FLP 文件位于 `plugins/fastloginplus/`; 应以实际生成的目录为准, 不要另建大小写不同的第二个目录.
-5. 检查 `config.yml`, 尤其是 `premiumUuid`, `autoRegister`, `autoLogin`, `auto-register-unknown`, `offline-whitelist`. `premiumUuid` 默认是 `true`, 已有离线服可能需要 `false` 来保留连接 UUID. 先阅读 [UUID 风险](../accounts/uuid.md).
-6. 选择 `language: en` 或 `language: zh`. 修改后完整重启服务器.
+### 1. 安装插件
+
+停止服务器, 将以下插件放入 `plugins/`:
+
+| 插件 | 选择 |
+| --- | --- |
+| FastLoginPlus | **Bukkit** 版本, 不使用 `-plain.jar` |
+| 认证插件 | 与服务端兼容的版本, 例如 AuthMe |
+| ProtocolLib | 与 Minecraft 和服务端版本兼容的版本 |
+
+### 2. 配置服务器
+
+在 `server.properties` 中设置 `online-mode=false`. 这允许玩家使用不同的登录方式, 但未验证玩家仍需通过认证插件登录.
+
+确认玩家直接连接此服务器后, 在 `spigot.yml` 中设置 `settings.bungeecord: false`. 如果使用 Paper, 也要在 Paper 配置中关闭 Velocity 转发.
+
+### 3. 配置 FLP
+
+1. 启动服务器一次, 检查插件是否正常加载, 然后停止服务器.
+2. 打开生成的 `plugins/fastloginplus/config.yml`. 文件夹名称以实际生成为准.
+3. 检查 `premiumUuid`. 默认值为 `true`; 已有离线服可能需要 `false` 来保留现有连接 UUID. 修改前先阅读 [UUID 与玩家数据](../accounts/uuid.md).
+4. 根据需要调整 `autoRegister`, `autoLogin`, `auto-register-unknown` 和 `offline-whitelist`. 各选项的用途见 [Java 登录策略](../configuration/java.md).
+5. 将 `language` 设置为 `zh` 或 `en`, 然后重启服务器.
 
 ## 验证
 
-确认 FLP 找到了认证插件, 数据包路径注册成功, 没有加密响应映射告警. 测试首次加入的正版账号, 已有密码账号, 重连和未验证连接. 已有密码或账号归属可能合理地阻止免密登录; 有皮肤或使用正版名字都不能证明认证成功.
+确认启动日志没有插件加载错误, 再用测试账号检查正版登录和已有密码账号登录. 已有密码账号未同意绑定时仍需输入密码. 如果出现登录对话框问题, 参阅[故障排查](../operations/troubleshooting.md).
 
-Paper 上 AuthMe 6 的 pre-join 处理可能早于进入游戏后的插件动作. 不要反复修改 `autoRegister` 试图解决对话框阻塞, 应按[排障指南](../operations/troubleshooting.md)检查.
-
-开放公网玩家之前完成[验证清单](verification.md), 保留密码恢复途径和管理员账号.
+开放公网之前, 保留密码恢复途径和管理员账号.

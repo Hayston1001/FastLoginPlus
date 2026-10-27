@@ -11,10 +11,9 @@
 
 * [Spigot/Paper 独立服](installation/standalone.md)
 * [Folia 独立服](installation/folia.md)
-* [Velocity 与经典后端](installation/velocity.md)
-* [BungeeCord 与经典后端](installation/bungeecord.md)
+* [Velocity 与 Spigot/Paper/Folia](installation/velocity.md)
+* [BungeeCord 与 Spigot/Paper/Folia](installation/bungeecord.md)
 * [Velocity 与 Fabric/EasyAuth](installation/fabric.md)
-* [安装验证与安全检查](installation/verification.md)
 
 ## 登录与账号管理
 
@@ -54,6 +53,3 @@
 * [架构与模块边界](development/architecture.md)
 * [登录流程与身份信任](LOGIN-FLOW.md)
 * [事件与扩展边界](development/extensions.md)
-* [ProtocolLib 异步设计](PROTOCOLLIB-ASYNC-DESIGN.md)
-* [CraftAPI 基线](CRAFTAPI-BASELINE.md)
-* [维护与发布 Wiki](development/gitbook.md)

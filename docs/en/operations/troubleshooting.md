@@ -5,21 +5,24 @@ Start with one reproducible attempt. Record deployment, exact versions, account 
 ## Premium player still gets a password prompt
 
 1. Check whether this connection actually passed Mojang verification. A Mojang name lookup, skin or stored UUID is not enough.
-2. Check the authoritative `autoLogin` policy and local auth account state. An existing password account without consent can correctly remain password-locked.
+2. Check FLP's `autoLogin` and the authentication plugin's account state. In a proxy deployment, check the proxy configuration. An unbound password account correctly continues to require its password.
 3. If no account exists, inspect `auto-register-unknown`. Off intentionally keeps registration.
-4. If this is a proxy backend, check forwarded facts/trust and proxy configuration, not just the backend's same-named options.
+4. With a proxy, follow the installation guide to check forwarding, the secret and the backend's allowed proxy IDs.
 5. Only after the holder logs in should they use the [binding procedure](../accounts/binding.md).
 
-## Stuck in an AuthMe pre-join dialog
+## Stuck in an AuthMe login dialog
 
-Confirm AuthMe version, FLP takeover and the appropriate early path. On Paper the dialog can appear before join-time plugin messages; Spigot uses a different pre-login path. Check forwarding mode/secret, proxy allowlist and validated declarations, then account ownership and registration API failures. Do not add a second verification listener, change UUID policy at random or treat a blocking password dialog as permission to erase an account.
+1. Confirm AuthMe and FLP are compatible with your server and check both startup logs.
+2. If using a proxy, follow the installation guide to check forwarding mode, the secret and the backend's allowed proxy IDs.
+3. Check whether the account already has a password and look for account or registration errors in both logs.
+4. If the issue persists, preserve account data and [report the problem](reporting.md). Do not delete the account or change UUID settings at random to bypass the dialog.
 
 ## Proxy requests have no effect
 
 - Run `/flp` on the backend, not the proxy console.
 - Check the generated proxy ID, backend trust list and required restart. Empty trust prevents message-based operations.
 - Check `verify-backend-messages` and old-peer policy compatibility. Do not permanently disable checking to hide a mismatch.
-- Classic empty backends queue requests locally; another backend having a player does not drain that queue. Fabric empty-server console requests fail instead of persisting.
+- An empty Bukkit/Folia backend holds pending requests until a player joins that backend. Fabric console requests that need forwarding fail when the server is empty.
 - Distinguish immediate hand-off from final result. Collect proxy logs, backend feedback and actual database state.
 
 ## Mojang unavailable / invalid session
@@ -36,7 +39,7 @@ Keep the existing row. Check exact name, verified UUID, consent and local auth s
 
 ## Inventory or permissions changed
 
-Compare old/new connection UUIDs and `premiumUuid` on the authoritative side. FLP does not migrate UUID-indexed data. Restore or separately migrate the affected plugin's data in a test copy; do not overwrite world files while players are online.
+Compare old/new connection UUIDs and the `premiumUuid` setting. In a proxy deployment, check the proxy configuration. FLP does not migrate data stored by UUID. Restore or separately migrate the affected plugin's data in a test copy; do not overwrite world files while players are online.
 
 ## Fabric rejects login or admin operations
 

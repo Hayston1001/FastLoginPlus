@@ -1,6 +1,6 @@
 # Bedrock 策略
 
-在独立部署中负责身份的服务器配置, 代理网络则在**代理**配置. 当前代理把策略随声明交给后端. 后端本地 Floodgate 检测是兼容路径, 不是另一套竞争的策略来源.
+独立服在服务器的 FLP 配置中设置这些选项; 代理网络在**代理**的 FLP 配置中设置.
 
 | 选项 | 默认值 | 用途 |
 | --- | --- | --- |
@@ -19,9 +19,9 @@
 
 `allowFloodgateNameConflict` 应作为布尔冲突开关, 不当作另一个自动登录选择器. 强烈建议保留不与 Java 冲突的 Floodgate 前缀, 不要为了复用 Java 账号随意删除前缀.
 
-## 经典认证后端
+## Spigot, Paper 和 Folia
 
-受支持的 AuthMe pre-login 路径可以在阻塞对话框之前准备账号并请求登录. 新账号要求自动注册和自动登录都允许. 名字冲突查询失败或账号不可读, 不会授权访问. 缺少必要 pre-login API 时可能不支持该路径, 通用钩子不会自动具备同样能力.
+在受支持的 AuthMe 版本上, FLP 可以在登录对话框出现前为 Floodgate 玩家处理账号. 自动创建账号需要同时允许自动注册和自动登录. 不同认证插件的支持范围不同, 请查看[集成说明](../integrations/bedrock.md).
 
 Java `auto-register-unknown` 不能替代 `autoRegisterFloodgate`. 准入, 建号, linked 身份和名字冲突是不同检查.
 

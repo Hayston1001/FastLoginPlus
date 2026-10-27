@@ -18,7 +18,7 @@ FLP 是 [FastLogin](https://github.com/TuxCoding/FastLogin) 的活跃维护分�
 - 不自动迁移不同 UUID 之间的背包, 世界, 权限或其他插件记录.
 - 不替代 Geyser, Floodgate, 认证插件, 转发配置, 后端网络隔离或专业抗 DDoS 服务.
 - 不保证所有 Minecraft 版本, 认证插件版本, Fabric 整合包和数据库拓扑的行为相同.
-- 切换账号状态不会 transfer 或自动重连玩家. 需要改变登录路径时, 由玩家手动重连.
+- 切换账号状态不会自动重连玩家. 需要改变登录方式时, 由玩家手动重连.
 
 ## 三个独立的问题
 

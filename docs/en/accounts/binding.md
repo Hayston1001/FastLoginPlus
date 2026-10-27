@@ -2,27 +2,27 @@
 
 Use the [commands reference](commands.md) for permissions and console restrictions. An account action must be performed by its authenticated holder or an authorized administrator. A premium-looking name is not permission to overwrite another account.
 
-Keep the auth plugin's pre-authentication command restrictions enabled. Do not whitelist account-management commands for unauthenticated players just to make `/flp` available before login. Classic command permission checks are not themselves password authentication.
+Keep the authentication plugin's restrictions on commands before login. Do not allow unauthenticated players to use account-management commands just to make `/flp` available before login.
 
-## Classic Bukkit/Folia accounts
+## Bukkit/Paper/Folia: bind a premium account
 
 1. For self-service, complete the auth plugin's login first. Run `/flp premium` and repeat only when the premium-warning prompt asks for confirmation.
-2. In proxy mode the backend relays the request; the proxy changes the FLP list. Wait for the **final** result, not just the hand-off message.
+2. In proxy mode, wait for the **final** result, not just the message that the request was sent.
 3. If `kick-toggle` is enabled the proxy/server disconnects the affected player; otherwise the current session stays. Reconnect manually to use the new route and prove the premium identity.
 4. Test the next login and record the connection UUID. A command does not authenticate the next connection or migrate player data.
 
 `/flp cracked` clears FLP premium state and changes the next route. **AuthMe cleanup is destructive:** current classic integration removes/reset its account record and clears premium caches, so re-registration may be needed. Do not assume it preserves a player's old password. For other auth plugins, equivalent cleanup is not generally implemented; an automatically generated password may need operator recovery.
 
-Classic standalone other-player commands and proxy-relayed commands do not have identical kick behavior. Follow actual feedback and schedule a manual reconnect rather than promising every admin command immediately kicks its target.
+When an administrator acts on another player, use the actual feedback to arrange a manual reconnect.
 
 ## Fabric/EasyAuth password account to premium
 
-1. Log in to the existing EasyAuth password account. Its stored state must be a consistent password account.
-2. Run `/flp premium`. The request uses the normal proxy toggle channel. With `premium-warning: true`, follow the proxy's confirmation and run the command again as prompted.
-3. The proxy records consent and resolves the target Mojang UUID. If `kick-toggle` is enabled it kicks; otherwise leave and reconnect manually.
-4. A later connection must pass Mojang verification and match account/consent checks before the backend converts it and completes EasyAuth login.
+1. Log in to the existing EasyAuth password account.
+2. Run `/flp premium`. If prompted for confirmation, run the command again as instructed.
+3. Wait for the final result. If disconnected, reconnect manually; otherwise leave and reconnect.
+4. Reconnect using the corresponding premium account. Binding and EasyAuth login complete after verification succeeds.
 
-The existing password is retained as a dormant credential, not replaced with a random one. The pending message is not the conversion itself. There is no transfer, cookie or temporary ten-minute backend binding window in this flow. Missing proxy trust, failed persistence or lost connectivity requires checking both sides before retrying; do not erase the password account.
+The original password is retained and can be restored by unbinding. A sent request does not mean binding is complete. If the operation fails, check proxy and backend logs before retrying; do not delete the password account.
 
 An administrator may authorize `/flp premium <player>` without proving the target's password. That is an explicit privileged operation, not ordinary self-service. It still requires a later verified connection and does not erase the password.
 

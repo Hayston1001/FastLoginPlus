@@ -4,24 +4,24 @@
 
 | 部署/文件 | 用途 |
 | --- | --- |
-| 经典平台 `plugins/fastloginplus/config.yml` | 本地设置, 自动选择代理或后端模板 |
-| 经典平台 `plugins/fastloginplus/messages_<语言>.yml` | 玩家/管理员消息覆盖 |
-| 经典后端 `allowed-proxies.txt` | 可信 FLP 代理 UUID, 每行一个, 重启生效 |
+| Bukkit/Folia/BungeeCord/Velocity `plugins/fastloginplus/config.yml` | 本地设置, 自动选择代理或后端模板 |
+| Bukkit/Folia/BungeeCord/Velocity `plugins/fastloginplus/messages_<语言>.yml` | 玩家和管理员消息 |
+| Bukkit/Folia 后端 `plugins/fastloginplus/allowed-proxies.txt` | 可信 FLP 代理 UUID, 每行一个, 重启生效 |
 | Velocity `proxyId.txt` | 自动生成的 FLP 代理身份, 应保留 |
 | BungeeCord 自身 `config.yml` 的 `stats` | FLP 使用的 Bungee 实例身份 |
 | Fabric `config/fastloginplus-fabric.yml` | 后端语言, debug, 更新检查和 `allowed-proxy-ids` |
 | Fabric `config/fastloginplus-fabric/messages_en.yml` / `messages_zh.yml` | 可选的本地消息覆盖 |
-| 经典后端 `pending-relay.json` | 持久化待转发请求, 不是策略文件, 不要随意删除 |
+| Bukkit/Folia 后端 `plugins/fastloginplus/pending-relay.json` | 等待发送给代理的请求, 不是配置文件, 不要随意删除 |
 
 路径相对各进程自己的工作目录. 插件目录以实际生成的为准. Forwarding secret 属于代理/服务端或 FabricProxy-Lite 配置, 不是 FLP 白名单.
 
 ## 模板刷新与重启
 
-经典平台根据 Bukkit/Folia 后端模板或 BungeeCord/Velocity 代理模板生成磁盘 `config.yml`. 启动时恢复模板结构/注释, 补齐缺失选项并保留已有值, 不会把所有值重置为新默认值. 不属于选定模板的选项可能被移除. 复制配置后需要检查, 不要把代理和后端配置视为完全通用.
+Bukkit/Folia 和 BungeeCord/Velocity 分别使用后端和代理配置模板. 启动时会补齐缺失选项并保留已有值; 不属于对应模板的选项可能被移除. 代理和后端的配置文件不能直接互换.
 
 Fabric 使用独立的扁平 YAML 模板, 旧 `.properties` 说明不再适用. 不受支持的 YAML 会有诊断, 不要往该文件塞入嵌套的代理策略段.
 
-停服编辑并重启对应进程. 没有通用 `/flp reload`. Fabric 后端本地设置在启动时固定; 每次操作检查 EasyAuth 内存中的策略, 不等于重新读取双方配置文件.
+停服编辑, 然后重启对应的代理或服务器. FLP 没有通用的 `/flp reload` 命令.
 
 ## 各设置由谁负责
 
@@ -40,7 +40,7 @@ Fabric 使用独立的扁平 YAML 模板, 旧 `.properties` 说明不再适用. 
 
 | 选项 | 默认值 | 范围 |
 | --- | --- | --- |
-| `language` | `en` | 经典平台支持自定义语言代码, Fabric 支持 `en`/`zh` |
+| `language` | `en` | Bukkit/Folia/BungeeCord/Velocity 支持自定义语言代码, Fabric 支持 `en`/`zh` |
 | `debug` | `false` | 当前进程诊断日志 |
 | `check-update` | `true` | 当前进程后台发布检查 |
 | `update-check-interval` | `24` | 小时; Fabric 无效或小于 1 时回退到 24 |

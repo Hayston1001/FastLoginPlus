@@ -11,17 +11,32 @@ Use this guide only when players connect directly to this server. Behind a proxy
 
 ## Install
 
-1. Stop the server. Put the installable **Bukkit** FLP JAR, auth plugin and packet library in `plugins/`. Do not use the `-plain.jar`, Folia, proxy or Fabric artifact.
-2. Set `online-mode=false` in `server.properties`. This allows mixed login methods; password authentication must remain enabled for unverified players.
-3. Disable proxy forwarding if this is genuinely a direct server: `settings.bungeecord: false` in `spigot.yml` and Velocity support disabled in Paper's configuration.
-4. Start once to generate files, check startup errors, then stop before editing. FLP's backend files are under `plugins/fastloginplus/`; inspect the generated folder rather than creating a second differently capitalized folder.
-5. Review `config.yml`, especially `premiumUuid`, `autoRegister`, `autoLogin`, `auto-register-unknown` and `offline-whitelist`. The shipped `premiumUuid` default is `true`; an existing offline server may need `false` to preserve connection UUIDs. See [UUID risks](../accounts/uuid.md).
-6. Select `language: en` or `language: zh`. Restart the server completely after configuration changes.
+### 1. Install the plugins
+
+Stop the server and put these plugins in `plugins/`:
+
+| Plugin | Choose |
+| --- | --- |
+| FastLoginPlus | The **Bukkit** edition, not `-plain.jar` |
+| Authentication plugin | A version compatible with your server, such as AuthMe |
+| ProtocolLib | A version compatible with your Minecraft and server version |
+
+### 2. Configure the server
+
+Set `online-mode=false` in `server.properties`. This allows different login methods, but unverified players must still authenticate through the authentication plugin.
+
+Once you have confirmed that players connect directly to this server, set `settings.bungeecord: false` in `spigot.yml`. On Paper, disable Velocity forwarding in Paper's configuration as well.
+
+### 3. Configure FLP
+
+1. Start the server once, check that the plugins load, then stop it.
+2. Open the generated `plugins/fastloginplus/config.yml`. Use the folder name actually generated on your server.
+3. Review `premiumUuid`. The default is `true`; an existing offline server may need `false` to preserve its connection UUIDs. Read [UUIDs and player data](../accounts/uuid.md) before changing it.
+4. Adjust `autoRegister`, `autoLogin`, `auto-register-unknown` and `offline-whitelist` if needed. See [Java login policies](../configuration/java.md) for their purposes.
+5. Set `language` to `en` or `zh`, then restart the server.
 
 ## Verify
 
-Check that FLP found the auth plugin and registered the packet path without an encryption-response mapping warning. Test a fresh verified Java account, a password account, a reconnect and an unverified connection. An account's existing password/ownership can legitimately prevent automatic login; a skin or a premium-looking name is not proof that authentication succeeded.
+Check the startup log for plugin loading errors, then use test accounts to check premium login and an existing password account. An existing password account still requires its password until its owner agrees to bind it. For login dialog problems, see [troubleshooting](../operations/troubleshooting.md).
 
-On Paper, AuthMe 6 pre-join handling may run earlier than join-time plugin actions. A blocked dialog is not fixed by repeatedly changing `autoRegister`; follow [AuthMe troubleshooting](../operations/troubleshooting.md).
-
-Complete the [verification checklist](verification.md) before admitting public players. Keep a password recovery method and an operator account available.
+Before admitting public players, keep a password recovery method and an operator account available.

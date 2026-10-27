@@ -4,24 +4,24 @@
 
 | Deployment/file | Purpose |
 | --- | --- |
-| Classic `plugins/fastloginplus/config.yml` | Local settings; proxy or backend template selected automatically |
-| Classic `plugins/fastloginplus/messages_<language>.yml` | Player/operator message overrides |
-| Classic backend `allowed-proxies.txt` | Trusted FLP proxy UUIDs, one per line; restart to apply |
+| Bukkit/Folia/BungeeCord/Velocity `plugins/fastloginplus/config.yml` | Local settings; proxy or backend template selected automatically |
+| Bukkit/Folia/BungeeCord/Velocity `plugins/fastloginplus/messages_<language>.yml` | Player and operator messages |
+| Bukkit/Folia backend `plugins/fastloginplus/allowed-proxies.txt` | Trusted FLP proxy UUIDs, one per line; restart to apply |
 | Velocity `proxyId.txt` | Generated FLP proxy identity; preserve it |
 | BungeeCord's own `config.yml` `stats` | Bungee instance identity used by FLP |
 | Fabric `config/fastloginplus-fabric.yml` | Backend language, debug, update checks and `allowed-proxy-ids` |
 | Fabric `config/fastloginplus-fabric/messages_en.yml` / `messages_zh.yml` | Optional localized overrides |
-| Classic backend `pending-relay.json` | Durable pending requests, not a policy file or a file to casually delete |
+| Bukkit/Folia backend `plugins/fastloginplus/pending-relay.json` | Requests waiting to be sent to the proxy, not a configuration file; do not delete casually |
 
 Paths refer to each process's own working directory. Use the actual generated plugin folder. Forwarding secrets belong to the proxy/server or FabricProxy-Lite configuration, not to FLP's allowlist.
 
 ## Template refresh and restart
 
-Classic platforms generate the on-disk `config.yml` from either the Bukkit/Folia backend template or BungeeCord/Velocity proxy template. Startup refresh preserves existing values while restoring template structure/comments and supplying missing options; it is not a reset to new defaults. Options outside the chosen template can be dropped. Review a copied config rather than assuming proxy/backend files are interchangeable.
+Bukkit/Folia and BungeeCord/Velocity use separate backend and proxy configuration templates. Startup supplies missing options and preserves existing values; options outside the relevant template may be removed. Proxy and backend configuration files are not interchangeable.
 
 Fabric uses its own flat YAML template. The old `.properties` instructions do not apply. Unsupported YAML is diagnosed; do not put nested proxy policy sections in this file.
 
-Edit while stopped and restart the affected process. No general `/flp reload` command is provided. Fabric freezes its backend-local settings at startup; checking EasyAuth's in-memory policy on each operation does not reload either plugin's files.
+Edit while stopped, then restart the affected proxy or server. FLP has no general `/flp reload` command.
 
 ## Who owns each setting?
 
@@ -40,7 +40,7 @@ Some compatibility paths differ: `respectIpLimit` is an AuthMe backend check eve
 
 | Option | Default | Scope |
 | --- | --- | --- |
-| `language` | `en` | Classic custom language code; Fabric supports `en`/`zh` |
+| `language` | `en` | Bukkit/Folia/BungeeCord/Velocity support custom language codes; Fabric supports `en`/`zh` |
 | `debug` | `false` | This process's diagnostic logs |
 | `check-update` | `true` | This process's background release checks |
 | `update-check-interval` | `24` | Hours; Fabric invalid/below-one values fall back to 24 |

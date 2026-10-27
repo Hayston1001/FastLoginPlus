@@ -2,7 +2,7 @@
 
 ## Connection limits
 
-These apply at standalone packet entry or proxy pre-login, **not again on a proxied backend**. They do not replace network-level flood protection.
+Configure connection limits on the standalone server or, in a proxy network, on the proxy. FLP does not apply them again on the proxied backend. They do not replace network-level flood protection.
 
 | Option | Default | Unit / purpose |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ These apply at standalone packet entry or proxy pre-login, **not again on a prox
 | `anti-bot.ban-duration` | `5` | Temporary IP ban, minutes |
 | `anti-bot.trusted-ips` | Empty | Explicit addresses bypassing FLP connection checks |
 
-Checks prioritize trusted addresses, active bans, the global rate and per-IP rate/burst. Hitting a limit **blocks** with `kick-antibot`. The old `anti-bot.action` and its ignore behavior were removed; do not add the key back. An event listener can still override the anti-bot decision, which is a privileged extension boundary.
+When a limit is reached, FLP rejects the connection with the `kick-antibot` message. The old `anti-bot.action` option was removed; do not add it back to the configuration.
 
 Invalid limits/durations are diagnosed and normalized; use positive sensible values rather than relying on fallback. Incorrect forwarded IPs can make every player share the proxy address and trigger limits. Check forwarding before raising limits or trusting the proxy's IP indiscriminately.
 
@@ -32,6 +32,6 @@ Invalid limits/durations are diagnosed and normalized; use positive sensible val
 
 On FLP's standalone path, retry settings cover name lookup and its session verification. On proxies they cover FLP name lookup, **not** the proxy software's native session handshake. Rate-limit errors are not blindly retried like transient I/O errors. `0` direct requests requires a configured HTTP proxy; without one the limit is reset to 600.
 
-Behind a proxy, backend retry settings do not control proxy requests. Paper's configure-phase lookup compatibility can still use backend `ip-addresses`, `mojang-request-limit` and `proxies`. Do not infer a universal "no HTTP on any backend" rule.
+Backend retry settings do not control proxy requests. Some Paper compatibility paths can still use backend `ip-addresses`, `mojang-request-limit` and `proxies` settings.
 
 An unreachable or rate-limited lookup is not a cracked verdict. Check DNS, TLS, outbound rules and service availability. Disabling account protection or repeatedly reconnecting can make a rate-limit incident worse.

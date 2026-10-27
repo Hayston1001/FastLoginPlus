@@ -10,8 +10,8 @@ Include:
 4. Account situation: new or existing, password or bound, Java or Bedrock/linked, expected UUID policy and recent commands/upgrades.
 5. Numbered reproduction steps, expected result and actual player-visible result. Say whether reconnect/restart changes it.
 6. Sanitized startup and one attempt's debug logs from both proxy and backend, plus relevant config. Include timestamps so the attempt can be correlated.
-7. Tests already performed and their limits: unit test, startup, real client login, disconnect/failure simulation are different evidence.
+7. What you have already tried and the result of each attempt.
 
 Remove passwords, generated credentials, proxy IDs, forwarding secrets, private IPs if needed and personal data. Never attach the full authentication database. If the issue is a vulnerability or account takeover, use GitHub's private vulnerability reporting where available rather than publishing exploit details or live secrets in a public issue.
 
-Do not report "premium does not work" using a skin as the only evidence. State whether the handshake verified identity and which account action failed. For docs problems, include the page and the incorrect statement, not just a screenshot without a URL.
+For documentation problems, include the page link and the incorrect text. For login problems, include the message the player actually saw; a skin alone does not establish whether verification succeeded.

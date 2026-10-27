@@ -1,30 +1,20 @@
 # Geyser and Floodgate
 
-Geyser translates Bedrock connections to Java protocol. Floodgate supplies a separately authenticated Bedrock identity and optional Java linking. FLP does not replace either product or infer their authentication from a prefix.
+Geyser lets Bedrock players connect to Java servers. Floodgate lets Bedrock players join supported servers without a Java account. FLP does not replace them: install and configure them using the [Geyser](https://geysermc.org/wiki/geyser/setup) and [Floodgate](https://geysermc.org/wiki/floodgate/setup) guides first.
 
-## Choose the authentication mode
+## How players log in
 
-Do not assume "Geyser without Floodgate" means "no authentication". Geyser's selected Java authentication mode determines whether a Java login is performed. FLP's plain-Geyser online path can follow the Java decision tree; a non-online path must not gain premium login merely because a name matches a paid Java account.
+| Setup | Player login |
+| --- | --- |
+| Geyser + Floodgate | FLP's Bedrock policy can allow automatic registration or login. Support depends on the backend authentication plugin |
+| Geyser without Floodgate | Login depends on Geyser's authentication settings. When a player logs in with a premium Java account, FLP can treat them as a Java player |
 
-Install Geyser/Floodgate according to their own [setup guides](https://geysermc.org/wiki/geyser/setup) and [Floodgate documentation](https://geysermc.org/wiki/floodgate/setup). Their current protocol/Java requirements are independent of FLP's bytecode minimum.
+A matching username alone does not prove ownership of a premium Java account. Do not grant premium passwordless login to an unverified player.
 
-## Classic deployments
+In a proxy network, configure [Bedrock policy](../configuration/bedrock.md) on the proxy. The backend still needs a compatible authentication plugin. For AuthMe, see the [version comparison](authme.md). Back up account data before changing Floodgate's player-name prefix: a name change can affect existing accounts.
 
-Place Geyser/Floodgate where that deployment's official guide requires. On proxy networks FLP takes identity and policy from the proxy and can forward signed Bedrock facts to the backend. AuthMe's supported name-based pre-login API can then prepare/register/login before its gate. This also covers the appropriate Spigot pre-login path, not only Paper configure events.
+## Fabric support
 
-An optional backend Floodgate API path exists for compatibility. It must not silently override a proxy declaration with backend-local policy or duplicate the proxy's identity decision. Keep names/prefixes stable, preserve trust files, and test linked/unlinked cases separately.
+Velocity with Fabric/EasyAuth currently supports automatic login only for qualifying Floodgate players **without a linked Java account** and with an existing EasyAuth account. The account must be fully registered and its name and UUID must match the player; the proxy must also allow automatic login.
 
-Automatic registration and login are controlled by [Bedrock policies](../configuration/bedrock.md). Failed registration/login cleanup can require operator repair; do not reset accounts or log generated credentials to force a successful result.
-
-## Fabric's narrower boundary
-
-All of these are required for the current Bedrock auto-login path:
-
-1. A fresh signed proxy claim bound to the actual connection's name and Floodgate UUID, from an allowed proxy.
-2. An **unlinked** identity and permitting proxy auto-login policy.
-3. An existing completed EasyAuth account with exactly the same name/UUID, a nonempty stored credential, an appropriate non-premium account kind and no forced UUID override.
-4. Successful EasyAuth policy checks, readable storage and a successful account update before authentication completes.
-
-Missing/invalid/expired/replayed claims are rejected; unknown/unreadable account state never grants login. Replay tracking is process-local, not a promise of persistence across restart. The stored credential establishes completed registration, not authentication of the current connection; that comes from the trusted Floodgate claim.
-
-This path does **not** create new Bedrock accounts, accept linked accounts, use EasyAuth native Floodgate bypass or convert them into Java premium accounts. A Bedrock player denied here needs a separately supported provisioning/recovery procedure, not fabricated Java UUIDs or disabled checks.
+This setup does not currently create Bedrock accounts automatically, support linked Floodgate account login, or convert Bedrock accounts to premium Java accounts. If login fails, do not disable identity checks or invent a UUID; check the account and proxy settings first. See the [Fabric guide](../installation/fabric.md) for installation requirements.

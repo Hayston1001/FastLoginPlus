@@ -18,7 +18,7 @@ FLP is an actively maintained fork of [FastLogin](https://github.com/TuxCoding/F
 - It does not automatically migrate inventories, worlds, permissions or other plugins' records between UUIDs.
 - It does not replace Geyser, Floodgate, the authentication plugin, forwarding configuration, firewall isolation, or a dedicated anti-DDoS service.
 - It does not promise that every Minecraft version, auth plugin release, Fabric modpack or database topology works identically.
-- Account switches do not transfer players or automatically reconnect them. A changed login route is applied through a manual reconnect when required.
+- Account switches do not automatically reconnect players. When needed, the player must reconnect manually to use the new login method.
 
 ## The three separate questions
 

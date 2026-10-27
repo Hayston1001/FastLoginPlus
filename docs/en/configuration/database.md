@@ -6,6 +6,28 @@ Standalone FLP stores its premium/cracked records on that server. Proxy deployme
 
 SQLite is the default. Do not put one SQLite file on a network share for several processes or copy a live database without a consistent backup. Multi-proxy or multi-backend account synchronization needs its own design and testing; choosing MySQL does not solve every cross-server race or local-account mismatch.
 
+## Configure MySQL or MariaDB
+
+If you do not need an external database, keep the default SQLite configuration. To use MySQL or MariaDB:
+
+1. Create a database and dedicated account on the database server, granting it the permissions required for that database.
+2. Stop the server running FLP. On a standalone server, edit its `plugins/fastloginplus/config.yml`; in a proxy deployment, edit that path on the proxy.
+3. Change the existing options below, replacing the examples with your actual details:
+
+   ```yaml
+   driver: 'mysql'
+   database: 'fastloginplus'
+   host: '127.0.0.1'
+   port: 3306
+   username: 'flp_user'
+   password: 'replace-with-database-password'
+   ```
+
+4. Configure encrypted connections as required by your database and driver. BungeeCord does not bundle the MariaDB driver; confirm that a compatible driver is available before switching.
+5. Start the server and check for database connection errors. Existing SQLite data is not migrated automatically when you change the configuration; back it up and plan the migration separately before switching an existing server.
+
+These settings configure FLP's list database, not the authentication plugin's account database.
+
 ## Options
 
 | Option | Default | Meaning |

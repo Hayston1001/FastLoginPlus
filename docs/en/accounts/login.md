@@ -2,9 +2,9 @@
 
 ## Verification is not automatic account access
 
-A name lookup asks whether Mojang knows a Java account with this name. The login handshake proves whether **this connection** owns that identity. Neither query alone decides whether an existing local password account should be opened.
+FLP can let verified premium players log in without a password. A premium username alone does not prove ownership, and an existing password account is not taken over based on its name.
 
-On proxy networks, the proxy verifies identity, controls admission/forwarding and owns FLP records. The backend combines trusted identity and policy facts with the auth plugin's local account state, then chooses and executes the account action. On standalone servers, these responsibilities live on the same server; generic standalone auth hooks retain their own force-login behavior, while AuthMe has additional early ownership checks.
+In a proxy network, manage login policies and the FLP list on the proxy. The authentication plugin's accounts and passwords are managed on the backend.
 
 ## Common results
 

@@ -1,28 +1,27 @@
 # AuthMeReloaded
 
-AuthMe runs on Bukkit/Paper/Folia backends, not as the backend JAR on Velocity/BungeeCord. Its optional proxy companions are different plugins. Install a version compatible with your server and check its startup separately from FLP.
+Install AuthMe on Bukkit, Paper or Folia. In a proxy network, each backend requiring authentication needs compatible versions of AuthMe and FLP; do not put the backend AuthMe plugin in the proxy's `plugins/` directory.
 
-## 5.x and 6.x are different
+## Choose a version
 
-FLP includes an AuthMe hook for password/registration actions. AuthMe 6 additionally has premium account state, caches and, on appropriate Paper/Folia versions, pre-join dialogs. FLP detects these capabilities and coordinates its premium handling with them.
+| Feature | AuthMe 5.x | AuthMe 6.x |
+| --- | --- | --- |
+| Password accounts | Registration and password login; FLP can provide automatic login | Also supported |
+| Premium account management | Use FLP's account commands | FLP coordinates AuthMe's premium account features; use FLP's commands |
+| Pre-join dialogs | Does not have AuthMe 6's dialog feature | Available on applicable Paper/Folia versions |
+| Bedrock automatic registration and login | The newer early-login flow is not guaranteed | Requires the appropriate AuthMe APIs; 6.0.1 provides the required capabilities |
 
-During the 6.x takeover FLP enables `settings.enablePremium` and disables AuthMe's own premium verification listener so two systems do not verify the same connection independently. AuthMe's `/premium` and `/freemium` are guarded and point to `/flp premium` and `/flp cracked`. FLP reasserts takeover after applicable AuthMe reload/enable events. This does not make generic server hot reload a supported deployment procedure.
+Choose a build compatible with your server and confirm that AuthMe and FLP both load in the startup log. Verify your particular versions and server combination.
 
-FLP pins the AuthMe proxy companion's `premium.keepOfflineUuidCompatibility` to `false` when managing that companion, leaving FLP `premiumUuid` as the connection UUID authority. It also coordinates AuthMe's own proxy auto-login policy while FLP owns login decisions. Do not maintain an independent contradictory auto-login path in the companion.
+## Commands and settings
 
-## First login and dialogs
+- Use `/flp premium` to bind a premium account and `/flp cracked` to return to password login. Read [binding and switching](../accounts/binding.md) first.
+- With AuthMe 6, FLP manages its premium features. Do not configure a separate conflicting premium verification or proxy auto-login system.
+- When FLP manages an AuthMe proxy companion, it sets `premium.keepOfflineUuidCompatibility: false`. FLP's `premiumUuid` setting determines the UUID used for the player.
+- To honor AuthMe's per-IP registration limit, enable `respectIpLimit` in the backend FLP configuration.
 
-A dialog can block before a normal join-time plugin message arrives. The current integration can consume verified standalone identity or trusted forwarded facts early, inspect account ownership, and prepare the allowed account action before AuthMe's gate. Paper configure and Spigot pre-login paths are not identical.
+## Back up before switching
 
-`enablePremium: true` alone does not authenticate a client. A profile UUID, skin or username alone is not sufficient. Legacy forwarding requires validated signed declarations; modern forwarding must be correctly authenticated. Existing password accounts need account-appropriate consent rather than a blind force-register.
+`/flp cracked` can remove or reset an AuthMe account record. Back up the authentication database first and make sure the player can register again safely. This differs from EasyAuth, which retains the original password.
 
-The new Bedrock pre-login path requires AuthMe's appropriate name-based registration/force-login APIs, including the capabilities used from 6.0.1. Do not promise that every 5.x hook has this behavior. Generated Bedrock registration credentials on this path are not printed to the player or log. A failed login after creation uses snapshot-checked cleanup; if safe cleanup cannot be verified the log requests operator repair.
-
-## Account safety and recovery
-
-- An unreadable account is not automatically absent. Corrupt premium UUIDs are preserved and rejected for operator diagnosis, not replaced with guessed identity.
-- With auto-login disabled, a verified owner can retain the auth plugin's password/registration flow; an unusable passwordless placeholder can need safe release or operator recovery. An ownership mismatch is not permission to delete a row.
-- `/flp cracked` performs AuthMe-specific cache and account cleanup. It can remove/reset the auth record, unlike EasyAuth's password-retaining unbind. Back up first and arrange safe re-registration.
-- If `respectIpLimit` is enabled, AuthMe's per-IP registration limit is checked on the backend, even behind a proxy.
-
-For blocked dialogs, inspect both proxy and backend logs and follow [troubleshooting](../operations/troubleshooting.md). PacketEvents is not a substitute for FLP's standalone ProtocolLib path; warnings about AuthMe's own optional listener must be interpreted in context.
+An existing password account is not taken over just because its name belongs to a premium player. The player must log in and agree to binding. If a login dialog blocks entry, check proxy and backend logs and see [troubleshooting](../operations/troubleshooting.md).

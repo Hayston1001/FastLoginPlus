@@ -9,7 +9,7 @@ Stop affected processes or use each database's supported consistent-backup proce
 - FLP config, languages and SQLite database, or a consistent MySQL/MariaDB dump.
 - AuthMe/EasyAuth/other auth-plugin data, config and databases.
 - Velocity `proxyId.txt`, BungeeCord's `stats` UUID, backend `allowed-proxies.txt` / Fabric `allowed-proxy-ids`, and forwarding secrets in a secure backup.
-- Classic `pending-relay.json`, since undelivered admin requests survive restarts.
+- Bukkit/Folia backend `pending-relay.json`, since undelivered admin requests survive restarts.
 - Worlds/player data and other plugins' UUID-indexed records, plus old JARs and exact versions.
 
 Test restoring the backup in an isolated environment. A copy of FLP's database alone is not an account or inventory recovery plan.
@@ -18,12 +18,12 @@ Test restoring the backup in an isolated environment. A copy of FLP's database a
 
 1. Reproduce the network in staging and note current player UUID policy, authentication methods and existing account types.
 2. Stop affected proxy/backends, install matching platform artifacts, and preserve data/config/trust identities. Do not deploy `-plain.jar` or several FLP versions together.
-3. Prefer updating both sides in one maintenance window. During an older rolling upgrade, backend message stamping and declared-policy compatibility matter: old unstamped backends require backend upgrades before enforcing proxy checks; do not enable strict declared-policy requirements until proxies send those facts. There is no universal safe order for every mixed generation.
-4. Start, inspect configuration/language migration warnings, trust lists, database errors and auth integration takeover. Existing configuration values normally survive; a new default does not silently replace them all.
-5. Verify premium, password, whitelist, switch, reconnect and failure paths using the [checklist](../installation/verification.md). Confirm final database outcomes, not only successful startup.
+3. Prefer updating proxy and backends in one maintenance window. If you must upgrade in stages, do not enforce new-format message checks on the proxy before upgrading old backends. Do not enable `require-declared-proxy-policy` on backends until the proxy is upgraded and supports declaring policies.
+4. Start and check for configuration, language, proxy trust-list and database warnings. Existing configuration values normally survive; a new default does not automatically replace them all.
+5. Use test accounts to check the premium and password login methods your server uses, as well as account switching and reconnecting. Confirm that player data and account state are as expected.
 6. Reopen to players only when exact supported combinations are checked. Keep a recovery operator available.
 
-Removed `anti-bot.action`, old Fabric `.properties` instructions, transfer/cookie binding descriptions and old one-shot fallback semantics must not be copied into new configurations. Revisit the [policy reference](../configuration/java.md).
+Do not copy the removed `anti-bot.action` or old Fabric `.properties` settings into a new version. Review the [policy reference](../configuration/java.md) when changing login behavior.
 
 ## Rollback
 

@@ -6,8 +6,8 @@
 | --- | --- | --- |
 | Spigot/Paper 独立服 | Bukkit 后端 | 后端认证插件 |
 | Folia 独立服 | Folia 后端 | 兼容 Folia 的认证插件 |
-| Velocity + 经典后端 | Velocity 和每个参与认证的 Bukkit/Folia 后端 | 后端认证插件 |
-| BungeeCord + 经典后端 | BungeeCord 和每个参与认证的 Bukkit/Folia 后端 | 后端认证插件, 或独立支持的 BungeeAuth 钩子 |
+| Velocity + Spigot/Paper/Folia | Velocity 和每个参与认证的 Bukkit/Folia 后端 | 后端认证插件 |
+| BungeeCord + Spigot/Paper/Folia | BungeeCord 和每个参与认证的 Bukkit/Folia 后端 | 后端认证插件, 或独立支持的 BungeeAuth 钩子 |
 | Velocity + Fabric 26.2 | Velocity 和 Fabric 后端 | Fabric 上的 EasyAuth |
 
 新建 Paper/Folia 代理网络时优先采用 Velocity modern forwarding. 原生 Spigot 不支持 modern forwarding, 应使用 [Velocity 指南的 legacy 分支](../installation/velocity.md), 或使用 BungeeCord 并隔离后端. Fabric 必须通过 FabricProxy-Lite 使用 modern forwarding, 不是 BungeeCord.
@@ -28,8 +28,8 @@
 
 - Bukkit/Folia 独立服需要兼容的数据包库和认证插件. FLP 针对 ProtocolLib 5.3.0 编译, 实际应选择兼容目标服务端的构建, 不能仅凭版本号大于 5.3.0 判断可用. ProtocolSupport 是另一条兼容路径, 不是代理后端的必装依赖.
 - 代理后端不使用 FLP 的 ProtocolLib 拦截, 在线握手由代理负责. 其他插件仍可能单独需要 ProtocolLib.
-- AuthMe 5.x 和 6.x 的集成行为不同. 其他认证插件存在钩子, 不代表具备 AuthMe 相同的清理或 pre-join 支持.
+- AuthMe 5.x 和 6.x 的支持范围不同, 详见 [AuthMe 版本对比](../integrations/authme.md). 其他认证插件不一定提供相同的账号管理功能.
 - Fabric 的参考集成是 EasyAuth 3.4.4. 加载范围为 `>=3.4.0 <3.5.0`, 不代表所有补丁构建都经过运行验证. 受支持的 Fabric 存储组合使用本地 SQLite; 其他 EasyAuth 存储尚未验证.
 - Geyser/Floodgate 和各认证插件还有独立的服务端与 Java 要求, 应查阅各自文档.
 
-产物列表不是覆盖所有 Minecraft 版本的实测矩阵. 对外开放之前, 应按[安装检查清单](../installation/verification.md)验证实际组合. Fabric 支持不自动扩展到其他 Minecraft 版本, linked Bedrock 账号或多后端账号迁移.
+产物列表不代表所有 Minecraft 版本都经过测试. 对外开放之前, 请在实际服务器组合上检查登录. Fabric 支持不自动扩展到其他 Minecraft 版本, linked Bedrock 账号或多后端账号迁移.

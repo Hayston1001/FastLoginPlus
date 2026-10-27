@@ -14,7 +14,7 @@
 
 这是插件字节码下限, 宿主软件可以要求更高 Java. 默认构建包含 Fabric, Gradle 运行在 JDK 25.
 
-## 职责不是"代理决策, 后端执行"
+## 代理和后端
 
 代理决定验证路由, 建立 Mojang/Floodgate 身份, 实施网络准入, 持有 FLP 记录并执行代理侧写入/转发. 后端读取本地认证账号, 在代理声明策略约束下做最终认证动作决策, 再注册/登录, 保持密码锁或拒绝.
 
@@ -22,12 +22,12 @@
 
 ## 源码边界
 
-`core` 不导入平台 API. `craftapi` 不负责 FLP 业务规则. `shared` 无生产依赖或内置资源, 调用者提供解析器, 资源与策略. Fabric 使用 `protocol`/`shared` 在自身命名空间生成的源码副本, 不依赖经典平台类或 JAR, 产物不得含旧 `com.github.games647.fastlogin` 引用.
+`core` 不导入平台 API, `craftapi` 不负责 FLP 业务规则. Fabric 使用 `protocol` 和 `shared` 的源码, 不依赖 Bukkit/Folia 或代理插件的 JAR.
 
-Bukkit/Folia 保留兼容包 `com.github.games647.fastlogin.bukkit`, 但为独立源码, 存在刻意保留的调度/平台差异. 不要批量覆盖 Folia. Bungee 内部实现通过已有反射边界访问, 不静态链接未发布内部类.
+Bukkit 和 Folia 是独立源码, 包含不同的调度和平台适配. 修改共同行为时应检查两边, 不能直接用 Bukkit 源码覆盖 Folia.
 
 ## 持久化边界
 
-代理 FLP 记录是网络名单权威, 后端 AuthMe/EasyAuth 是本地账号权威. 协议/档案事实, 待转发请求和账号更新生命周期不同. 按名字加锁避免部分经典读改写竞争, 但不是跨库事务或多代理全局锁.
+代理 FLP 记录是网络名单的来源, 后端 AuthMe/EasyAuth 保存本地账号. 两处更新不是同一个数据库事务, 不能假设一处成功就代表另一处也成功.
 
-当前默认构建没有 `web` 模块. WebUI 功能分支只有明确移植, 构建和验收后才能作为正式 1.0.0 能力. 另见[登录流程](../LOGIN-FLOW.md), [扩展边界](extensions.md), [shared 模块说明](https://github.com/Hayston1001/FastLoginPlus/blob/main/shared/README.md).
+另见[登录流程](../LOGIN-FLOW.md)和[事件与扩展](extensions.md).
