@@ -9,17 +9,18 @@
 # FastLoginPlus Configuration (Bukkit / Folia)
 # ========================================
 # This file configures a standalone server or a backend behind a proxy.
-# Scope labels describe where a setting applies:
-#   Standalone: only without a proxy. Shared policies are configured on the proxy.
-#   Proxy backend: only behind a proxy.
-#   Both: applies locally in either deployment.
-#   Paper/Folia lookup: also used behind a proxy during the configuration phase;
-#     Spigot backends do not use it there.
-# Unlabelled settings apply locally in both deployments.
+# Scope labels appear above each setting or group:
+#   [Standalone only] - without a proxy; shared policies are set on the proxy.
+#   [Proxy backend only] - only on a backend behind a proxy.
+#   [Both modes] - applies locally in both deployments.
+#   [Standalone + Paper/Folia lookup] - also used behind a proxy for applicable
+#     Paper/Folia configuration-phase lookups, but not on Spigot backends.
+# A group label also applies to its nested or following settings.
 
 # ========================================
 # Language
 # ========================================
+# [Both modes]
 # Language file to use. Built-in options: "en"(English), "zh"(中文)
 # You can also use a custom value, e.g. "ja" -> loads messages_ja.yml
 # Missing keys will be auto-filled on startup.
@@ -28,6 +29,7 @@ language: en
 # ========================================
 # Update Check
 # ========================================
+# [Both modes] Update check settings.
 # Check for new versions on GitHub. Logs to console; notifies OPs on login
 check-update: true
 # Check interval in hours
@@ -36,7 +38,8 @@ update-check-interval: 24
 # ========================================
 # Anti-bot
 # ========================================
-# Standalone: reject connections that exceed these limits. Behind a proxy,
+# [Standalone only] All anti-bot settings below.
+# Reject connections that exceed these limits. Behind a proxy,
 # configure anti-bot on the proxy. Use a firewall for stronger protection.
 anti-bot:
   enabled: true
@@ -70,36 +73,43 @@ anti-bot:
 # ========================================
 # Premium Detection
 # ========================================
-# Standalone: route new premium names to verification. Account creation still
+# [Standalone only]
+# Route new premium names to verification. Account creation still
 # depends on login policy and account ownership; other checks may also verify.
 autoRegister: true
 
-# Standalone: allow auto-login for verified premium players. Behind a proxy,
+# [Standalone only]
+# Allow auto-login for verified premium players. Behind a proxy,
 # the backend enforces the proxy's policy instead.
 autoLogin: true
 
-# Proxy backend: require declared policies for force LOGIN/REGISTER messages.
+# [Proxy backend only]
+# Require declared policies for force LOGIN/REGISTER messages.
 # Upgrade older proxies before enabling, or players may need passwords or manual
 # registration. This does not authenticate messages or replace the proxy allowlist.
 # An explicit autoLogin: false overrides a conflicting force request either way.
 require-declared-proxy-policy: false
 
-# Standalone: use the verified premium UUID instead of the offline UUID.
+# [Standalone only]
+# Use the verified premium UUID instead of the offline UUID.
 # This does not enable verification or migrate player data.
 premiumUuid: true
 
-# Standalone: look up new names and reconcile FLP records by UUID after a name
+# [Standalone only]
+# Look up new names and reconcile FLP records by UUID after a name
 # change. This does not migrate player data.
 nameChangeCheck: true
 
-# Standalone: remember eligible failed premium verification attempts for an
+# [Standalone only]
+# Remember eligible failed premium verification attempts for an
 # offline retry (not recommended). Confirmed premium accounts are not downgraded.
 secondAttemptCracked: false
 
 # ========================================
 # Offline Whitelist
 # ========================================
-# Standalone: deny offline Java names unknown to FLP. This controls admission,
+# [Standalone only]
+# Deny offline Java names unknown to FLP. This controls admission,
 # not password or premium authentication. Manage the list with /flp cracked
 # and /flp delete.
 offline-whitelist: false
@@ -107,54 +117,65 @@ offline-whitelist: false
 # ========================================
 # Skin
 # ========================================
-# Standalone: forward premium skins. SkinsRestorer custom skins take priority.
+# [Standalone only]
+# Forward premium skins. SkinsRestorer custom skins take priority.
 forwardSkin: true
 
 # ========================================
 # Command Behavior
 # ========================================
-# Standalone: ask for confirmation before /flp premium takes effect.
+# [Standalone only]
+# Ask for confirmation before /flp premium takes effect.
 premium-warning: true
 
+# [Both modes]
 # Standalone: kick after a toggle so the player can reconnect manually.
-# Proxy backend: this also controls kicks after relaying a queued toggle;
+# Proxy backend: also controls kicks after relaying a queued toggle;
 # the proxy's setting controls its own kick after a toggle.
 kick-toggle: true
 
 # ========================================
 # Advanced
 # ========================================
+# [Both modes]
 # Enable verbose logging for troubleshooting.
 debug: false
 
-# Standalone: automatically create a missing auth-plugin account for a verified
+# [Standalone only]
+# Automatically create a missing auth-plugin account for a verified
 # premium player. If false, they use the normal registration flow. This never
 # creates accounts for unverified offline players. Proxy backends enforce the
 # proxy's policy instead.
 auto-register-unknown: true
 
-# Both: respect AuthMe's per-IP registration limit. Other auth hooks do not
+# [Both modes]
+# Respect AuthMe's per-IP registration limit. Other auth hooks do not
 # currently implement this check.
 respectIpLimit: false
 
-# Standalone: omit the IP from Mojang session verification. Useful with DNAT or
+# [Standalone only]
+# Omit the IP from Mojang session verification. Useful with DNAT or
 # transparent reverse proxies when the server sees a different client IP.
 useProxyAgnosticResolver: true
 
-# Standalone: total attempts for Mojang name lookups and session verification.
+# [Standalone only] Both retry settings.
+# Total attempts for Mojang name lookups and session verification.
 mojang-retry-count: 3
-# Standalone: retry delay in milliseconds, doubled per retry and capped at 10s.
+# Retry delay in milliseconds, doubled per retry and capped at 10s.
 mojang-retry-delay: 500
 
-# Standalone: verify client public key signatures (1.19+, ProtocolLib).
+# [Standalone only]
+# Verify client public key signatures (1.19+, ProtocolLib).
 verifyClientKeys: false
 
-# Standalone and Paper/Folia lookup: rotate local IPs for Mojang API requests.
+# [Standalone + Paper/Folia lookup]
+# Rotate local IPs for Mojang API requests.
 # ip-addresses:
 #   - 192-168-0-2
 ip-addresses:
 
-# Standalone and Paper/Folia lookup: direct name lookups per 10 minutes per IP.
+# [Standalone + Paper/Folia lookup]
+# Direct name lookups per 10 minutes per IP.
 # Range: 0..600. Values are clamped; 0 disables direct requests and requires
 # at least one HTTP proxy below, otherwise the limit resets to 600.
 mojang-request-limit: 600
@@ -162,19 +183,23 @@ mojang-request-limit: 600
 # ========================================
 # Floodgate / Bedrock
 # ========================================
-# Standalone: Floodgate auto-login policy: false / true / linked / no-conflict.
+# [Standalone only]
+# Floodgate auto-login policy: false / true / linked / no-conflict.
 autoLoginFloodgate: false
 
-# Standalone: allow Bedrock names that conflict with Java premium names.
+# [Standalone only]
+# Allow Bedrock names that conflict with Java premium names.
 allowFloodgateNameConflict: false
 
-# Standalone: auto-register Floodgate players. Requires autoLoginFloodgate.
+# [Standalone only]
+# Auto-register Floodgate players. Requires autoLoginFloodgate.
 autoRegisterFloodgate: false
 
 # ========================================
 # Database
 # ========================================
-# Standalone: FLP list database. Behind a proxy, configure the proxy's database;
+# [Standalone only] All FLP database settings below.
+# FLP list database. Behind a proxy, configure the proxy's database;
 # the backend auth plugin still maintains its own local accounts.
 # Database driver: 'sqlite' (default) or 'mysql'
 driver: 'sqlite'
@@ -209,7 +234,8 @@ ServerRSAPublicKeyFile:
 # ========================================
 # Proxies
 # ========================================
-# Standalone and Paper/Folia lookup: HTTP proxies for Mojang API requests.
+# [Standalone + Paper/Folia lookup]
+# HTTP proxies for Mojang API requests.
 # proxies:
 #   - 'xyz.com:1337'
 proxies:

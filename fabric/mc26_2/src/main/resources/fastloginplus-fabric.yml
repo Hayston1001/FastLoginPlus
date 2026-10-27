@@ -2,7 +2,8 @@
 #
 # Copyright (c) 2026 Hayston1001
 
-# This file contains backend-local settings. Configure network and login
+# [Fabric backend] All settings in this file are backend-local.
+# Configure network and login
 # policies on the proxy; this backend checks them against local EasyAuth accounts.
 # Restart the backend after changing this file; /flp reload is not supported.
 # EasyAuth settings are checked from its current in-memory configuration.

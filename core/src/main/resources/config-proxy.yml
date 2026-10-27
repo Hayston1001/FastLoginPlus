@@ -10,9 +10,11 @@
 # ========================================
 # The proxy verifies identities, manages network policy and owns the FLP list.
 # Backends check their local auth accounts and execute login or registration.
-# Settings here apply on the proxy unless their comments say the policy is also
-# sent to backends. Backend-local settings belong in the backend's config.yml
-# or, for Fabric, config/fastloginplus-fabric.yml.
+# [Proxy] Settings in this file apply on the proxy.
+# [Proxy policy -> backend] The proxy sends the policy to backends, which apply
+# it when deciding local account actions.
+# Backend-local settings belong in the backend's config.yml or, for Fabric,
+# config/fastloginplus-fabric.yml.
 
 # ========================================
 # Language
@@ -72,6 +74,7 @@ anti-bot:
 # backend policy and account ownership; other checks may also verify.
 autoRegister: true
 
+# [Proxy policy -> backend]
 # Allow auto-login for verified premium players. This policy is sent to backends,
 # which check their local accounts and enforce it.
 autoLogin: true
@@ -131,6 +134,7 @@ kick-toggle: true
 # Enable verbose logging for troubleshooting.
 debug: false
 
+# [Proxy policy -> backend]
 # Allow backends to automatically create a missing auth-plugin account for a
 # verified premium player. If false, they use normal registration. This policy
 # does not create accounts for unverified offline players.
