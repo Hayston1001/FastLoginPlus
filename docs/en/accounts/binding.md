@@ -1,40 +1,54 @@
 # Binding and switching
 
-Use the [commands reference](commands.md) for permissions and console restrictions. An account action must be performed by its authenticated holder or an authorized administrator. A premium-looking name is not permission to overwrite another account.
-
-Keep the authentication plugin's restrictions on commands before login. Do not allow unauthenticated players to use account-management commands just to make `/flp` available before login.
-
 ## Bukkit/Paper/Folia: bind a premium account
 
-1. For self-service, complete the auth plugin's login first. Run `/flp premium` and repeat only when the premium-warning prompt asks for confirmation.
-2. In proxy mode, wait for the **final** result, not just the message that the request was sent.
-3. If `kick-toggle` is enabled the proxy/server disconnects the affected player; otherwise the current session stays. Reconnect manually to use the new route and prove the premium identity.
-4. Test the next login and record the connection UUID. A command does not authenticate the next connection or migrate player data.
+1. Log in to your password account using the authentication plugin.
+2. Enter `/flp premium`. If prompted for confirmation, enter the command again.
+3. Wait for the final result, then reconnect manually using the corresponding premium account.
+4. Confirm the next login and player data are as expected.
 
-`/flp cracked` clears FLP premium state and changes the next route. **AuthMe cleanup is destructive:** current classic integration removes/reset its account record and clears premium caches, so re-registration may be needed. Do not assume it preserves a player's old password. For other auth plugins, equivalent cleanup is not generally implemented; an automatically generated password may need operator recovery.
+### Notes
 
-When an administrator acts on another player, use the actual feedback to arrange a manual reconnect.
+- In proxy mode, a sent request does not mean the list change has completed. Wait for final feedback.
+- `kick-toggle` controls whether applicable switches disconnect the player; otherwise leave and reconnect manually.
+- The command does not verify the next connection or migrate player data. When an administrator acts on another player, arrange a reconnect according to the feedback.
 
-## Fabric/EasyAuth password account to premium
+## Bukkit/Paper/Folia: return to password login
+
+**Back up the authentication database first.** AuthMe can remove or reset an account, and the player may need to register again; do not assume the original password is retained.
+
+1. Confirm the player is logged in and has permission to run `/flp cracked`.
+2. Enter `/flp cracked` and wait for the final result.
+3. Reconnect as instructed and follow the authentication plugin's password or registration flow.
+
+### Notes
+
+Cleanup and password recovery differ between authentication plugins. If the plugin generated a password, check its recovery procedure before switching. Administrators can use `/flp cracked <player>`; see [commands and permissions](commands.md).
+
+## Fabric/EasyAuth: bind a premium account
 
 1. Log in to the existing EasyAuth password account.
-2. Run `/flp premium`. If prompted for confirmation, run the command again as instructed.
-3. Wait for the final result. If disconnected, reconnect manually; otherwise leave and reconnect.
-4. Reconnect using the corresponding premium account. Binding and EasyAuth login complete after verification succeeds.
+2. Enter `/flp premium`. If prompted for confirmation, enter the command again.
+3. Wait for the final result, then reconnect manually using the corresponding premium account.
+4. After verification, confirm that EasyAuth completes binding and login.
 
-The original password is retained and can be restored by unbinding. A sent request does not mean binding is complete. If the operation fails, check proxy and backend logs before retrying; do not delete the password account.
+### Notes
 
-An administrator may authorize `/flp premium <player>` without proving the target's password. That is an explicit privileged operation, not ordinary self-service. It still requires a later verified connection and does not erase the password.
+The original password is retained and can be restored by unbinding. A sent request does not mean binding is complete. If it fails, check proxy and backend logs before retrying; do not delete the password account. An administrator can authorize `/flp premium <player>`, but the player must still reconnect with their verified premium identity.
 
-## Fabric/EasyAuth back to password or registration
+## Fabric/EasyAuth: return to password login or registration
 
-- For a bound account with a retained password, `/flp cracked` clears the local premium binding and restores the password route, preserving that credential.
-- For a bound account **without** a password, the command warns that the name will be opened for registration. Repeat the same operation within **30 seconds** to confirm. This releases it to registration rather than revealing a nonexistent password. Arrange a safe re-registration window; the next registrant can claim it.
-- The self cracked command is operator-restricted and requires the account to be authenticated. Administrators can act on another name.
-- `/flp delete <player>` removes only a non-premium FLP record at the proxy. It does not delete the EasyAuth account; bound local accounts must be handled first.
+**An account without a password is opened for registration after confirmation.** Arrange a safe registration time first so another person cannot claim it.
 
-These operations involve both the proxy record and local EasyAuth storage and are not a distributed transaction. A local save failure after a request was sent can leave states requiring operator reconciliation. Review logs and persistent records, then test reconnect and restart.
+1. Log in to the account and confirm you have administrator permission.
+2. Enter `/flp cracked`.
+3. If warned that the account has no password and will be opened for registration, repeat the same command within 30 seconds to confirm.
+4. Reconnect as instructed: use the original password if one exists, or register again if it does not.
 
-## Recovery precautions
+### Notes
 
-Back up both stores first, use exact player names, and distinguish FLP consent from auth-plugin ownership. Do not "repair" an ownership conflict by manually attaching a victim's UUID. Restoring a backup or changing UUID policy can also affect inventories and permissions; see [UUIDs and player data](uuid.md).
+Administrators can specify another player. `/flp delete <player>` only requests deletion of a non-premium FLP record on the proxy; it does not delete the EasyAuth account. Handle a bound local account first. If a proxy request was sent but the local save failed, check logs and account state on both sides before retrying.
+
+## Requirements for all operations
+
+Account actions must be performed by an authenticated owner or authorized administrator. Keep the authentication plugin's restrictions on commands before login; do not allow unauthenticated players to use `/flp`. Back up FLP and authentication-plugin data before switching or recovering accounts. UUID changes can affect inventories and permissions; see [UUIDs and player data](uuid.md).

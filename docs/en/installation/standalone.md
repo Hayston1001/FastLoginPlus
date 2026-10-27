@@ -32,7 +32,7 @@ Once you have confirmed that players connect directly to this server, set `setti
 1. Start the server once, check that the plugins load, then stop it.
 2. Open the generated `plugins/fastloginplus/config.yml`. Use the folder name actually generated on your server.
 3. Review `premiumUuid`. The default is `true`; an existing offline server may need `false` to preserve its connection UUIDs. Read [UUIDs and player data](../accounts/uuid.md) before changing it.
-4. Adjust `autoRegister`, `autoLogin`, `auto-register-unknown` and `offline-whitelist` if needed. See [Java login policies](../configuration/java.md) for their purposes.
+4. Adjust `autoRegister`, `autoLogin`, `auto-register-unknown` and `offline-whitelist` if needed. See [Bukkit configuration](../configuration/bukkit.md) for their purposes.
 5. Set `language` to `en` or `zh`, then restart the server.
 
 ## Verify

@@ -11,7 +11,7 @@ Geyser 让基岩版玩家连接 Java 服务器. Floodgate 让基岩版玩家无�
 
 仅有相同用户名不能证明玩家拥有 Java 正版账号. 不要把未经过验证的玩家当作正版玩家免密登录.
 
-代理网络中, 在代理设置 [Bedrock 策略](../configuration/bedrock.md). 后端仍需要兼容的认证插件. 如果使用 AuthMe, 请先查看 [AuthMe 版本区别](authme.md). 修改 Floodgate 玩家名前缀前, 请先备份账号数据, 因为名称变化可能影响已有账号.
+代理网络中, 在代理配置中设置 Bedrock 策略, 见 [Velocity](../configuration/velocity.md) 或 [BungeeCord](../configuration/bungeecord.md). 后端仍需要兼容的认证插件. 如果使用 AuthMe, 请先查看 [AuthMe 版本区别](authme.md). 修改 Floodgate 玩家名前缀前, 请先备份账号数据, 因为名称变化可能影响已有账号.
 
 ## Fabric 的支持范围
 

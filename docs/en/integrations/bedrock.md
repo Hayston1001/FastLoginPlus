@@ -11,7 +11,7 @@ Geyser lets Bedrock players connect to Java servers. Floodgate lets Bedrock play
 
 A matching username alone does not prove ownership of a premium Java account. Do not grant premium passwordless login to an unverified player.
 
-In a proxy network, configure [Bedrock policy](../configuration/bedrock.md) on the proxy. The backend still needs a compatible authentication plugin. For AuthMe, see the [version comparison](authme.md). Back up account data before changing Floodgate's player-name prefix: a name change can affect existing accounts.
+In a proxy network, configure Bedrock policy on the proxy; see [Velocity](../configuration/velocity.md) or [BungeeCord](../configuration/bungeecord.md). The backend still needs a compatible authentication plugin. For AuthMe, see the [version comparison](authme.md). Back up account data before changing Floodgate's player-name prefix: a name change can affect existing accounts.
 
 ## Fabric support
 

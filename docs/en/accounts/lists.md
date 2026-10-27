@@ -1,5 +1,27 @@
 # Premium/cracked lists and admission
 
+## Enable the offline whitelist
+
+**Back up the authentication database first.** `/flp cracked` can change existing accounts; with AuthMe it can remove or reset an account record.
+
+1. Stop the server. In a proxy deployment, stop the proxy and edit its FLP configuration; on a standalone server, edit the local FLP configuration.
+2. Set `offline-whitelist` to `true`, then start the server.
+3. On a backend, run `/flp cracked <player>` as an authorized administrator to add each offline player who needs access.
+4. Use test accounts to check that known players can reach authentication and unknown offline players are refused.
+
+### Notes
+
+An existing authentication-plugin account does not mean FLP already knows the name. The whitelist does not replace password, Mojang or Floodgate authentication. See [commands and permissions](commands.md).
+
+## Delete a non-premium list record
+
+1. Confirm the target name and account state, and back up FLP and authentication-plugin data.
+2. On a backend, run `/flp delete <player>` and wait for the final result.
+
+### Notes
+
+`/flp delete` does not directly delete premium records or reset authentication-plugin accounts. Review and deliberately switch a premium account first. Switching can change or remove an authentication account; read [binding and switching](binding.md) before acting.
+
 ## What the lists do
 
 FLP distinguishes premium and non-premium lists. `/flp premium` and `/flp cracked` change list status; `offline-whitelist` uses those known records to restrict admission.
@@ -7,12 +29,6 @@ FLP distinguishes premium and non-premium lists. `/flp premium` and `/flp cracke
 In proxy mode, the proxy's FLP database is authoritative. An AuthMe/EasyAuth account is **local authentication state**, not membership in an FLP list. Creating or deleting an auth account does not by itself synchronize the FLP list, and deleting an FLP record is not an auth-account reset.
 
 Premium players on the list still need verification on each connection. Non-premium players normally use password login. Do not edit the database directly to bypass account ownership checks.
-
-## Offline whitelist
-
-With `offline-whitelist: true`, unknown offline Java names are denied; known offline names can reach authentication. Premium verification is still required for the premium route. An existing auth-plugin account alone does not make an offline name known to FLP.
-
-To admit an offline name, use the authorized backend command `/flp cracked <player>`. To remove a non-premium FLP record, use `/flp delete <player>`. A premium record is protected from direct deletion: review the account and switch it deliberately first. The list is not a replacement for passwords, Mojang verification or Floodgate verification.
 
 ## Same-name offline fallback
 

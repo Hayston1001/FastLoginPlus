@@ -23,7 +23,7 @@
 5. 使用测试账号检查服务器所用的正版和密码登录, 以及账号切换和重连. 确认玩家数据和账号状态符合预期.
 6. 仅在实际组合通过检查后重新开放, 保留可用的恢复管理员.
 
-不要把已删除的 `anti-bot.action` 或旧版 Fabric `.properties` 配置复制到新版本. 需要调整登录方式时, 请重新阅读[策略参考](../configuration/java.md).
+不要把已删除的 `anti-bot.action` 或旧版 Fabric `.properties` 配置复制到新版本. 需要调整登录方式时, 请按平台查看[配置参考](../configuration/README.md).
 
 ## 回退
 

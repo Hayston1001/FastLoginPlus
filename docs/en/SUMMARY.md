@@ -25,11 +25,11 @@
 
 ## Configuration reference
 
-* [Files, defaults and scope](configuration/README.md)
-* [Java verification and login policies](configuration/java.md)
-* [Bedrock policies](configuration/bedrock.md)
-* [Anti-bot and Mojang networking](configuration/network.md)
-* [Database configuration](configuration/database.md)
+* [Bukkit configuration](configuration/bukkit.md)
+* [Folia configuration](configuration/folia.md)
+* [Velocity configuration](configuration/velocity.md)
+* [BungeeCord configuration](configuration/bungeecord.md)
+* [Fabric configuration](configuration/fabric.md)
 
 ## Compatibility and integrations
 

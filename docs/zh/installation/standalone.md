@@ -32,7 +32,7 @@
 1. 启动服务器一次, 检查插件是否正常加载, 然后停止服务器.
 2. 打开生成的 `plugins/fastloginplus/config.yml`. 文件夹名称以实际生成为准.
 3. 检查 `premiumUuid`. 默认值为 `true`; 已有离线服可能需要 `false` 来保留现有连接 UUID. 修改前先阅读 [UUID 与玩家数据](../accounts/uuid.md).
-4. 根据需要调整 `autoRegister`, `autoLogin`, `auto-register-unknown` 和 `offline-whitelist`. 各选项的用途见 [Java 登录策略](../configuration/java.md).
+4. 根据需要调整 `autoRegister`, `autoLogin`, `auto-register-unknown` 和 `offline-whitelist`. 各选项的用途见 [Bukkit 配置](../configuration/bukkit.md).
 5. 将 `language` 设置为 `zh` 或 `en`, 然后重启服务器.
 
 ## 验证

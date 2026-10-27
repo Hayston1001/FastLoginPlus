@@ -27,7 +27,7 @@ The exact account capabilities differ between [AuthMe](../integrations/authme.md
 - `offline-whitelist` controls admission based on FLP's known list; it does not authenticate or register a password account.
 - Floodgate has independent identity and auto-auth policies.
 
-For example, disabling `autoRegister` does not disable a verification route requested by a returning premium record, name-change handling or admission policy. Read the [configuration reference](../configuration/java.md) before combining switches.
+For example, disabling `autoRegister` does not disable a verification route requested by a returning premium record, name-change handling or admission policy. Choose your platform in the [configuration reference](../configuration/README.md) before combining switches.
 
 ## Failures and retrying
 

@@ -27,7 +27,7 @@ FLP 可以让通过验证的正版玩家免输密码登录. 但正版用户名�
 - `offline-whitelist` 根据 FLP 已知名单控制准入, 不认证或注册密码账号.
 - Floodgate 有独立的身份和自动认证策略.
 
-例如关闭 `autoRegister`, 不代表返回的 premium 记录, 改名处理或准入策略不会再请求验证. 组合修改之前先看[配置参考](../configuration/java.md).
+例如关闭 `autoRegister`, 不代表返回的 premium 记录, 改名处理或准入策略不会再请求验证. 组合修改之前先按平台查看[配置参考](../configuration/README.md).
 
 ## 失败与重试
 

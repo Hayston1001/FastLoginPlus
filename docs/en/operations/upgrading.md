@@ -23,7 +23,7 @@ Test restoring the backup in an isolated environment. A copy of FLP's database a
 5. Use test accounts to check the premium and password login methods your server uses, as well as account switching and reconnecting. Confirm that player data and account state are as expected.
 6. Reopen to players only when exact supported combinations are checked. Keep a recovery operator available.
 
-Do not copy the removed `anti-bot.action` or old Fabric `.properties` settings into a new version. Review the [policy reference](../configuration/java.md) when changing login behavior.
+Do not copy the removed `anti-bot.action` or old Fabric `.properties` settings into a new version. Choose your platform in the [configuration reference](../configuration/README.md) when changing login behavior.
 
 ## Rollback
 

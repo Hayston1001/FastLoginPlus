@@ -1,6 +1,16 @@
 # UUIDs, name changes and player data
 
-## Verification and the delivered UUID are independent
+## Change the UUID used by players
+
+**Back up player and account data first.** Changing UUIDs can make players load different inventories and permissions; FLP does not migrate that data automatically.
+
+1. Back up worlds, player data, other plugin data, and the FLP and authentication-plugin databases.
+2. On a test copy, record existing UUIDs and plan migration for affected plugins; keep the current setting if migration is not needed.
+3. Stop the server. Edit the local FLP `config.yml` on a standalone server, or the proxy's FLP `config.yml` in a proxy deployment.
+4. Set `premiumUuid` to the desired value, start the server and check login, inventories and permissions with test accounts.
+5. Only after confirming the result, apply the same plan to production.
+
+### Option details
 
 `premiumUuid` defaults to `true`. It selects which UUID the backend sees **after** premium verification; it does not enable or disable that verification.
 
@@ -11,14 +21,7 @@
 
 This setting does not give an unverified player a premium identity. In proxy mode, configure it on the proxy.
 
-## Before changing UUID policy
-
-1. Back up worlds/player data, permissions, economy, inventories and auth/FLP databases.
-2. Record both UUIDs for representative accounts and inspect how each plugin keys data.
-3. Test in an isolated copy. A new inventory is often data under another UUID, not deleted data.
-4. Plan migration separately for every affected plugin, or retain the old policy. FLP does not perform this migration.
-
-Do not change `premiumUuid` casually on a live server or copy another server's config without review. In proxy mode all participating backends need a consistent understanding of forwarded identities.
+A different inventory can mean data was loaded under another UUID, not necessarily that it was deleted. Do not copy another server's setting without checking it.
 
 ## Name changes
 
