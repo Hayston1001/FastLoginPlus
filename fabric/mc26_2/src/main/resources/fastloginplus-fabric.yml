@@ -2,52 +2,31 @@
 #
 # Copyright (c) 2026 Hayston1001
 
-# FastLoginPlus Fabric configuration (backend-local keys only).
+# This file contains backend-local settings. Configure network and login
+# policies on the proxy; this backend checks them against local EasyAuth accounts.
+# Restart the backend after changing this file; /flp reload is not supported.
+# EasyAuth settings are checked from its current in-memory configuration.
+#
 # Bedrock auto-login requires a signed proxy claim and an existing completed
-# EasyAuth account with the same Floodgate UUID and a non-empty stored credential.
-# No Bedrock account creation, linked login, native Floodgate bypass or premium conversion.
-#
-# Effect scope: policy keys (autoRegister, autoLogin, offline-whitelist,
-# premium-warning, kick-toggle, auto-register-unknown, ...) live on the proxy
-# and arrive here with the identity facts. They are enforced here but NOT set
-# here. This file only holds keys that are local to this backend.
-#
-# Configuration changes require a backend restart.
-# Hot reload and /flp reload are known unsupported.
-# EasyAuth policy (external, not keys in this file) is rechecked on each
-# connection and account operation using EasyAuth's current in-memory settings.
-# This does not reread EasyAuth's configuration files or provide hot reload.
-#
-# A pending binding window is in-memory state with a ten-minute lifetime.
-# Restarting the backend interrupts unfinished binding; log in and start again.
-# Disconnecting does not by itself clear the binding window.
+# EasyAuth account with matching Floodgate UUID and a non-empty credential.
+# Bedrock account creation, linked login and native Floodgate bypass are unsupported.
 
-# Backend-local player messages: en or zh. Unknown non-empty values warn at
-# startup and fall back to en. Changing the language requires a backend restart.
-# Optional UTF-8 overrides remain in config/fastloginplus-fabric/messages_en.yml
-# or messages_zh.yml. Missing message keys are appended automatically and the
-# file carries a _messages-version marker. Extra keys are kept, not deleted, and
-# are reported in the backend log. Comments and key order are not rewritten.
+# Player messages: en or zh. Unknown values fall back to en with a warning.
+# Customize config/fastloginplus-fabric/messages_en.yml or messages_zh.yml;
+# missing keys are added and extra keys are retained and logged.
 language: en
 
-# Enable verbose diagnostic logging for troubleshooting. Per-connection and
-# per-player decision details are only logged when this is true. Changes
-# require a backend restart.
+# Enable detailed diagnostic logging.
 debug: false
 
-# Check GitHub Releases for a newer FastLoginPlus version. The check runs in
-# the background and never blocks a login.
+# Check GitHub Releases for updates in the background.
 check-update: true
 
 # Hours between update checks. Values below 1 fall back to 24.
 update-check-interval: 24
 
-# Comma-separated UUIDs of trusted proxies (from each proxy's proxyId.txt).
-# YAML block lists and flow lists are also accepted; startup rewrites them as
-# a comma-separated string. This list is frozen until the backend restarts.
-# Bedrock claims are verified against this list; empty/unreadable trust denies
-# Bedrock auto-login. Claim replay protection is process-local, not restart-persistent.
-# The proxy refuses unauthenticated upgrade consent messages. With an empty list,
-# /flp premium can queue an upgrade but the consent never reaches the proxy, so
-# binding can never complete. Fill this in on every backend running /flp premium.
+# Comma-separated trusted proxy UUIDs from each proxy's proxyId.txt.
+# Required for premium binding and Bedrock claims; an empty or invalid list
+# prevents those operations. This allowlist is not a firewall.
+# YAML lists are also accepted and normalized when the file is rewritten.
 allowed-proxy-ids: ''

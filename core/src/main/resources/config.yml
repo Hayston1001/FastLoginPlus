@@ -8,53 +8,14 @@
 # ========================================
 # FastLoginPlus Configuration (Bukkit / Folia)
 # ========================================
-# This template ships with the Bukkit/Folia plugin and covers BOTH deployment
-# modes:
-#   standalone    - no proxy, direct connections
-#   proxy backend - behind a Bungee or Velocity server
-#
-# A key that behaves differently in the two modes says so in its own comment, with a
-# "Behind a proxy:" line. It describes what THIS server does when it IS a proxy
-# backend.
-#
-# Three shapes appear:
-#   ignored here        - this server never reads the key. The proxy decides, from
-#                         its own copy of the key in the proxy's config.yml - that
-#                         is the one to edit.
-#   standalone only     - this server never reads the key, and the proxy has no such
-#                         key either: it exists only in standalone deployments.
-#   only Paper reads it - still read here, but only in Paper's connection
-#                         configuration phase; on Spigot this degenerates to
-#                         "ignored here", above.
-#                         (The configuration-phase connection event FLP uses exists
-#                          from 1.21.7 onwards; AuthMe 6.0's pre-join dialogs require
-#                          Paper/Folia 1.21.11+, so on any server where this matters
-#                          the event is always present.)
-#
-# Keys without a "Behind a proxy:" line behave identically in both modes.
-#
-# Examples — how to read a "Behind a proxy:" line:
-#
-#   --------------------------------
-#   # Behind a proxy: ignored here - the proxy runs its own anti-bot checks
-#   anti-bot:
-#     enabled: true
-#   --------------------------------
-#   Standalone: This section fully works HERE.
-#   Behind a proxy: Editing this section HERE changes NOTHING. You should edit this in proxy's config.yml
-#
-#   --------------------------------
-#   # Behind a proxy: only Paper reads it, in the configure phase
-#   ip-addresses:
-#   --------------------------------
-#   Standalone: This section fully works HERE.
-#   Behind a proxy: Only Paper's configure phase reads it (for the pre-login Mojang
-#   lookup); on Spigot editing this section HERE changes NOTHING.
-#
-#   --------------------------------
-#   language: en
-#   --------------------------------
-#   No "Behind a proxy:" line: behaves identically in both modes.
+# This file configures a standalone server or a backend behind a proxy.
+# Scope labels describe where a setting applies:
+#   Standalone: only without a proxy. Shared policies are configured on the proxy.
+#   Proxy backend: only behind a proxy.
+#   Both: applies locally in either deployment.
+#   Paper/Folia lookup: also used behind a proxy during the configuration phase;
+#     Spigot backends do not use it there.
+# Unlabelled settings apply locally in both deployments.
 
 # ========================================
 # Language
@@ -75,9 +36,8 @@ update-check-interval: 24
 # ========================================
 # Anti-bot
 # ========================================
-# Simple anti-bot protection. For serious protection, use a dedicated firewall
-# Limit hits always reject the connection with the kick-antibot message.
-# Behind a proxy: ignored here - the proxy runs its own anti-bot checks
+# Standalone: reject connections that exceed these limits. Behind a proxy,
+# configure anti-bot on the proxy. Use a firewall for stronger protection.
 anti-bot:
   enabled: true
   # Total connections allowed in the time window
@@ -110,76 +70,55 @@ anti-bot:
 # ========================================
 # Premium Detection
 # ========================================
-# Auto-register new premium players on first join
-# Behind a proxy: ignored here - the proxy controls the new-premium-player
-# route. Name-change checks and offline-whitelist can also request premium
-# verification. Account creation here still depends on declared login policies
-# and account ownership; this copy only applies in standalone mode
+# Standalone: route new premium names to verification. Account creation still
+# depends on login policy and account ownership; other checks may also verify.
 autoRegister: true
 
-# Enable auto-login for premium players
-# Behind a proxy: ignored here - the proxy's value travels with the identity
-# facts and is enforced here; this copy only applies in standalone mode
+# Standalone: allow auto-login for verified premium players. Behind a proxy,
+# the backend enforces the proxy's policy instead.
 autoLogin: true
 
-# Proxy backends only: require declared policy facts before accepting a force
-# LOGIN/REGISTER plugin message. Default false preserves older proxy compatibility.
-# Enabling this rejects force requests from proxies without policy facts: their
-# players keep the auth plugin's own password/registration flow and may lose
-# passwordless access. Upgrade proxies before enabling. This does not authenticate
-# messages or replace the proxy allowlist. Explicit autoLogin:false facts always
-# override a contradictory force intent, regardless of this switch.
+# Proxy backend: require declared policies for force LOGIN/REGISTER messages.
+# Upgrade older proxies before enabling, or players may need passwords or manual
+# registration. This does not authenticate messages or replace the proxy allowlist.
+# An explicit autoLogin: false overrides a conflicting force request either way.
 require-declared-proxy-policy: false
 
-# Whether to use the premium UUID after premium verification (does not decide
-# whether premium verification is enabled).
-# In standalone mode, true = inject the premium UUID into the offline-mode
-# server (ProtocolLib reflection)
-# Behind a proxy: ignored here - the proxy decides the UUID
+# Standalone: use the verified premium UUID instead of the offline UUID.
+# This does not enable verification or migrate player data.
 premiumUuid: true
 
-# Query Mojang API for new players and detect name changes by UUID
-# If a player's name is not in the database but their UUID is (under an old name),
-# the old record is updated with the new name and they log in as premium
-# Behind a proxy: ignored here - the proxy detects name changes
+# Standalone: look up new names and reconcile FLP records by UUID after a name
+# change. This does not migrate player data.
 nameChangeCheck: true
 
-# If an offline player uses a premium username but fails authentication, 
-# remember them so they can join in offline mode next time (not recommended)
-# Behind a proxy: ignored here - the cracked fallback runs on the proxy
+# Standalone: remember eligible failed premium verification attempts for an
+# offline retry (not recommended). Confirmed premium accounts are not downgraded.
 secondAttemptCracked: false
 
 # ========================================
 # Offline Whitelist
 # ========================================
-# When enabled, offline players not present in the database will be denied entry (custom kick message available)
-# Offline players already in the database may still join
-# No restrictions apply to online players
-# Use /flp cracked <player> to add offline players to the database
-# Use /flp delete <player> to remove offline players from the database
-# Behind a proxy: ignored here - the proxy enforces the whitelist
+# Standalone: deny offline Java names unknown to FLP. This controls admission,
+# not password or premium authentication. Manage the list with /flp cracked
+# and /flp delete.
 offline-whitelist: false
 
 # ========================================
 # Skin
 # ========================================
-# Forward premium skin to the player
-# Even when enabled, SkinsRestorer custom skins take priority (if SR is installed)
-# Behind a proxy: ignored here - the proxy forwards or strips the skin itself
+# Standalone: forward premium skins. SkinsRestorer custom skins take priority.
 forwardSkin: true
 
 # ========================================
 # Command Behavior
 # ========================================
-# Show warning before /flp premium command takes effect
-# Behind a proxy: ignored here - the proxy asks for the confirmation
+# Standalone: ask for confirmation before /flp premium takes effect.
 premium-warning: true
 
-# Kick the player from the server after they confirm /flp premium, forcing them to reconnect
-# Behind a proxy: the proxy's copy decides the kick after a toggle; this copy
-# additionally kicks after relaying a queued toggle and only applies fully in
-# standalone mode
-# Reconnection is manual; this does not automatically reconnect the player.
+# Standalone: kick after a toggle so the player can reconnect manually.
+# Proxy backend: this also controls kicks after relaying a queued toggle;
+# the proxy's setting controls its own kick after a toggle.
 kick-toggle: true
 
 # ========================================
@@ -188,81 +127,55 @@ kick-toggle: true
 # Enable verbose logging for troubleshooting.
 debug: false
 
-# Auto-register a verified premium player who is missing from the auth plugin DB
-# (the account was deleted, or the two databases drifted apart).
-# Scope - the key name misleads: "unknown" does NOT mean strangers or offline
-# players. This only applies to a connection Mojang has verified whose name has
-# no local account: the account is then registered for that proven identity, and
-# the generated password is only a backup - premium logins never need one.
-# Offline/cracked connections are never covered: they carry no identity proof at
-# all (the name is just a string), so they get the register dialog and set their
-# own password - an account can only change hands through a password its owner
-# chose. Off = a verified premium player without a local account gets the
-# register dialog instead of an automatic account.
-# Behind a proxy: ignored here - the proxy's value travels with the identity
-# facts and is enforced here; this copy only applies in standalone mode
+# Standalone: automatically create a missing auth-plugin account for a verified
+# premium player. If false, they use the normal registration flow. This never
+# creates accounts for unverified offline players. Proxy backends enforce the
+# proxy's policy instead.
 auto-register-unknown: true
 
-# Respect auth plugin per-IP registration limit
-# Bukkit/Folia only - currently honored by the AuthMe hook; other auth-plugin
-# hooks do not implement this check yet. Works in both modes (the auth plugin
-# runs on this server).
+# Both: respect AuthMe's per-IP registration limit. Other auth hooks do not
+# currently implement this check.
 respectIpLimit: false
 
-# Alternative session resolver that doesn't send the server IP to Mojang
-# Useful behind DNAT / transparent reverse proxies
-# In standalone mode it omits the ip parameter in hasJoined, so verification
-# matches even when the backend observes a different IP than the client used
-# Behind a proxy: standalone only - hasJoined never runs here; the proxy has no such key
+# Standalone: omit the IP from Mojang session verification. Useful with DNAT or
+# transparent reverse proxies when the server sees a different client IP.
 useProxyAgnosticResolver: true
 
-# Mojang API retry
-# Retry count for Mojang API calls (Name→UUID lookup + session verification)
-# Total attempts per request
-# Behind a proxy: ignored here - no retried Mojang call is made by this server
+# Standalone: total attempts for Mojang name lookups and session verification.
 mojang-retry-count: 3
-# Base delay between retries in milliseconds (exponential backoff: delay * 2^(attempt-1), capped at 10s)
-# Behind a proxy: ignored here - no retried Mojang call is made by this server
+# Standalone: retry delay in milliseconds, doubled per retry and capped at 10s.
 mojang-retry-delay: 500
 
-# Verify client public key signature (1.19+, standalone ProtocolLib)
-# Behind a proxy: standalone only - ProtocolLib never runs here; the proxy has no such key
+# Standalone: verify client public key signatures (1.19+, ProtocolLib).
 verifyClientKeys: false
 
-# IP addresses for rotating Mojang API requests (to avoid rate limits)
-# Behind a proxy: only Paper reads it, in the configure phase
+# Standalone and Paper/Folia lookup: rotate local IPs for Mojang API requests.
 # ip-addresses:
 #   - 192-168-0-2
 ip-addresses:
 
-# Max Mojang name->UUID requests per 10 minutes
-# Behind a proxy: only Paper reads it, in the configure phase
-# Mojang allows 600 requests per 10 minutes per outgoing IPv4 address. Lower this to
-# leave room for other plugins, or raise it while using 'proxies' below. Valid range
-# 0..600, other values are clamped. 0 means "never call Mojang directly" and requires
-# at least one proxy entry; without one the value is reset to 600.
+# Standalone and Paper/Folia lookup: direct name lookups per 10 minutes per IP.
+# Range: 0..600. Values are clamped; 0 disables direct requests and requires
+# at least one HTTP proxy below, otherwise the limit resets to 600.
 mojang-request-limit: 600
 
 # ========================================
 # Floodgate / Bedrock
 # ========================================
-# Auto-login for Floodgate (Bedrock) players. Values: false / true / linked / no-conflict
-# Behind a proxy: ignored here - the proxy handles Bedrock players
+# Standalone: Floodgate auto-login policy: false / true / linked / no-conflict.
 autoLoginFloodgate: false
 
-# Allow Bedrock players to join even if their name conflicts with a Java premium account
-# Behind a proxy: ignored here - the proxy enforces the conflict policy
+# Standalone: allow Bedrock names that conflict with Java premium names.
 allowFloodgateNameConflict: false
 
-# Auto-register Floodgate players. Requires autoLoginFloodgate
-# Behind a proxy: ignored here - the proxy handles Bedrock players
+# Standalone: auto-register Floodgate players. Requires autoLoginFloodgate.
 autoRegisterFloodgate: false
 
 # ========================================
 # Database
 # ========================================
-# Behind a proxy: ignored here - this server never opens a database; the proxy's
-#                                DB is the single source of truth
+# Standalone: FLP list database. Behind a proxy, configure the proxy's database;
+# the backend auth plugin still maintains its own local accounts.
 # Database driver: 'sqlite' (default) or 'mysql'
 driver: 'sqlite'
 
@@ -281,13 +194,8 @@ password: 'myPassword'
 # timeout: how long an operation waits to obtain a connection from the pool
 # before failing (HikariCP connectionTimeout)
 timeout: 30
-# lifetime: how long a pooled connection lives before the pool retires and
-# replaces it (HikariCP maxLifetime).
-# Recommended: 1800 (30 minutes — the HikariCP default): long enough to
-# amortize TCP/auth/TLS handshake costs, short enough to retire connections
-# before the server kills them — keep it BELOW your MySQL wait_timeout
-# (default 8h). Values below 300 are clamped to 300 with a startup warning
-# (shorter lifetimes make the pool constantly reconnect); 0 = never expire.
+# lifetime: connection lifetime in seconds. Keep it below MySQL wait_timeout.
+# Values below 300 are clamped to 300; 0 disables expiry.
 lifetime: 1800
 
 # SSL for MySQL (only used when driver: 'mysql')
@@ -301,8 +209,7 @@ ServerRSAPublicKeyFile:
 # ========================================
 # Proxies
 # ========================================
-# HTTP proxies for Mojang API requests (workaround for rate limits)
-# Behind a proxy: only Paper reads it, in the configure phase
+# Standalone and Paper/Folia lookup: HTTP proxies for Mojang API requests.
 # proxies:
 #   - 'xyz.com:1337'
 proxies:
