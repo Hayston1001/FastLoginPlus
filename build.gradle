@@ -11,7 +11,7 @@ plugins {
 }
 
 group = 'com.github.games647'
-version = '0.7.0'
+version = '1.0.0'
 
 def commit = providers.exec {
     commandLine 'git', 'rev-parse', '--short=7', 'HEAD'

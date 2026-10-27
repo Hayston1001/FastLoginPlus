@@ -98,8 +98,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Fabric remains available on GitHub only.
-        platform: [Bukkit, Folia, Bungee, Velocity]
+        platform: [Bukkit, Folia, Bungee, Velocity, Fabric]
     steps:
       - uses: actions/checkout@v7
 
@@ -133,9 +132,9 @@ jobs:
 
           def prepare_upload(config, platform, tag, directory, notes):
               entry = config["platforms"][platform]
-              prefix = f"FastLoginPlus{platform}-"
+              prefix = entry.get("jar_prefix", f"FastLoginPlus{platform}-")
               candidates = list(directory.glob(f"{prefix}*.jar"))
-              pattern = rf"{prefix}{re.escape(tag.removeprefix('v'))}-[0-9a-f]{{7,40}}\.jar"
+              pattern = rf"{re.escape(prefix)}{re.escape(tag.removeprefix('v'))}-[0-9a-f]{{7,40}}\.jar"
               if len(candidates) != 1 or not re.fullmatch(pattern, candidates[0].name):
                   raise ValueError(f"Expected exactly one installable {platform} jar for {tag}")
               jar = candidates[0]

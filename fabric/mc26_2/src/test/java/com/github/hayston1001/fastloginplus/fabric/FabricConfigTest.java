@@ -121,7 +121,7 @@ class FabricConfigTest {
         assertEquals("first,second", FabricConfig.readFile(directory, logger).get("allowed-proxy-ids"));
         String output = Files.readString(yaml());
         assertTrue(output.contains("allowed-proxy-ids: 'first,second'\n"));
-        assertTrue(output.contains("# Configuration changes require a backend restart."));
+        assertTrue(output.contains("# Restart the backend after changing this file; /flp reload is not supported."));
         assertFalse(output.contains("Old comments"));
         assertFalse(output.contains("obsolete"));
         byte[] first = Files.readAllBytes(yaml());

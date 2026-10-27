@@ -14,8 +14,6 @@
 
 FastLoginPlus 可以让通过验证的 Java 正版持有人和受支持的 Floodgate 玩家免密登录, 同时为其他账号保留密码认证. 登录方式由身份验证, 服务器策略和本地账号归属共同决定, 正版用户名本身不是所有权证明.
 
-> 文档面向即将发布的 **1.0.0**. 旧发布产物不一定包含全部文档功能.
-
 ## 功能
 
 ### 核心功能(来自 FastLogin)
@@ -29,7 +27,7 @@ FastLoginPlus 可以让通过验证的 Java 正版持有人和受支持的 Flood
 * **[AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 兼容**: 自动检测 AuthMeReloaded 版本, 无需用户配置
 * **[SkinsRestorer](https://github.com/SkinsRestorer/SkinsRestorer) 兼容**: 不再覆盖 SkinsRestorer 的自定义皮肤
 * **Folia 支持**: 独立模块, 使用 Folia 兼容的调度器
-* **Fabric 初步支持**: 处于开发阶段, 已适配 Velocity + [Easyauth](https://github.com/NikitaCartes/EasyAuth) 3.4.x, 正逐步扩大覆盖面
+* **Fabric 26.2 支持(初步)**: 已适配 Velocity + [Easyauth](https://github.com/NikitaCartes/EasyAuth) 3.4.x
 * **代理端 SQLite 支持**: BungeeCord 和 Velocity 内置 SQLite JDBC 驱动, 适用于单代理小型服
 * **反机器人增强**: 每 IP 速率限制, 突发检测, 临时封禁, 可信 IP 白名单
 * **多语言**: 支持切换自定义语言文件
@@ -38,9 +36,9 @@ FastLoginPlus 可以让通过验证的 Java 正版持有人和受支持的 Flood
 
 ## 贡献与帮助
 
-[![问题反馈](https://img.shields.io/badge/%E9%97%AE%E9%A2%98%E5%8F%8D%E9%A6%88-D97706?style=flat-square&logo=github&logoColor=white)](docs/zh/operations/reporting.md)
-[![参与贡献](https://img.shields.io/badge/%E5%8F%82%E4%B8%8E%E8%B4%A1%E7%8C%AE-2EA44F?style=flat-square&logo=github&logoColor=white)](CONTRIBUTING_zh.md)
-[![从源码构建](https://img.shields.io/badge/%E4%BB%8E%E6%BA%90%E7%A0%81%E6%9E%84%E5%BB%BA-0969DA?style=flat-square&logo=gradle&logoColor=white)](docs/zh/development/build.md)
+[![Report a problem](https://img.shields.io/badge/%E9%97%AE%E9%A2%98%E5%8F%8D%E9%A6%88-D97706?style=flat-square&logo=github&logoColor=white)](https://hayston.gitbook.io/flp-wiki/zh/wei-hu-yu-pai-zhang/reporting)
+[![Contributing](https://img.shields.io/badge/%E5%8F%82%E4%B8%8E%E8%B4%A1%E7%8C%AE-2EA44F?style=flat-square&logo=github&logoColor=white)](https://github.com/Hayston1001/FastLoginPlus/blob/main/CONTRIBUTING_zh.md)
+[![Build from source](https://img.shields.io/badge/%E4%BB%8E%E6%BA%90%E7%A0%81%E6%9E%84%E5%BB%BA-0969DA?style=flat-square&logo=gradle&logoColor=white)](https://hayston.gitbook.io/flp-wiki/zh/kai-fa-zhe-wen-dang/build)
 
 ## 星标历史
 
@@ -54,4 +52,4 @@ FastLoginPlus 可以让通过验证的 Java 正版持有人和受支持的 Flood
 
 ## 许可证
 
-[MIT](LICENSE). 原作者为 [games647](https://github.com/TuxCoding), 由 [Hayston1001](https://github.com/Hayston1001) 维护
+[MIT](https://github.com/Hayston1001/FastLoginPlus/blob/main/LICENSE). 原作者为 [games647](https://github.com/TuxCoding), 由 [Hayston1001](https://github.com/Hayston1001) 维护

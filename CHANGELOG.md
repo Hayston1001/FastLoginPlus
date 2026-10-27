@@ -1,6 +1,73 @@
 # FastLoginPlus Changelog
 
-[简体中文](CHANGELOG_zh.md)
+English | [简体中文](CHANGELOG_zh.md)
+
+## v1.0.0
+
+![fabric](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/supported/fabric_vector.svg)
+
+> FLP's first stable release:
+> - Build system migrated to Gradle
+> - Login and identity decision chain redesigned
+> - Fabric 26.2 and Velocity/EasyAuth integration
+
+### Fabric 26.2 and EasyAuth
+
+- **New Fabric 26.2 backend**: the Velocity backend can be used with Fabric 26.2 and EasyAuth 3.4
+
+See the corresponding section of the [FLP wiki](https://hayston.gitbook.io/flp-wiki/) for more information.
+
+### Proxy and backend identity
+
+- **Backends follow proxy facts**: the login method is determined by the signed identity and policy facts declared by the proxy; the backend's local `autoLogin`, `autoRegister` or Bedrock policy no longer overrides these declarations
+- **Reject when facts are missing**: missing, conflicting, expired or unreadable identity data keeps authentication locked and is no longer filled in by a default allow
+- **Legacy forwarding requires signature verification**: older proxy declarations must carry a valid signature before being accepted for premium admission
+- **Unverified connections are distinguished**: connections that have not completed verification are handled separately from verified premium connections
+- **Waiting hint**: while identity facts are being exchanged, players see a waiting hint instead of an unresponsive login
+- **No duplicate automatic login by the authentication plugin**: while FLP manages login decisions, the authentication plugin's own proxy auto-login stays disabled
+- **Final result is relayed**: the proxy applies the final handshake result, and admin commands report the final result instead of only reporting that the request was submitted
+
+### Accounts and UUIDs
+
+- **Observations and consent are separate**: a name declaration or failed attempt no longer directly grants premium access; only when the verification service explicitly returns a failure can the same-name offline fallback be triggered
+- **Verified owners can still register**: when `autoLogin` changes from `true` to `false`, a verified premium account is allowed to create a password account
+- **The offline UUID can be kept**: `premiumUuid: false` keeps the name-derived UUID while the verified Mojang UUID is still used to identify account ownership
+- **Corrupt premium UUID records are preserved**: corrupt records are reported and no longer discarded or silently overwritten
+- **Accounts without a password need explicit release**: accounts without a password are opened for registration only after a second confirmation; ownership mismatches are refused
+- **Impostor attempts do not demote a consented account**: a name that has confirmed a binding is not switched back to password login just because an impostor connects
+
+### Bedrock and Floodgate
+
+- **AuthMe backend handles Bedrock login earlier**: supported AuthMe 6 combinations can complete Bedrock login at an earlier stage, reducing dialog stalls
+- **Bedrock facts are signed**: Bedrock pre-login facts are signed by the proxy and verified by the backend
+- **Spigot proxy backend supports Bedrock pre-login**: when the authentication plugin provides the required hooks, the Spigot backend can also handle Bedrock pre-login
+
+### Commands
+
+- **`/flp delete <player>`**: deletes a non-premium FLP list record without deleting the authentication plugin account
+- **Final feedback**: list changes sent through a proxy report the final result; a request still queued on a backend is not a completed change
+- **Fabric commands**: Fabric provides the same list operations through vanilla gamemaster permissions
+
+### Configuration and messages
+
+- **Language files gain a version key**: `_messages-version` lets FLP add missing keys, refresh old defaults and keep custom values
+- **Configuration templates match actual behavior**: the Bukkit/Folia and BungeeCord/Velocity templates state which side reads each key; a proxy backend no longer implies that a local setting takes effect
+- **New `require-declared-proxy-policy`**: optional strict mode rejects legacy force messages from proxies that do not declare policy facts
+- **Anti-bot always blocks**: a limit hit directly rejects the connection; `anti-bot.action` and the `Ignore` action were removed
+
+### Other fixes
+
+- **Paper configure phase**: standalone Paper servers keep the configure-phase login path and no longer lose premium pre-login handling
+- **Encrypted sessions**: an encrypted session failure is reported as a failure and is no longer mistaken for a missing premium identity
+- **AuthMe pre-login**: pre-login registration cleanup is verified before the account is treated as ready
+- **Debug logging**: diagnostic messages use the plugin's own debug switch and no longer require changing the logging framework
+
+### Upgrade notes
+
+- **Upgrade proxy and backends together**: the new identity facts and legacy declaration signature verification require matching versions on both sides; do not keep running an old proxy behind a new backend unless you accept the documented rejection behavior
+- **Removed anti-bot option**: delete `anti-bot.action` from existing configurations
+- **Message files are migrated automatically**: keep custom message files, let startup migration add new keys, and review any reported extra keys
+- **`require-declared-proxy-policy` defaults to off**: enable it only after all proxies have been upgraded
 
 ## v0.7.0
 

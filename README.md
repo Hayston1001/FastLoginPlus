@@ -14,8 +14,6 @@ English | [简体中文](https://github.com/Hayston1001/FastLoginPlus/blob/main/
 
 FastLoginPlus can provide passwordless login for verified Java owners and supported Floodgate players while keeping password authentication for other accounts. Identity verification, server policy and local account ownership determine the login method; a premium username alone never proves ownership.
 
-> The documentation targets the forthcoming **1.0.0**. Older release artifacts may not include all documented features.
-
 ## Features
 
 ### Core features (from FastLogin)
@@ -29,7 +27,7 @@ FastLoginPlus can provide passwordless login for verified Java owners and suppor
 * **[AuthMeReloaded](https://modrinth.com/plugin/authmereloaded) 6.0 compatibility**: Automatically detects the AuthMeReloaded version, with no user configuration required
 * **[SkinsRestorer](https://github.com/SkinsRestorer/SkinsRestorer) compatibility**: No longer overrides SkinsRestorer's custom skins
 * **Folia support**: A dedicated module using Folia-compatible schedulers
-* **Initial Fabric support**: Under development, with Velocity + [EasyAuth](https://github.com/NikitaCartes/EasyAuth) 3.4.x integration and gradually expanding coverage
+* **Fabric 26.2 support (initial)**: Velocity + [EasyAuth](https://github.com/NikitaCartes/EasyAuth) 3.4.x integration
 * **Proxy-side SQLite support**: BungeeCord and Velocity bundle the SQLite JDBC driver, suitable for small single-proxy servers
 * **Enhanced anti-bot protection**: Per-IP rate limits, burst detection, temporary bans and a trusted IP allowlist
 * **Multiple languages**: Supports switching between custom language files
@@ -38,9 +36,9 @@ FastLoginPlus can provide passwordless login for verified Java owners and suppor
 
 ## Contribute and get help
 
-[![Report a problem](https://img.shields.io/badge/Report%20a%20problem-D97706?style=flat-square&logo=github&logoColor=white)](docs/en/operations/reporting.md)
-[![Contributing](https://img.shields.io/badge/Contributing-2EA44F?style=flat-square&logo=github&logoColor=white)](CONTRIBUTING.md)
-[![Build from source](https://img.shields.io/badge/Build%20from%20source-0969DA?style=flat-square&logo=gradle&logoColor=white)](docs/en/development/build.md)
+[![Report a problem](https://img.shields.io/badge/Report%20a%20problem-D97706?style=flat-square&logo=github&logoColor=white)](https://hayston.gitbook.io/flp-wiki/operations-and-troubleshooting/reporting)
+[![Contributing](https://img.shields.io/badge/Contributing-2EA44F?style=flat-square&logo=github&logoColor=white)](https://github.com/Hayston1001/FastLoginPlus/blob/main/CONTRIBUTING.md)
+[![Build from source](https://img.shields.io/badge/Build%20from%20source-0969DA?style=flat-square&logo=gradle&logoColor=white)](https://hayston.gitbook.io/flp-wiki/developer-documentation/build)
 
 ## Star history
 
@@ -54,4 +52,4 @@ FastLoginPlus can provide passwordless login for verified Java owners and suppor
 
 ## License
 
-[MIT](LICENSE). Originally by [games647](https://github.com/TuxCoding), maintained by [Hayston1001](https://github.com/Hayston1001)
+[MIT](https://github.com/Hayston1001/FastLoginPlus/blob/main/LICENSE). Originally by [games647](https://github.com/TuxCoding), maintained by [Hayston1001](https://github.com/Hayston1001)
