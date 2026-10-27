@@ -1,6 +1,6 @@
 # Java verification and login policies
 
-Defaults below come from the Bukkit/Folia and proxy templates. In a proxy network, configure Java login policies on the **proxy**; do not add these options to the Fabric backend configuration.
+Defaults below come from the Bukkit/Folia and proxy templates. In a proxy network, configure shared Java login policies on the **proxy**. Some options are specific to a Bukkit/Folia backend or a standalone server; follow the scope in each row. Do not add these options to the Fabric backend configuration.
 
 | Option | Default | Meaning and limits |
 | --- | --- | --- |

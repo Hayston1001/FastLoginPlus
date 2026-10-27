@@ -29,6 +29,9 @@
 * [Velocity 配置](configuration/velocity.md)
 * [BungeeCord 配置](configuration/bungeecord.md)
 * [Fabric 配置](configuration/fabric.md)
+* [Java 验证与登录策略](configuration/java.md)
+* [Bedrock 策略](configuration/bedrock.md)
+* [反机器人与 Mojang 网络请求](configuration/network.md)
 
 ## 兼容与集成
 

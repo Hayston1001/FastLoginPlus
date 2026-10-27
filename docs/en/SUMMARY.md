@@ -29,6 +29,9 @@
 * [Velocity configuration](configuration/velocity.md)
 * [BungeeCord configuration](configuration/bungeecord.md)
 * [Fabric configuration](configuration/fabric.md)
+* [Java verification and login policies](configuration/java.md)
+* [Bedrock policies](configuration/bedrock.md)
+* [Anti-bot and Mojang networking](configuration/network.md)
 
 ## Compatibility and integrations
 

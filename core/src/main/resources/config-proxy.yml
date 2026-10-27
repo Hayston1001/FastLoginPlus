@@ -120,8 +120,8 @@ verify-backend-messages: true
 # ========================================
 # Command Behavior
 # ========================================
-# Ask for confirmation for self-invoked premium toggles from classic backends.
-# Fabric binding consent uses its own flow and does not use this warning.
+# Ask for confirmation for self-invoked premium toggles from classic and Fabric
+# backends. An administrator acting on another player is not prompted.
 premium-warning: true
 
 # After a toggle, kick the player if true; otherwise keep the session.
