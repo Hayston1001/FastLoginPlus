@@ -11,7 +11,9 @@ Use this guide only when players connect directly to this server. Behind a proxy
 
 ## Install
 
-### 1. Install the plugins
+{% stepper %}
+{% step %}
+### Install the plugins
 
 Stop the server and put these plugins in `plugins/`:
 
@@ -21,19 +23,26 @@ Stop the server and put these plugins in `plugins/`:
 | Authentication plugin | A version compatible with your server, such as AuthMe |
 | ProtocolLib | A version compatible with your Minecraft and server version |
 
-### 2. Configure the server
+{% endstep %}
+{% step %}
+### Configure the server
 
 Set `online-mode=false` in `server.properties`. This allows different login methods, but unverified players must still authenticate through the authentication plugin.
 
 Once you have confirmed that players connect directly to this server, set `settings.bungeecord: false` in `spigot.yml`. On Paper, disable Velocity forwarding in Paper's configuration as well.
 
-### 3. Configure FLP
+{% endstep %}
+{% step %}
+### Configure FLP
 
 1. Start the server once, check that the plugins load, then stop it.
 2. Open the generated `plugins/fastloginplus/config.yml`. Use the folder name actually generated on your server.
 3. Review `premiumUuid`. The default is `true`; an existing offline server may need `false` to preserve its connection UUIDs. Read [UUIDs and player data](../accounts/uuid.md) before changing it.
 4. Adjust `autoRegister`, `autoLogin`, `auto-register-unknown` and `offline-whitelist` if needed. See [Bukkit configuration](../configuration/bukkit.md) for their purposes.
 5. Set `language` to `en` or `zh`, then restart the server.
+
+{% endstep %}
+{% endstepper %}
 
 ## Verify
 

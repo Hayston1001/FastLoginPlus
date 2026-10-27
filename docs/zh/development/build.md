@@ -4,17 +4,21 @@
 
 克隆仓库后, 在根目录使用项目自带的 Gradle wrapper. 运行 Gradle 需要 **JDK 25**; 构建会按需使用其他 Java 工具链.
 
-Windows:
+{% tabs %}
+{% tab title="Windows" %}
 
 ```powershell
 .\gradlew.bat build --console=plain
 ```
 
-macOS 和 Linux:
+{% endtab %}
+{% tab title="macOS / Linux" %}
 
 ```sh
 ./gradlew build --console=plain
 ```
+{% endtab %}
+{% endtabs %}
 
 `build` 会运行项目的测试和检查. 只处理某个模块时, 可以使用定向任务, 例如 `./gradlew :velocity:build`.
 

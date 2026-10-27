@@ -4,17 +4,21 @@
 
 Clone the repository and use its Gradle wrapper from the root directory. Gradle requires **JDK 25**; the build uses other Java toolchains as needed.
 
-Windows:
+{% tabs %}
+{% tab title="Windows" %}
 
 ```powershell
 .\gradlew.bat build --console=plain
 ```
 
-macOS and Linux:
+{% endtab %}
+{% tab title="macOS / Linux" %}
 
 ```sh
 ./gradlew build --console=plain
 ```
+{% endtab %}
+{% endtabs %}
 
 `build` runs the project's tests and checks. For work on one module, use a targeted task such as `./gradlew :velocity:build`.
 

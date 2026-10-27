@@ -2,25 +2,27 @@
 
 ## Enable the offline whitelist
 
+{% hint style="warning" %}
 **Back up the authentication database first.** `/flp cracked` can change existing accounts; with AuthMe it can remove or reset an account record.
+{% endhint %}
 
 1. Stop the server. In a proxy deployment, stop the proxy and edit its FLP configuration; on a standalone server, edit the local FLP configuration.
 2. Set `offline-whitelist` to `true`, then start the server.
 3. On a backend, run `/flp cracked <player>` as an authorized administrator to add each offline player who needs access.
 4. Use test accounts to check that known players can reach authentication and unknown offline players are refused.
 
-### Notes
-
+{% hint style="info" %}
 An existing authentication-plugin account does not mean FLP already knows the name. The whitelist does not replace password, Mojang or Floodgate authentication. See [commands and permissions](commands.md).
+{% endhint %}
 
 ## Delete a non-premium list record
 
 1. Confirm the target name and account state, and back up FLP and authentication-plugin data.
 2. On a backend, run `/flp delete <player>` and wait for the final result.
 
-### Notes
-
+{% hint style="info" %}
 `/flp delete` does not directly delete premium records or reset authentication-plugin accounts. Review and deliberately switch a premium account first. Switching can change or remove an authentication account; read [binding and switching](binding.md) before acting.
+{% endhint %}
 
 ## What the lists do
 

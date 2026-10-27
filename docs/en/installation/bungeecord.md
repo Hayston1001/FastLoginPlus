@@ -6,7 +6,11 @@ This guide covers BungeeCord with Bukkit/Paper/Folia authentication backends. It
 
 Check the [requirements](../overview/requirements.md), choose a compatible [authentication plugin](../integrations/auth-plugins.md), and back up the proxy, backends and their databases. Stop all affected servers before installation.
 
-## 1. Install the plugins
+## Installation
+
+{% stepper %}
+{% step %}
+### Install the plugins
 
 | Location | Plugins to put in `plugins/` |
 | --- | --- |
@@ -16,7 +20,9 @@ Check the [requirements](../overview/requirements.md), choose a compatible [auth
 
 FLP does not need backend ProtocolLib in this setup. Do not use `-plain.jar`.
 
-## 2. Configure the proxy and backends
+{% endstep %}
+{% step %}
+### Configure the proxy and backends
 
 In BungeeCord's `config.yml`, set:
 
@@ -34,22 +40,31 @@ settings:
 
 On Paper or Folia, also disable Velocity forwarding and set the BungeeCord forwarding online-mode option to `false`. The location of these options varies by Paper version; consult your version's configuration reference.
 
-## 3. Allow the backend to trust the proxy
+{% endstep %}
+{% step %}
+### Allow the backend to trust the proxy
 
 1. Start the proxy and backends once to generate configuration files, then stop both sides.
 2. In BungeeCord's own `config.yml`, copy the UUID in `stats`. This is not Velocity's `proxyId.txt`.
 3. Add the UUID to each backend's `plugins/fastloginplus/allowed-proxies.txt`, one UUID per line. Preserve the proxy's `stats` value rather than regenerating it.
 
-## 4. Configure policies and start
+{% endstep %}
+{% step %}
+### Configure policies and start
 
 1. Configure FLP login policies and database in the proxy's `plugins/fastloginplus/config.yml`.
 2. Configure the authentication plugin and backend language on the backend.
 3. Firewall backend ports so only trusted proxies can connect.
 4. Start the proxy and backends, check that plugins load, and try premium and password login with test accounts.
 
+{% endstep %}
+{% endstepper %}
+
 ## Security boundary
 
+{% hint style="warning" %}
 BungeeCord forwarding alone does not secure the entire backend. Even with an FLP proxy allowlist, use a firewall to prevent players connecting directly to the backend. Keep proxy IDs private.
+{% endhint %}
 
 Leave `verify-backend-messages: true` in the proxy's FLP config. Temporarily disabling it for an old deployment reduces message checking; it is not a fix for an incorrect allowlist.
 

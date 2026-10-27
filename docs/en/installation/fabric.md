@@ -9,7 +9,11 @@ This is a **server-side Minecraft 26.2** integration. Java clients do not need a
 - Local SQLite for the supported proxy/EasyAuth storage combination. Other EasyAuth stores emit a warning and are unverified, especially their distinction between a missing account and a failed read.
 - Backups of EasyAuth, FLP records and world/player data. Read [UUID implications](../accounts/uuid.md) before enabling bindings.
 
-## 1. Install plugins and mods
+## Installation
+
+{% stepper %}
+{% step %}
+### Install plugins and mods
 
 Stop the proxy and backend, then install:
 
@@ -20,7 +24,9 @@ Stop the proxy and backend, then install:
 
 Do not install FLP's Bukkit/Folia edition on Fabric or install the conflicting FabricProxy mod alongside FabricProxy-Lite.
 
-## 2. Configure forwarding
+{% endstep %}
+{% step %}
+### Configure forwarding
 
 In the proxy's `velocity.toml`, set:
 
@@ -31,7 +37,9 @@ player-info-forwarding-mode = "modern"
 
 Set `online-mode=false` in the Fabric backend's `server.properties`. Start the proxy and backend once to generate configuration files, then stop both. In the backend's `config/FabricProxy-Lite.toml`, set `secret` to the contents of the proxy's `forwarding.secret` file. Keep this secret private.
 
-## 3. Configure EasyAuth
+{% endstep %}
+{% step %}
+### Configure EasyAuth
 
 In the backend's EasyAuth 3.4.4 `config/EasyAuth/main.conf`, set:
 
@@ -52,17 +60,26 @@ In `config/EasyAuth/extended.conf`, set:
 
 Edit EasyAuth's generated files; do not add these options to FLP's YAML file.
 
-## 4. Configure FLP
+{% endstep %}
+{% step %}
+### Configure FLP
 
 1. Copy the UUID from the proxy's `plugins/fastloginplus/proxyId.txt`.
 2. Set `allowed-proxy-ids` in the backend's `config/fastloginplus-fabric.yml` to that UUID. You can also set `language: en` or `language: zh`.
 3. Configure Java/Bedrock login policies in the proxy's `plugins/fastloginplus/config.yml`. Do not add proxy policies to the Fabric configuration.
 
+{% hint style="warning" %}
 The proxy ID and forwarding secret are different values and cannot be exchanged. Restart after changing configuration.
+{% endhint %}
 
-## 5. Start and check
+{% endstep %}
+{% step %}
+### Start and check
 
 Use a firewall to prevent public access to the backend. Start the proxy and backend, check the startup logs, and try premium and password login with test accounts.
+
+{% endstep %}
+{% endstepper %}
 
 ## Expected behavior
 

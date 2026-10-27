@@ -4,11 +4,37 @@ Folia uses region-based threading. A plugin being compatible with Paper does not
 
 ## Install
 
-1. Back up the server and authentication data. Check the [runtime requirements](../overview/requirements.md).
-2. Stop the server. Install the **Folia** FLP artifact in `plugins/`, not the Bukkit artifact. Install Folia-compatible builds of your auth plugin and packet library as well.
-3. Set `online-mode=false` in `server.properties`. For a direct server, disable BungeeCord and Velocity forwarding.
-4. Start once, confirm that all dependencies enabled successfully, then stop. Edit `plugins/fastloginplus/config.yml` using the [standalone setup choices](standalone.md), including the UUID decision.
-5. Restart the server, check that the plugins load, and try premium and password login with test accounts.
+{% stepper %}
+{% step %}
+### Back up and check requirements
+
+Back up the server and authentication data. Check the [runtime requirements](../overview/requirements.md).
+{% endstep %}
+
+{% step %}
+### Install the plugins
+
+Stop the server. Install the **Folia** FLP artifact in `plugins/`, not the Bukkit artifact. Install Folia-compatible builds of your auth plugin and packet library as well.
+{% endstep %}
+
+{% step %}
+### Configure the server
+
+Set `online-mode=false` in `server.properties`. For a direct server, disable BungeeCord and Velocity forwarding.
+{% endstep %}
+
+{% step %}
+### Configure FLP
+
+Start once, confirm that all dependencies enabled successfully, then stop. Edit `plugins/fastloginplus/config.yml` using the [standalone setup choices](standalone.md), including the UUID decision.
+{% endstep %}
+
+{% step %}
+### Restart and check
+
+Restart the server, check that the plugins load, and try premium and password login with test accounts.
+{% endstep %}
+{% endstepper %}
 
 Folia permissions use `fastloginplus.folia.command.*`, not `fastloginplus.bukkit.command.*`.
 

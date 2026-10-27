@@ -2,7 +2,9 @@
 
 ## Change the UUID used by players
 
+{% hint style="warning" %}
 **Back up player and account data first.** Changing UUIDs can make players load different inventories and permissions; FLP does not migrate that data automatically.
+{% endhint %}
 
 1. Back up worlds, player data, other plugin data, and the FLP and authentication-plugin databases.
 2. On a test copy, record existing UUIDs and plan migration for affected plugins; keep the current setting if migration is not needed.

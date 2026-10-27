@@ -9,7 +9,11 @@
 - 受支持的代理/EasyAuth 存储组合使用本地 SQLite. 其他 EasyAuth 存储会告警且尚未验证, 尤其不能保证它们能正确区分账号不存在与读取失败.
 - 备份 EasyAuth, FLP 记录和世界/玩家数据. 启用绑定前阅读 [UUID 影响](../accounts/uuid.md).
 
-## 1. 安装插件和 Mod
+## 安装步骤
+
+{% stepper %}
+{% step %}
+### 安装插件和 Mod
 
 停止代理和后端, 然后放入以下文件:
 
@@ -20,7 +24,9 @@
 
 不要在 Fabric 安装 Bukkit/Folia 版本, 也不要同时安装与 FabricProxy-Lite 冲突的 FabricProxy.
 
-## 2. 配置转发
+{% endstep %}
+{% step %}
+### 配置转发
 
 在代理 `velocity.toml` 设置:
 
@@ -31,7 +37,9 @@ player-info-forwarding-mode = "modern"
 
 在 Fabric 后端的 `server.properties` 设置 `online-mode=false`. 然后启动代理和后端一次以生成配置, 再停止两端. 在后端 `config/FabricProxy-Lite.toml` 中, 将 `secret` 设置为代理的 `forwarding.secret` 文件内容. 不要公开这个密钥.
 
-## 3. 配置 EasyAuth
+{% endstep %}
+{% step %}
+### 配置 EasyAuth
 
 在后端修改 EasyAuth 3.4.4 的 `config/EasyAuth/main.conf`:
 
@@ -52,17 +60,26 @@ player-info-forwarding-mode = "modern"
 
 修改 EasyAuth 已生成的配置, 不要把这些选项添加到 FLP 的 YAML 文件.
 
-## 4. 配置 FLP
+{% endstep %}
+{% step %}
+### 配置 FLP
 
 1. 复制代理 `plugins/fastloginplus/proxyId.txt` 中的 UUID.
 2. 在后端 `config/fastloginplus-fabric.yml` 中, 将 `allowed-proxy-ids` 设置为该 UUID. 可以同时设置 `language: zh` 或 `language: en`.
 3. 在代理的 `plugins/fastloginplus/config.yml` 中配置 Java/Bedrock 登录策略. 不要把代理策略添加到 Fabric 的配置文件.
 
+{% hint style="warning" %}
 代理 ID 与转发密钥是不同的值, 不能互换. 修改配置后需要重启.
+{% endhint %}
 
-## 5. 启动并检查
+{% endstep %}
+{% step %}
+### 启动并检查
 
 用防火墙禁止公网直连后端. 启动代理和后端, 检查启动日志, 再使用测试账号检查正版和密码登录.
+
+{% endstep %}
+{% endstepper %}
 
 ## 预期行为
 
