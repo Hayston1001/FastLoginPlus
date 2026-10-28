@@ -1,12 +1,11 @@
 # FastLoginPlus Wiki
 
-FastLoginPlus (FLP) connects verified Minecraft identities with your server's authentication system. It can let verified Java account owners and supported Floodgate players log in without entering a password, while keeping password authentication for other players. Whether an account can be created or opened depends on server policy and the local account state.
+FastLoginPlus (FLP) identifies **premium** players on **offline-mode** servers using authentication plugins and enables Mojang verification for **passwordless** login. It also offers anti-bot protection, premium skins and UUIDs, and an offline whitelist, with support for SkinsRestorer and Geyser/Floodgate.
 
-## Read these warnings first
+## An example
 
-1. A premium username is not proof of ownership. The current connection must pass Mojang verification.
-2. FLP's premium/cracked list is not the authentication plugin's account database.
-3. Changing the UUID delivered to the server can change which inventory, permissions and other player data are loaded. FLP does not migrate that data.
-4. A proxy allowlist does not replace firewall rules or authenticated forwarding. Keep backend ports inaccessible to the public.
+Imagine your server uses an authentication plugin that asks players for a password. A premium player first logs in to their existing account with its password, then agrees to bind their premium identity. On later joins, FLP verifies that identity and, when server policy and account state allow it, the authentication plugin can log the player in without a password. Other players can continue to use password login.
+
+Use the sidebar to explore supported platforms and authentication plugins, choose an installation guide for your server, and learn about account binding and configuration.
 
 [Downloads and releases](https://github.com/Hayston1001/FastLoginPlus/releases) | [Changelog](https://github.com/Hayston1001/FastLoginPlus/blob/main/CHANGELOG.md) | [Issues](https://github.com/Hayston1001/FastLoginPlus/issues) | [Source](https://github.com/Hayston1001/FastLoginPlus)

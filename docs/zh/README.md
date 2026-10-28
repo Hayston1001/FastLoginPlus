@@ -1,12 +1,11 @@
 # FastLoginPlus Wiki
 
-FastLoginPlus (FLP) 把经过验证的 Minecraft 身份与服务器的认证系统衔接起来. 它可以让通过验证的 Java 正版账号持有人和受支持的 Floodgate 玩家免输密码登录, 同时让其他玩家继续使用密码认证. 是否能创建或打开账号, 取决于服务器策略和本地账号状态.
+FastLoginPlus(FLP) 可在使用认证插件的**离线**服务器上, 识别**正版**玩家为其启用 MOJANG 身份验证以**免密**登入. 还提供反机器人/恢复在线皮肤和UUID/离线白名单等实用功能, 同时兼容 SkinsRestorer 以及 Geyser/Floodgate.
 
-## 请先了解这些风险
+## 一个例子
 
-1. 正版用户名不是所有权证明. 当前连接必须通过 Mojang 验证.
-2. FLP 的 premium/cracked 名单不是认证插件的账号数据库.
-3. 修改交给服务器的 UUID, 可能改变玩家加载的背包, 权限和其他数据. FLP 不迁移这些数据.
-4. 代理白名单不能替代防火墙和经过认证的信息转发. 不要让公网玩家直接连接后端端口.
+假设你的服务器使用登录插件, 玩家进入时需要输入密码. 一位正版玩家先用密码登录自己的已有账号, 然后同意绑定正版身份. 之后再次进入服务器时, FLP 验证其正版身份, 在服务器策略和账号状态允许的情况下, 登录插件就可以让这位玩家免输密码登录. 其他玩家仍可使用密码登录.
+
+你可以从侧栏了解支持的平台和登录插件, 按自己的服务器类型安装, 再查看账号绑定和配置方法.
 
 [下载与发布](https://github.com/Hayston1001/FastLoginPlus/releases) | [更新历史](https://github.com/Hayston1001/FastLoginPlus/blob/main/CHANGELOG_zh.md) | [问题反馈](https://github.com/Hayston1001/FastLoginPlus/issues) | [源码](https://github.com/Hayston1001/FastLoginPlus)
