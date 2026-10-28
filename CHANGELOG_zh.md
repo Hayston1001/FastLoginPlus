@@ -4,8 +4,6 @@
 
 ## v1.0.0
 
-![fabric](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/supported/fabric_vector.svg)
-
 > FLP 首个正式版本:
 > - 构建体系迁移至 Gradle
 > - 登录与身份决策链重新设计

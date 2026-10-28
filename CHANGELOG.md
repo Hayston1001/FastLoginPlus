@@ -4,8 +4,6 @@ English | [简体中文](CHANGELOG_zh.md)
 
 ## v1.0.0
 
-![fabric](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/supported/fabric_vector.svg)
-
 > FLP's first stable release:
 > - Build system migrated to Gradle
 > - Login and identity decision chain redesigned

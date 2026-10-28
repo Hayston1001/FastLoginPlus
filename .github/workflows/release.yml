@@ -48,7 +48,10 @@ jobs:
               body = re.sub(r"\]\((docs/[^)]+)\)", lambda match: f"]({base}/{match[1]})", body)
               links = (f"Changelog: [English]({base}/CHANGELOG.md) | "
                        f"[简体中文]({base}/CHANGELOG_zh.md)")
-              return f"{links}\n\n{body}\n"
+              badge = ("[![modrinth](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/"
+                       "assets/cozy/available/modrinth_vector.svg)]"
+                       "(https://modrinth.com/plugin/fastloginplus)")
+              return f"{links}\n\n{badge}\n\n{body}\n"
 
           def notes_main():
               notes = release_notes(
