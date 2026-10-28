@@ -3,8 +3,7 @@
 English | [简体中文](https://github.com/Hayston1001/FastLoginPlus/blob/main/README_zh.md)
 
 [![Modrinth downloads](https://img.shields.io/modrinth/dt/dmpkLjdL?style=flat-square&logo=modrinth&label=Modrinth&color=00AF5C)](https://modrinth.com/plugin/fastloginplus)
-[![Build](https://img.shields.io/github/actions/workflow/status/Hayston1001/FastLoginPlus/gradle.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=Build)](https://github.com/Hayston1001/FastLoginPlus/actions/workflows/gradle.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/Hayston1001/FastLoginPlus/release.yml?style=flat-square&logo=githubactions&logoColor=white&label=Release)](https://github.com/Hayston1001/FastLoginPlus/actions/workflows/release.yml)
+[![codeql](https://img.shields.io/github/actions/workflow/status/Hayston1001/FastLoginPlus/codeql-analysis.yml?style=flat-square&label=CodeQL)](https://github.com/Hayston1001/FastLoginPlus/actions/workflows/codeql-analysis.yml)
 [![MIT](https://img.shields.io/badge/License-MIT-2563EB?style=flat-square)](LICENSE)
 
 [![modrinth](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/assets/cozy/available/modrinth_vector.svg)](https://modrinth.com/plugin/fastloginplus)
