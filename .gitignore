@@ -1,9 +1,3 @@
-# dev
-.worktrees/
-.playwright-mcp/
-local-docs/
-scripts/
-
 # Eclipse
 .classpath
 .project
@@ -64,8 +58,3 @@ desktop.ini
 !bukkit/lib/*.jar
 !bungee/lib/*.jar
 !folia/lib/*.jar
-
-# AI agent
-AGENTS.md
-.agents/skills/
-.hermes/
