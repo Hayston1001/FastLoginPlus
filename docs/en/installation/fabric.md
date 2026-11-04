@@ -64,7 +64,7 @@ Edit EasyAuth's generated files; do not add these options to FLP's YAML file.
 {% step %}
 ### Configure FLP
 
-1. Copy the UUID from the proxy's `plugins/fastloginplus/proxyId.txt`.
+1. Copy the UUID from the Velocity proxy's `plugins/fastloginplus/proxyId.txt`.
 2. Set `allowed-proxy-ids` in the backend's `config/fastloginplus-fabric.yml` to that UUID. You can also set `language: en` or `language: zh`.
 3. Configure Java/Bedrock login policies in the proxy's `plugins/fastloginplus/config.yml`. Do not add proxy policies to the Fabric configuration.
 

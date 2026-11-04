@@ -52,37 +52,41 @@ public class DeleteCommand implements CommandExecutor {
         // whole load/validate/delete flow runs async, replies hop back to the
         // main thread
         plugin.getScheduler().runAsync(() -> {
-            StoredProfile profile = plugin.getCore().getStorage().loadProfile(targetName);
-            if (profile == null) {
-                plugin.getScheduler().getSyncExecutor().execute(() ->
-                        plugin.getCore().sendLocaleMessage("database-error", sender));
-                return;
-            }
-
-            if (!profile.isExistingPlayer()) {
-                plugin.getScheduler().getSyncExecutor().execute(() ->
-                        plugin.getCore().sendLocaleMessage("delete-not-found", sender));
-                return;
-            }
-
-            if (profile.isOnlinemodePreferred()) {
-                plugin.getScheduler().getSyncExecutor().execute(() ->
-                        plugin.getCore().sendLocaleMessage("delete-premium-denied", sender));
-                return;
-            }
-
-            boolean deleted = plugin.getCore().getStorage().deleteProfile(targetName);
-            if (deleted) {
-                plugin.getServer().getPluginManager().callEvent(
-                        new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
-                );
-            }
-            plugin.getScheduler().getSyncExecutor().execute(() -> {
-                if (deleted) {
-                    plugin.getCore().sendLocaleMessage("delete-success", sender);
-                } else {
-                    plugin.getCore().sendLocaleMessage("delete-fail", sender);
+            // the load-modify-delete window must hold the name lock, otherwise a
+            // concurrent toggle can write between the checks and the delete
+            plugin.getCore().getStorage().withNameLock(targetName, () -> {
+                StoredProfile profile = plugin.getCore().getStorage().loadProfile(targetName);
+                if (profile == null) {
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("database-error", sender));
+                    return;
                 }
+
+                if (!profile.isExistingPlayer()) {
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("delete-not-found", sender));
+                    return;
+                }
+
+                if (profile.isOnlinemodePreferred()) {
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("delete-premium-denied", sender));
+                    return;
+                }
+
+                boolean deleted = plugin.getCore().getStorage().deleteProfile(targetName);
+                if (deleted) {
+                    plugin.getServer().getPluginManager().callEvent(
+                            new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
+                    );
+                }
+                plugin.getScheduler().getSyncExecutor().execute(() -> {
+                    if (deleted) {
+                        plugin.getCore().sendLocaleMessage("delete-success", sender);
+                    } else {
+                        plugin.getCore().sendLocaleMessage("delete-fail", sender);
+                    }
+                });
             });
         });
 

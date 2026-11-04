@@ -138,6 +138,9 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
     public void onProxyShutdown(ProxyShutdownEvent event) {
         // stop scheduling before closing shared resources
         scheduler.shutdown();
+        // in-flight storage tasks may still be writing — let them finish
+        // before core.close() shuts the database pool down underneath them
+        scheduler.awaitQuiescence(Duration.ofSeconds(3));
 
         if (core != null) {
             core.close();

@@ -64,7 +64,7 @@ player-info-forwarding-mode = "modern"
 {% step %}
 ### 配置 FLP
 
-1. 复制代理 `plugins/fastloginplus/proxyId.txt` 中的 UUID.
+1. 复制 Velocity 代理 `plugins/fastloginplus/proxyId.txt` 中的 UUID.
 2. 在后端 `config/fastloginplus-fabric.yml` 中, 将 `allowed-proxy-ids` 设置为该 UUID. 可以同时设置 `language: zh` 或 `language: en`.
 3. 在代理的 `plugins/fastloginplus/config.yml` 中配置 Java/Bedrock 登录策略. 不要把代理策略添加到 Fabric 的配置文件.
 

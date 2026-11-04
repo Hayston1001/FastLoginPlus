@@ -37,6 +37,32 @@ public abstract class AbstractAsyncScheduler {
         shutdown = true;
     }
 
+    /**
+     * Wait until every task that already started has finished, up to the given
+     * timeout. Submitting stops accepting work after {@link #shutdown()}, but a
+     * task that is already running may still be using resources (for example
+     * the database pool) that the caller is about to close.
+     *
+     * @param timeout maximum time to wait
+     * @return true when no task is running any more
+     */
+    public boolean awaitQuiescence(Duration timeout) {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (currentlyRunning.get() > 0) {
+            if (System.nanoTime() >= deadline) {
+                logger.warn("{} task(s) still running after the shutdown wait", currentlyRunning.get());
+                return false;
+            }
+            try {
+                Thread.sleep(10L);
+            } catch (InterruptedException interruptedException) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return true;
+    }
+
     protected boolean isShutdown() {
         return shutdown;
     }
@@ -46,6 +72,11 @@ public abstract class AbstractAsyncScheduler {
     public abstract CompletableFuture<Void> runAsyncDelayed(Runnable task, Duration delay);
 
     protected void process(Runnable task) {
+        // second gate: a task accepted before shutdown() but only picked up
+        // afterwards must not touch resources the owner has already closed
+        if (shutdown) {
+            return;
+        }
         currentlyRunning.incrementAndGet();
         try {
             task.run();

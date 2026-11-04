@@ -138,7 +138,7 @@ class FabricConfigTest {
         FabricConfig.warnIfUntrusted(new FabricConfig.StartupSettings(raw), logger);
         verify(logger).warn("fastloginplus-fabric.yml has an empty allowed-proxy-ids; the proxy "
                 + "will refuse the upgrade consent message and /flp premium can never complete. "
-                + "Fill in the proxy's UUID (its proxyId.txt).");
+                + "Fill in the Velocity proxy's UUID (its proxyId.txt).");
         verifyNoMoreInteractions(logger);
     }
 

@@ -35,19 +35,15 @@ public class AsyncScheduler extends AbstractAsyncScheduler {
             return CompletableFuture.completedFuture(null);
         }
         return CompletableFuture.runAsync(() -> {
-            currentlyRunning.incrementAndGet();
             try {
                 Thread.sleep(delay.toMillis());
-                // the plugin may have disabled during the delay
-                if (isShutdown()) {
-                    return;
-                }
-                process(task);
             } catch (InterruptedException interruptedException) {
                 Thread.currentThread().interrupt();
-            } finally {
-                currentlyRunning.getAndDecrement();
+                return;
             }
+            // the plugin may have disabled during the delay — process()
+            // re-checks the flag and skips a task that must no longer run
+            process(task);
         }, processingPool).exceptionally(error -> {
             logger.warn("Error occurred on thread pool", error);
             return null;

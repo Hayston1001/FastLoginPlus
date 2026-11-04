@@ -526,6 +526,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         scheduler.shutdown();
         // stop the self-chaining relay retry tasks
         relayChainsRunning.set(false);
+        // in-flight storage tasks may still be writing — let them finish
+        // before core.close() shuts the database pool down underneath them
+        scheduler.awaitQuiescence(Duration.ofSeconds(3));
 
         if (core != null) {
             core.close();

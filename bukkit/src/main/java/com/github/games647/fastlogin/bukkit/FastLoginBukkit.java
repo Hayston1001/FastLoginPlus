@@ -527,6 +527,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
         // stop scheduling before closing shared resources
         scheduler.shutdown();
+        // in-flight storage tasks may still be writing — let them finish
+        // before core.close() shuts the database pool down underneath them
+        scheduler.awaitQuiescence(Duration.ofSeconds(3));
 
         if (core != null) {
             core.close();
@@ -1788,12 +1791,22 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 // task was scheduled — never send a stale captured value
                 Boolean pendingValue = pendingRelayStore.removeToggle(target);
                 if (pendingValue != null) {
-                    ChangePremiumMessage message = new ChangePremiumMessage(target, pendingValue, false);
-                    bungeeManager.sendPluginMessage(sender, message);
-                    logger.info("Relayed pending {} toggle for {}",
-                        pendingValue ? "premium" : "cracked", target);
+                    try {
+                        ChangePremiumMessage message = new ChangePremiumMessage(target, pendingValue, false);
+                        bungeeManager.sendPluginMessage(sender, message);
+                        logger.info("Relayed pending {} toggle for {}",
+                            pendingValue ? "premium" : "cracked", target);
+                        Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
+                    } catch (Exception ex) {
+                        // send failed after removal — put the entry back and let
+                        // the next tick retry instead of losing it
+                        pendingRelayStore.queueToggle(target, pendingValue);
+                        logger.warn("Failed to relay pending toggle for {} — requeued: {}",
+                            target, ex.getMessage());
+                    }
+                } else {
+                    Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
                 }
-                Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
             }
         }, 20L, 20L);
     }
@@ -1827,10 +1840,20 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                 Player sender = optPlayer.get();
                 // remove-if-present: never double-send after another retry already relayed it
                 if (pendingRelayStore.clearDelete(targetName)) {
-                    bungeeManager.sendPluginMessage(sender, new DeletePremiumMessage(targetName, false));
-                    logger.info("Relayed pending delete for {}", targetName);
+                    try {
+                        bungeeManager.sendPluginMessage(sender, new DeletePremiumMessage(targetName, false));
+                        logger.info("Relayed pending delete for {}", targetName);
+                        Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
+                    } catch (Exception ex) {
+                        // send failed after removal — put the entry back and let
+                        // the next tick retry instead of losing it
+                        pendingRelayStore.queueDelete(targetName);
+                        logger.warn("Failed to relay pending delete for {} — requeued: {}",
+                            targetName, ex.getMessage());
+                    }
+                } else {
+                    Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
                 }
-                Bukkit.getScheduler().cancelTask(taskIdHolder[0]);
             }
         }, 20L, 20L);
     }
