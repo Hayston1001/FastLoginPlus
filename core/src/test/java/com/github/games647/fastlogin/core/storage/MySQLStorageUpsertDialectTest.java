@@ -9,6 +9,10 @@ package com.github.games647.fastlogin.core.storage;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -27,10 +31,49 @@ class MySQLStorageUpsertDialectTest {
         assertTrue(stmt.contains("`UUID`="));
         assertTrue(stmt.contains("`Premium`="));
         assertTrue(stmt.contains("`Floodgate`="));
+        assertTrue(stmt.contains("`SameNameCracked`="));
         assertTrue(stmt.contains("`LastIp`="));
         // byte-exact name comparison keeps the case-variant protection
         assertTrue(stmt.contains("HEX(`Name`)=HEX(VALUES(`Name`))"),
                 "case-variant duplicate must not overwrite the existing row");
+    }
+
+    /**
+     * Guards the binding contract in {@code SQLStorage.saveQuietly}: the insert
+     * branch binds six positional parameters, so the dialect statement must
+     * declare the same columns in the same order.  A drifted column list shifts
+     * every later value (a missing SameNameCracked once wrote LastIp into it).
+     */
+    @Test
+    void upsertStatementBindsTheSameColumnsAsTheBaseInsert() {
+        String upsert = MySQLStorage.INSERT_PROFILE_UPSERT;
+        String base = SQLStorage.INSERT_PROFILE;
+
+        assertEquals(insertColumns(base), insertColumns(upsert), "column list/order must match the base insert");
+        assertEquals(countPlaceholders(base), countPlaceholders(upsert), "placeholder count must match");
+    }
+
+    private static List<String> insertColumns(String sql) {
+        int start = sql.indexOf('(');
+        int end = sql.indexOf(')', start);
+        List<String> columns = new ArrayList<>();
+        for (String column : sql.substring(start + 1, end).split(",")) {
+            columns.add(column.trim().replace("`", ""));
+        }
+        return columns;
+    }
+
+    private static int countPlaceholders(String sql) {
+        int values = sql.indexOf("VALUES");
+        int start = sql.indexOf('(', values);
+        int end = sql.indexOf(')', start);
+        int count = 0;
+        for (String value : sql.substring(start + 1, end).split(",")) {
+            if ("?".equals(value.trim())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**

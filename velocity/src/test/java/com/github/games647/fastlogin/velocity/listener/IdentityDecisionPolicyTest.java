@@ -7,6 +7,8 @@
 package com.github.games647.fastlogin.velocity.listener;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.github.games647.craftapi.UUIDAdapter;
 import com.github.games647.fastlogin.protocol.IdentityClaim;
@@ -25,6 +27,21 @@ class IdentityDecisionPolicyTest {
         assertEquals(Decision.UNDECIDED, decide(null, false, false, true, "Player_1", VERIFIED).getDecision());
         VelocityLoginSession session = new VelocityLoginSession("Player_1", false, null);
         assertEquals(Decision.UNDECIDED, decide(session, false, false, true, "Player_1", VERIFIED).getDecision());
+    }
+
+    @Test
+    void missingSessionDeclaresTheProxyAutoLoginPolicyInsteadOfAssumingTrue() {
+        IdentityClaim enabled = IdentityDecisionPolicy.decide(null, false, false, true, true,
+                "Player_1", VERIFIED);
+        assertTrue(enabled.getFacts().policyDeclared());
+        assertTrue(enabled.getFacts().autoLogin());
+
+        // autoLogin:false must reach the backend as a declared false, not as an assumed true
+        IdentityClaim disabled = IdentityDecisionPolicy.decide(null, false, false, true, false,
+                "Player_1", VERIFIED);
+        assertTrue(disabled.getFacts().policyDeclared());
+        assertFalse(disabled.getFacts().autoLogin());
+        assertEquals(Decision.UNDECIDED, disabled.getDecision());
     }
 
     @Test
@@ -118,6 +135,6 @@ class IdentityDecisionPolicyTest {
 
     private static IdentityClaim decide(VelocityLoginSession session, boolean online, boolean bedrock,
                                         boolean premiumUuid, String name, UUID uuid) {
-        return IdentityDecisionPolicy.decide(session, online, bedrock, premiumUuid, name, uuid);
+        return IdentityDecisionPolicy.decide(session, online, bedrock, premiumUuid, true, name, uuid);
     }
 }

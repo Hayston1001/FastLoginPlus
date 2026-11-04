@@ -85,7 +85,11 @@ public class PremiumCommand extends ToggleCommand {
                     profile.setOnlinemodePreferred(true);
                     // an explicit consent supersedes any same-name cracked observation
                     profile.setSameNameCracked(false);
-                    plugin.getCore().getStorage().save(profile);
+                    if (!plugin.getCore().getStorage().saveQuietly(profile)) {
+                        plugin.getScheduler().getSyncExecutor().execute(() ->
+                                plugin.getCore().sendLocaleMessage("database-error", sender));
+                        return;
+                    }
                     plugin.getServer().getPluginManager().callEvent(
                             new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_SELF)
                     );
@@ -131,7 +135,11 @@ public class PremiumCommand extends ToggleCommand {
                     profile.setOnlinemodePreferred(true);
                     // an explicit consent supersedes any same-name cracked observation
                     profile.setSameNameCracked(false);
-                    plugin.getCore().getStorage().save(profile);
+                    if (!plugin.getCore().getStorage().saveQuietly(profile)) {
+                        plugin.getScheduler().getSyncExecutor().execute(() ->
+                                plugin.getCore().sendLocaleMessage("database-error", sender));
+                        return;
+                    }
                     plugin.getServer().getPluginManager().callEvent(
                             new BukkitFastLoginPremiumToggleEvent(sender, profile, PremiumToggleReason.COMMAND_OTHER)
                     );

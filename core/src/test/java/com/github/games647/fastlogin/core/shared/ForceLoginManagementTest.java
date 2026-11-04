@@ -66,7 +66,7 @@ class ForceLoginManagementTest {
         }
         verify(authPlugin, never()).forceLogin(any());
         verify(authPlugin, never()).forceRegister(any(), anyString());
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
         verify(core, never()).resetVerificationState(anyString());
     }
 
@@ -95,6 +95,8 @@ class ForceLoginManagementTest {
         doNothing().when(core).sendLocaleMessage(anyString(), any());
         // plugins that store the generated password keep the interface default
         when(authPlugin.notifyGeneratedPassword()).thenReturn(true);
+        // the mocked storage reports a successful write unless a test overrides it
+        when(storage.saveQuietly(any())).thenReturn(true);
         // the production save windows run inside withNameLock - the
         // mock must execute the passed runnable so the wrapped saves still happen
         doAnswer(inv -> {
@@ -125,7 +127,7 @@ class ForceLoginManagementTest {
                 "the pre-decision write must not grant the upgrade consent");
         assertEquals(premiumUuid, profile.getId());
         assertFalse(profile.isSameNameCracked(), "a passing verification refutes the observation");
-        verify(storage).save(profile);
+        verify(storage).saveQuietly(profile);
         assertEquals(1, mgmt.ackCount, "proxy must still forward the force-login action");
     }
 
@@ -148,7 +150,7 @@ class ForceLoginManagementTest {
 
         assertFalse(profile.isOnlinemodePreferred(), "the observation write never flips the consent");
         assertEquals(premiumUuid, profile.getId());
-        verify(storage).save(profile);
+        verify(storage).saveQuietly(profile);
     }
 
     // ---- backend with AuthMe 6.0 bypass (forceLogin returns false) ----
@@ -164,6 +166,8 @@ class ForceLoginManagementTest {
         when(config.get("auto-register-unknown")).thenReturn(true);
         when(authPlugin.isRegistered("TestUser")).thenReturn(true);
         when(authPlugin.forceLogin(any())).thenReturn(false);
+        // the bypass leaves the player authenticated, which is what licenses the ack
+        when(authPlugin.isAuthenticated(any())).thenReturn(true);
 
         TestLoginSession session = new TestLoginSession("TestUser", true, null);
         session.setUuid(UUID.randomUUID());
@@ -171,7 +175,7 @@ class ForceLoginManagementTest {
         TestForceLoginManagement mgmt = createManagement(session, true);
         mgmt.run();
 
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
         assertEquals(1, mgmt.ackCount, "backends must ack verified premium sessions even when forceLogin fails");
     }
 
@@ -196,7 +200,7 @@ class ForceLoginManagementTest {
         // the confirmed outcome ("registered as premium") is what records consent
         assertTrue(profile.isOnlinemodePreferred());
         assertFalse(profile.isSameNameCracked(), "a passing verification refutes the observation");
-        verify(storage).save(profile);
+        verify(storage).saveQuietly(profile);
         assertEquals(1, mgmt.ackCount);
     }
 
@@ -215,6 +219,49 @@ class ForceLoginManagementTest {
     @Test
     void alreadyAuthenticatedPremiumRecoveryStillAcknowledgesTheProxy() throws Exception {
         assertPremiumRecovery(IdentityClaim.Consent.NO, false, false);
+    }
+
+    @Test
+    void vetoedAutoLoginNeverRecordsConsentEvenWhenAuthPluginAuthenticated() throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(authPlugin.inspectAccount("TestUser"))
+                .thenReturn(LoginMethodDecider.AccountState.PREMIUM_OWNED);
+        when(authPlugin.isAuthenticated(any())).thenReturn(true);
+
+        StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
+        TestLoginSession session = new TestLoginSession("TestUser", true, profile);
+        session.setUuid(UUID.randomUUID());
+        session.setFacts(new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, true, false, false));
+
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.cancelAutoLoginEvent = true;
+        mgmt.run();
+
+        assertFalse(profile.isOnlinemodePreferred(), "a vetoed auto login must not become consent");
+        assertEquals(0, mgmt.ackCount, "the proxy must not be told a vetoed login succeeded");
+        verify(authPlugin, never()).forceLogin(any());
+        verify(storage, never()).saveQuietly(any());
+    }
+
+    @Test
+    void failedForceActionWithoutAuthenticationRecordsNoConsentAndNoAck() throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(authPlugin.inspectAccount("TestUser"))
+                .thenReturn(LoginMethodDecider.AccountState.PREMIUM_OWNED);
+        when(authPlugin.forceLogin(any())).thenReturn(false);
+        // a real failure (or a vetoed event) leaves the session unauthenticated
+
+        StoredProfile profile = new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1");
+        TestLoginSession session = new TestLoginSession("TestUser", true, profile);
+        session.setUuid(UUID.randomUUID());
+        session.setFacts(new IdentityClaim.Facts(false, false, IdentityClaim.Consent.NO, true, false, false));
+
+        TestForceLoginManagement mgmt = createManagement(session, true);
+        mgmt.run();
+
+        assertFalse(profile.isOnlinemodePreferred(), "a rejected login must not become consent");
+        assertEquals(0, mgmt.ackCount, "the proxy must not be told a rejected login succeeded");
+        verify(storage, never()).saveQuietly(any());
     }
 
     @Test
@@ -239,7 +286,7 @@ class ForceLoginManagementTest {
         assertEquals(0, management.ackCount);
         verify(authPlugin, never()).forceLogin(any());
         verify(authPlugin, never()).forceRegister(any(), anyString());
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
         verify(core).sendLocaleMessage("premium-policy-disabled", management.player);
         verify(core, never()).sendLocaleMessage(org.mockito.ArgumentMatchers.eq("premium-password-login"), any());
     }
@@ -250,6 +297,11 @@ class ForceLoginManagementTest {
         when(authPlugin.inspectAccount("TestUser"))
                 .thenReturn(LoginMethodDecider.AccountState.PREMIUM_OWNED);
         when(authPlugin.forceLogin(any())).thenReturn(loginResult);
+        if (!loginResult) {
+            // the AuthMe 6.0 case: AsynchronousJoin already authenticated the
+            // player before ForceLoginTask ran, so forceLogin reports false
+            when(authPlugin.isAuthenticated(any())).thenReturn(true);
+        }
 
         StoredProfile profile = localProfile
                 ? new StoredProfile(null, "TestUser", false, FloodgateState.FALSE, "127.0.0.1") : null;
@@ -266,9 +318,9 @@ class ForceLoginManagementTest {
         if (profile != null) {
             assertTrue(profile.isOnlinemodePreferred(), "R-7 confirms premium ownership");
             assertEquals(session.getUuid(), profile.getId());
-            verify(storage).save(profile);
+            verify(storage).saveQuietly(profile);
         } else {
-            verify(storage, never()).save(any());
+            verify(storage, never()).saveQuietly(any());
         }
         assertEquals(1, mgmt.ackCount, "the backend must acknowledge the premium outcome to its proxy");
         String warning = "Recovered verified premium login for {} from the auth plugin's premium account "
@@ -306,7 +358,7 @@ class ForceLoginManagementTest {
         assertNull(mgmt.denied);
         assertFalse(mgmt.premiumHandlingAllowed);
         assertEquals(0, mgmt.ackCount);
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
         verify(authPlugin, never()).forceLogin(any());
         verify(authPlugin, never()).forceRegister(any(), anyString());
         verify(core, never()).sendLocaleMessage(
@@ -327,7 +379,7 @@ class ForceLoginManagementTest {
         assertFalse(mgmt.premiumHandlingAllowed);
         assertFalse(profile.isOnlinemodePreferred());
         assertEquals(0, mgmt.ackCount);
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
         verify(authPlugin, never()).forceLogin(any());
         verify(authPlugin, never()).forceRegister(any(), anyString());
         verify(core).sendLocaleMessage("premium-password-login", mgmt.player);
@@ -380,7 +432,7 @@ class ForceLoginManagementTest {
         assertFalse(profile.isOnlinemodePreferred());
         assertEquals(premiumUuid, profile.getId(), "the premium UUID observation survives an offline join");
         assertTrue(profile.isSameNameCracked(), "the observation survives an offline join");
-        verify(storage).save(profile);
+        verify(storage).saveQuietly(profile);
     }
 
     // ---- a passing verification resets the unverified-attempt streak ----
@@ -455,7 +507,7 @@ class ForceLoginManagementTest {
 
         assertFalse(profile.isOnlinemodePreferred());
         assertNull(profile.getId());
-        verify(storage).save(profile);
+        verify(storage).saveQuietly(profile);
     }
 
     // ---- generated password message ----
@@ -523,7 +575,7 @@ class ForceLoginManagementTest {
 
         verify(authPlugin, never()).forceRegister(any(), anyString());
         verify(authPlugin, never()).forceLogin(any());
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
         assertEquals(0, mgmt.ackCount, "guide register is not a confirmed premium outcome");
     }
 
@@ -562,6 +614,7 @@ class ForceLoginManagementTest {
 
         private final boolean onlineMode;
         private int ackCount;
+        private boolean cancelAutoLoginEvent;
 
         TestForceLoginManagement(FastLoginCore<Object, Object, PlatformPlugin<Object>> core,
                                  Object player, TestLoginSession session, boolean onlineMode) {
@@ -571,7 +624,9 @@ class ForceLoginManagementTest {
 
         @Override
         public FastLoginAutoLoginEvent callFastLoginAutoLoginEvent(LoginSession session, StoredProfile profile) {
-            return mock(FastLoginAutoLoginEvent.class);
+            FastLoginAutoLoginEvent event = mock(FastLoginAutoLoginEvent.class);
+            when(event.isCancelled()).thenReturn(cancelAutoLoginEvent);
+            return event;
         }
 
         @Override

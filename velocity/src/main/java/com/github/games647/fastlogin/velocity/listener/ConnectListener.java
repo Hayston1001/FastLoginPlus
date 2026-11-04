@@ -362,7 +362,9 @@ public class ConnectListener {
                 session.computeFacts(plugin.getCore());
             }
             claim = IdentityDecisionPolicy.decide(session, event.isOnlineMode(), bedrock,
-                    (boolean) plugin.getCore().getConfig().get("premiumUuid"), profile.getName(), forwardedUuid);
+                    (boolean) plugin.getCore().getConfig().get("premiumUuid"),
+                    plugin.getCore().getConfig().getBoolean("autoLogin"),
+                    profile.getName(), forwardedUuid);
         } catch (IllegalArgumentException invalidProfile) {
             throw new IllegalArgumentException("Cannot attach identity claim for an invalid profile", invalidProfile);
         }

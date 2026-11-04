@@ -35,11 +35,12 @@ class CrackedNoticeTaskTest {
         when(player.isActive()).thenReturn(true);
         when(player.getUsername()).thenReturn("TestUser");
         when(profile.isSameNameCracked()).thenReturn(true);
+        when(storage.saveQuietly(profile)).thenReturn(true);
         doAnswer(invocation -> { ((Runnable) invocation.getArgument(1)).run(); return null; })
                 .when(storage).withNameLock(eq("TestUser"), any(Runnable.class));
         VelocityLoginSession session = new VelocityLoginSession("TestUser", false, profile);
         new ForceLoginTask(core, player, server, session).run();
-        verify(storage).save(profile);
+        verify(storage).saveQuietly(profile);
         verify(delivery).deliver(player, server);
         verify(core, never()).consumeSameNameCrackedNotice(anyString());
         verify(core, never()).sendLocaleMessage(anyString(), any());

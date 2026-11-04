@@ -142,7 +142,7 @@ public class PluginMessageListener implements Listener {
 
             String playerName = deleteMessage.getPlayerName();
             boolean isSourceInvoker = deleteMessage.isSourceInvoker();
-            plugin.getScheduler().runAsync(() -> {
+            plugin.getScheduler().runAsync(() -> core.getStorage().withNameLock(playerName, () -> {
                 StoredProfile profile = core.getStorage().loadProfile(playerName);
                 if (profile == null) {
                     // null only on SQL exception (connection down / lock timeout) — do not
@@ -172,7 +172,7 @@ public class PluginMessageListener implements Listener {
                         sendDeleteFeedback(forPlayer, isSourceInvoker, "delete-fail");
                     }
                 }
-            });
+            }));
         }
     }
 
@@ -232,15 +232,35 @@ public class PluginMessageListener implements Listener {
             // interleave with a concurrent toggle for the same player; the
             // already-saved check runs inside for the same reason
             plugin.getCore().getStorage().withNameLock(forPlayer.getName(), () -> {
-                if (!loginSession.isAlreadySaved()) {
-                    // the backend confirmed a premium outcome (auto-register or
-                    // auto-login), so the account now belongs to this verified
-                    // identity — this is what the consent records ("registered as
-                    // premium", including auth-plugin-created premium accounts)
-                    playerProfile.setOnlinemodePreferred(true);
-                    playerProfile.setSameNameCracked(false);
-                    plugin.getCore().getStorage().save(playerProfile);
+                if (loginSession.isAlreadySaved()) {
+                    return;
+                }
+                // re-read the current row: an admin toggle may have revoked the
+                // consent after this login started, and the stale session object
+                // must not resurrect it
+                StoredProfile current = plugin.getCore().getStorage().loadProfile(forPlayer.getName());
+                if (current != null && !current.isOnlinemodePreferred()
+                        && playerProfile.isOnlinemodePreferred()) {
                     loginSession.setAlreadySaved(true);
+                    plugin.getLog().warn("Ignoring the success ack for {}: the consent was revoked"
+                            + " during this login", forPlayer.getName());
+                    return;
+                }
+                // the backend confirmed a premium outcome (auto-register or
+                // auto-login), so the account now belongs to this verified
+                // identity — this is what the consent records ("registered as
+                // premium", including auth-plugin-created premium accounts).
+                // Write the freshly loaded row so concurrent legacy fields survive.
+                StoredProfile target = current == null ? playerProfile : current;
+                target.setOnlinemodePreferred(true);
+                target.setSameNameCracked(false);
+                // a failed write must not mark the session saved, so a later
+                // ack can retry the persist instead of silently losing it
+                if (plugin.getCore().getStorage().saveQuietly(target)) {
+                    loginSession.setAlreadySaved(true);
+                } else {
+                    plugin.getLog().warn("Could not persist premium profile for {};"
+                            + " keeping the session unsaved for the next ack", forPlayer.getName());
                 }
             });
         }

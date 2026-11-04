@@ -58,6 +58,8 @@ class JoinManagementTest {
         when(core.getConfig()).thenReturn(config);
         when(core.getStorage()).thenReturn(storage);
         doReturn(plugin).when(core).getPlugin();
+        // the mocked storage reports a successful write unless a test overrides it
+        when(storage.saveQuietly(any())).thenReturn(true);
         // the production windows run inside withNameLock - the mock must
         // execute the passed lambda so the wrapped save still happens
         doAnswer(inv -> ((Supplier<?>) inv.getArgument(1)).get())
@@ -102,7 +104,7 @@ class JoinManagementTest {
 
         assertEquals(1, mgmt.premiumRequests);
         assertEquals(0, mgmt.crackedSessions);
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
     }
 
     // ---- fallback: one unverified attempt is enough ----
@@ -120,7 +122,7 @@ class JoinManagementTest {
         assertEquals(0, mgmt.premiumRequests);
         assertEquals(1, mgmt.crackedSessions);
         assertTrue(profile.isSameNameCracked(), "the observation must be recorded per name");
-        verify(storage).save(profile);
+        verify(storage).saveQuietly(profile);
         verify(core).queueSameNameCrackedNotice("TestUser");
     }
 
@@ -151,7 +153,7 @@ class JoinManagementTest {
 
         assertEquals(0, mgmt.premiumRequests);
         assertEquals(1, mgmt.crackedSessions);
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
         verify(core, never()).queueSameNameCrackedNotice(any());
     }
 
@@ -169,7 +171,7 @@ class JoinManagementTest {
         assertEquals(1, mgmt.crackedSessions);
         // a row without any premium observation is never marked as same-name cracked
         assertFalse(profile.isSameNameCracked());
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
     }
 
     // ---- fallback for names without a row ----
@@ -186,7 +188,7 @@ class JoinManagementTest {
 
         assertEquals(1, mgmt.crackedSessions);
         assertTrue(profile.isSameNameCracked());
-        verify(storage).save(profile);
+        verify(storage).saveQuietly(profile);
     }
 
     @Test
@@ -248,7 +250,7 @@ class JoinManagementTest {
         assertEquals(0, mgmt.premiumRequests);
         assertEquals(1, mgmt.crackedSessions);
         assertFalse(profile.isSameNameCracked());
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
     }
 
     // ---- an unfinished name lookup is "could not tell", never "not premium" ----
@@ -280,7 +282,7 @@ class JoinManagementTest {
         assertEquals(0, mgmt.crackedSessions);
         assertEquals(0, mgmt.premiumRequests);
         assertFalse(profile.isSameNameCracked(), "an unfinished lookup counts nothing");
-        verify(storage, never()).save(any());
+        verify(storage, never()).saveQuietly(any());
     }
 
     @Test

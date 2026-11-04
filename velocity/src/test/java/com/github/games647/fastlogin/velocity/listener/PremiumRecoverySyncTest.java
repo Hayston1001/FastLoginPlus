@@ -40,6 +40,47 @@ class PremiumRecoverySyncTest {
         assertConfirmation(false);
     }
 
+    @Test
+    void inFlightAckCannotResurrectARevokedConsent() throws Exception {
+        FastLoginVelocity plugin = mock(FastLoginVelocity.class);
+        FastLoginCore core = mock(FastLoginCore.class);
+        SQLStorage storage = mock(SQLStorage.class);
+        when(plugin.getName()).thenReturn("fastloginplus");
+        when(plugin.getCore()).thenReturn(core);
+        when(core.getStorage()).thenReturn(storage);
+        when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
+        doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(1)).run();
+            return null;
+        }).when(storage).withNameLock(anyString(), any(Runnable.class));
+        Player player = mock(Player.class);
+        InetSocketAddress address = new InetSocketAddress("127.0.0.1", 12345);
+        when(player.isOnlineMode()).thenReturn(true);
+        when(player.getUsername()).thenReturn("TestUser");
+        when(player.getRemoteAddress()).thenReturn(address);
+
+        // the session still carries the consent it saw at login ...
+        StoredProfile snapshot = new StoredProfile(UUID.randomUUID(), "TestUser", true,
+                FloodgateState.FALSE, "1.1.1.1");
+        // ... while an admin toggle revoked it during the in-flight login
+        StoredProfile revoked = new StoredProfile(UUID.randomUUID(), "TestUser", false,
+                FloodgateState.FALSE, "1.1.1.1");
+        when(storage.loadProfile("TestUser")).thenReturn(revoked);
+
+        VelocityLoginSession session = new VelocityLoginSession("TestUser", true, snapshot);
+        ConcurrentHashMap<InetSocketAddress, VelocityLoginSession> sessions = new ConcurrentHashMap<>();
+        sessions.put(address, session);
+        when(plugin.getSession()).thenReturn(sessions);
+        PluginMessageListener listener = new PluginMessageListener(plugin);
+        Method success = PluginMessageListener.class.getDeclaredMethod("onSuccessMessage", Player.class);
+        success.setAccessible(true);
+        success.invoke(listener, player);
+
+        assertFalse(revoked.isOnlinemodePreferred(), "the ack must not overwrite the revocation");
+        assertTrue(session.isAlreadySaved(), "the ack is handled, not retried forever");
+        verify(storage, never()).saveQuietly(any());
+    }
+
     @SuppressWarnings({"rawtypes", "unchecked"})
     private void assertConfirmation(boolean verified) throws Exception {
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
@@ -48,6 +89,7 @@ class PremiumRecoverySyncTest {
         when(plugin.getName()).thenReturn("fastloginplus");
         when(plugin.getCore()).thenReturn(core);
         when(core.getStorage()).thenReturn(storage);
+        when(storage.saveQuietly(any())).thenReturn(true);
         doAnswer(invocation -> {
             ((Runnable) invocation.getArgument(1)).run();
             return null;
@@ -73,12 +115,12 @@ class PremiumRecoverySyncTest {
             assertTrue(profile.isOnlinemodePreferred());
             assertFalse(profile.isSameNameCracked());
             assertTrue(session.isAlreadySaved());
-            verify(storage).save(profile);
+            verify(storage).saveQuietly(profile);
         } else {
             assertFalse(profile.isOnlinemodePreferred());
             assertTrue(profile.isSameNameCracked());
             assertFalse(session.isAlreadySaved());
-            verify(storage, never()).save(any());
+            verify(storage, never()).saveQuietly(any());
         }
     }
 }

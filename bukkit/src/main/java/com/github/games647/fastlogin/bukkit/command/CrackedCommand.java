@@ -93,7 +93,11 @@ public class CrackedCommand extends ToggleCommand {
                 profile.setId(null);
                 profile.setSameNameCracked(false);
 
-                plugin.getCore().getStorage().save(profile);
+                if (!plugin.getCore().getStorage().saveQuietly(profile)) {
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("database-error", sender));
+                    return;
+                }
 
                 // Local path (no proxy): event + kick
                 plugin.getServer().getPluginManager().callEvent(
@@ -160,14 +164,18 @@ public class CrackedCommand extends ToggleCommand {
                     return;
                 }
 
-                plugin.getScheduler().getSyncExecutor().execute(() ->
-                        plugin.getCore().sendLocaleMessage("remove-premium-other", sender));
-
                 profile.setOnlinemodePreferred(false);
                 profile.setId(null);
                 profile.setSameNameCracked(false);
 
-                plugin.getCore().getStorage().save(profile);
+                if (!plugin.getCore().getStorage().saveQuietly(profile)) {
+                    plugin.getScheduler().getSyncExecutor().execute(() ->
+                            plugin.getCore().sendLocaleMessage("database-error", sender));
+                    return;
+                }
+
+                plugin.getScheduler().getSyncExecutor().execute(() ->
+                        plugin.getCore().sendLocaleMessage("remove-premium-other", sender));
 
                 // Local path (no proxy): event
                 plugin.getServer().getPluginManager().callEvent(

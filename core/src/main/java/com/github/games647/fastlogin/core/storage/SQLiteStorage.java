@@ -115,6 +115,19 @@ public class SQLiteStorage extends SQLStorage {
         }
     }
 
+    // callers that need the write result use this entry point directly, so it
+    // must take the same global SQLite lock as save() (the ReentrantLock makes
+    // the save() -> saveQuietly() delegation safe)
+    @Override
+    public boolean saveQuietly(StoredProfile playerProfile) {
+        lock.lock();
+        try {
+            return super.saveQuietly(playerProfile);
+        } finally {
+            lock.unlock();
+        }
+    }
+
     @Override
     public boolean deleteProfile(String name) {
         lock.lock();

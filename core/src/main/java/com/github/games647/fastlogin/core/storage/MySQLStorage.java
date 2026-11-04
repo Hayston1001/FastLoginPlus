@@ -24,12 +24,18 @@ public class MySQLStorage extends SQLStorage {
     // "Steve" vs "steve") still conflicts on the case-insensitive unique key
     // but is NOT written — preserving the anti name-stealing semantics.
     // package-private for the dialect assertion test
+    // the column list and placeholders must stay in lockstep with
+    // SQLStorage.INSERT_PROFILE — the insert branch binds the same six
+    // parameters positionally, so a missing column shifts every later value.
     static final String INSERT_PROFILE_UPSERT = "INSERT INTO `" + PREMIUM_TABLE
-            + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `LastIp`) VALUES (?, ?, ?, ?, ?) "
+            + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `SameNameCracked`, `LastIp`) "
+            + "VALUES (?, ?, ?, ?, ?, ?) "
             + "ON DUPLICATE KEY UPDATE "
             + "`UUID`=IF(HEX(`Name`)=HEX(VALUES(`Name`)), VALUES(`UUID`), `UUID`), "
             + "`Premium`=IF(HEX(`Name`)=HEX(VALUES(`Name`)), VALUES(`Premium`), `Premium`), "
             + "`Floodgate`=IF(HEX(`Name`)=HEX(VALUES(`Name`)), VALUES(`Floodgate`), `Floodgate`), "
+            + "`SameNameCracked`=IF(HEX(`Name`)=HEX(VALUES(`Name`)), "
+            + "VALUES(`SameNameCracked`), `SameNameCracked`), "
             + "`LastIp`=IF(HEX(`Name`)=HEX(VALUES(`Name`)), VALUES(`LastIp`), `LastIp`)";
 
     public MySQLStorage(PlatformPlugin<?> plugin, String driver, String host, int port, String database,

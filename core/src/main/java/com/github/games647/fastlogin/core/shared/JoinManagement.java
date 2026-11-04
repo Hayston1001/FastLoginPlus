@@ -366,8 +366,8 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
         boolean firstConfirmation = storage.withNameLock(username, () -> {
             boolean first = !profile.isSameNameCracked();
             profile.setSameNameCracked(true);
-            storage.save(profile);
-            return first;
+            // only queue the "recorded" notice when the observation was persisted
+            return storage.saveQuietly(profile) && first;
         });
         if (firstConfirmation) {
             core.queueSameNameCrackedNotice(username);

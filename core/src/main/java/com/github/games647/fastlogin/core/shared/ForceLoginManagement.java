@@ -77,11 +77,13 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     onForceActionSuccess(session);
 
                     if (playerProfile != null) {
-                        // persist under the name-level striped lock
+                        // persist under the name-level striped lock; a failed
+                        // write is logged by saveQuietly and the proxy remains
+                        // the source of truth for this observation
                         storage.withNameLock(getName(player), () -> {
                             playerProfile.setId(session.getUuid());
                             playerProfile.setSameNameCracked(false);
-                            storage.save(playerProfile);
+                            storage.saveQuietly(playerProfile);
                         });
                     }
                 } else {
@@ -93,7 +95,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 // an offline join — a cracked connection under a premium name is exactly
                 // the same-name cracked case, and only an explicit toggle revokes consent.
                 storage.withNameLock(getName(player), () -> {
-                    storage.save(playerProfile);
+                    storage.saveQuietly(playerProfile);
                 });
 
                 // the one-time notice for a freshly confirmed same-name cracked
@@ -132,7 +134,10 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     private void runAuthPluginFlow(SQLStorage storage, StoredProfile playerProfile, AuthPlugin<P> authPlugin)
             throws Exception {
         String playerName = getName(player);
-        boolean success = true;
+        // no action has been confirmed yet: only a successful force action or a
+        // session the auth plugin reports as authenticated may record consent
+        boolean success = false;
+        boolean eventVetoed = false;
         boolean recoveringPremiumAccount = false;
         if (session.isFactsPresent()) {
             // The message path: a proxy exists, so the decision table
@@ -155,6 +160,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 case AUTO_LOGIN:
                     premiumHandlingAllowed = true;
                     boolean cancelled = callFastLoginAutoLoginEvent(session, playerProfile).isCancelled();
+                    eventVetoed = cancelled;
                     success = !cancelled && forceLogin(player);
                     recoveringPremiumAccount = !cancelled
                             && account == LoginMethodDecider.AccountState.PREMIUM_OWNED
@@ -219,7 +225,19 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 return;
             } else if (!callFastLoginAutoLoginEvent(session, playerProfile).isCancelled()) {
                 success = forceLogin(player);
+            } else {
+                // a plugin vetoed the auto login: never record consent for it
+                eventVetoed = true;
             }
+        }
+
+        if (!success && !eventVetoed && authPlugin.isAuthenticated(player)) {
+            // AuthMe 6.0 authenticates the player in AsynchronousJoin
+            // (canBypassWithPremium) before ForceLoginTask runs, so
+            // forceLogin()/forceRegister() report false even though the
+            // verified identity already owns this session. Only this confirmed
+            // state may still record consent and acknowledge the proxy.
+            success = true;
         }
 
         if (success) {
@@ -232,39 +250,20 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     playerProfile.setId(session.getUuid());
                     playerProfile.setSameNameCracked(false);
                     playerProfile.setOnlinemodePreferred(true);
-                    storage.save(playerProfile);
+                    storage.saveQuietly(playerProfile);
                 });
             }
 
             onForceActionSuccess(session);
         } else {
-            // forceLogin/forceRegister returned false but this is a verified
-            // premium session. This happens with AuthMe 6.0: AuthMe's
-            // AsynchronousJoin runs canBypassWithPremium() before FLP's
-            // ForceLoginTask, so the player is already authenticated when
-            // forceLogin() is called (returns false).
-            // We still need to persist onlinemodePreferred=true so that future
-            // reconnects route through requestPremiumLogin instead of
-            // startCrackedSession (direct mode; proxy-mode backends keep
-            // profile=null, so nothing is saved there).
-            if (playerProfile != null) {
-                // persist under the name-level striped lock. The player is
-                // authenticated as this verified identity (AuthMe 6.0's
-                // bypass), so this is again a confirmed outcome.
-                storage.withNameLock(getName(player), () -> {
-                    playerProfile.setId(session.getUuid());
-                    playerProfile.setSameNameCracked(false);
-                    playerProfile.setOnlinemodePreferred(true);
-                    storage.save(playerProfile);
-                });
-
-            }
-            // Ack the proxy even when the auth plugin reported failure: the
-            // session is already verified and the player is in game. Without
-            // this ack the proxy never persists the premium row and
-            // secondAttemptCracked can let the player join offline after a
-            // session expiry.
-            onForceActionSuccess(session);
+            // The auth plugin did not accept the action (real failure or a
+            // cancelled FastLoginAutoLoginEvent) and the session is not
+            // authenticated as this identity. Recording consent or acking the
+            // proxy here would turn a rejected login into a stored premium
+            // outcome, so both stay untouched.
+            core.getPlugin().getLog().warn(
+                    "Auth plugin did not accept the verified premium session for {}; not recording consent",
+                    playerName);
         }
         if (recoveringPremiumAccount) {
             core.getPlugin().getLog().warn(

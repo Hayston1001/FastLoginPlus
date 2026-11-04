@@ -23,16 +23,21 @@ final class IdentityDecisionPolicy {
      * match the verified UUID, or the name-derived offline UUID when premium UUIDs are disabled.
      * A missing session, incomplete lookup, or unsupported Bedrock connection remains unresolved.
      *
+     * <p>A connection without a session only carries policy facts: the observation facts are
+     * empty, and {@code autoLogin} is the proxy's own configured value rather than an assumed
+     * {@code true}, so the backend never enables a login the proxy disabled.</p>
+     *
      * @param session the connection session, if any
      * @param onlineMode whether Velocity finished online authentication
      * @param bedrock whether this is a Floodgate connection
      * @param premiumUuid whether premium players must keep their verified UUID
+     * @param proxyAutoLogin the proxy's configured {@code autoLogin} value
      * @param name final forwarded profile name
      * @param uuid final forwarded profile UUID
      * @return the bound identity claim
      */
     static IdentityClaim decide(LoginSession session, boolean onlineMode, boolean bedrock, boolean premiumUuid,
-                                String name, UUID uuid) {
+                                boolean proxyAutoLogin, String name, UUID uuid) {
         Decision decision = Decision.UNDECIDED;
         UUID verified = null;
         if (session != null && !bedrock) {
@@ -53,7 +58,7 @@ final class IdentityDecisionPolicy {
         boolean sameNameCracked = session != null && session.isSameNameCracked();
         IdentityClaim.Consent consent =
                 session == null ? IdentityClaim.Consent.UNKNOWN : session.getConsent();
-        boolean autoLogin = session == null || session.isAutoLogin();
+        boolean autoLogin = session == null ? proxyAutoLogin : session.isAutoLogin();
         boolean autoRegisterUnknown = session != null && session.isAutoRegisterUnknown();
         boolean offlineWhitelist = session != null && session.isOfflineWhitelist();
         return new IdentityClaim(decision, name, uuid, verified,
