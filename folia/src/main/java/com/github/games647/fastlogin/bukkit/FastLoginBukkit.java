@@ -800,7 +800,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // Cracked: the queued relay STAYS pending and is delivered by the retry
         // task once any player reaches the PLAY phase.
         Boolean pendingActivate = pendingRelayStore.getToggle(playerName);
-        final boolean isPendingPremium = Boolean.TRUE.equals(pendingActivate);
+        final boolean isPendingPremium = pendingRelayStore.isRecentPremiumToggle(
+                playerName, PendingRelayStore.PENDING_PREMIUM_RELAXATION_MILLIS);
         if (pendingActivate != null && !pendingActivate) {
             // The queued cracked toggle must still reach the proxy (its DB is
             // still premium) — do NOT consume the entry here.  Only skip the

@@ -169,7 +169,8 @@ final class EasyAuth344Bridge {
                         checkPremiumEntry(entry, claim.getPlayerName(), claim.getVerifiedMojangUuid());
                     }
                 } else {
-                    if (PremiumGate.decideUnverified(state) == PremiumGate.Action.REJECT) {
+                    if (PremiumGate.decideUnverified(claim.getConsent(), state)
+                            == PremiumGate.Action.REJECT) {
                         throw FabricMessages.failure("ownership-conflict");
                     }
                     checkOfflineEntry(entry, claim.getPlayerName(), claim.getForwardedUuid());
@@ -495,7 +496,7 @@ final class EasyAuth344Bridge {
         }
         AccountState.Snapshot state = accountStatus(claim.getPlayerName());
         if (claim.getDecision() == Decision.OFFLINE) {
-            if (PremiumGate.decideUnverified(state) == PremiumGate.Action.REJECT) {
+            if (PremiumGate.decideUnverified(claim.getConsent(), state) == PremiumGate.Action.REJECT) {
                 throw FabricMessages.failure("ownership-conflict");
             }
             checkOfflineEntry(entry, claim.getPlayerName(), claim.getForwardedUuid());

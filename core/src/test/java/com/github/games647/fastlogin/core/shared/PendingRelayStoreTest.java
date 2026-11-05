@@ -237,4 +237,52 @@ class PendingRelayStoreTest {
         assertTrue(restored.containsDelete("Notch"));
         assertTrue(restored.premiumNotices().isEmpty());
     }
+
+    @Test
+    void preTimestampFileStartsAgingAtLoad() throws Exception {
+        Files.write(tempDir.resolve("pending-relay.json"),
+            "{\"toggles\":{\"Steve\":true}}".getBytes("UTF-8"));
+
+        PendingRelayStore restored = new PendingRelayStore(tempDir, logger());
+        assertTrue(restored.load());
+
+        // the migrated entry counts as freshly queued, not as arbitrarily old
+        assertTrue(restored.isRecentPremiumToggle("Steve",
+                PendingRelayStore.PENDING_PREMIUM_RELAXATION_MILLIS));
+    }
+
+    @Test
+    void staleEntriesAreDroppedOnLoad() throws Exception {
+        long old = System.currentTimeMillis()
+                - PendingRelayStore.MAX_ENTRY_AGE_MILLIS - 60_000L;
+        Files.write(tempDir.resolve("pending-relay.json"),
+            ("{\"toggles\":{\"Steve\":true},\"toggleTimes\":{\"Steve\":" + old + "},"
+                + "\"deletes\":[\"Notch\"],\"deleteTimes\":{\"Notch\":" + old + "}}").getBytes("UTF-8"));
+
+        PendingRelayStore restored = new PendingRelayStore(tempDir, logger());
+        assertFalse(restored.load());
+        assertFalse(restored.containsToggle("Steve"));
+        assertFalse(restored.containsDelete("Notch"));
+        assertFalse(restored.hasPending());
+    }
+
+    @Test
+    void onlyRecentPremiumTogglesRelaxTheAdmissionCheck() throws Exception {
+        long now = System.currentTimeMillis();
+        long stale = now - PendingRelayStore.PENDING_PREMIUM_RELAXATION_MILLIS - 60_000L;
+        Files.write(tempDir.resolve("pending-relay.json"),
+            ("{\"toggles\":{\"Steve\":true,\"Alex\":false},"
+                + "\"toggleTimes\":{\"Steve\":" + stale + ",\"Alex\":" + now + "}}").getBytes("UTF-8"));
+
+        PendingRelayStore restored = new PendingRelayStore(tempDir, logger());
+        assertTrue(restored.load());
+
+        // still queued for relay, but too old to reopen the UUID-mismatch exception
+        assertEquals(Boolean.TRUE, restored.getToggle("Steve"));
+        assertFalse(restored.isRecentPremiumToggle("Steve",
+                PendingRelayStore.PENDING_PREMIUM_RELAXATION_MILLIS));
+        // a cracked toggle never relaxes it, however recent
+        assertFalse(restored.isRecentPremiumToggle("Alex",
+                PendingRelayStore.PENDING_PREMIUM_RELAXATION_MILLIS));
+    }
 }

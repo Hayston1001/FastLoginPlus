@@ -58,11 +58,14 @@ class PremiumGateTest {
     }
 
     @ParameterizedTest
-    @EnumSource(AccountState.class)
-    void unverifiedBoundAndConflictRejectButOtherAccountsStayLocked(AccountState state) {
-        assertEquals(state == AccountState.BOUND || state == AccountState.CONFLICT
-                        ? Action.REJECT : Action.PASSWORD_LOCK,
-                PremiumGate.decideUnverified(new AccountState.Snapshot(state,
-                        state == AccountState.BOUND ? VERIFIED : null)));
+    @EnumSource(Consent.class)
+    void unverifiedBoundAndConflictRejectAndConsentedPasswordAccountsReject(Consent consent) {
+        for (AccountState state : AccountState.values()) {
+            Action expected = state == AccountState.BOUND || state == AccountState.CONFLICT
+                    || (state == AccountState.PASSWORD && consent == Consent.YES)
+                    ? Action.REJECT : Action.PASSWORD_LOCK;
+            assertEquals(expected, PremiumGate.decideUnverified(consent, new AccountState.Snapshot(state,
+                    state == AccountState.BOUND ? VERIFIED : null)));
+        }
     }
 }

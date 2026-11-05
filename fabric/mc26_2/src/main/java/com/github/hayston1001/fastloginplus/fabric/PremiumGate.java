@@ -92,13 +92,20 @@ final class PremiumGate {
 
     /**
      * Decides for an unverified (offline or same-name cracked) connection.
-     * Converted accounts refuse it; everything else stays behind the password.
+     * Converted accounts refuse it; a password account on a name the proxy has
+     * already upgraded also refuses it, so an unverified connection cannot use
+     * the old password to reach a consented premium identity. Everything else
+     * stays behind the password.
      *
+     * @param consent the name's upgrade consent as the proxy recorded it
      * @param state the local account state
      * @return the action to apply
      */
-    static Action decideUnverified(AccountState.Snapshot state) {
+    static Action decideUnverified(IdentityClaim.Consent consent, AccountState.Snapshot state) {
         if (state.state() == AccountState.BOUND || state.state() == AccountState.CONFLICT) {
+            return Action.REJECT;
+        }
+        if (state.state() == AccountState.PASSWORD && consent == IdentityClaim.Consent.YES) {
             return Action.REJECT;
         }
         return Action.PASSWORD_LOCK;

@@ -39,18 +39,33 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code premium.set}, false for {@code premium.unset}. These travel on AuthMe's own
  * channel ({@code authme:main}) rather than on FLP's, and they update a different cache
  * on the proxy, so they get their own slot instead of riding the toggle entries.
+ * <p>
+ * Every entry carries the time it was queued. Entries older than
+ * {@link #MAX_ENTRY_AGE_MILLIS} are stale admin intent and are dropped on load and
+ * on read; files written before timestamps existed inherit the load time.
  */
 public class PendingRelayStore {
 
     private static final String FILE_NAME = "pending-relay.json";
+
+    /** Entries older than this are dropped instead of being relayed days later. */
+    public static final long MAX_ENTRY_AGE_MILLIS = 24L * 60L * 60L * 1000L;
+    /**
+     * Only a premium toggle this recent may relax the configure-phase connection
+     * UUID check, so a forgotten entry cannot keep that exception alive.
+     */
+    public static final long PENDING_PREMIUM_RELAXATION_MILLIS = 5L * 60L * 1000L;
 
     private final Path file;
     private final Logger logger;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
     private final Map<String, Boolean> toggles = new ConcurrentHashMap<>();
+    private final Map<String, Long> toggleTimes = new ConcurrentHashMap<>();
     private final Set<String> deletes = ConcurrentHashMap.newKeySet();
+    private final Map<String, Long> deleteTimes = new ConcurrentHashMap<>();
     private final Map<String, Boolean> premiumNotices = new ConcurrentHashMap<>();
+    private final Map<String, Long> premiumNoticeTimes = new ConcurrentHashMap<>();
 
     /**
      * @param pluginFolder plugin data folder (the file lives directly in it)
@@ -101,16 +116,48 @@ public class PendingRelayStore {
         // the contract says "replace" — clear first so a second
         // load() cannot resurrect entries that were relayed and removed since
         toggles.clear();
+        toggleTimes.clear();
         deletes.clear();
+        deleteTimes.clear();
         premiumNotices.clear();
+        premiumNoticeTimes.clear();
+        long now = System.currentTimeMillis();
+        boolean migrated = false;
         if (data.toggles != null) {
             toggles.putAll(data.toggles);
+        }
+        if (data.toggleTimes != null) {
+            toggleTimes.putAll(data.toggleTimes);
+            migrated = true;
         }
         if (data.deletes != null) {
             deletes.addAll(data.deletes);
         }
+        if (data.deleteTimes != null) {
+            deleteTimes.putAll(data.deleteTimes);
+            migrated = true;
+        }
         if (data.premiumNotices != null) {
             premiumNotices.putAll(data.premiumNotices);
+        }
+        if (data.premiumNoticeTimes != null) {
+            premiumNoticeTimes.putAll(data.premiumNoticeTimes);
+            migrated = true;
+        }
+        // a file written before timestamps existed is not stale: it starts aging now
+        for (String name : toggles.keySet()) {
+            migrated |= toggleTimes.putIfAbsent(name, now) == null;
+        }
+        for (String name : deletes) {
+            migrated |= deleteTimes.putIfAbsent(name, now) == null;
+        }
+        for (String name : premiumNotices.keySet()) {
+            migrated |= premiumNoticeTimes.putIfAbsent(name, now) == null;
+        }
+        boolean pruned = pruneExpired(now);
+        if (migrated || pruned) {
+            // rewrite once with timestamps and without the expired entries
+            persist();
         }
         return !toggles.isEmpty() || !deletes.isEmpty() || !premiumNotices.isEmpty();
     }
@@ -130,6 +177,7 @@ public class PendingRelayStore {
     public synchronized boolean queueToggle(String name, boolean activate) {
         Boolean previous = toggles.put(name, activate);
         if (previous == null || previous.booleanValue() != activate) {
+            toggleTimes.put(name, System.currentTimeMillis());
             persist();
         }
         return previous == null;
@@ -143,6 +191,7 @@ public class PendingRelayStore {
      */
     public synchronized boolean clearToggle(String name) {
         boolean removed = toggles.remove(name) != null;
+        toggleTimes.remove(name);
         if (removed) {
             persist();
         }
@@ -163,6 +212,7 @@ public class PendingRelayStore {
      */
     public synchronized Boolean removeToggle(String name) {
         Boolean value = toggles.remove(name);
+        toggleTimes.remove(name);
         if (value != null) {
             persist();
         }
@@ -179,6 +229,7 @@ public class PendingRelayStore {
     public synchronized boolean queueDelete(String name) {
         boolean added = deletes.add(name);
         if (added) {
+            deleteTimes.put(name, System.currentTimeMillis());
             persist();
         }
         return added;
@@ -192,6 +243,7 @@ public class PendingRelayStore {
      */
     public synchronized boolean clearDelete(String name) {
         boolean removed = deletes.remove(name);
+        deleteTimes.remove(name);
         if (removed) {
             persist();
         }
@@ -213,6 +265,7 @@ public class PendingRelayStore {
     public synchronized boolean queuePremiumNotice(String name, boolean isSet) {
         Boolean previous = premiumNotices.put(name, isSet);
         if (previous == null || previous.booleanValue() != isSet) {
+            premiumNoticeTimes.put(name, System.currentTimeMillis());
             persist();
         }
         return previous == null;
@@ -226,6 +279,7 @@ public class PendingRelayStore {
      */
     public synchronized boolean clearPremiumNotice(String name) {
         boolean removed = premiumNotices.remove(name) != null;
+        premiumNoticeTimes.remove(name);
         if (removed) {
             persist();
         }
@@ -241,6 +295,7 @@ public class PendingRelayStore {
      */
     public synchronized Boolean removePremiumNotice(String name) {
         Boolean value = premiumNotices.remove(name);
+        premiumNoticeTimes.remove(name);
         if (value != null) {
             persist();
         }
@@ -251,7 +306,8 @@ public class PendingRelayStore {
      * @param name player name
      * @return the queued notice value, or null if not queued
      */
-    public Boolean getPremiumNotice(String name) {
+    public synchronized Boolean getPremiumNotice(String name) {
+        pruneExpired(System.currentTimeMillis());
         return premiumNotices.get(name);
     }
 
@@ -259,14 +315,16 @@ public class PendingRelayStore {
      * @param name player name
      * @return true if a premium notice is queued for the name
      */
-    public boolean containsPremiumNotice(String name) {
+    public synchronized boolean containsPremiumNotice(String name) {
+        pruneExpired(System.currentTimeMillis());
         return premiumNotices.containsKey(name);
     }
 
     /**
      * @return snapshot of the queued premium notices (copy — safe to iterate)
      */
-    public Map<String, Boolean> premiumNotices() {
+    public synchronized Map<String, Boolean> premiumNotices() {
+        pruneExpired(System.currentTimeMillis());
         return new LinkedHashMap<>(premiumNotices);
     }
 
@@ -277,8 +335,11 @@ public class PendingRelayStore {
     public synchronized void clearAll() {
         if (!toggles.isEmpty() || !deletes.isEmpty() || !premiumNotices.isEmpty()) {
             toggles.clear();
+            toggleTimes.clear();
             deletes.clear();
+            deleteTimes.clear();
             premiumNotices.clear();
+            premiumNoticeTimes.clear();
             persist();
         }
     }
@@ -287,15 +348,36 @@ public class PendingRelayStore {
      * @param name player name
      * @return the queued toggle value, or null if not queued
      */
-    public Boolean getToggle(String name) {
+    public synchronized Boolean getToggle(String name) {
+        pruneExpired(System.currentTimeMillis());
         return toggles.get(name);
+    }
+
+    /**
+     * Whether a premium toggle for this name was queued recently enough to relax
+     * the configure-phase connection UUID check. An entry that waited longer still
+     * gets relayed, but it no longer reopens that admission exception.
+     *
+     * @param name player name
+     * @param maxAgeMillis maximum accepted age
+     * @return true for a queued premium toggle within the window
+     */
+    public synchronized boolean isRecentPremiumToggle(String name, long maxAgeMillis) {
+        long now = System.currentTimeMillis();
+        pruneExpired(now);
+        if (!Boolean.TRUE.equals(toggles.get(name))) {
+            return false;
+        }
+        Long queuedAt = toggleTimes.get(name);
+        return queuedAt != null && now - queuedAt <= maxAgeMillis;
     }
 
     /**
      * @param name player name
      * @return true if a toggle is queued for the name
      */
-    public boolean containsToggle(String name) {
+    public synchronized boolean containsToggle(String name) {
+        pruneExpired(System.currentTimeMillis());
         return toggles.containsKey(name);
     }
 
@@ -303,36 +385,90 @@ public class PendingRelayStore {
      * @param name player name
      * @return true if a delete is queued for the name
      */
-    public boolean containsDelete(String name) {
+    public synchronized boolean containsDelete(String name) {
+        pruneExpired(System.currentTimeMillis());
         return deletes.contains(name);
     }
 
     /**
      * @return snapshot of the queued toggles (copy — safe to iterate)
      */
-    public Map<String, Boolean> toggles() {
+    public synchronized Map<String, Boolean> toggles() {
+        pruneExpired(System.currentTimeMillis());
         return new LinkedHashMap<>(toggles);
     }
 
     /**
      * @return snapshot of the queued deletes (copy — safe to iterate)
      */
-    public Set<String> deletes() {
+    public synchronized Set<String> deletes() {
+        pruneExpired(System.currentTimeMillis());
         return new LinkedHashSet<>(deletes);
     }
 
     /**
      * @return true if any toggle, delete or premium notice is queued
      */
-    public boolean hasPending() {
+    public synchronized boolean hasPending() {
+        pruneExpired(System.currentTimeMillis());
         return !toggles.isEmpty() || !deletes.isEmpty() || !premiumNotices.isEmpty();
+    }
+
+    /**
+     * Drops entries older than {@link #MAX_ENTRY_AGE_MILLIS} so a long-forgotten
+     * admin action cannot be relayed days later.
+     *
+     * @param now current time in epoch milliseconds
+     * @return true when at least one entry was dropped
+     */
+    private boolean pruneExpired(long now) {
+        long cutoff = now - MAX_ENTRY_AGE_MILLIS;
+        int removed = pruneBooleanMap(toggles, toggleTimes, cutoff)
+                + pruneNameSet(deletes, deleteTimes, cutoff)
+                + pruneBooleanMap(premiumNotices, premiumNoticeTimes, cutoff);
+        if (removed > 0) {
+            logger.warn("Dropped {} stale pending relay entr{} older than {} hours",
+                    removed, removed == 1 ? "y" : "ies", MAX_ENTRY_AGE_MILLIS / 3_600_000L);
+        }
+        return removed > 0;
+    }
+
+    private static int pruneBooleanMap(Map<String, Boolean> values, Map<String, Long> times, long cutoff) {
+        int removed = 0;
+        for (String name : new ArrayList<>(values.keySet())) {
+            if (isExpired(times.get(name), cutoff)) {
+                values.remove(name);
+                times.remove(name);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    private static int pruneNameSet(Set<String> names, Map<String, Long> times, long cutoff) {
+        int removed = 0;
+        for (String name : new ArrayList<>(names)) {
+            if (isExpired(times.get(name), cutoff)) {
+                names.remove(name);
+                times.remove(name);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    private static boolean isExpired(Long queuedAt, long cutoff) {
+        return queuedAt == null || queuedAt < cutoff;
     }
 
     private void persist() {
         Data data = new Data();
         data.toggles = new LinkedHashMap<>(toggles);
+        data.toggleTimes = new LinkedHashMap<>(toggleTimes);
         data.deletes = new ArrayList<>(deletes);
+        data.deleteTimes = new LinkedHashMap<>(deleteTimes);
         data.premiumNotices = new LinkedHashMap<>(premiumNotices);
+        data.premiumNoticeTimes = new LinkedHashMap<>(premiumNoticeTimes);
 
         String json = gson.toJson(data);
         try {
@@ -351,7 +487,10 @@ public class PendingRelayStore {
 
     private static final class Data {
         private Map<String, Boolean> toggles;
+        private Map<String, Long> toggleTimes;
         private ArrayList<String> deletes;
+        private Map<String, Long> deleteTimes;
         private Map<String, Boolean> premiumNotices;
+        private Map<String, Long> premiumNoticeTimes;
     }
 }
