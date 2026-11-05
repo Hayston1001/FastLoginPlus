@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntFunction;
 
 /**
  * Versioned, line-preserving updates for the backend-local Fabric language files.
@@ -35,7 +36,7 @@ final class FabricLanguageUpdater {
     }
 
     static Result update(Path file, Map<String, String> english, Map<String, String> localized,
-                         Logger logger) {
+                         IntFunction<Map<String, String>> previousLocalized, Logger logger) {
         if (!Files.exists(file)) {
             return Result.none();
         }
@@ -51,19 +52,33 @@ final class FabricLanguageUpdater {
 
             int currentVersion = version(localized, english);
             int userVersion = parseVersion(parsed.values().get(VERSION_KEY));
+            boolean upgrading = currentVersion > userVersion;
             LinkedHashSet<String> known = knownKeys(english, localized);
             LinkedHashSet<String> present = LanguageFileKeys.read(lines);
             List<String> missing = known.stream().filter(key -> !present.contains(key)).toList();
 
+            Map<String, String> previous = upgrading ? previousLocalized.apply(userVersion) : null;
+            if (upgrading && previous == null && userVersion > 0) {
+                logger.warn("Cannot refresh {}: no snapshot for messages v{}",
+                        file.getFileName(), userVersion);
+            }
+
             Map<String, String> refreshed = new LinkedHashMap<>();
-            if (currentVersion > userVersion) {
+            if (upgrading) {
                 for (String key : known) {
                     Object userValue = parsed.values().get(key);
                     String englishValue = english.get(key);
                     String localizedValue = localized.get(key);
-                    if (userValue instanceof String && englishValue != null && localizedValue != null
-                            && !englishValue.equals(localizedValue)
-                            && englishValue.equals(userValue)) {
+                    if (!(userValue instanceof String) || localizedValue == null
+                            || localizedValue.equals(userValue)) {
+                        continue;
+                    }
+                    // Refresh a value the user never changed: it still matches the
+                    // previous bundled default for this language, or the current
+                    // English default (the classic migration rule).
+                    boolean untouchedLocalized = previous != null && userValue.equals(previous.get(key));
+                    boolean untouchedEnglish = englishValue != null && englishValue.equals(userValue);
+                    if (untouchedLocalized || untouchedEnglish) {
                         refreshed.put(key, localizedValue);
                     }
                 }

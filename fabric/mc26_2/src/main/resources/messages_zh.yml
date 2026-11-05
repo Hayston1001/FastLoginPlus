@@ -4,7 +4,7 @@
 # UTF-8 player messages. Missing or blank overrides fall back to bundled values.
 # This is the Fabric message schema version, independent of the classic files.
 
-_messages-version: 1
+_messages-version: 2
 
 ownership-conflict: "FastLoginPlus: 此账号与本次连接的认证身份不符. 请使用正确的账号重新连接, 或联系管理员."
 rename-conflict: "FastLoginPlus: 多个 EasyAuth 账号与您的认证身份匹配. 请联系管理员处理重复账号后再重新连接."

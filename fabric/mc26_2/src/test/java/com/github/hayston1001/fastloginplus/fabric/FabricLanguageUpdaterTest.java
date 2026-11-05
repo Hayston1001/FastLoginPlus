@@ -43,7 +43,8 @@ class FabricLanguageUpdaterTest {
                 "beta", "Localized beta", "alpha", "Localized alpha");
         Logger logger = mock(Logger.class);
 
-        FabricLanguageUpdater.Result result = FabricLanguageUpdater.update(file, english, localized, logger);
+        FabricLanguageUpdater.Result result = FabricLanguageUpdater.update(file, english, localized,
+                version -> null, logger);
 
         assertEquals(1, result.added());
         assertTrue(result.versionUpdated());
@@ -65,7 +66,8 @@ class FabricLanguageUpdaterTest {
 
         FabricLanguageUpdater.Result result = FabricLanguageUpdater.update(file,
                 messages("_messages-version", "1", "beta", "New beta", "alpha", "New alpha"),
-                messages("_messages-version", "1", "beta", "New beta", "alpha", "New alpha"), logger);
+                messages("_messages-version", "1", "beta", "New beta", "alpha", "New alpha"),
+                version -> null, logger);
 
         assertTrue(result.added() > 0);
         assertFalse(result.versionUpdated());
@@ -83,7 +85,8 @@ class FabricLanguageUpdaterTest {
 
         FabricLanguageUpdater.update(file,
                 messages("_messages-version", "1", "premium-requested", "valid"),
-                messages("_messages-version", "1", "premium-requested", "valid"), logger);
+                messages("_messages-version", "1", "premium-requested", "valid"),
+                version -> null, logger);
 
         assertEquals(invalid, Files.readString(file, StandardCharsets.UTF_8));
         verify(logger).warn("Language file {} is not a valid message file; leaving it unchanged",
@@ -98,7 +101,7 @@ class FabricLanguageUpdaterTest {
         FabricLanguageUpdater.Result result = FabricLanguageUpdater.update(file,
                 messages("_messages-version", "1", "beta", "New beta", "alpha", "New alpha"),
                 messages("_messages-version", "1", "beta", "New beta", "alpha", "New alpha"),
-                mock(Logger.class));
+                version -> null, mock(Logger.class));
 
         assertTrue(result.added() > 0);
         assertFalse(result.versionUpdated());
@@ -120,13 +123,86 @@ class FabricLanguageUpdaterTest {
         FabricLanguageUpdater.update(file,
                 messages("_messages-version", "1", "beta", "New beta", "alpha", "New alpha"),
                 messages("_messages-version", "1", "beta", "本地 beta", "alpha", "本地 alpha"),
-                logger);
+                version -> null, logger);
 
         List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
         assertEquals("_messages-version: 1", lines.get(0));
         assertEquals("# Keep this comment", lines.get(1));
         assertTrue(lines.contains("beta: \"本地 beta\""));
         assertTrue(lines.contains("alpha: \"My custom value\""));
+    }
+
+    @Test
+    void versionUpgradeRefreshesDefaultsFromThePreviousSnapshotAndAppendsMissingKeys() throws Exception {
+        Path file = directory.resolve("messages_zh.yml");
+        Files.writeString(file, """
+                _messages-version: 1
+                beta: "旧本地默认"
+                alpha: "My custom value"
+                """, StandardCharsets.UTF_8);
+        Map<String, String> previous = messages("_messages-version", "1",
+                "beta", "旧本地默认", "alpha", "本地 alpha");
+        Logger logger = mock(Logger.class);
+
+        FabricLanguageUpdater.Result result = FabricLanguageUpdater.update(file,
+                messages("_messages-version", "2", "beta", "New beta",
+                        "alpha", "New alpha", "added", "New added"),
+                messages("_messages-version", "2", "beta", "本地 beta",
+                        "alpha", "本地 alpha", "added", "新增"),
+                version -> previous, logger);
+
+        assertEquals(1, result.added());
+        assertTrue(result.versionUpdated());
+        List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+        assertEquals("_messages-version: 2", lines.get(0));
+        assertTrue(lines.contains("beta: \"本地 beta\""),
+                "an untouched old localized default must be refreshed");
+        assertTrue(lines.contains("alpha: \"My custom value\""),
+                "a value that differs from the snapshot must be kept");
+        assertTrue(lines.contains("added: \"新增\""));
+        verify(logger).info("Refreshed {} unchanged message values to messages v{} in {}",
+                1, 2, file.getFileName());
+    }
+
+    @Test
+    void englishDefaultsRefreshFromThePreviousSnapshotToo() throws Exception {
+        Path file = directory.resolve("messages_en.yml");
+        Files.writeString(file, """
+                _messages-version: 1
+                beta: "Old English default"
+                """, StandardCharsets.UTF_8);
+        Map<String, String> current = messages("_messages-version", "2", "beta", "New English default");
+        Map<String, String> previous = messages("_messages-version", "1", "beta", "Old English default");
+
+        FabricLanguageUpdater.update(file, current, current, version -> previous, mock(Logger.class));
+
+        List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+        assertTrue(lines.contains("beta: \"New English default\""));
+        assertEquals("_messages-version: 2", lines.get(0));
+    }
+
+    @Test
+    void missingSnapshotKeepsTheCurrentRuleAndWarns() throws Exception {
+        Path file = directory.resolve("messages_zh.yml");
+        Files.writeString(file, """
+                _messages-version: 1
+                beta: "Old beta"
+                alpha: "New alpha"
+                """, StandardCharsets.UTF_8);
+        Logger logger = mock(Logger.class);
+
+        FabricLanguageUpdater.Result result = FabricLanguageUpdater.update(file,
+                messages("_messages-version", "2", "beta", "New beta", "alpha", "New alpha"),
+                messages("_messages-version", "2", "beta", "本地 beta", "alpha", "本地 alpha"),
+                version -> null, logger);
+
+        assertTrue(result.versionUpdated(), "the version marker is still upgraded");
+        List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+        assertTrue(lines.contains("beta: \"Old beta\""),
+                "without a snapshot only the current English default can refresh");
+        assertTrue(lines.contains("alpha: \"本地 alpha\""));
+        verify(logger).warn("Cannot refresh {}: no snapshot for messages v{}",
+                file.getFileName(), 1);
     }
 
     private static Map<String, String> messages(String... pairs) {

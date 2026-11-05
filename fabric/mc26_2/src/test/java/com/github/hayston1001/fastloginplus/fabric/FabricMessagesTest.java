@@ -66,8 +66,8 @@ class FabricMessagesTest {
         Map<String, String> english = bundled("en");
         Map<String, String> chinese = bundled("zh");
         assertEquals(english.keySet(), chinese.keySet());
-        assertEquals("1", english.get("_messages-version"));
-        assertEquals("1", chinese.get("_messages-version"));
+        assertEquals("2", english.get("_messages-version"));
+        assertEquals("2", chinese.get("_messages-version"));
         assertNotEquals(english.get("premium-requested"), chinese.get("premium-requested"));
         assertEquals(chinese.get("premium-requested"),
                 FabricMessages.load("zh", directory).get("premium-requested"));
@@ -262,9 +262,23 @@ class FabricMessagesTest {
         assertEquals(bundled("en").get("premium-requested"), messages.get("premium-requested"));
     }
 
+    @Test
+    void archivedDefaultsCoverBothLanguagesAtThePreviousVersion() throws Exception {
+        for (String language : new String[]{"en", "zh"}) {
+            Map<String, String> archived = resource(
+                    "/messages/archive/1/messages_" + language + ".yml");
+            assertEquals("1", archived.get("_messages-version"), language);
+            assertEquals(bundled(language).keySet(), archived.keySet(), language);
+        }
+    }
+
     private Map<String, String> bundled(String language) throws Exception {
-        try (var input = getClass().getResourceAsStream("/messages_" + language + ".yml")) {
-            assertTrue(input != null, "missing bundled language " + language);
+        return resource("/messages_" + language + ".yml");
+    }
+
+    private Map<String, String> resource(String path) throws Exception {
+        try (var input = getClass().getResourceAsStream(path)) {
+            assertTrue(input != null, "missing bundled language " + path);
             String text = new String(input.readAllBytes(), StandardCharsets.UTF_8);
             FlatYamlReader.Result parsed = FlatYamlReader.read(text.lines().toList());
             assertEquals(0, parsed.unsupportedLine());

@@ -38,8 +38,10 @@ final class FabricMessages {
     }
 
     static Map<String, String> loadAndReportLanguage(String language, Path directory, org.slf4j.Logger logger) {
-        Path file = directory.resolve("messages_" + effectiveLanguage(language) + ".yml");
-        FabricLanguageUpdater.update(file, bundled("en"), bundled(effectiveLanguage(language)), logger);
+        String locale = effectiveLanguage(language);
+        Path file = directory.resolve("messages_" + locale + ".yml");
+        FabricLanguageUpdater.update(file, bundled("en"), bundled(locale),
+                version -> archived(locale, version), logger);
         LanguageMessages.Result<Map<String, String>> result = LanguageMessages.loadWithFallback(
                 file, defaults(language, file), bundledFallback(language), YAML_LOADER,
                 failure -> logger.error("Invalid Fabric message file {}; falling back to bundled messages",
@@ -147,6 +149,34 @@ final class FabricMessages {
             }
         } catch (IOException error) {
             throw new IllegalStateException("Cannot read bundled Fabric language", error);
+        }
+    }
+
+    /**
+     * Loads the bundled defaults of a language for a previous message version.
+     * The selected language is preferred; English is the fallback, mirroring the
+     * classic archive lookup.
+     *
+     * @param language the effective language (en or zh)
+     * @param version the version stored in the user's file
+     * @return the archived defaults, or null when no snapshot is bundled
+     */
+    private static Map<String, String> archived(String language, int version) {
+        Map<String, String> localized = archive(language, version);
+        return localized != null ? localized : archive("en", version);
+    }
+
+    private static Map<String, String> archive(String language, int version) {
+        String resource = "/messages/archive/" + version + "/messages_" + language + ".yml";
+        try (InputStream input = FabricMessages.class.getResourceAsStream(resource)) {
+            if (input == null) {
+                return null;
+            }
+            try (Reader reader = new InputStreamReader(input, StandardCharsets.UTF_8)) {
+                return loadYaml(reader, Map.of());
+            }
+        } catch (IOException error) {
+            throw new IllegalStateException("Cannot read archived Fabric language " + resource, error);
         }
     }
 
