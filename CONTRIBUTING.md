@@ -19,7 +19,7 @@ On Unix-like systems use `./gradlew`. `release` builds every module and collects
 
 - Check the current branch, working tree and affected source. Do not overwrite unrelated work.
 - Read the [login/identity trust model](docs/en/LOGIN-FLOW.md) for authentication changes. A name lookup, UUID shape or plugin message alone is not identity proof.
-- Keep platform APIs out of shared core logic. Mirror applicable Bukkit changes into Folia while preserving scheduler differences; protocol changes need Velocity and Fabric checks together.
+- Keep platform APIs out of shared core logic. The standalone `net.md_5.bungee.config` (`bungeecord-config`) YAML library is the documented exception: it is not the BungeeCord API, and packaged jars relocate it to `fastlogin.config`; the exception does not extend to BungeeCord API types. Mirror applicable Bukkit changes into Folia while preserving scheduler differences; protocol changes need Velocity and Fabric checks together.
 - Preserve the deliberate driver/dependency baselines and UUID golden vectors. Source compilation does not prove packaged runtime compatibility.
 - Keep comments concise and licensed source headers in the MIT SPDX short form, with original contributor credit where applicable. Follow Checkstyle and `.gitattributes` (LF, with `.bat`/`.cmd` exceptions).
 

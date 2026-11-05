@@ -19,7 +19,7 @@ Unix 类系统使用 `./gradlew`. `release` 构建全部模块并在 `build/rele
 
 - 检查当前分支, 工作区和目标源码, 不覆盖无关工作.
 - 认证变化先阅读[登录/身份信任模型](docs/zh/LOGIN-FLOW.md). 名字查询, UUID 外形或插件消息本身都不证明身份.
-- 平台 API 不进入共享 core 逻辑. 适用 Bukkit 变化同步 Folia, 保留调度差异; 改协议同时检查 Velocity 与 Fabric.
+- 平台 API 不进入共享 core 逻辑. 唯一例外是独立的 `net.md_5.bungee.config` (`bungeecord-config`) YAML 库: 它不是 BungeeCord 平台 API, 打包 JAR 会被重定位到 `fastlogin.config`; 该例外不适用于 BungeeCord API 类型. 适用 Bukkit 变化同步 Folia, 保留调度差异; 改协议同时检查 Velocity 与 Fabric.
 - 保留刻意固定的驱动/依赖基线和 UUID 黄金向量. 源码编译不证明打包后的运行兼容.
 - 注释保持简洁, 已有许可头采用 MIT SPDX 短头并保留适用原作者署名. 遵守 Checkstyle 与 `.gitattributes` (LF, `.bat`/`.cmd` 例外).
 
