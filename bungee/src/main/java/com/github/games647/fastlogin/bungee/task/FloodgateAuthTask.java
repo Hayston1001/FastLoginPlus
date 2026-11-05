@@ -32,6 +32,9 @@ public class FloodgateAuthTask
     @Override
     protected void startLogin() {
         BungeeLoginSession session = new BungeeLoginSession(player.getName(), isRegistered, profile);
+        // the force message must say this identity came from Floodgate, so the
+        // backend does not mistake the missing Mojang UUID for an unverified login
+        session.setBedrockVerified(true);
         core.getPlugin().getSession().put(player.getPendingConnection(), session);
 
         // run login task

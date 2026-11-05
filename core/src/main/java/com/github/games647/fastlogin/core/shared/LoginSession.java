@@ -25,6 +25,7 @@ public abstract class LoginSession {
 
     private IdentityClaim.Facts facts = IdentityClaim.Facts.defaults();
     private boolean factsPresent;
+    private boolean bedrockVerified;
 
     protected boolean registered;
 
@@ -92,6 +93,20 @@ public abstract class LoginSession {
 
     public synchronized Decision getIdentityDecision() {
         return identityDecision;
+    }
+
+    /**
+     * Whether this connection was verified through Floodgate. A Bedrock identity
+     * is authenticated by Xbox Live even though it has no Mojang premium UUID.
+     *
+     * @return true for a Floodgate-verified Bedrock connection
+     */
+    public synchronized boolean isBedrockVerified() {
+        return bedrockVerified;
+    }
+
+    public synchronized void setBedrockVerified(boolean bedrockVerified) {
+        this.bedrockVerified = bedrockVerified;
     }
 
     public synchronized void setIdentityDecision(Decision identityDecision) {

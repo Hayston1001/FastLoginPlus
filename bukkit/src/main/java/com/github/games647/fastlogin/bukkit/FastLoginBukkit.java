@@ -69,6 +69,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     );
 
     private final Map<UUID, PremiumStatus> premiumPlayers = new ConcurrentHashMap<>();
+    /** Claim nonces already admitted in the current freshness window. */
+    private static final com.github.games647.fastlogin.protocol.IdentityClaimReplayCache
+            IDENTITY_CLAIM_REPLAY_CACHE =
+            new com.github.games647.fastlogin.protocol.IdentityClaimReplayCache();
     /** Kick messages for logins refused during the configuration phase. */
     private final java.util.concurrent.ConcurrentMap<String, String> pendingKicks =
             new ConcurrentHashMap<>();
@@ -1221,9 +1225,15 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      */
     private com.github.games647.fastlogin.protocol.IdentityClaim readIdentityDeclaration(
             Object profile, String playerName, UUID connectionUuid) {
+        return readIdentityDeclaration(profile, playerName, connectionUuid, false);
+    }
+
+    private com.github.games647.fastlogin.protocol.IdentityClaim readIdentityDeclaration(
+            Object profile, String playerName, UUID connectionUuid, boolean consumeNonce) {
         try {
             SpigotProfileReader.Snapshot snapshot = SpigotProfileReader.readProfile(profile, "profile");
-            return validateIdentityDeclaration(snapshot.claims, snapshot.signatures, playerName, connectionUuid);
+            return validateIdentityDeclaration(snapshot.claims, snapshot.signatures, playerName,
+                    connectionUuid, consumeNonce);
         } catch (Exception untrustworthy) {
             return null;
         }
@@ -1231,11 +1241,13 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     private com.github.games647.fastlogin.protocol.IdentityClaim validateIdentityDeclaration(
             java.util.List<String> values, String playerName, UUID connectionUuid) {
-        return validateIdentityDeclaration(values, java.util.Collections.emptyList(), playerName, connectionUuid);
+        return validateIdentityDeclaration(values, java.util.Collections.emptyList(), playerName,
+                connectionUuid, false);
     }
 
     private com.github.games647.fastlogin.protocol.IdentityClaim validateIdentityDeclaration(
-            java.util.List<String> values, java.util.List<String> signatures, String playerName, UUID connectionUuid) {
+            java.util.List<String> values, java.util.List<String> signatures, String playerName,
+            UUID connectionUuid, boolean consumeNonce) {
         try {
             com.github.games647.fastlogin.protocol.IdentityClaim claim =
                     com.github.games647.fastlogin.protocol.IdentityClaim.parseExactlyOne(
@@ -1250,6 +1262,25 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                             values.get(0), signatures.get(0), proxyId);
                 }
                 if (!verified) {
+                    return null;
+                }
+                // Legacy forwarding has no transport authentication, so a claim
+                // without the freshness fields could be replayed indefinitely.
+                if (!claim.hasFreshness()) {
+                    logger.warn("Refusing identity claim for {}: legacy forwarding requires a fresh claim. "
+                            + "Update the proxy.", playerName);
+                    return null;
+                }
+            }
+            if (claim.hasFreshness()) {
+                long now = System.currentTimeMillis();
+                if (!claim.isFresh(now)) {
+                    logger.warn("Refusing stale identity claim for {}", playerName);
+                    return null;
+                }
+                // consume only at admission: the same claim is read again in later phases
+                if (consumeNonce && !IDENTITY_CLAIM_REPLAY_CACHE.register(claim.getNonce(), now)) {
+                    logger.warn("Refusing replayed identity claim for {}", playerName);
                     return null;
                 }
             }
@@ -1292,7 +1323,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return false;
         }
         return rejectUntrustedPremiumConnection(playerName, connectionUuid,
-                readIdentityDeclaration(profile, playerName, connectionUuid));
+                readIdentityDeclaration(profile, playerName, connectionUuid, true));
     }
 
     private boolean rejectUntrustedPremiumConnection(String playerName, UUID connectionUuid,
@@ -1339,7 +1370,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         try {
             SpigotProfileReader.Snapshot snapshot = SpigotProfileReader.read(player);
             claim = validateIdentityDeclaration(
-                    snapshot.claims, snapshot.signatures, playerName, player.getUniqueId());
+                    snapshot.claims, snapshot.signatures, playerName, player.getUniqueId(), synchronize);
             if (core.isDebug()) {
                 logger.info("Spigot identity visibility: phase={} name={} source={} claimCount={} trusted={}",
                         phase, playerName, snapshot.source, snapshot.claims.size(), claim != null);

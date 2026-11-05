@@ -183,7 +183,8 @@ class ProxyAdmissionTest {
     private String claim(IdentityClaim.Decision decision, String name, UUID forwarded, UUID verified,
                          UUID source) {
         return new IdentityClaim(decision, name, forwarded, verified,
-                IdentityClaim.Facts.defaults(), source).encode();
+                IdentityClaim.Facts.defaults(), source,
+                System.currentTimeMillis(), UUID.randomUUID()).encode();
     }
 
     private PlayerProfile profile(String... claims) {

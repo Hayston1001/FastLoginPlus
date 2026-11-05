@@ -122,6 +122,53 @@ class IdentityClaimTest {
     }
 
     @Test
+    void freshClaimCarriesTheTimestampAndNonce() {
+        UUID nonce = UUID.randomUUID();
+        long issuedAt = System.currentTimeMillis();
+        UUID proxyId = UUID.randomUUID();
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
+                "Player_1", FORWARDED, MOJANG, IdentityClaim.Facts.defaults(), proxyId, issuedAt, nonce);
+        String encoded = claim.encode();
+
+        assertTrue(encoded.startsWith(IdentityClaim.VERSION + ":"));
+        IdentityClaim parsed = IdentityClaim.parseExactlyOne(
+                Collections.singletonList(encoded), "Player_1", FORWARDED);
+
+        assertTrue(parsed.hasFreshness());
+        assertEquals(issuedAt, parsed.getIssuedAt());
+        assertEquals(nonce, parsed.getNonce());
+        assertEquals(proxyId, parsed.getProxyId());
+        assertTrue(parsed.isFresh(issuedAt));
+        assertFalse(parsed.isFresh(issuedAt + IdentityClaim.MAX_AGE_MILLIS + 1L));
+        assertFalse(parsed.isFresh(issuedAt - IdentityClaim.MAX_CLOCK_SKEW_MILLIS - 1L));
+    }
+
+    @Test
+    void legacyClaimHasNoFreshnessFields() {
+        IdentityClaim parsed = IdentityClaim.parseExactlyOne(
+                Collections.singletonList(new IdentityClaim(IdentityClaim.Decision.OFFLINE,
+                        "Player_1", FORWARDED, null).encode()), "Player_1", FORWARDED);
+
+        assertFalse(parsed.hasFreshness());
+        assertFalse(parsed.isFresh(System.currentTimeMillis()));
+    }
+
+    @Test
+    void rejectsMalformedFreshnessFields() {
+        String prefix = "2:" + IdentityClaim.Decision.OFFLINE.name() + ":Player_1:" + FORWARDED + ":-"
+                + ":N:N:-:Y:N:N:-:";
+        UUID nonce = UUID.randomUUID();
+        for (String value : Arrays.asList(
+                prefix + "not-a-timestamp:" + nonce,
+                prefix + "0:" + nonce,
+                prefix + System.currentTimeMillis() + ":not-a-uuid",
+                prefix + System.currentTimeMillis())) {
+            assertThrows(IllegalArgumentException.class, () -> IdentityClaim.parseExactlyOne(
+                    Collections.singletonList(value), "Player_1", FORWARDED));
+        }
+    }
+
+    @Test
     void rejectsMalformedWireValues() {
         String prefix = "1:PREMIUM_VERIFIED:Player_1:" + FORWARDED + ":";
         for (String value : Arrays.asList("2:OFFLINE:Player_1:" + FORWARDED + ":-",

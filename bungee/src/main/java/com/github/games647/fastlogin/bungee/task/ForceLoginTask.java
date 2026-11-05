@@ -117,7 +117,8 @@ public class ForceLoginTask
         loginMessage.setDeclaration(type == Type.CRACKED
                 ? com.github.games647.fastlogin.protocol.IdentityClaim.Decision.OFFLINE
                 : verified == null ? com.github.games647.fastlogin.protocol.IdentityClaim.Decision.UNDECIDED
-                : com.github.games647.fastlogin.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED, player.getUniqueId());
+                : com.github.games647.fastlogin.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED,
+                player.getUniqueId(), session.isBedrockVerified());
 
         core.getPlugin().sendPluginMessage(server, loginMessage);
     }

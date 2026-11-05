@@ -145,11 +145,13 @@ final class EasyAuth344Bridge {
                 }
                 AccountState.Snapshot state = accountStatus(claim.getPlayerName());
                 if (claim.getDecision() == Decision.PREMIUM_VERIFIED) {
-                    // The declared policy governs; an older proxy that
-                    // declared nothing keeps the previous behaviour (on) — the
-                    // Fabric config has no local copy of this key
-                    boolean autoRegisterUnknown = claim.getFacts().policyDeclared()
-                            ? claim.getFacts().autoRegisterUnknown() : true;
+                    if (!claim.getFacts().policyDeclared()) {
+                        // an older proxy declared nothing: keep the password lock
+                        // instead of guessing auto-login/auto-register
+                        return;
+                    }
+                    // The declared policy governs from here on.
+                    boolean autoRegisterUnknown = claim.getFacts().autoRegisterUnknown();
                     PremiumGate.Action action = PremiumGate.decideVerified(claim.getConsent(), state,
                             claim.getVerifiedMojangUuid(), claim.isAutoLogin(),
                             autoRegisterUnknown);
@@ -505,9 +507,17 @@ final class EasyAuth344Bridge {
         if (claim.getDecision() != Decision.PREMIUM_VERIFIED) {
             throw new IllegalStateException("Unresolved identity claim");
         }
+        if (!claim.getFacts().policyDeclared()) {
+            // an older proxy declared nothing: keep the password lock
+            if (FabricConfig.isDebug()) {
+                LOGGER.info("Premium login not applied; the proxy declared no policy for {}",
+                        player.getGameProfile().name());
+            }
+            player.sendSystemMessage(FabricMessages.text(passwordLockMessage(claim, state)));
+            return;
+        }
         PremiumGate.Action action = PremiumGate.decideVerified(claim.getConsent(), state,
-                claim.getVerifiedMojangUuid(), claim.isAutoLogin(),
-                !claim.getFacts().policyDeclared() || claim.getFacts().autoRegisterUnknown());
+                claim.getVerifiedMojangUuid(), claim.isAutoLogin(), claim.getFacts().autoRegisterUnknown());
         if (action == PremiumGate.Action.PASSWORD_LOCK) {
             // Missing consent or disabled policy keeps the password/registration flow.
             if (FabricConfig.isDebug()) {

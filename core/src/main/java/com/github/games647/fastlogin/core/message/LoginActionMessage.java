@@ -42,8 +42,30 @@ public class LoginActionMessage implements ChannelMessage {
     private ConnectionDeclaration declaration;
 
     public void setDeclaration(IdentityClaim.Decision decision, UUID forwardedUuid) {
-        this.declaration = new ConnectionDeclaration(decision, forwardedUuid);
+        setDeclaration(decision, forwardedUuid, false);
+    }
+
+    /**
+     * Declares the connection decision.
+     *
+     * @param decision the proxy decision for this connection
+     * @param forwardedUuid the forwarded connection UUID
+     * @param bedrock whether the proxy verified this through Floodgate
+     */
+    public void setDeclaration(IdentityClaim.Decision decision, UUID forwardedUuid, boolean bedrock) {
+        this.declaration = new ConnectionDeclaration(decision, forwardedUuid, bedrock);
         validateDeclaration();
+    }
+
+    /**
+     * Whether the proxy verified this as a Floodgate/Bedrock connection. A
+     * Bedrock identity is verified by Xbox Live even when no Mojang UUID exists,
+     * so the backend treats it as authenticated without calling it premium.
+     *
+     * @return true when the declaration carries the Bedrock flag
+     */
+    public boolean isBedrockVerified() {
+        return declaration != null && declaration.isBedrock();
     }
 
     public IdentityClaim.Decision getIdentityDecision() {

@@ -147,7 +147,7 @@ class UnverifiedDeclarationTest {
     @Test
     void configureOfflineClaimRejectsBeforeLegacyPremiumShortcuts() throws Exception {
         when(manager.isSignedForwarding()).thenReturn(false);
-        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, "TestUser", uuid, null, facts(), proxy);
+        IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, "TestUser", uuid, null, facts(), proxy, System.currentTimeMillis(), UUID.randomUUID());
         ConfigureConnection connection = new ConfigureConnection(new Profile(uuid, claim.encode()).signed(proxy));
         Method configure = FastLoginBukkit.class.getDeclaredMethod("onPlayerConfigure", Object.class);
         configure.setAccessible(true);
@@ -163,7 +163,7 @@ class UnverifiedDeclarationTest {
     void configureVerifiedPolicyOffSynchronizesBeforeAccountDecisionWithoutPremiumMarking() throws Exception {
         UUID mojang = UUID.randomUUID();
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
-                "TestUser", mojang, mojang, facts(), proxy);
+                "TestUser", mojang, mojang, facts(), proxy, System.currentTimeMillis(), UUID.randomUUID());
         ConfigureConnection connection = new ConfigureConnection(new Profile(mojang, claim.encode()));
         Method configure = FastLoginBukkit.class.getDeclaredMethod("onPlayerConfigure", Object.class);
         configure.setAccessible(true);
@@ -181,7 +181,7 @@ class UnverifiedDeclarationTest {
     void configurePolicyOffPassesVerifiedUuidAndReleasesOnlyOnce() throws Exception {
         UUID mojang = UUID.randomUUID();
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
-                "TestUser", uuid, mojang, facts(), proxy);
+                "TestUser", uuid, mojang, facts(), proxy, System.currentTimeMillis(), UUID.randomUUID());
         ConfigureConnection connection = new ConfigureConnection(new Profile(uuid, claim.encode(), mojang));
         plugin.recordPreLoginAttestation("TestUser", connection.getProfile());
         when(integrator.releaseUnusablePlaceholder("TestUser", mojang)).thenReturn(
@@ -256,7 +256,7 @@ class UnverifiedDeclarationTest {
         when(manager.isSignedForwarding()).thenReturn(false);
         when(manager.getAllowedProxyIds()).thenReturn(java.util.Collections.emptySet());
         Profile profile = new Profile(uuid, new IdentityClaim(IdentityClaim.Decision.OFFLINE,
-                "TestUser", uuid, null, facts(), null).encode()).signed(proxy);
+                "TestUser", uuid, null, facts(), null, System.currentTimeMillis(), UUID.randomUUID()).encode()).signed(proxy);
         Method read = FastLoginBukkit.class.getDeclaredMethod("readIdentityDeclaration", Object.class,
                 String.class, UUID.class);
         read.setAccessible(true);
@@ -291,50 +291,53 @@ class UnverifiedDeclarationTest {
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(value = LoginActionMessage.Type.class, names = {"LOGIN", "REGISTER"})
     void contradictoryForceAlwaysWarnsAndAppliesDisabledFacts(LoginActionMessage.Type type) {
-        for (boolean strict : new boolean[]{false, true}) {
-            when(core.getConfig()).thenReturn(new net.md_5.bungee.config.Configuration());
-            core.getConfig().set("require-declared-proxy-policy", strict);
-            new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player,
-                    forceMessage(type, true, false));
-        }
+        when(core.getConfig()).thenReturn(new net.md_5.bungee.config.Configuration());
+        new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player,
+                forceMessage(type, true, false));
         ArgumentCaptor<BukkitLoginSession> captured = ArgumentCaptor.forClass(BukkitLoginSession.class);
-        verify(plugin, times(2)).putSession(eq(address), captured.capture());
-        for (BukkitLoginSession session : captured.getAllValues()) {
-            assertFalse(session.getFacts().autoLogin());
-            assertTrue(session.isVerifiedPremium());
-            assertTrue(session.isFactsPresent());
-        }
-        verify(plugin.getLog(), times(2)).warn(contains("contradicts"), eq(type), eq("TestUser"));
+        verify(plugin).putSession(eq(address), captured.capture());
+        BukkitLoginSession session = captured.getValue();
+        assertFalse(session.getFacts().autoLogin());
+        assertTrue(session.isVerifiedPremium());
+        assertTrue(session.isFactsPresent());
+        verify(plugin.getLog()).warn(contains("contradicts"), eq(type), eq("TestUser"));
         verify(hook, never()).forceLogin(any());
         verify(hook, never()).forceRegister(any(), anyString());
     }
 
     @Test
-    void strictGateBlocksLegacyForceButDefaultOffKeepsLegacyDispatch() {
-        net.md_5.bungee.config.Configuration config = new net.md_5.bungee.config.Configuration();
-        when(core.getConfig()).thenReturn(config);
-        config.set("require-declared-proxy-policy", true);
+    void undeclaredLegacyForceIsAlwaysIgnored() {
+        when(core.getConfig()).thenReturn(new net.md_5.bungee.config.Configuration());
         for (LoginActionMessage.Type type : new LoginActionMessage.Type[]{
                 LoginActionMessage.Type.LOGIN, LoginActionMessage.Type.REGISTER}) {
             new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player,
                     forceMessage(type, false, true));
         }
         verify(plugin, never()).putSession(any(), any());
-        config.set("require-declared-proxy-policy", false);
-        new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player,
-                forceMessage(LoginActionMessage.Type.LOGIN, false, true));
-        ArgumentCaptor<BukkitLoginSession> captured = ArgumentCaptor.forClass(BukkitLoginSession.class);
-        verify(plugin).putSession(eq(address), captured.capture());
-        assertFalse(captured.getValue().getFacts().policyDeclared());
-        assertTrue(captured.getValue().isVerifiedPremium());
         verify(plugin.getLog(), times(2)).warn(contains("policy facts are missing"), any(), eq("TestUser"));
     }
 
     @Test
-    void strictGateAcceptsDeclaredEnabledPolicyAndDoesNotFilterOfflineGuardrail() {
-        net.md_5.bungee.config.Configuration config = new net.md_5.bungee.config.Configuration();
-        config.set("require-declared-proxy-policy", true);
-        when(core.getConfig()).thenReturn(config);
+    void bedrockDeclarationIsVerifiedWithoutAPremiumUuid() {
+        LoginActionMessage message = new LoginActionMessage(LoginActionMessage.Type.LOGIN,
+                "TestUser", proxy, null);
+        message.setFacts(new IdentityClaim.Facts(false, false, IdentityClaim.Consent.NO, true, true, false));
+        message.setDeclaration(IdentityClaim.Decision.UNDECIDED, uuid, true);
+        com.google.common.io.ByteArrayDataOutput output = ByteStreams.newDataOutput();
+        message.writeTo(output);
+
+        new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player, output.toByteArray());
+
+        ArgumentCaptor<BukkitLoginSession> captured = ArgumentCaptor.forClass(BukkitLoginSession.class);
+        verify(plugin).putSession(eq(address), captured.capture());
+        // Xbox Live verified the identity: authenticated, but no Mojang UUID exists
+        assertTrue(captured.getValue().isVerifiedPremium());
+        assertNull(captured.getValue().getUuid());
+    }
+
+    @Test
+    void declaredPolicyIsAcceptedAndDoesNotFilterOfflineGuardrail() {
+        when(core.getConfig()).thenReturn(new net.md_5.bungee.config.Configuration());
         new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player,
                 forceMessage(LoginActionMessage.Type.LOGIN, true, true));
         new BungeeListener(plugin).onPluginMessageReceived("fastloginplus:force", player, message(uuid));
@@ -389,7 +392,8 @@ class UnverifiedDeclarationTest {
         configureWithLookup(new Profile(premium, verifiedClaim(premium, UUID.randomUUID()), premium), premium);
         configureWithLookup(new Profile(premium, verifiedClaim(UUID.randomUUID(), proxy), premium), premium);
         configureWithLookup(new Profile(premium, new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
-                "OtherUser", premium, premium, facts(), proxy).encode(), premium), premium);
+                "OtherUser", premium, premium, facts(), proxy,
+                System.currentTimeMillis(), UUID.randomUUID()).encode(), premium), premium);
         assertNoPremiumGrant();
     }
 
@@ -398,7 +402,8 @@ class UnverifiedDeclarationTest {
         when(manager.isSignedForwarding()).thenReturn(false);
         when(hook.inspectAccount("TestUser")).thenReturn(LoginMethodDecider.AccountState.PASSWORD_ACCOUNT);
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, "TestUser", uuid, null,
-                new IdentityClaim.Facts(false, true, IdentityClaim.Consent.NO, true, true, false), proxy);
+                new IdentityClaim.Facts(false, true, IdentityClaim.Consent.NO, true, true, false), proxy,
+                System.currentTimeMillis(), UUID.randomUUID());
         configureWithLookup(new Profile(uuid, claim.encode(), UUID.randomUUID()).signed(proxy), UUID.randomUUID());
         assertNoPremiumGrant();
         verify(core, never()).getResolver();
@@ -418,7 +423,8 @@ class UnverifiedDeclarationTest {
         when(integrator.isAuthMePremiumEnabled()).thenReturn(true);
         String rewrittenClaim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
                 "TestUser", uuid, premium,
-                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, true, true, false), proxy).encode();
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, true, true, false), proxy,
+                System.currentTimeMillis(), UUID.randomUUID()).encode();
         configureWithLookup(new Profile(uuid, rewrittenClaim, premium).signed(proxy), premium);
         configureWithLookup(new Profile(premium, verifiedClaim(premium, null), null).signed(proxy), premium);
         verify(integrator, times(2)).markPlayerAsPremium("TestUser", premium);
@@ -451,7 +457,8 @@ class UnverifiedDeclarationTest {
 
     private String verifiedClaim(UUID connection, UUID source) {
         return new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED, "TestUser", connection, connection,
-                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, true, true, false), source).encode();
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, true, true, false), source,
+                System.currentTimeMillis(), UUID.randomUUID()).encode();
     }
 
     private void configureWithLookup(Profile profile, UUID resolved) throws Exception {

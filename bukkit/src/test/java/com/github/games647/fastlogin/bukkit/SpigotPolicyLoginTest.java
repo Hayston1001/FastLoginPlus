@@ -253,7 +253,8 @@ class SpigotPolicyLoginTest {
         UUID offline = UUID.nameUUIDFromBytes("OfflinePlayer:TestUser".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
                 NAME, offline, offline,
-                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false), null);
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false), null,
+                System.currentTimeMillis(), UUID.randomUUID());
         when(((LiveProfileCarrier) player).getProfile()).thenReturn(
                 new BeanProfile(claim.encode(), IdentityClaim.sign(claim.encode(), proxy)));
         when(player.getUniqueId()).thenReturn(offline);
@@ -275,7 +276,8 @@ class SpigotPolicyLoginTest {
         UUID offline = UUID.nameUUIDFromBytes("OfflinePlayer:TestUser".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
                 NAME, offline, offline,
-                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false), null);
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false), null,
+                System.currentTimeMillis(), UUID.randomUUID());
         when(((LiveProfileCarrier) player).getProfile()).thenReturn(
                 new BeanProfile(claim.encode(), IdentityClaim.sign(claim.encode(), proxy)));
         when(player.getUniqueId()).thenReturn(offline);
@@ -295,7 +297,8 @@ class SpigotPolicyLoginTest {
         UUID offline = UUID.nameUUIDFromBytes("OfflinePlayer:TestUser".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
                 NAME, offline, offline,
-                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false), null);
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.UNKNOWN, true, true, false), null,
+                System.currentTimeMillis(), UUID.randomUUID());
         when(((LiveProfileCarrier) player).getProfile()).thenReturn(
                 new BeanProfile(claim.encode(), IdentityClaim.sign(claim.encode(), proxy)));
         when(player.getUniqueId()).thenReturn(offline);
@@ -313,7 +316,8 @@ class SpigotPolicyLoginTest {
     private void giveClaim(boolean enabled, UUID source, UUID forwarded) {
         IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.PREMIUM_VERIFIED,
                 NAME, forwarded, forwarded,
-                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, enabled, true, false), null);
+                new IdentityClaim.Facts(false, false, IdentityClaim.Consent.YES, enabled, true, false), null,
+                System.currentTimeMillis(), UUID.randomUUID());
         when(((LiveProfileCarrier) player).getProfile()).thenReturn(
                 new BeanProfile(claim.encode(), IdentityClaim.sign(claim.encode(), source)));
     }

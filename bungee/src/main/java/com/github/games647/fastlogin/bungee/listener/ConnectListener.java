@@ -281,7 +281,8 @@ public class ConnectListener implements Listener {
                     && session.getIdentityDecision() == IdentityClaim.Decision.OFFLINE) {
                 session.computeFacts(plugin.getCore());
                 IdentityClaim claim = new IdentityClaim(IdentityClaim.Decision.OFFLINE, connection.getName(),
-                        connection.getUniqueId(), null, session.getFacts(), null);
+                        connection.getUniqueId(), null, session.getFacts(), null,
+                        System.currentTimeMillis(), UUID.randomUUID());
                 // Try early, warn once on failure, keep admission and the
                 // onServerConnected late sender intact. Never reject all offline players.
                 earlyDeclarations.attach(connection, claim, ProxyServer.getInstance().getConfig().getUuid());
@@ -390,7 +391,8 @@ public class ConnectListener implements Listener {
         session.computeFacts(plugin.getCore());
         IdentityClaim claim = new IdentityClaim(verifiedUUID == null ? IdentityClaim.Decision.OFFLINE
                 : IdentityClaim.Decision.PREMIUM_VERIFIED,
-                username, connection.getUniqueId(), verifiedUUID, session.getFacts(), null);
+                username, connection.getUniqueId(), verifiedUUID, session.getFacts(), null,
+                System.currentTimeMillis(), UUID.randomUUID());
         boolean attached = LoginProfileProperties.attachIdentity(loginProfile(connection), claim,
                 ProxyServer.getInstance().getConfig().getUuid(),
                 failure -> plugin.getLog().warn("Could not attach the identity facts for {}"

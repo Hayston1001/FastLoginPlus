@@ -23,7 +23,14 @@ public final class IdentityClaim {
 
     public static final String PROPERTY_NAME = "flp_identity";
     public static final String SIGNATURE_PROPERTY_NAME = "flp_identity_sig";
-    public static final int VERSION = 1;
+    /** Current wire version. Version 2 adds the issued-at timestamp and the replay nonce. */
+    public static final int VERSION = 2;
+    /** The pre-freshness wire version, still parsed so callers can decide how to treat it. */
+    public static final int LEGACY_VERSION = 1;
+    /** Maximum accepted age of a v2 claim. */
+    public static final long MAX_AGE_MILLIS = 120_000L;
+    /** Tolerated clock skew into the future for a v2 claim. */
+    public static final long MAX_CLOCK_SKEW_MILLIS = 5_000L;
     private static final String SIGNATURE_DOMAIN = "fastloginplus:flp_identity:v1\0";
     private static final Pattern PLAYER_NAME = Pattern.compile("[A-Za-z0-9_]{3,16}");
     private static final Pattern UUID_TEXT = Pattern.compile(
@@ -124,6 +131,8 @@ public final class IdentityClaim {
     private final UUID verifiedMojangUuid;
     private final Facts facts;
     private final UUID proxyId;
+    private final long issuedAt;
+    private final UUID nonce;
 
     public IdentityClaim(Decision decision, String playerName, UUID forwardedUuid, UUID verifiedMojangUuid) {
         this(decision, playerName, forwardedUuid, verifiedMojangUuid, Facts.defaults(), null);
@@ -136,6 +145,26 @@ public final class IdentityClaim {
 
     public IdentityClaim(Decision decision, String playerName, UUID forwardedUuid, UUID verifiedMojangUuid,
                          Facts facts, UUID proxyId) {
+        this(decision, playerName, forwardedUuid, verifiedMojangUuid, facts, proxyId, 0L, null);
+    }
+
+    /**
+     * Creates a fresh claim. The timestamp and nonce are part of the signed value
+     * and let the receiver reject replays; older constructors produce the legacy
+     * shape without them.
+     *
+     * @param decision the proxy decision for this connection
+     * @param playerName forwarded profile name
+     * @param forwardedUuid forwarded profile UUID
+     * @param verifiedMojangUuid Mojang UUID for verified premium claims, otherwise null
+     * @param facts declared facts and policy
+     * @param proxyId historical proxy identifier, may be null
+     * @param issuedAt creation time in epoch milliseconds
+     * @param nonce random single-use value
+     */
+    // CHECKSTYLE.OFF: ParameterNumber
+    public IdentityClaim(Decision decision, String playerName, UUID forwardedUuid, UUID verifiedMojangUuid,
+                         Facts facts, UUID proxyId, long issuedAt, UUID nonce) {
         this.decision = Objects.requireNonNull(decision, "decision");
         if (playerName == null || !PLAYER_NAME.matcher(playerName).matches()) {
             throw new IllegalArgumentException("Invalid player name");
@@ -148,7 +177,13 @@ public final class IdentityClaim {
         this.verifiedMojangUuid = verifiedMojangUuid;
         this.facts = Objects.requireNonNull(facts, "facts");
         this.proxyId = proxyId;
+        if ((issuedAt == 0L) != (nonce == null) || issuedAt < 0L) {
+            throw new IllegalArgumentException("Freshness fields must be present together");
+        }
+        this.issuedAt = issuedAt;
+        this.nonce = nonce;
     }
+    // CHECKSTYLE.ON: ParameterNumber
 
     public Decision getDecision() {
         return decision;
@@ -244,12 +279,49 @@ public final class IdentityClaim {
     }
 
     /**
+     * Whether this claim carries the v2 freshness fields.
+     *
+     * @return true when the timestamp and nonce are present
+     */
+    public boolean hasFreshness() {
+        return nonce != null;
+    }
+
+    /**
+     * Creation time of a v2 claim in epoch milliseconds, 0 for a legacy claim.
+     *
+     * @return the signed issue timestamp
+     */
+    public long getIssuedAt() {
+        return issuedAt;
+    }
+
+    /**
+     * Single-use value of a v2 claim, null for a legacy claim.
+     *
+     * @return the replay nonce
+     */
+    public UUID getNonce() {
+        return nonce;
+    }
+
+    /**
+     * Whether a v2 claim was issued inside the accepted window.
+     *
+     * @param now current time in epoch milliseconds
+     * @return true when the timestamp is not too old and not too far in the future
+     */
+    public boolean isFresh(long now) {
+        return nonce != null && issuedAt >= now - MAX_AGE_MILLIS && issuedAt <= now + MAX_CLOCK_SKEW_MILLIS;
+    }
+
+    /**
      * Encodes a claim with an exact wire shape. A name cannot contain the delimiter.
      *
      * @return property value
      */
     public String encode() {
-        return VERSION + ":" + decision.name() + ":" + playerName + ":" + forwardedUuid + ":"
+        String factsAndPolicy = decision.name() + ":" + playerName + ":" + forwardedUuid + ":"
                 + (verifiedMojangUuid == null ? "-" : verifiedMojangUuid.toString()) + ":"
                 + (facts.newPlayer() ? "Y" : "N") + ":" + (facts.sameNameCracked() ? "Y" : "N") + ":"
                 + (facts.consent() == Consent.UNKNOWN ? "-"
@@ -257,6 +329,10 @@ public final class IdentityClaim {
                 + (facts.autoLogin() ? "Y" : "N") + ":" + (facts.autoRegisterUnknown() ? "Y" : "N") + ":"
                 + (facts.offlineWhitelist() ? "Y" : "N") + ":"
                 + (proxyId == null ? "-" : proxyId.toString());
+        if (nonce == null) {
+            return LEGACY_VERSION + ":" + factsAndPolicy;
+        }
+        return VERSION + ":" + factsAndPolicy + ":" + issuedAt + ":" + nonce;
     }
 
     /**
@@ -324,15 +400,22 @@ public final class IdentityClaim {
         if (iterator.hasNext()) {
             throw new IllegalArgumentException("Duplicate identity claim");
         }
-        if (value == null || value.length() > 192) {
+        if (value == null || value.length() > 256) {
             throw new IllegalArgumentException("Invalid identity claim length");
         }
         String[] parts = value.split(":", -1);
-        // five mandatory fields plus optional trailing fact, policy and proxy
-        // fields; a proxy that predates them sends the short shape and the facts
-        // stay unknown
-        if ((parts.length != 5 && parts.length != 8 && parts.length != 11 && parts.length != 12)
-                || !Integer.toString(VERSION).equals(parts[0])) {
+        // v1: five mandatory fields plus optional trailing fact, policy and proxy
+        // fields (5/8/11/12). v2 always carries facts, policy, proxy slot,
+        // issued-at and nonce (14).
+        int version;
+        if (parts.length == 5 || parts.length == 8 || parts.length == 11 || parts.length == 12) {
+            version = LEGACY_VERSION;
+        } else if (parts.length == 14) {
+            version = VERSION;
+        } else {
+            throw new IllegalArgumentException("Unsupported identity claim format");
+        }
+        if (!Integer.toString(version).equals(parts[0])) {
             throw new IllegalArgumentException("Unsupported identity claim format");
         }
         Decision decision;
@@ -362,13 +445,21 @@ public final class IdentityClaim {
             declared = true;
         }
         UUID proxyId = null;
-        if (parts.length == 12 && !"-".equals(parts[11])) {
-            proxyId = parseUuid(parts[11]);
+        long issuedAt = 0L;
+        UUID nonce = null;
+        if (version == VERSION || parts.length == 12) {
+            if (!"-".equals(parts[11])) {
+                proxyId = parseUuid(parts[11]);
+            }
+        }
+        if (version == VERSION) {
+            issuedAt = parseTimestamp(parts[12]);
+            nonce = parseUuid(parts[13]);
         }
         IdentityClaim claim = new IdentityClaim(decision, parts[2], forwarded, verified,
                 new Facts(newPlayer, sameNameCracked, consent, autoLogin, autoRegisterUnknown,
                         offlineWhitelist, declared),
-                proxyId);
+                proxyId, issuedAt, nonce);
         if (!claim.playerName.equals(expectedName) || !claim.forwardedUuid.equals(expectedUuid)) {
             throw new IllegalArgumentException("Identity claim does not match forwarding profile");
         }
@@ -421,6 +512,18 @@ public final class IdentityClaim {
             return false;
         }
         throw new IllegalArgumentException("Invalid " + fact + " fact in identity claim");
+    }
+
+    private static long parseTimestamp(String value) {
+        try {
+            long issuedAt = Long.parseLong(value);
+            if (issuedAt <= 0L) {
+                throw new IllegalArgumentException("Invalid issue timestamp in identity claim");
+            }
+            return issuedAt;
+        } catch (NumberFormatException malformed) {
+            throw new IllegalArgumentException("Invalid issue timestamp in identity claim", malformed);
+        }
     }
 
     private static Consent parseConsent(String value) {

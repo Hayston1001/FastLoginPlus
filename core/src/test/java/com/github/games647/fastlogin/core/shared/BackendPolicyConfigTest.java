@@ -46,12 +46,13 @@ class BackendPolicyConfigTest {
     }
 
     @Test
-    void strictPolicyGateDefaultsOffAndIsOnlyABackendSetting() throws Exception {
+    void removedStrictPolicyGateIsNoLongerInEitherTemplate() throws Exception {
         try (InputStream backend = getClass().getResourceAsStream("/config.yml");
              InputStream proxy = getClass().getResourceAsStream("/config-proxy.yml")) {
             Map<String, Object> backendSettings = new Yaml().load(backend);
             Map<String, Object> proxySettings = new Yaml().load(proxy);
-            assertEquals(Boolean.FALSE, backendSettings.get("require-declared-proxy-policy"));
+            // undeclared policy is always rejected now, so the switch is gone
+            assertFalse(backendSettings.containsKey("require-declared-proxy-policy"));
             assertFalse(proxySettings.containsKey("require-declared-proxy-policy"));
         }
     }

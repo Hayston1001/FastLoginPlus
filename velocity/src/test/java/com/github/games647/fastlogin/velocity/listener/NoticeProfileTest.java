@@ -110,7 +110,8 @@ class NoticeProfileTest {
         IdentityClaim identity = IdentityClaim.parseExactlyOne(identityValues, "TestUser", id);
         assertFalse(identity.isAutoLogin());
         assertEquals(IdentityClaim.Decision.OFFLINE, identity.getDecision());
-        assertEquals(12, identity.encode().split(":").length);
+        assertEquals(14, identity.encode().split(":").length);
+        assertTrue(identity.hasFreshness());
         assertEquals(identityValues.get(0), identity.encode());
         List<String> signatures = properties.stream()
                 .filter(value -> IdentityClaim.SIGNATURE_PROPERTY_NAME.equals(value.getName()))

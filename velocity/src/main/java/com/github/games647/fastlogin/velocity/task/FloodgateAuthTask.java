@@ -33,6 +33,9 @@ public class FloodgateAuthTask
     @Override
     protected void startLogin() {
         VelocityLoginSession session = new VelocityLoginSession(player.getUsername(), isRegistered, profile);
+        // the force message must say this identity came from Floodgate, so the
+        // backend does not mistake the missing Mojang UUID for an unverified login
+        session.setBedrockVerified(true);
         core.getPlugin().getSession().put(player.getRemoteAddress(), session);
 
         // enable auto login based on the value of 'autoLoginFloodgate' in config.yml;

@@ -239,7 +239,7 @@ class BindingClaimTest {
 
     private void joinThroughEntrypoint(IdentityClaim claim) {
         try (var fabric = mockStatic(FastLoginFabric.class, CALLS_REAL_METHODS)) {
-            fabric.when(() -> FastLoginFabric.parseClaim(player.getGameProfile())).thenReturn(claim);
+            fabric.when(() -> FastLoginFabric.parseVerifiedClaim(player.getGameProfile())).thenReturn(claim);
             FastLoginFabric.onJoin(player.connection, bridge, mock(FabricCrackedNotice.class));
         }
     }

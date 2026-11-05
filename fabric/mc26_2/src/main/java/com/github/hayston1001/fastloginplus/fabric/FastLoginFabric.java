@@ -57,6 +57,7 @@ public final class FastLoginFabric implements ModInitializer {
         crackedNotice.register();
         BindingConsentWriter.register();
         DeleteConsentWriter.register();
+        FabricFeedbackReceiver.register();
         CommandRegistrationCallback.EVENT.register((dispatcher, dedicated, environment) ->
                 registerCommands(dispatcher, bridge));
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
@@ -206,7 +207,7 @@ public final class FastLoginFabric implements ModInitializer {
             } catch (RuntimeException unavailable) {
                 throw new AuthUnavailableException("EasyAuth policy check failed", unavailable);
             }
-            IdentityClaim claim = parseClaim(profile);
+            IdentityClaim claim = parseVerifiedClaim(profile);
             bridge.beforeConfigure(server, claim);
             crackedNotice.beforeConfigure(listener, claim);
             if (FabricConfig.isDebug()) {
@@ -242,7 +243,7 @@ public final class FastLoginFabric implements ModInitializer {
             return;
         }
         try {
-            IdentityClaim claim = parseClaim(profile);
+            IdentityClaim claim = parseVerifiedClaim(profile);
             bridge.onJoin(handler.player, claim);
             crackedNotice.onJoin(handler.player, claim);
         } catch (RuntimeException failure) {
@@ -292,10 +293,77 @@ public final class FastLoginFabric implements ModInitializer {
     }
 
     static IdentityClaim parseClaim(GameProfile profile) {
+        return parseClaim(profile, false);
+    }
+
+    /**
+     * Parses a claim for login admission. In addition to the signature, a v2
+     * claim must still be inside its freshness window; a command issued later in
+     * the same session keeps using {@link #parseClaim(GameProfile)}.
+     *
+     * @param profile the forwarded profile
+     * @return the verified claim
+     */
+    static IdentityClaim parseVerifiedClaim(GameProfile profile) {
+        return parseClaim(profile, true);
+    }
+
+    private static IdentityClaim parseClaim(GameProfile profile, boolean requireFresh) {
         List<String> values = new ArrayList<>();
         for (Property property : profile.properties().get(IdentityClaim.PROPERTY_NAME)) {
             values.add(property.value());
         }
-        return IdentityClaim.parseForFabric(values, profile.name(), profile.id());
+        List<String> signatures = new ArrayList<>();
+        for (Property property : profile.properties().get(IdentityClaim.SIGNATURE_PROPERTY_NAME)) {
+            signatures.add(property.value());
+        }
+        IdentityClaim claim = IdentityClaim.parseForFabric(values, profile.name(), profile.id());
+        verifyClaim(claim, values.get(0), signatures, requireFresh);
+        return claim;
+    }
+
+    /**
+     * Verifies the proxy signature when the profile carries one and rejects a
+     * v2 claim outside its freshness window at login. A missing signature keeps
+     * the FabricProxy-Lite transport as the trust anchor, the same split the
+     * classic backends use for signed forwarding.
+     *
+     * @param claim parsed claim
+     * @param value exact encoded claim the signature covers
+     * @param signatures values of the signature property
+     * @param requireFresh whether the login-time freshness window applies
+     */
+    private static void verifyClaim(IdentityClaim claim, String value, List<String> signatures,
+                                    boolean requireFresh) {
+        if (requireFresh && claim.hasFreshness() && !claim.isFresh(System.currentTimeMillis())) {
+            throw new IllegalArgumentException("Stale identity claim");
+        }
+        if (signatures.isEmpty()) {
+            return;
+        }
+        if (signatures.size() != 1) {
+            throw new IllegalArgumentException("Duplicate identity claim signature");
+        }
+        String configured;
+        try {
+            configured = FabricConfig.startup().allowedProxyIds();
+        } catch (RuntimeException unavailable) {
+            throw new IllegalStateException("Proxy trust list is unavailable", unavailable);
+        }
+        boolean valid = false;
+        for (String entry : configured.split(",")) {
+            String trimmed = entry.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            try {
+                valid |= IdentityClaim.verifySignature(value, signatures.get(0), java.util.UUID.fromString(trimmed));
+            } catch (IllegalArgumentException malformedEntry) {
+                // a broken allowlist entry must not make another entry match
+            }
+        }
+        if (!valid) {
+            throw new IllegalArgumentException("Unauthenticated identity claim");
+        }
     }
 }

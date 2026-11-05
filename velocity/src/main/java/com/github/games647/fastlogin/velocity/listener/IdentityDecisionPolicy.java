@@ -63,6 +63,7 @@ final class IdentityDecisionPolicy {
         boolean offlineWhitelist = session != null && session.isOfflineWhitelist();
         return new IdentityClaim(decision, name, uuid, verified,
                 new IdentityClaim.Facts(newPlayer, sameNameCracked, consent,
-                        autoLogin, autoRegisterUnknown, offlineWhitelist));
+                        autoLogin, autoRegisterUnknown, offlineWhitelist),
+                null, System.currentTimeMillis(), UUID.randomUUID());
     }
 }

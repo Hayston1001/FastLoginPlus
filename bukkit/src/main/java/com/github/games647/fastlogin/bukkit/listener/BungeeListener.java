@@ -88,10 +88,9 @@ public class BungeeListener implements PluginMessageListener {
             if (loginMessage.getFacts().policyDeclared() && !loginMessage.isAutoLogin()) {
                 plugin.getLog().warn("Proxy force {} for {} contradicts its disabled auto-login policy; "
                         + "applying declared policy instead", loginMessage.getType(), loginMessage.getPlayerName());
-            } else if (!loginMessage.getFacts().policyDeclared()
-                    && plugin.getCore().getConfig().getBoolean("require-declared-proxy-policy")) {
-                plugin.getLog().warn("Ignoring proxy force {} for {}: policy facts are missing and "
-                        + "require-declared-proxy-policy is enabled; keeping the auth plugin's own login flow",
+            } else if (!loginMessage.getFacts().policyDeclared()) {
+                plugin.getLog().warn("Ignoring proxy force {} for {}: policy facts are missing; "
+                        + "keeping the auth plugin's own login flow",
                         loginMessage.getType(), loginMessage.getPlayerName());
                 return;
             }
@@ -160,7 +159,7 @@ public class BungeeListener implements PluginMessageListener {
         // only omits it when it verified nothing, and resolvePremiumUuid rejects non-v4 values.
         playerSession.setUuid(message.getVerifiedPremiumUuid());
         playerSession.setFacts(message.getFacts());
-        playerSession.setVerifiedPremium(true);
+        playerSession.setVerifiedPremium(isVerifiedIdentity(message));
         startLoginTaskIfReady(player, playerSession);
     }
 
@@ -177,13 +176,27 @@ public class BungeeListener implements PluginMessageListener {
                     BukkitLoginSession playerSession = new BukkitLoginSession(playerName, registered);
                     playerSession.setUuid(message.getVerifiedPremiumUuid());
                     playerSession.setFacts(message.getFacts());
-                    playerSession.setVerifiedPremium(true);
+                    playerSession.setVerifiedPremium(isVerifiedIdentity(message));
                     startLoginTaskIfReady(player, playerSession);
                 }
             } catch (Exception ex) {
                 plugin.getLog().error("Failed to query isRegistered for player: {}", player, ex);
             }
         });
+    }
+
+    /**
+     * A force action authenticates the connection when the proxy verified a Mojang
+     * identity, or when it verified the player through Floodgate. An undecided
+     * Java connection is not verified, even though the proxy sent a force action.
+     *
+     * @param message the proxy's login action
+     * @return whether the session may run the verified-identity decision table
+     */
+    private static boolean isVerifiedIdentity(LoginActionMessage message) {
+        return message.getIdentityDecision()
+                == com.github.games647.fastlogin.protocol.IdentityClaim.Decision.PREMIUM_VERIFIED
+                || message.isBedrockVerified();
     }
 
     private void startLoginTaskIfReady(Player player, BukkitLoginSession session) {

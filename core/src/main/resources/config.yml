@@ -80,15 +80,9 @@ autoRegister: true
 
 # [Standalone only]
 # Allow auto-login for verified premium players. Behind a proxy,
-# the backend enforces the proxy's policy instead.
+# the backend enforces the proxy's policy instead. A force action from a
+# proxy that does not declare its policy is always ignored.
 autoLogin: true
-
-# [Proxy backend only]
-# Require declared policies for force LOGIN/REGISTER messages.
-# Upgrade older proxies before enabling, or players may need passwords or manual
-# registration. This does not authenticate messages or replace the proxy allowlist.
-# An explicit autoLogin: false overrides a conflicting force request either way.
-require-declared-proxy-policy: false
 
 # [Standalone only]
 # Use the verified premium UUID instead of the offline UUID.
