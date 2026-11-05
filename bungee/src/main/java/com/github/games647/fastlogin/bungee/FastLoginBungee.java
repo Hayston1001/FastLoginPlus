@@ -20,6 +20,7 @@ import org.slf4j.Logger;
 
 import com.github.games647.fastlogin.bungee.hook.BungeeAuthHook;
 import com.github.games647.fastlogin.bungee.listener.ConnectListener;
+import com.github.games647.fastlogin.bungee.listener.CrackedNoticeDelivery;
 import com.github.games647.fastlogin.bungee.listener.PluginMessageListener;
 import com.github.games647.fastlogin.core.CommonUtil;
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
@@ -37,6 +38,7 @@ import com.github.games647.fastlogin.core.shared.AuthMeProxyConfig;
 import com.github.games647.fastlogin.core.shared.AuthMeProxyPin;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.shared.PlatformPlugin;
+import com.github.games647.fastlogin.protocol.CrackedNoticeWire;
 import com.google.common.collect.MapMaker;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
@@ -71,6 +73,7 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
 
     private FastLoginCore<ProxiedPlayer, CommandSender, FastLoginBungee> core;
     private AsyncScheduler scheduler;
+    private CrackedNoticeDelivery crackedNoticeDelivery;
     private FloodgateService floodgateService;
     private GeyserService geyserService;
     private Logger logger;
@@ -108,11 +111,14 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
         Listener connectListener = new ConnectListener(this, core.getAntiBotService());
         pluginManager.registerListener(this, connectListener);
         pluginManager.registerListener(this, new PluginMessageListener(this));
+        crackedNoticeDelivery = new CrackedNoticeDelivery(this);
+        pluginManager.registerListener(this, crackedNoticeDelivery);
 
         //this is required to listen to incoming messages from the server
         getProxy().registerChannel(NamespaceKey.getCombined(getName(), ChangePremiumMessage.CHANGE_CHANNEL));
         getProxy().registerChannel(NamespaceKey.getCombined(getName(), SuccessMessage.SUCCESS_CHANNEL));
         getProxy().registerChannel(NamespaceKey.getCombined(getName(), DeletePremiumMessage.DELETE_CHANNEL));
+        getProxy().registerChannel(NamespaceKey.getCombined(getName(), CrackedNoticeWire.CHANNEL));
 
         registerHook();
         scheduleUpdateCheck();
@@ -130,6 +136,7 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
         getProxy().unregisterChannel(NamespaceKey.getCombined(getName(), ChangePremiumMessage.CHANGE_CHANNEL));
         getProxy().unregisterChannel(NamespaceKey.getCombined(getName(), SuccessMessage.SUCCESS_CHANNEL));
         getProxy().unregisterChannel(NamespaceKey.getCombined(getName(), DeletePremiumMessage.DELETE_CHANNEL));
+        getProxy().unregisterChannel(NamespaceKey.getCombined(getName(), CrackedNoticeWire.CHANNEL));
 
         if (core != null) {
             core.close();
@@ -142,6 +149,10 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
 
     public ConcurrentMap<PendingConnection, BungeeLoginSession> getSession() {
         return session;
+    }
+
+    public CrackedNoticeDelivery getCrackedNoticeDelivery() {
+        return crackedNoticeDelivery;
     }
 
     private void registerHook() {

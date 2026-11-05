@@ -213,6 +213,53 @@ final class LoginProfileProperties {
     }
 
     /**
+     * Drops every property with the given name, keeping the rest in order.
+     *
+     * <p>Used to remove client-supplied copies of a reserved FastLoginPlus
+     * property before the proxy attaches its own value.</p>
+     *
+     * @param loginProfile the BungeeCord login profile; may be null
+     * @param name         the property name to drop
+     * @param onFailure    receives the reason when the profile could not be updated
+     * @return true when the profile no longer carries a property of that name
+     */
+    static boolean remove(Object loginProfile, String name, Consumer<Throwable> onFailure) {
+        if (loginProfile == null) {
+            return false;
+        }
+
+        try {
+            Field field = propertiesField(loginProfile);
+            Object existing = field.get(loginProfile);
+            int length = existing == null ? 0 : Array.getLength(existing);
+
+            int kept = 0;
+            for (int i = 0; i < length; i++) {
+                if (!name.equals(propertyName(Array.get(existing, i)))) {
+                    kept++;
+                }
+            }
+            if (kept == length) {
+                return true;
+            }
+
+            Object updated = Array.newInstance(field.getType().getComponentType(), kept);
+            int index = 0;
+            for (int i = 0; i < length; i++) {
+                Object property = Array.get(existing, i);
+                if (!name.equals(propertyName(property))) {
+                    Array.set(updated, index++, property);
+                }
+            }
+            field.set(loginProfile, updated);
+            return true;
+        } catch (ReflectiveOperationException | LinkageError | RuntimeException failure) {
+            onFailure.accept(failure);
+            return false;
+        }
+    }
+
+    /**
      * Returns the accessible {@code properties} field of the profile's class.
      *
      * @param loginProfile the BungeeCord login profile

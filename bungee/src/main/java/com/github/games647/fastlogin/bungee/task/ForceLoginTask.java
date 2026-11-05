@@ -74,6 +74,15 @@ public class ForceLoginTask
     }
 
     @Override
+    protected void notifySameNameCracked(StoredProfile profile) {
+        if (!profile.isSameNameCracked()) {
+            core.consumeSameNameCrackedNotice(getName(player));
+            return;
+        }
+        core.getPlugin().getCrackedNoticeDelivery().deliver(player, server);
+    }
+
+    @Override
     public FastLoginAutoLoginEvent callFastLoginAutoLoginEvent(LoginSession session, StoredProfile profile) {
         return core.getPlugin().getProxy().getPluginManager()
                 .callEvent(new BungeeFastLoginAutoLoginEvent(session, profile));

@@ -8,6 +8,7 @@ package com.github.games647.fastlogin.bungee.task;
 import com.github.games647.fastlogin.bungee.BungeeLoginSession;
 import com.github.games647.fastlogin.bungee.FastLoginBungee;
 import com.github.games647.fastlogin.bungee.listener.ConnectListener;
+import com.github.games647.fastlogin.bungee.listener.CrackedNoticeDelivery;
 import com.github.games647.fastlogin.core.scheduler.AsyncScheduler;
 import com.github.games647.fastlogin.core.message.LoginActionMessage;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
@@ -65,6 +66,7 @@ class UnverifiedSenderTest {
         when(plugin.getSession()).thenReturn(sessions);
         AsyncScheduler scheduler = mock(AsyncScheduler.class);
         when(plugin.getScheduler()).thenReturn(scheduler);
+        when(plugin.getCrackedNoticeDelivery()).thenReturn(mock(CrackedNoticeDelivery.class));
         doAnswer(invocation -> { ((Runnable) invocation.getArgument(0)).run(); return null; })
                 .when(scheduler).runAsync(any(Runnable.class));
         LoginEvent login = mock(LoginEvent.class);

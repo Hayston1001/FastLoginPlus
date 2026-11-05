@@ -20,6 +20,7 @@ import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.protocol.CrackedNoticeClaim;
 import com.github.games647.fastlogin.protocol.IdentityClaim;
 import com.github.games647.fastlogin.protocol.BedrockClaim;
 import com.github.games647.fastlogin.core.hooks.bedrock.BedrockSession;
@@ -286,6 +287,9 @@ public class ConnectListener implements Listener {
                 // Try early, warn once on failure, keep admission and the
                 // onServerConnected late sender intact. Never reject all offline players.
                 earlyDeclarations.attach(connection, claim, ProxyServer.getInstance().getConfig().getUuid());
+                if (claim.isSameNameCracked()) {
+                    attachCrackedNotice(connection, claim);
+                }
             }
         }
     }
@@ -344,6 +348,45 @@ public class ConnectListener implements Listener {
                         username, failure.toString());
             }
         });
+    }
+
+    /**
+     * Reserves and forwards the optional one-time cracked notice for this login.
+     *
+     * <p>The notice is a notification only, so every failure here is logged and
+     * left non-fatal: authentication and admission must not depend on it. A
+     * reserved claim that never reaches the backend still falls back to proxy
+     * chat on join.</p>
+     *
+     * @param connection the login connection being established
+     * @param claim      the offline identity claim for this login
+     */
+    private void attachCrackedNotice(PendingConnection connection, IdentityClaim claim) {
+        CrackedNoticeClaim notice;
+        try {
+            notice = plugin.getCrackedNoticeDelivery().prepare(
+                    connection, claim.getPlayerName(), claim.getForwardedUuid());
+        } catch (RuntimeException unavailable) {
+            plugin.getLog().warn("Could not attach the optional cracked notice for {}", claim.getPlayerName());
+            return;
+        }
+
+        java.util.function.Consumer<Throwable> failure = error -> plugin.getLog().warn(
+                "Could not attach the optional cracked notice for {}", claim.getPlayerName());
+        if (!LoginProfileProperties.ensureOfflineProfile(connection, claim.getPlayerName(),
+                claim.getForwardedUuid(), failure)) {
+            return;
+        }
+        Object profile = loginProfile(connection);
+        if (profile == null) {
+            return;
+        }
+        if (notice == null) {
+            // Never forward a client-supplied copy of the reserved property.
+            LoginProfileProperties.remove(profile, CrackedNoticeClaim.PROPERTY_NAME, failure);
+            return;
+        }
+        LoginProfileProperties.attach(profile, CrackedNoticeClaim.PROPERTY_NAME, notice.encode(), failure);
     }
 
     /**
@@ -452,6 +495,11 @@ public class ConnectListener implements Listener {
             return;
         }
 
+        if (!player.getPendingConnection().isOnlineMode()
+                && session.getIdentityDecision() == IdentityClaim.Decision.OFFLINE) {
+            plugin.getScheduler().runAsync(() -> plugin.getCrackedNoticeDelivery().deliver(player, server));
+        }
+
         // No delay here: the backend gates a message that arrives during the
         // login phase and runs it 10 ticks after PlayerJoinEvent. Velocity adds
         // 1 s for its own login-event timing, which BungeeCord does not need.
@@ -463,6 +511,7 @@ public class ConnectListener implements Listener {
     public void onDisconnect(PlayerDisconnectEvent disconnectEvent) {
         ProxiedPlayer player = disconnectEvent.getPlayer();
         plugin.getCore().dropPendingVerification(player.getName(), player.getPendingConnection());
+        plugin.getCrackedNoticeDelivery().disconnected(player);
         plugin.getSession().remove(player.getPendingConnection());
         plugin.getCore().getPendingConfirms().remove(player.getUniqueId());
     }

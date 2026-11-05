@@ -34,6 +34,7 @@ class PendingVerificationDisconnectTest {
         when(plugin.getCore()).thenReturn(core);
         when(plugin.getSession()).thenReturn(new ConcurrentHashMap<>());
         when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
+        when(plugin.getCrackedNoticeDelivery()).thenReturn(mock(CrackedNoticeDelivery.class));
         PendingConnection connection = mock(PendingConnection.class);
         when(connection.getName()).thenReturn("Steve");
         when(connection.isConnected()).thenReturn(true);
