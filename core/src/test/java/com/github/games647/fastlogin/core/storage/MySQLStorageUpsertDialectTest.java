@@ -77,6 +77,24 @@ class MySQLStorageUpsertDialectTest {
     }
 
     /**
+     * Bedrock/Floodgate prefixed names exceed the Java username limit. MySQL
+     * enforces the declared width, so existing tables must be widened in place
+     * and UUID lookups need an index.
+     */
+    @Test
+    void schemaMigrationsWidenTheNameColumnAndIndexTheUuid() {
+        assertTrue(SQLStorage.CREATE_TABLE_STMT.contains("`Name` VARCHAR(64) NOT NULL"),
+                "new tables must declare the widened Name column");
+
+        String widen = SQLStorage.WIDEN_NAME_COLUMN_STMT;
+        assertTrue(widen.contains("MODIFY COLUMN `Name` VARCHAR(64) NOT NULL"),
+                "MySQL enforces the VARCHAR width and must widen existing tables");
+
+        assertTrue(SQLStorage.CREATE_UUID_INDEX_STMT.contains("(`UUID`)"),
+                "UUID lookups must be indexed");
+    }
+
+    /**
      * Manual test: needs a local MySQL/MariaDB server (database "fastlogin").
      * Verifies that two first-time saves of the same name collapse into one row
      * on the real server dialect.

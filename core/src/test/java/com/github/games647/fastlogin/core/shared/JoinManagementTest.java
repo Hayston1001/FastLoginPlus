@@ -10,6 +10,7 @@ import com.github.games647.craftapi.model.Profile;
 import com.github.games647.craftapi.resolver.MojangResolver;
 import com.github.games647.craftapi.resolver.RateLimitException;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
+import com.github.games647.fastlogin.core.storage.ProfileLookupException;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import net.md_5.bungee.config.Configuration;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -306,6 +308,37 @@ class JoinManagementTest {
         mgmt.onLogin("TestUser", source);
 
         assertEquals("auth-server-unreachable", source.kicked);
+        assertEquals(0, mgmt.crackedSessions);
+    }
+
+    @Test
+    void profileLookupFailureKicksInsteadOfRegisteringTheName() throws Exception {
+        // the UUID lookup failed: "could not tell" whether the name changed.
+        // Treating it as "not renamed" would register the new name and store a
+        // second row for the same UUID.
+        StoredProfile profile = newRow();
+        when(storage.loadProfile("TestUser")).thenReturn(profile);
+        when(core.getDefiniteFailures("TestUser")).thenReturn(0);
+        when(config.get("secondAttemptCracked")).thenReturn(true);
+        when(config.get("nameChangeCheck")).thenReturn(true);
+        when(config.get("autoRegister")).thenReturn(true);
+        when(config.get("offline-whitelist")).thenReturn(false);
+        when(config.get("mojang-retry-count")).thenReturn(1);
+        when(config.get("mojang-retry-delay")).thenReturn(100L);
+        when(core.getMessage("database-error")).thenReturn("database-error");
+        MojangResolver resolver = mock(MojangResolver.class);
+        when(core.getResolver()).thenReturn(resolver);
+        Profile mojangProfile = new Profile(UUID.randomUUID(), "TestUser");
+        when(resolver.findProfile("TestUser")).thenReturn(Optional.of(mojangProfile));
+        when(storage.loadProfile(mojangProfile.getId()))
+                .thenThrow(new ProfileLookupException("database unavailable", new SQLException("boom")));
+
+        TestSource source = new TestSource();
+        TestJoinManagement mgmt = createManagement();
+        mgmt.onLogin("TestUser", source);
+
+        assertEquals("database-error", source.kicked, "the player must be told, not registered");
+        assertEquals(0, mgmt.premiumRequests, "no premium registration may start after a failed lookup");
         assertEquals(0, mgmt.crackedSessions);
     }
 

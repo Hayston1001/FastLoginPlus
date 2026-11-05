@@ -21,12 +21,15 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -82,6 +85,51 @@ class SQLiteStorageTest {
      *
      * @throws Exception if the SQLite driver is not on the test classpath
      */
+    @Test
+    void uuidLookupDistinguishesFailureFromUnknownUuid() {
+        UUID unknown = UUID.randomUUID();
+        assertNull(storage.loadProfile(unknown), "a UUID without a row is not a lookup failure");
+
+        UUID stored = UUID.randomUUID();
+        storage.save(new StoredProfile(stored, "Steve", true, FloodgateState.FALSE, "127.0.0.1"));
+        assertNotNull(storage.loadProfile(stored));
+
+        storage.close();
+        assertThrows(ProfileLookupException.class, () -> storage.loadProfile(unknown),
+                "a database error must not look like an unknown UUID");
+    }
+
+    @Test
+    void uuidIndexIsCreatedAndReassertedIdempotently() throws Exception {
+        assertEquals(1, countUuidIndexes());
+        storage.createTables();
+        assertEquals(1, countUuidIndexes(), "a repeated startup must not duplicate the index");
+    }
+
+    @Test
+    void acceptsNamesLongerThanSixteenCharacters() {
+        // Bedrock/Floodgate prefix names exceed the Java username limit; SQLite
+        // does not enforce the declared VARCHAR width
+        String longName = ".BedrockPlayer1234";
+        storage.save(new StoredProfile(null, longName, false, FloodgateState.FALSE, "127.0.0.1"));
+
+        StoredProfile loaded = storage.loadProfile(longName);
+        assertNotNull(loaded);
+        assertTrue(loaded.isExistingPlayer(), "the long name must be persisted");
+        assertEquals(longName, loaded.getName());
+    }
+
+    private int countUuidIndexes() throws Exception {
+        String dbPath = tempDir.resolve("FastLogin.db").toString();
+        try (Connection con = DriverManager.getConnection("jdbc:sqlite:" + dbPath);
+             Statement stmt = con.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM `sqlite_master` "
+                     + "WHERE `type`='index' AND `name`='" + SQLStorage.UUID_INDEX_NAME + "'")) {
+            rs.next();
+            return rs.getInt(1);
+        }
+    }
+
     @Test
     void driverUnderTestMatchesExpectedVersion() throws Exception {
         URL location = Class.forName("org.sqlite.JDBC").getProtectionDomain().getCodeSource().getLocation();
@@ -166,6 +214,9 @@ class SQLiteStorageTest {
         // Migration must be logged: start (info) and completion (info)
         verify(logger).info("Migrating premium table to case-insensitive Name collation (COLLATE NOCASE)");
         verify(logger).info("Migrated premium table to case-insensitive Name collation (COLLATE NOCASE)");
+
+        // the rebuild drops the old table with its indexes; the UUID index must be re-created
+        assertEquals(1, countUuidIndexes(), "the rebuilt table must carry the UUID index");
     }
 
     @Test

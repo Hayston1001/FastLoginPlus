@@ -11,6 +11,7 @@ import com.github.games647.craftapi.resolver.RateLimitException;
 import com.github.games647.fastlogin.core.hooks.AuthPlugin;
 import com.github.games647.fastlogin.core.hooks.bedrock.BedrockService;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
+import com.github.games647.fastlogin.core.storage.ProfileLookupException;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import net.md_5.bungee.config.Configuration;
@@ -233,6 +234,13 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
 
                 startCrackedSession(source, profile, username);
             }
+        } catch (ProfileLookupException ex) {
+            // "could not tell" whether the name changed: treating it as
+            // "not renamed" would store the new name as a second row for the
+            // same UUID
+            core.getPlugin().getLog().error(
+                    "Failed to check the stored profile of {}; refusing to continue", username, ex);
+            source.kick(core.getMessage("database-error"));
         } catch (Exception ex) {
             core.getPlugin().getLog().error("Failed to check premium state of {}", username, ex);
             // Fail closed: an error in the decision tree must not

@@ -30,7 +30,7 @@ public class SQLiteStorage extends SQLStorage {
             // MySQL is case-insensitive by default (utf8mb4 collations), while SQLite's default
             // BINARY collation is case-sensitive. COLLATE NOCASE aligns SQLite with MySQL so the
             // same player cannot get two rows (premium + cracked) that differ only by letter case.
-            + "`Name` VARCHAR(16) COLLATE NOCASE NOT NULL, "
+            + "`Name` VARCHAR(" + NAME_COLUMN_LENGTH + ") COLLATE NOCASE NOT NULL, "
             + "`Premium` BOOLEAN NOT NULL, "
             + "`LastIp` VARCHAR(255) NOT NULL, "
             + "`LastLogin` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
@@ -142,6 +142,20 @@ public class SQLiteStorage extends SQLStorage {
     public void createTables() throws SQLException {
         super.createTables();
         migrateCaseInsensitiveName();
+        // a table rebuild moves the indexes to the renamed old table and drops
+        // them with it, so re-assert the schema migrations on the final table
+        migrateSchema();
+    }
+
+    @Override
+    protected String getCreateUuidIndexStmt() {
+        return "CREATE INDEX IF NOT EXISTS `" + UUID_INDEX_NAME + "` ON `" + PREMIUM_TABLE + "` (`UUID`)";
+    }
+
+    @Override
+    protected String getWidenNameColumnStmt() {
+        // SQLite does not enforce VARCHAR lengths, so widening needs no rebuild
+        return null;
     }
 
     /**

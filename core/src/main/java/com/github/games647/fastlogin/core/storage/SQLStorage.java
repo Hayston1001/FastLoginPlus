@@ -29,10 +29,24 @@ import com.zaxxer.hikari.HikariDataSource;
 public abstract class SQLStorage implements AuthStorage {
 
     protected static final String PREMIUM_TABLE = "premium";
+    // Bedrock/Floodgate prefixed names can exceed the 16 characters of a Java
+    // username; the declared width only documents the column, it is not enforced
+    protected static final int NAME_COLUMN_LENGTH = 64;
+
+    protected static final String UUID_INDEX_NAME = "idx_premium_uuid";
+    protected static final String CREATE_UUID_INDEX_STMT = "CREATE INDEX `" + UUID_INDEX_NAME + "` ON `"
+            + PREMIUM_TABLE + "` (`UUID`)";
+    // only MySQL/MariaDB enforce the declared width
+    protected static final String WIDEN_NAME_COLUMN_STMT = "ALTER TABLE `" + PREMIUM_TABLE
+            + "` MODIFY COLUMN `Name` VARCHAR(" + NAME_COLUMN_LENGTH + ") NOT NULL";
+
+    // MySQL/MariaDB ER_DUP_KEYNAME: a concurrent start created the index first
+    private static final int DUPLICATE_KEY_NAME_ERROR = 1061;
+
     protected static final String CREATE_TABLE_STMT = "CREATE TABLE IF NOT EXISTS `" + PREMIUM_TABLE + "` ("
             + "`UserID` INTEGER PRIMARY KEY AUTO_INCREMENT, "
             + "`UUID` CHAR(36), "
-            + "`Name` VARCHAR(16) NOT NULL, "
+            + "`Name` VARCHAR(" + NAME_COLUMN_LENGTH + ") NOT NULL, "
             + "`Premium` BOOLEAN NOT NULL, "
             + "`LastIp` VARCHAR(255) NOT NULL, "
             + "`LastLogin` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, "
@@ -140,29 +154,96 @@ public abstract class SQLStorage implements AuthStorage {
         // choose surrogate PK(ID), because UUID can be null for offline players
         // if UUID is always Premium UUID we would have to update offline player entries on insert
         // name cannot be PK, because it can be changed for premium players
-        //todo: add unique uuid index usage
         try (Connection con = dataSource.getConnection();
              Statement stmt = con.createStatement()) {
             stmt.executeUpdate(getCreateTableStmt());
 
             // add Floodgate column
             DatabaseMetaData md = con.getMetaData();
-            if (isColumnMissing(md, "Floodgate")) {
+            if (isColumnMissing(con, md, "Floodgate")) {
                 stmt.executeUpdate(ADD_FLOODGATE_COLUMN_STMT);
             }
 
             // add the same-name cracked observation column
-            if (isColumnMissing(md, "SameNameCracked")) {
+            if (isColumnMissing(con, md, "SameNameCracked")) {
                 stmt.executeUpdate(ADD_SAME_NAME_CRACKED_COLUMN_STMT);
             }
 
         }
+
+        migrateSchema();
     }
 
-    private boolean isColumnMissing(DatabaseMetaData metaData, String columnName) throws SQLException {
-        try (ResultSet rs = metaData.getColumns(null, null, PREMIUM_TABLE, columnName)) {
+    /**
+     * Applies the idempotent migrations that older tables need: the UUID
+     * lookup index and the widened Name column. Runs after table creation and
+     * on every startup, so existing databases are upgraded in place.
+     *
+     * @throws SQLException when a migration could not be applied
+     */
+    protected void migrateSchema() throws SQLException {
+        try (Connection con = dataSource.getConnection();
+             Statement stmt = con.createStatement()) {
+            DatabaseMetaData md = con.getMetaData();
+            widenNameColumn(con, stmt, md);
+            createUuidIndex(con, stmt, md);
+        }
+    }
+
+    private void widenNameColumn(Connection con, Statement stmt, DatabaseMetaData md) throws SQLException {
+        String widenStmt = getWidenNameColumnStmt();
+        if (widenStmt == null) {
+            return;
+        }
+
+        int columnSize = getColumnSize(con, md, "Name");
+        if (columnSize > 0 && columnSize < NAME_COLUMN_LENGTH) {
+            stmt.executeUpdate(widenStmt);
+            log.info("Widened the premium Name column to VARCHAR({})", NAME_COLUMN_LENGTH);
+        }
+    }
+
+    private void createUuidIndex(Connection con, Statement stmt, DatabaseMetaData md) throws SQLException {
+        if (!isIndexMissing(con, md, UUID_INDEX_NAME)) {
+            return;
+        }
+
+        try {
+            stmt.executeUpdate(getCreateUuidIndexStmt());
+            log.info("Created the premium UUID index {}", UUID_INDEX_NAME);
+        } catch (SQLException ex) {
+            if (ex.getErrorCode() != DUPLICATE_KEY_NAME_ERROR) {
+                throw ex;
+            }
+            // another instance created the index between the check and the CREATE
+            log.debug("The premium UUID index {} already exists", UUID_INDEX_NAME);
+        }
+    }
+
+    private boolean isColumnMissing(Connection con, DatabaseMetaData metaData, String columnName)
+            throws SQLException {
+        try (ResultSet rs = metaData.getColumns(con.getCatalog(), null, PREMIUM_TABLE, columnName)) {
             return !rs.next();
         }
+    }
+
+    private int getColumnSize(Connection con, DatabaseMetaData metaData, String columnName) throws SQLException {
+        try (ResultSet rs = metaData.getColumns(con.getCatalog(), null, PREMIUM_TABLE, columnName)) {
+            return rs.next() ? rs.getInt("COLUMN_SIZE") : -1;
+        }
+    }
+
+    private boolean isIndexMissing(Connection con, DatabaseMetaData metaData, String indexName)
+            throws SQLException {
+        try (ResultSet rs = metaData.getIndexInfo(con.getCatalog(), null, PREMIUM_TABLE, false, false)) {
+            while (rs.next()) {
+                String name = rs.getString("INDEX_NAME");
+                if (indexName.equalsIgnoreCase(name)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     @Override
@@ -183,6 +264,13 @@ public abstract class SQLStorage implements AuthStorage {
         return null;
     }
 
+    /**
+     * Loads the profile owning the given UUID.
+     *
+     * @param uuid the UUID to look up
+     * @return the matching profile, or null when no row holds this UUID
+     * @throws ProfileLookupException when the database could not be queried
+     */
     @Override
     public StoredProfile loadProfile(UUID uuid) {
         try (Connection con = dataSource.getConnection();
@@ -194,9 +282,8 @@ public abstract class SQLStorage implements AuthStorage {
             }
         } catch (SQLException sqlEx) {
             log.error("Failed to query profile: {}", uuid, sqlEx);
+            throw new ProfileLookupException("Failed to query the profile for " + uuid, sqlEx);
         }
-
-        return null;
     }
 
     private Optional<StoredProfile> parseResult(ResultSet resultSet) throws SQLException {
@@ -390,6 +477,26 @@ public abstract class SQLStorage implements AuthStorage {
      */
     protected String getInsertProfileStmt() {
         return INSERT_PROFILE;
+    }
+
+    /**
+     * Index statement for UUID lookups. Implementations whose SQL dialect
+     * supports {@code IF NOT EXISTS} override this.
+     *
+     * @return the CREATE INDEX statement for the UUID column
+     */
+    protected String getCreateUuidIndexStmt() {
+        return CREATE_UUID_INDEX_STMT;
+    }
+
+    /**
+     * Statement widening the Name column for dialects that enforce the
+     * declared width. SQLite does not, so it overrides this with null.
+     *
+     * @return the ALTER statement, or null when the dialect needs no widening
+     */
+    protected String getWidenNameColumnStmt() {
+        return WIDEN_NAME_COLUMN_STMT;
     }
 
     @Override
