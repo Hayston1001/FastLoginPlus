@@ -8,8 +8,6 @@ package com.github.games647.fastlogin.core.scheduler;
 
 import org.slf4j.Logger;
 
-import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -30,41 +28,5 @@ public class AsyncScheduler extends AbstractAsyncScheduler {
         // NOT used, so platform-side cancellation cannot reach these tasks —
         // shutdown() is the only cancellation path (called on plugin disable).
         logger.info("Using optimized green threads with Java 21");
-    }
-
-    @Override
-    public CompletableFuture<Void> runAsync(Runnable task) {
-        if (isShutdown()) {
-            return CompletableFuture.completedFuture(null);
-        }
-        return CompletableFuture
-                .runAsync(() -> process(task), processingPool)
-                .exceptionally(error -> {
-                    logger.warn("Error occurred on thread pool", error);
-                    return null;
-                });
-    }
-
-    @Override
-    public CompletableFuture<Void> runAsyncDelayed(Runnable task, Duration delay) {
-        if (isShutdown()) {
-            return CompletableFuture.completedFuture(null);
-        }
-        return CompletableFuture.runAsync(() -> {
-            try {
-                Thread.sleep(delay);
-            } catch (InterruptedException interruptedException) {
-                // restore interrupt flag
-                Thread.currentThread().interrupt();
-                return;
-            }
-            // the plugin may have disabled during the delay — platform
-            // schedulers cannot cancel this virtual thread, so process()
-            // re-checks the flag and skips a task that must no longer run
-            process(task);
-        }, processingPool).exceptionally(error -> {
-            logger.warn("Error occurred on thread pool", error);
-            return null;
-        });
     }
 }
