@@ -105,6 +105,8 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         core.load();
         loadOrGenerateProxyId();
         if (!core.setupDatabase() || proxyId == null) {
+            logger.error("FastLoginPlus is not active: the database or proxy ID could not be initialised. "
+                    + "Fix the configuration and restart the proxy.");
             return;
         }
 

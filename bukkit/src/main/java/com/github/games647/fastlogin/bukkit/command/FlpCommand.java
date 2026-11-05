@@ -91,8 +91,9 @@ public class FlpCommand implements CommandExecutor, TabCompleter {
                     .collect(Collectors.toList());
         }
 
-        // Second argument: online player names (only for senders with .other permission)
-        if (args.length == 2 && sender.hasPermission(PERM_PREFIX + args[0].toLowerCase() + ".other")) {
+        // Second argument: online player names (only for senders with .other permission).
+        // Resolve the alias first: a raw "prem"/"unpremium" would test a node that does not exist.
+        if (args.length == 2 && sender.hasPermission(PERM_PREFIX + canonicalSubcommand(args[0]) + ".other")) {
             String prefix = args[1].toLowerCase();
             return Bukkit.getOnlinePlayers().stream()
                     .map(p -> p.getName())
@@ -101,5 +102,24 @@ public class FlpCommand implements CommandExecutor, TabCompleter {
         }
 
         return Collections.emptyList();
+    }
+
+    /**
+     * Maps the command aliases to the subcommand name that owns the permission node.
+     *
+     * @param sub the raw first argument, in any case
+     * @return the canonical subcommand name
+     */
+    private static String canonicalSubcommand(String sub) {
+        switch (sub.toLowerCase()) {
+            case "prem":
+                return "premium";
+            case "unpremium":
+                return "cracked";
+            case "del":
+                return "delete";
+            default:
+                return sub.toLowerCase();
+        }
     }
 }

@@ -85,6 +85,10 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
         core.setConfigTemplate("config-proxy.yml");
         core.load();
         if (!core.setupDatabase()) {
+            // BungeeCord cannot disable a plugin from onEnable; say plainly that
+            // the plugin stays loaded but will not function
+            getLog().error("FastLoginPlus is not active: the database could not be initialised. "
+                    + "Fix the configuration and restart the proxy.");
             return;
         }
 

@@ -48,7 +48,7 @@ public final class SessionServerProbe {
      *
      * @return true when the session server answered, false when it could not be reached
      */
-    public boolean isReachable() {
+    public synchronized boolean isReachable() {
         long now = System.currentTimeMillis();
         if (now - cachedAt < cacheMillis) {
             return reachable;
@@ -64,7 +64,9 @@ public final class SessionServerProbe {
             // into the settlement sweep and stall it silently.
             reachable = false;
         }
-        cachedAt = now;
+        // stamp the answer after the probe: its duration must not shorten the
+        // cache window, or a slow probe would trigger the next one early
+        cachedAt = System.currentTimeMillis();
         return reachable;
     }
 }

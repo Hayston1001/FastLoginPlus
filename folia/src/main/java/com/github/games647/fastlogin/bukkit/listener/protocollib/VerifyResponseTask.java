@@ -71,10 +71,22 @@ public class VerifyResponseTask implements Runnable {
 
     private final byte[] sharedSecret;
 
-    private static Method encryptMethod;
-    private static Method encryptKeyMethod;
+    // resolved once per server version and published as one immutable holder,
+    // so no thread can observe a half-initialised set of methods
+    private static volatile EncryptionMethods encryptionMethods;
 
-    private static Method cipherMethod;
+    private static final class EncryptionMethods {
+
+        private final Method keyMethod;
+        private final Method encryptionMethod;
+        private final Method cipherMethod;
+
+        private EncryptionMethods(Method keyMethod, Method encryptionMethod, Method cipherMethod) {
+            this.keyMethod = keyMethod;
+            this.encryptionMethod = encryptionMethod;
+            this.cipherMethod = cipherMethod;
+        }
+    }
 
     public VerifyResponseTask(FastLoginBukkit plugin, PacketEvent packetEvent,
                               Player player, BukkitLoginSession session,
@@ -255,6 +267,10 @@ public class VerifyResponseTask implements Runnable {
         // this connection passed the Mojang verification: it refutes any
         // pending same-name cracked suspicion for the name
         plugin.getCore().resetVerificationState(realUsername);
+        // refresh the session cache: its TTL starts at the pre-login write, so
+        // a slow Mojang answer could otherwise let it expire before
+        // PlayerJoinEvent and drop the player into the password flow
+        plugin.putSession(player.getAddress(), session);
 
         // AuthMe 6.0 premium integration: inject state to skip Pre-Join dialog
         com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
@@ -338,41 +354,22 @@ public class VerifyResponseTask implements Runnable {
             plugin.getLog().info("Enabling onlinemode encryption for {}", player.getAddress());
         }
         // Initialize method reflections
-        if (encryptKeyMethod == null || encryptMethod == null) {
-            Class<?> networkManagerClass = MinecraftReflection.getNetworkManagerClass();
-            try {
-                // Try to get the old (pre MC 1.16.4) encryption method
-                encryptKeyMethod = FuzzyReflection.fromClass(networkManagerClass)
-                        .getMethodByParameters("a", SecretKey.class);
-            } catch (IllegalArgumentException exception) {
-                // Get the new encryption method
-                encryptMethod = FuzzyReflection.fromClass(networkManagerClass)
-                        .getMethodByParameters("a", Cipher.class, Cipher.class);
-
-                Class<?> encryptionClass = MinecraftReflection.getMinecraftClass(
-                        "util." + ENCRYPTION_CLASS_NAME, ENCRYPTION_CLASS_NAME
-                );
-
-                // Get the needed Cipher helper method (used to generate ciphers from login key)
-                cipherMethod = FuzzyReflection.fromClass(encryptionClass)
-                        .getMethodByParameters("a", int.class, Key.class);
-            }
-        }
+        EncryptionMethods methods = resolveEncryptionMethods();
 
         try {
             Object networkManager = this.getNetworkManager();
 
             // If cipherMethod is null - use old encryption (pre MC 1.16.4), otherwise use the new cipher one
-            if (encryptKeyMethod != null) {
+            if (methods.keyMethod != null) {
                 // Encrypt/decrypt packet flow, this behaviour is expected by the client
-                encryptKeyMethod.invoke(networkManager, loginKey);
+                methods.keyMethod.invoke(networkManager, loginKey);
             } else {
                 // Create ciphers from login key
-                Object decryptionCipher = cipherMethod.invoke(null, Cipher.DECRYPT_MODE, loginKey);
-                Object encryptionCipher = cipherMethod.invoke(null, Cipher.ENCRYPT_MODE, loginKey);
+                Object decryptionCipher = methods.cipherMethod.invoke(null, Cipher.DECRYPT_MODE, loginKey);
+                Object encryptionCipher = methods.cipherMethod.invoke(null, Cipher.ENCRYPT_MODE, loginKey);
 
                 // Encrypt/decrypt packet flow, this behaviour is expected by the client
-                encryptMethod.invoke(networkManager, decryptionCipher, encryptionCipher);
+                methods.encryptionMethod.invoke(networkManager, decryptionCipher, encryptionCipher);
             }
         } catch (Exception ex) {
             disconnect("error-kick", "Couldn't enable encryption", ex);
@@ -380,6 +377,40 @@ public class VerifyResponseTask implements Runnable {
         }
 
         return true;
+    }
+
+    private static EncryptionMethods resolveEncryptionMethods() {
+        EncryptionMethods resolved = encryptionMethods;
+        if (resolved != null) {
+            return resolved;
+        }
+
+        Class<?> networkManagerClass = MinecraftReflection.getNetworkManagerClass();
+        Method keyMethod;
+        Method encryptionMethod = null;
+        Method cipherMethod = null;
+        try {
+            // Try to get the old (pre MC 1.16.4) encryption method
+            keyMethod = FuzzyReflection.fromClass(networkManagerClass)
+                    .getMethodByParameters("a", SecretKey.class);
+        } catch (IllegalArgumentException exception) {
+            keyMethod = null;
+            // Get the new encryption method
+            encryptionMethod = FuzzyReflection.fromClass(networkManagerClass)
+                    .getMethodByParameters("a", Cipher.class, Cipher.class);
+
+            Class<?> encryptionClass = MinecraftReflection.getMinecraftClass(
+                    "util." + ENCRYPTION_CLASS_NAME, ENCRYPTION_CLASS_NAME
+            );
+
+            // Get the needed Cipher helper method (used to generate ciphers from login key)
+            cipherMethod = FuzzyReflection.fromClass(encryptionClass)
+                    .getMethodByParameters("a", int.class, Key.class);
+        }
+
+        resolved = new EncryptionMethods(keyMethod, encryptionMethod, cipherMethod);
+        encryptionMethods = resolved;
+        return resolved;
     }
 
     private void disconnect(String reasonKey, String logMessage, Object... arguments) {

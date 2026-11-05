@@ -472,10 +472,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             startVerificationSettlement();
             return true;
         } catch (Exception ex) {
-            plugin.getLog().warn("Failed to setup database. Disabling plugin...", ex);
-            // the HikariDataSource was already constructed — close
-            // it here, because setEnabled(false) during onEnable suppresses
-            // onDisable (and with it core.close()) on bukkit/folia
+            plugin.getLog().warn("Failed to set up the database; FastLoginPlus cannot run without it", ex);
+            // the HikariDataSource was already constructed — close it here so
+            // the failure path releases it before the platform disables the
+            // plugin (on Bukkit/Folia setEnabled(false) also runs onDisable)
             if (storage != null) {
                 storage.close();
                 storage = null;
