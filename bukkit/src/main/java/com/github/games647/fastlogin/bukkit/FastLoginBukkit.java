@@ -138,6 +138,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     // state but no longer converge with FLP's profile, so AuthMeCommandGuard intercepts
     // them for players who could actually run them.
     private boolean premiumTakeoverActive;
+    // Unsupported AuthMe builds fail the proxy pin; warn once instead of on every reassert.
+    private boolean authMeProxyPinWarningLogged;
 
     private final BukkitScheduler scheduler;
     private FastLoginCore<Player, CommandSender, FastLoginBukkit> core;
@@ -201,7 +203,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // Proxy mode must be known before takeover: preserve its stored flag until trusted facts arrive.
         if (authMePremiumIntegrator != null && authMeVersionDetector.isAuthMe6()) {
             premiumTakeoverActive = authMePremiumIntegrator.enforceFlpPremiumControl(bungeeManager.isEnabled());
-            authMePremiumIntegrator.pinProxyAutoLoginOff();
+            pinAuthMeProxyAutoLoginOff();
             if (!premiumTakeoverActive) {
                 logger.warn("Failed to fully enforce FastLogin premium control in AuthMe 6.0"
                         + " — premium logins may conflict with AuthMe's own listener");
@@ -393,6 +395,22 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     /**
+     * Applies FLP's AuthMe proxy auto-login pin and reports a failure to the administrator.
+     *
+     * <p>A {@code false} result means the pin was skipped, for example on an AuthMe version FLP
+     * has not reviewed. Upstream's proxy login receiver may then stay active, so this warns
+     * once: the AuthMe version does not change between reasserts and a reload would otherwise
+     * repeat the same line.
+     */
+    private void pinAuthMeProxyAutoLoginOff() {
+        if (!authMePremiumIntegrator.pinProxyAutoLoginOff() && !authMeProxyPinWarningLogged) {
+            authMeProxyPinWarningLogged = true;
+            logger.warn("AuthMe proxy auto-login pin was not applied; "
+                    + "upstream proxy SSO may remain enabled.");
+        }
+    }
+
+    /**
      * Re-asserts FLP's AuthMe premium takeover one tick after an event that may have started
      * AuthMe's own packet listener.
      *
@@ -414,7 +432,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
         if (bungeeManager.isEnabled()) {
             Bukkit.getScheduler().runTaskLater(this, () -> {
-                authMePremiumIntegrator.pinProxyAutoLoginOff();
+                pinAuthMeProxyAutoLoginOff();
                 if (authMePremiumIntegrator.hasProxyAutoLoginPolicy()) {
                     authMePremiumIntegrator.reassertProxyAutoLogin();
                 }
@@ -422,7 +440,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
         Bukkit.getScheduler().runTaskLater(this,
-                () -> authMePremiumIntegrator.pinProxyAutoLoginOff(), 1L);
+                this::pinAuthMeProxyAutoLoginOff, 1L);
         if (!getServer().getPluginManager().isPluginEnabled("packetevents")) {
             return;
         }
