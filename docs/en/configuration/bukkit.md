@@ -22,7 +22,6 @@ Folia account commands use the `fastloginplus.folia.command.*` permission prefix
 | `forwardSkin` | `true` | Standalone: provide verified players' skins and capes |
 | `premium-warning` | `true` | Standalone: ask players to repeat self-binding commands for confirmation |
 | `kick-toggle` | `true` | Disconnect after standalone switching for manual reconnect; also relevant to queued proxy-backend toggles |
-| `require-declared-proxy-policy` | `false` | Proxy backend: require login policies from the proxy; enable after upgrading and confirming proxy support |
 | `respectIpLimit` | `false` | Honor AuthMe's registration limit per IP, including behind a proxy |
 | `useProxyAgnosticResolver` | `true` | Standalone: omit the IP during session verification, useful for DNAT |
 | `verifyClientKeys` | `false` | Standalone: check applicable client public-key signatures; not a replacement for premium verification |

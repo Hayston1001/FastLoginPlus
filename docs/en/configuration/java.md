@@ -17,7 +17,6 @@ Defaults below come from the Bukkit/Folia and proxy templates. In a proxy networ
 | `respectIpLimit` | `false` | Backend AuthMe registration IP-limit check, including behind a proxy; not a generic feature of every auth hook |
 | `verifyClientKeys` | `false` | Standalone ProtocolLib client public-key signature verification for applicable clients. Not Mojang session verification and not a proxy option |
 | `useProxyAgnosticResolver` | `true` | Standalone session verification omits the IP parameter for DNAT-like setups. Not included in the proxy template; native proxy session verification is separate |
-| `require-declared-proxy-policy` | `false` | Require the proxy to provide login and registration policies to a Bukkit/Folia backend. Enable after upgrading the proxy and confirming support |
 | `verify-backend-messages` | `true` | Have the proxy check account-management messages sent by backends. Disable only temporarily for a controlled upgrade from older versions |
 
 ## Examples of intent

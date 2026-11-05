@@ -22,7 +22,6 @@ Folia 的账号命令使用 `fastloginplus.folia.command.*` 权限前缀, 而不
 | `forwardSkin` | `true` | 独立服: 提供已验证玩家的皮肤及披风 |
 | `premium-warning` | `true` | 独立服: 自助绑定时要求重复命令确认 |
 | `kick-toggle` | `true` | 独立服切换后踢出玩家以便手动重连; 代理后端的排队转发也可能使用此项 |
-| `require-declared-proxy-policy` | `false` | 代理后端: 要求代理提供登录策略; 升级代理并确认支持后再开启 |
 | `respectIpLimit` | `false` | 在本端遵守 AuthMe 每 IP 注册限制, 代理后端也生效 |
 | `useProxyAgnosticResolver` | `true` | 独立服: 验证会话时不传 IP, 适用于 DNAT 等环境 |
 | `verifyClientKeys` | `false` | 独立服: 为适用客户端检查公钥签名, 不代替正版验证 |

@@ -17,7 +17,6 @@
 | `respectIpLimit` | `false` | 后端 AuthMe 注册 IP 限制检查, 代理后面也生效, 不是所有钩子的通用能力 |
 | `verifyClientKeys` | `false` | 独立服 ProtocolLib 对适用客户端的公钥签名验证, 不是 Mojang 会话验证, 也不是代理选项 |
 | `useProxyAgnosticResolver` | `true` | 独立服会话验证省略 IP 参数, 用于 DNAT 等环境. 代理模板不包含此项, 代理原生验证另行处理 |
-| `require-declared-proxy-policy` | `false` | Bukkit/Folia 后端要求代理提供登录和注册策略. 升级代理并确认支持后再启用 |
 | `verify-backend-messages` | `true` | 代理检查后端发送的账号管理消息. 仅在受控的旧版本升级期间临时关闭 |
 
 ## 按目标选择配置
