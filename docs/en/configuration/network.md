@@ -14,7 +14,7 @@ Configure connection limits on the standalone server or, in a proxy network, on 
 | `anti-bot.burst-limit` | `10` | Per-IP short-window connections |
 | `anti-bot.burst-window` | `10` | Burst window, seconds |
 | `anti-bot.ban-duration` | `5` | Temporary IP ban, minutes |
-| `anti-bot.trusted-ips` | Empty | Explicit addresses bypassing FLP connection checks |
+| `anti-bot.trusted-ips` | Empty | Explicit addresses bypassing all anti-bot checks, including temporary IP bans; bans are in-memory and cleared on restart |
 
 When a limit is reached, FLP rejects the connection with the `kick-antibot` message. The old `anti-bot.action` option was removed; do not add it back to the configuration.
 

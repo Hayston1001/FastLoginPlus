@@ -36,7 +36,7 @@ Limits reject connections and do not replace a firewall. Check real IP forwardin
 | `anti-bot.burst-limit` | `10` | Connections per IP in the short window |
 | `anti-bot.burst-window` | `10` | Short window in seconds |
 | `anti-bot.ban-duration` | `5` | Temporary IP ban in minutes |
-| `anti-bot.trusted-ips` | Empty | IP addresses exempt from FLP connection limits |
+| `anti-bot.trusted-ips` | Empty | IP addresses bypassing all anti-bot checks, including temporary IP bans; bans are in-memory and cleared on restart |
 
 ## Mojang and Floodgate
 

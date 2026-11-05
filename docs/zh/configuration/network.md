@@ -14,7 +14,7 @@
 | `anti-bot.burst-limit` | `10` | 每 IP 短窗口连接数 |
 | `anti-bot.burst-window` | `10` | 突发窗口, 秒 |
 | `anti-bot.ban-duration` | `5` | 临时 IP 封禁, 分钟 |
-| `anti-bot.trusted-ips` | 空 | 明确配置的地址跳过 FLP 连接检查 |
+| `anti-bot.trusted-ips` | 空 | 明确配置的地址跳过全部反机器人检查, 包括临时 IP 封禁; 封禁仅存于内存, 重启后清空 |
 
 达到限制时, FLP 会拒绝连接并显示 `kick-antibot` 消息. 旧版的 `anti-bot.action` 选项已经移除, 不要添加回配置.
 

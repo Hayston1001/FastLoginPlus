@@ -36,7 +36,7 @@
 | `anti-bot.burst-limit` | `10` | 每 IP 短窗口连接数 |
 | `anti-bot.burst-window` | `10` | 短窗口, 秒 |
 | `anti-bot.ban-duration` | `5` | 临时 IP 封禁, 分钟 |
-| `anti-bot.trusted-ips` | 空 | 不受 FLP 连接限制的 IP 列表 |
+| `anti-bot.trusted-ips` | 空 | 跳过全部反机器人检查的 IP 列表, 包括临时 IP 封禁; 封禁仅存于内存, 重启后清空 |
 
 ## Mojang 与 Floodgate
 
