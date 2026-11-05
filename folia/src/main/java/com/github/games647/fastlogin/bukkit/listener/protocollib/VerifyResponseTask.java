@@ -263,6 +263,12 @@ public class VerifyResponseTask implements Runnable {
 
         session.setVerifiedUsername(realUsername);
         session.setUuid(verification.getId());
+        // The pre-login event reports the UUID the connection will actually carry: the spoofed
+        // Mojang UUID when premiumUuid is on, and the name-derived offline UUID otherwise (the
+        // one seeded when the session was created for the handshake).
+        if (plugin.getConfig().getBoolean("premiumUuid")) {
+            session.setConnectionUuid(verification.getId());
+        }
         session.setVerifiedPremium(true);
         // this connection passed the Mojang verification: it refutes any
         // pending same-name cracked suspicion for the name

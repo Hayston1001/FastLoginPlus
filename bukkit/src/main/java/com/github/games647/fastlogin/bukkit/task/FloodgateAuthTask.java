@@ -28,6 +28,7 @@ public class FloodgateAuthTask extends FloodgateManagement<Player, CommandSender
     @Override
     protected void startLogin() {
         BukkitLoginSession session = new BukkitLoginSession(player.getName(), isRegistered, profile);
+        session.setConnectionUuid(player.getUniqueId());
 
         // enable auto login based on the value of 'autoLoginFloodgate' in config.yml
         session.setVerifiedPremium(isAutoAuthAllowed(autoLoginFloodgate));

@@ -13,6 +13,7 @@ import com.github.games647.fastlogin.core.storage.StoredProfile;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -30,6 +31,7 @@ public class BukkitLoginSession extends LoginSession {
 
     private boolean verified;
     private SkinProperty skinProperty;
+    private UUID connectionUuid;
 
     // one-shot guard for the encryption verification — a malicious
     // client can send duplicate ENCRYPTION_BEGIN packets; without this guard
@@ -90,6 +92,31 @@ public class BukkitLoginSession extends LoginSession {
      */
     public synchronized Optional<SkinProperty> getSkin() {
         return Optional.ofNullable(skinProperty);
+    }
+
+    /**
+     * The UUID this login connection carries, as reported by the pre-login event.
+     * <p>
+     * The login-session cache is keyed by address including the port, which the
+     * pre-login event does not expose. This UUID is the identifier that survives
+     * from the handshake/verification stage to the pre-login stage, so skins are
+     * matched by it instead of by player name alone.
+     *
+     * @return the connection UUID, or null while it is not known yet
+     */
+    @Nullable
+    public synchronized UUID getConnectionUuid() {
+        return connectionUuid;
+    }
+
+    /**
+     * Records the UUID this login connection carries.
+     *
+     * @param connectionUuid the UUID {@code AsyncPlayerPreLoginEvent#getUniqueId()}
+     *                       reports for this connection, or null when unknown
+     */
+    public synchronized void setConnectionUuid(@Nullable UUID connectionUuid) {
+        this.connectionUuid = connectionUuid;
     }
 
     /**

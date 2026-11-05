@@ -1017,6 +1017,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
 
         BukkitLoginSession session = newPremiumSession(playerName, premiumUuid, facts);
+        session.setConnectionUuid(connectionUuid);
         putSession(address, session);
 
         if (isPendingPremium) {

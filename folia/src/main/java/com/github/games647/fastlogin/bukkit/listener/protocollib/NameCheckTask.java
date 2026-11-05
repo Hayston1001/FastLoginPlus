@@ -8,6 +8,7 @@ package com.github.games647.fastlogin.bukkit.listener.protocollib;
 
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.events.PacketEvent;
+import com.github.games647.craftapi.UUIDAdapter;
 import com.github.games647.fastlogin.bukkit.BukkitLoginSession;
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
 import com.github.games647.fastlogin.bukkit.event.BukkitFastLoginPreLoginEvent;
@@ -95,6 +96,11 @@ public class NameCheckTask extends JoinManagement<Player, CommandSender, Protoco
         ClientPublicKey clientKey = source.getClientKey();
 
         BukkitLoginSession playerSession = new BukkitLoginSession(username, verify, clientKey, registered, profile);
+        // The session cache is keyed by address including the port, but the pre-login event only
+        // exposes the connection UUID. Until verification succeeds that UUID is the offline one
+        // the server derives from the requested name; VerifyResponseTask replaces it with the
+        // spoofed Mojang UUID when premiumUuid is enabled.
+        playerSession.setConnectionUuid(UUIDAdapter.generateOfflineId(username));
         plugin.putSession(player.getAddress(), playerSession);
         //cancel only if the player has a paid account otherwise login as normal offline player
         synchronized (packetEvent.getAsyncMarker().getProcessingLock()) {
@@ -114,6 +120,7 @@ public class NameCheckTask extends JoinManagement<Player, CommandSender, Protoco
         }
 
         BukkitLoginSession loginSession = new BukkitLoginSession(username, profile);
+        loginSession.setConnectionUuid(UUIDAdapter.generateOfflineId(username));
         plugin.putSession(player.getAddress(), loginSession);
     }
 }

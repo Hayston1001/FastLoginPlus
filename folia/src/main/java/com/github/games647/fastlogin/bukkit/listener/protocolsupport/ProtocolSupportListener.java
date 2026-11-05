@@ -27,6 +27,7 @@ import protocolsupport.api.events.PlayerProfileCompleteEvent;
 
 import java.net.InetSocketAddress;
 import java.util.Optional;
+import java.util.UUID;
 
 public class ProtocolSupportListener extends JoinManagement<Player, CommandSender, ProtocolLoginSource>
         implements Listener {
@@ -97,16 +98,22 @@ public class ProtocolSupportListener extends JoinManagement<Player, CommandSende
             // ProtocolSupport applies the offline rewrite below to this very profile object once
             // the event returns, so afterwards neither resolvePremiumUuid source is v4 and AuthMe
             // would never get a premium_uuid written.
-            session.setUuid(profileCompleteEvent.getConnection().getProfile().getUUID());
+            UUID connectionUuid = profileCompleteEvent.getConnection().getProfile().getUUID();
+            session.setUuid(connectionUuid);
             // this connection passed the Mojang verification: it refutes any
             // pending same-name cracked suspicion for the name
-            plugin.getCore().resetVerificationState(Optional.ofNullable(profileCompleteEvent.getForcedName())
-                    .orElse(profileCompleteEvent.getConnection().getProfile().getName()));
+            String username = Optional.ofNullable(profileCompleteEvent.getForcedName())
+                    .orElse(profileCompleteEvent.getConnection().getProfile().getName());
+            plugin.getCore().resetVerificationState(username);
 
             if (!plugin.getConfig().getBoolean("premiumUuid")) {
-                String username = Optional.ofNullable(profileCompleteEvent.getForcedName())
-                        .orElse(profileCompleteEvent.getConnection().getProfile().getName());
-                profileCompleteEvent.setForcedUUID(UUIDAdapter.generateOfflineId(username));
+                // The forced offline UUID is what the pre-login event reports for this
+                // connection, so the session has to carry that identifier, not the Mojang one.
+                UUID offlineUuid = UUIDAdapter.generateOfflineId(username);
+                session.setConnectionUuid(offlineUuid);
+                profileCompleteEvent.setForcedUUID(offlineUuid);
+            } else {
+                session.setConnectionUuid(connectionUuid);
             }
         }
     }
@@ -127,12 +134,16 @@ public class ProtocolSupportListener extends JoinManagement<Player, CommandSende
         plugin.getCore().markPendingVerification(username);
 
         BukkitLoginSession playerSession = new BukkitLoginSession(username, registered, profile);
+        // Connection UUID the pre-login event will report while the offline UUID is still in
+        // place; onPropertiesResolve updates it when the premium UUID is kept instead.
+        playerSession.setConnectionUuid(UUIDAdapter.generateOfflineId(username));
         plugin.putSession(source.getAddress(), playerSession);
     }
 
     @Override
     public void startCrackedSession(ProtocolLoginSource source, StoredProfile profile, String username) {
         BukkitLoginSession loginSession = new BukkitLoginSession(username, profile);
+        loginSession.setConnectionUuid(UUIDAdapter.generateOfflineId(username));
         plugin.putSession(source.getAddress(), loginSession);
     }
 }

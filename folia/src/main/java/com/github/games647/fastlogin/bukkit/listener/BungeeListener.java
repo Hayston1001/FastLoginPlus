@@ -142,6 +142,7 @@ public class BungeeListener implements PluginMessageListener {
         } else if (type == Type.CRACKED) {
             plugin.getPremiumPlayers().put(player.getUniqueId(), PremiumStatus.CRACKED);
             BukkitLoginSession session = new BukkitLoginSession(playerName, false);
+            session.setConnectionUuid(player.getUniqueId());
             session.setFacts(message.getFacts());
             session.setIdentityDecision(com.github.games647.fastlogin.protocol.IdentityClaim.Decision.OFFLINE);
             session.setVerifiedPremium(false);
@@ -157,6 +158,7 @@ public class BungeeListener implements PluginMessageListener {
         // player would be asked for a password on every single login. Null stays null: the proxy
         // only omits it when it verified nothing, and resolvePremiumUuid rejects non-v4 values.
         playerSession.setUuid(message.getVerifiedPremiumUuid());
+        playerSession.setConnectionUuid(player.getUniqueId());
         playerSession.setFacts(message.getFacts());
         playerSession.setVerifiedPremium(isVerifiedIdentity(message));
         startLoginTaskIfReady(player, playerSession);
@@ -175,6 +177,7 @@ public class BungeeListener implements PluginMessageListener {
                         == com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.PREMIUM_OWNED) {
                     BukkitLoginSession playerSession = new BukkitLoginSession(playerName, registered);
                     playerSession.setUuid(message.getVerifiedPremiumUuid());
+                    playerSession.setConnectionUuid(player.getUniqueId());
                     playerSession.setFacts(message.getFacts());
                     playerSession.setVerifiedPremium(isVerifiedIdentity(message));
                     startLoginTaskIfReady(player, playerSession);

@@ -17,6 +17,10 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent.Result;
 
+import java.util.Collection;
+import java.util.Objects;
+import java.util.UUID;
+
 public class PaperCacheListener implements Listener {
 
     private final FastLoginBukkit plugin;
@@ -55,34 +59,92 @@ public class PaperCacheListener implements Listener {
             return;
         }
 
-        // event gives us only IP, not the port, so we need to loop through all the sessions
-        for (BukkitLoginSession session : plugin.getLoginSessions().values()) {
-            if (!event.getName().equals(session.getUsername())) {
+        // The event exposes only the client IP, not the port the session cache is keyed by, but
+        // it does expose the UUID this connection carries. Match on that identifier: a name alone
+        // would let concurrent logins with the same name read each other's skin. No match means
+        // no skin — never fall back to another connection's session.
+        BukkitLoginSession session = findSession(plugin.getLoginSessions().values(),
+                event.getName(), event.getUniqueId());
+        if (session == null) {
+            return;
+        }
+
+        // SkinsRestorer wins when it has a custom skin for the player. Look up both UUIDs this
+        // login can have: the verified Mojang one, and the one the connection actually carries —
+        // they differ under premiumUuid:false and SkinsRestorer is keyed by the latter. Write its
+        // skin instead of the empty placeholder used until 0.7.0: that placeholder counted as
+        // "online properties" for SkinsRestorer while destroying the skin its own pre-login
+        // handler (default priority, i.e. before this one) had just applied, so players
+        // connected with the default skin instead of their custom one.
+        ProfileProperty customSkin = skinPropertyFor(plugin.getSkinsRestorerCompat()
+                .getCustomSkin(session.getUuid(), event.getUniqueId()));
+        if (customSkin != null) {
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().info("Skipping FastLogin skin for {} — SkinsRestorer custom skin detected",
+                session.getUsername());
+            }
+            event.getPlayerProfile().setProperty(customSkin);
+            return;
+        }
+
+        session.getSkin().ifPresent(skin -> event.getPlayerProfile().setProperty(new ProfileProperty(Textures.KEY,
+                skin.getValue(), skin.getSignature())));
+    }
+
+    /**
+     * Finds the login session belonging to this connection.
+     * <p>
+     * The session cache is keyed by address including the port, which the pre-login event does
+     * not carry, so the connection UUID recorded in the session is the only identifier that ties
+     * a cached session to the connection being admitted. A session without a recorded connection
+     * UUID never matches.
+     * <p>
+     * Two cached sessions can share the same name and connection UUID, for example the player's
+     * previous session when the entry has not expired yet. They may only stand in for one another
+     * when both are the same verified identity; otherwise this connection cannot be told apart and
+     * receives no skin rather than a possibly foreign one.
+     *
+     * @param sessions       the cached login sessions
+     * @param name           the connecting player's name
+     * @param connectionUuid the UUID the connection carries
+     * @return the matching session, or null when there is none or the match is ambiguous
+     */
+    private static BukkitLoginSession findSession(Collection<BukkitLoginSession> sessions, String name,
+                                                  UUID connectionUuid) {
+        if (connectionUuid == null) {
+            return null;
+        }
+
+        BukkitLoginSession match = null;
+        for (BukkitLoginSession session : sessions) {
+            if (!name.equals(session.getUsername())) {
+                continue;
+            }
+            if (!connectionUuid.equals(session.getConnectionUuid())) {
                 continue;
             }
 
-            // SkinsRestorer wins when it has a custom skin for the player. Look up both UUIDs this
-            // login can have: the verified Mojang one, and the one the connection actually carries —
-            // they differ under premiumUuid:false and SkinsRestorer is keyed by the latter. Write its
-            // skin instead of the empty placeholder used until 0.7.0: that placeholder counted as
-            // "online properties" for SkinsRestorer while destroying the skin its own pre-login
-            // handler (default priority, i.e. before this one) had just applied, so players
-            // connected with the default skin instead of their custom one.
-            ProfileProperty customSkin = skinPropertyFor(plugin.getSkinsRestorerCompat()
-                    .getCustomSkin(session.getUuid(), event.getUniqueId()));
-            if (customSkin != null) {
-                if (plugin.getCore().isDebug()) {
-                    plugin.getLog().info("Skipping FastLogin skin for {} — SkinsRestorer custom skin detected",
-                    session.getUsername());
-                }
-                event.getPlayerProfile().setProperty(customSkin);
-                break;
+            if (match == null) {
+                match = session;
+                continue;
             }
 
-            session.getSkin().ifPresent(skin -> event.getPlayerProfile().setProperty(new ProfileProperty(Textures.KEY,
-                    skin.getValue(), skin.getSignature())));
-            break;
+            if (!sameVerifiedIdentity(match, session)) {
+                return null;
+            }
+
+            // Same identity (e.g. an expired-but-still-cached previous session): prefer the
+            // entry that actually carries a skin.
+            if (!match.getSkin().isPresent() && session.getSkin().isPresent()) {
+                match = session;
+            }
         }
+        return match;
+    }
+
+    private static boolean sameVerifiedIdentity(BukkitLoginSession first, BukkitLoginSession second) {
+        return first.isVerifiedPremium() && second.isVerifiedPremium()
+                && Objects.equals(first.getUuid(), second.getUuid());
     }
 
     /**

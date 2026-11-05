@@ -33,6 +33,7 @@ public class FloodgateAuthTask extends FloodgateManagement<Player, CommandSender
     @Override
     protected void startLogin() {
         BukkitLoginSession session = new BukkitLoginSession(player.getName(), isRegistered, profile);
+        session.setConnectionUuid(player.getUniqueId());
 
         session.setVerifiedPremium(isAutoAuthAllowed(autoLoginFloodgate));
 

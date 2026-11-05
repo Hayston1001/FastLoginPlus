@@ -1147,7 +1147,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
 
         // Create session so ForceLoginTask auto-logs the player after join
-        putSession(address, newPremiumSession(playerName, premiumUuid, facts));
+        BukkitLoginSession session = newPremiumSession(playerName, premiumUuid, facts);
+        session.setConnectionUuid(connectionUuid);
+        putSession(address, session);
 
         // For pending premium toggles, send the proxy message now
         // (the player is connected in PLAY phase) and kick. This

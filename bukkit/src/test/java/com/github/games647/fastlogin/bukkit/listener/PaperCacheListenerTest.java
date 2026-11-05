@@ -108,6 +108,7 @@ class PaperCacheListenerTest {
         BukkitLoginSession session = new BukkitLoginSession(NAME, true);
         UUID premiumUuid = UUID.randomUUID();
         session.setUuid(premiumUuid);
+        session.setConnectionUuid(connectionUuid);
         session.setSkinProperty(new SkinProperty("premium-value", "premium-signature"));
         ConcurrentHashMap<String, BukkitLoginSession> sessions = new ConcurrentHashMap<>();
         sessions.put("connection", session);
@@ -128,5 +129,119 @@ class PaperCacheListenerTest {
                 customSkin ? "custom-signature" : "premium-signature"));
         verify(event, never()).disallow(any(Result.class), anyString());
         verify(core, never()).getMessage("not-started");
+    }
+
+    @Test
+    void matchesSkinsByConnectionUuidWhenNamesCollide() {
+        when(plugin.isServerFullyStarted()).thenReturn(true);
+        when(config.getBoolean("forwardSkin")).thenReturn(true);
+        when(plugin.getSkinsRestorerCompat()).thenReturn(mock(SkinsRestorerCompat.class));
+
+        UUID firstUuid = UUID.randomUUID();
+        UUID secondUuid = UUID.randomUUID();
+        PlayerProfile firstProfile = mock(PlayerProfile.class);
+        PlayerProfile secondProfile = mock(PlayerProfile.class);
+        AsyncPlayerPreLoginEvent firstEvent = preLogin(firstUuid, firstProfile);
+        AsyncPlayerPreLoginEvent secondEvent = preLogin(secondUuid, secondProfile);
+
+        ConcurrentHashMap<String, BukkitLoginSession> sessions = new ConcurrentHashMap<>();
+        sessions.put("first", session(firstUuid, "first-value", "first-signature"));
+        sessions.put("second", session(secondUuid, "second-value", "second-signature"));
+        when(plugin.getLoginSessions()).thenReturn(sessions);
+
+        // interleaved lookups: each connection must read its own session, not the first same-name one
+        listener.onAsyncPlayerPreLogin(firstEvent);
+        listener.onAsyncPlayerPreLogin(secondEvent);
+        listener.onAsyncPlayerPreLogin(firstEvent);
+
+        verify(firstProfile, times(2)).setProperty(new ProfileProperty(Textures.KEY,
+                "first-value", "first-signature"));
+        verify(secondProfile).setProperty(new ProfileProperty(Textures.KEY,
+                "second-value", "second-signature"));
+    }
+
+    @Test
+    void doesNotBorrowAnotherConnectionsSkinForAnUnknownConnection() {
+        when(plugin.isServerFullyStarted()).thenReturn(true);
+        when(config.getBoolean("forwardSkin")).thenReturn(true);
+
+        PlayerProfile eventProfile = mock(PlayerProfile.class);
+        AsyncPlayerPreLoginEvent loginEvent = preLogin(UUID.randomUUID(), eventProfile);
+        ConcurrentHashMap<String, BukkitLoginSession> sessions = new ConcurrentHashMap<>();
+        sessions.put("known", session(UUID.randomUUID(), "known-value", "known-signature"));
+        when(plugin.getLoginSessions()).thenReturn(sessions);
+
+        listener.onAsyncPlayerPreLogin(loginEvent);
+
+        verify(eventProfile, never()).setProperty(any());
+        verify(plugin, never()).getSkinsRestorerCompat();
+    }
+
+    @Test
+    void refusesSkinWhenTwoDifferentIdentitiesShareNameAndConnectionUuid() {
+        when(plugin.isServerFullyStarted()).thenReturn(true);
+        when(config.getBoolean("forwardSkin")).thenReturn(true);
+
+        UUID sharedUuid = UUID.randomUUID();
+        BukkitLoginSession verified = session(sharedUuid, "premium-value", "premium-signature");
+        verified.setUuid(UUID.randomUUID());
+        verified.setVerifiedPremium(true);
+        BukkitLoginSession cracked = new BukkitLoginSession(NAME, false);
+        cracked.setConnectionUuid(sharedUuid);
+
+        ConcurrentHashMap<String, BukkitLoginSession> sessions = new ConcurrentHashMap<>();
+        sessions.put("verified", verified);
+        sessions.put("cracked", cracked);
+        when(plugin.getLoginSessions()).thenReturn(sessions);
+
+        PlayerProfile eventProfile = mock(PlayerProfile.class);
+        listener.onAsyncPlayerPreLogin(preLogin(sharedUuid, eventProfile));
+
+        // the same name and UUID cannot be tied to one identity: fail closed instead of guessing
+        verify(eventProfile, never()).setProperty(any());
+    }
+
+    @Test
+    void reusesACachedSessionOfTheSameVerifiedIdentity() {
+        when(plugin.isServerFullyStarted()).thenReturn(true);
+        when(config.getBoolean("forwardSkin")).thenReturn(true);
+        when(plugin.getSkinsRestorerCompat()).thenReturn(mock(SkinsRestorerCompat.class));
+
+        UUID sharedUuid = UUID.randomUUID();
+        UUID premiumUuid = UUID.randomUUID();
+        BukkitLoginSession previous = session(sharedUuid, "premium-value", "premium-signature");
+        previous.setUuid(premiumUuid);
+        previous.setVerifiedPremium(true);
+        BukkitLoginSession current = new BukkitLoginSession(NAME, true);
+        current.setConnectionUuid(sharedUuid);
+        current.setUuid(premiumUuid);
+        current.setVerifiedPremium(true);
+
+        ConcurrentHashMap<String, BukkitLoginSession> sessions = new ConcurrentHashMap<>();
+        sessions.put("previous", previous);
+        sessions.put("current", current);
+        when(plugin.getLoginSessions()).thenReturn(sessions);
+
+        listener.onAsyncPlayerPreLogin(preLogin(sharedUuid, profile));
+
+        // a still-cached previous session of the same verified account may supply the skin
+        verify(profile).setProperty(new ProfileProperty(Textures.KEY,
+                "premium-value", "premium-signature"));
+    }
+
+    private static AsyncPlayerPreLoginEvent preLogin(UUID uuid, PlayerProfile eventProfile) {
+        AsyncPlayerPreLoginEvent loginEvent = mock(AsyncPlayerPreLoginEvent.class);
+        when(loginEvent.getName()).thenReturn(NAME);
+        when(loginEvent.getUniqueId()).thenReturn(uuid);
+        when(loginEvent.getPlayerProfile()).thenReturn(eventProfile);
+        when(loginEvent.getLoginResult()).thenReturn(Result.ALLOWED);
+        return loginEvent;
+    }
+
+    private static BukkitLoginSession session(UUID uuid, String skinValue, String skinSignature) {
+        BukkitLoginSession session = new BukkitLoginSession(NAME, true);
+        session.setConnectionUuid(uuid);
+        session.setSkinProperty(new SkinProperty(skinValue, skinSignature));
+        return session;
     }
 }
