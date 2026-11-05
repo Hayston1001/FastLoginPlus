@@ -128,6 +128,16 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     private Configuration config;
 
     /**
+     * Bundled template defaults, kept so a value of the wrong type can fall
+     * back to the documented default instead of throwing.
+     */
+    private Configuration configDefaults;
+
+    /** Typed values read once at load; the config object is not reloaded at runtime. */
+    private boolean debugEnabled;
+    private boolean secondAttemptCrackedEnabled;
+
+    /**
      * Bundled config template resource name. Backends (bukkit/folia) use the
      * full "config.yml"; proxies (bungee/velocity) select the trimmed
      * "config-proxy.yml" before {@link #load()}.
@@ -185,6 +195,11 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             plugin.getLog().error("Failed to reload config.yml after refresh", ioEx);
             return;
         }
+
+        // Read these once: typed helpers warn on a wrong type, and isDebug() is
+        // called on hot logging paths where a warning per call would flood the log.
+        debugEnabled = readBoolean("debug");
+        secondAttemptCrackedEnabled = readBoolean("secondAttemptCracked");
 
         // 2. Determine language file based on config
         String language = config.getString("language");
@@ -280,6 +295,91 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             }
             updateChecker = new UpdateChecker(plugin.getLog(), currentVersion, isDebug());
         }
+    }
+
+    /**
+     * Reads a boolean without a raw cast. A value of another type is reported
+     * and replaced by the bundled template default; it never aborts startup.
+     *
+     * @param config the user configuration
+     * @param defaults the bundled template defaults, may be null
+     * @param key the config key
+     * @param logger the logger for the type mismatch warning
+     * @return the configured value or the template default
+     */
+    static boolean readBoolean(Configuration config, Configuration defaults, String key, Logger logger) {
+        Object value = config.get(key);
+        if (value instanceof Boolean) {
+            return ((Boolean) value).booleanValue();
+        }
+        Object fallbackValue = defaults == null ? null : defaults.get(key);
+        boolean fallback = fallbackValue instanceof Boolean
+                ? ((Boolean) fallbackValue).booleanValue() : false;
+        if (value != null) {
+            logger.warn("Config '{}' must be a boolean but is {}; using default {}",
+                    key, value.getClass().getSimpleName(), fallback);
+        }
+        return fallback;
+    }
+
+    /**
+     * Reads an integer without a raw cast. Numeric strings and other types are
+     * reported and replaced by the bundled template default.
+     *
+     * @param config the user configuration
+     * @param defaults the bundled template defaults, may be null
+     * @param key the config key
+     * @param logger the logger for the type mismatch warning
+     * @return the configured value or the template default
+     */
+    static int readInt(Configuration config, Configuration defaults, String key, Logger logger) {
+        Object value = config.get(key);
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        Object fallbackValue = defaults == null ? null : defaults.get(key);
+        int fallback = fallbackValue instanceof Number ? ((Number) fallbackValue).intValue() : 0;
+        if (value != null) {
+            logger.warn("Config '{}' must be a number but is {}; using default {}",
+                    key, value.getClass().getSimpleName(), fallback);
+        }
+        return fallback;
+    }
+
+    /**
+     * Reads a string without a raw cast. A non-string value is reported and
+     * replaced by the bundled template default.
+     *
+     * @param config the user configuration
+     * @param defaults the bundled template defaults, may be null
+     * @param key the config key
+     * @param logger the logger for the type mismatch warning
+     * @return the configured value or the template default
+     */
+    static String readString(Configuration config, Configuration defaults, String key, Logger logger) {
+        Object value = config.get(key);
+        if (value instanceof String) {
+            return (String) value;
+        }
+        Object fallbackValue = defaults == null ? null : defaults.get(key);
+        String fallback = fallbackValue instanceof String ? (String) fallbackValue : "";
+        if (value != null) {
+            logger.warn("Config '{}' must be a string but is {}; using default '{}'",
+                    key, value.getClass().getSimpleName(), fallback);
+        }
+        return fallback;
+    }
+
+    private boolean readBoolean(String key) {
+        return readBoolean(config, configDefaults, key, plugin.getLog());
+    }
+
+    private int readInt(String key) {
+        return readInt(config, configDefaults, key, plugin.getLog());
+    }
+
+    private String readString(String key) {
+        return readString(config, configDefaults, key, plugin.getLog());
     }
 
     /**
@@ -390,6 +490,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
         Path file = plugin.getPluginFolder().resolve(fileName);
 
+        configDefaults = defaults;
         return ConfigurationFiles.load(file, defaults, configurationLoader(configProvider));
     }
 
@@ -443,9 +544,9 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
         if (type.contains("sqlite")) {
             storage = new SQLiteStorage(plugin, database, databaseConfig);
         } else {
-            String host = (String) config.get("host");
-            int port = ((Number) config.get("port")).intValue();
-            boolean useSSL = (boolean) config.get("useSSL");
+            String host = readString("host");
+            int port = readInt("port");
+            boolean useSSL = readBoolean("useSSL");
 
             if (useSSL) {
                 boolean publicKeyRetrieval = config.getBoolean("allowPublicKeyRetrieval");
@@ -457,7 +558,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
                 databaseConfig.addDataSourceProperty("sslMode", sslMode);
             }
 
-            databaseConfig.setUsername((String) config.get("username"));
+            databaseConfig.setUsername(readString("username"));
             databaseConfig.setPassword(config.getString("password"));
             storage = new MySQLStorage(plugin, type, host, port, database, databaseConfig, useSSL);
         }
@@ -503,8 +604,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      * enabled nothing is touched.</p>
      */
     public void reconcileSameNameCracked() {
-        reconcileSameNameCracked(storage,
-                config != null && (boolean) config.get("secondAttemptCracked"), plugin.getLog());
+        reconcileSameNameCracked(storage, config != null && secondAttemptCrackedEnabled, plugin.getLog());
     }
 
     /**
@@ -529,7 +629,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     public boolean isDebug() {
-        return config != null && (boolean) config.get("debug");
+        return config != null && debugEnabled;
     }
 
     public PasswordGenerator<P> getPasswordGenerator() {
