@@ -119,6 +119,58 @@ class SQLiteStorageTest {
         assertEquals(longName, loaded.getName());
     }
 
+    @Test
+    void saveProfileLockedKeepsAConcurrentPremiumChange() {
+        // a login assembled before the lock must not write its stale copy over
+        // an operator toggle that landed in the meantime
+        storage.save(new StoredProfile(null, "Steve", false, FloodgateState.FALSE, "1.1.1.1"));
+        StoredProfile stale = storage.loadProfile("Steve");
+        assertNotNull(stale);
+
+        StoredProfile toggled = storage.loadProfile("Steve");
+        toggled.setOnlinemodePreferred(true);
+        storage.save(toggled);
+
+        StoredProfile persisted = storage.saveProfileLocked("Steve", stale, current -> {
+            current.setFloodgate(FloodgateState.LINKED);
+            current.setLastIp("2.2.2.2");
+        });
+
+        assertNotNull(persisted);
+        StoredProfile loaded = storage.loadProfile("Steve");
+        assertTrue(loaded.isOnlinemodePreferred(), "the operator toggle must survive");
+        assertEquals(FloodgateState.LINKED, loaded.getFloodgate());
+        assertEquals("2.2.2.2", loaded.getLastIp());
+    }
+
+    @Test
+    void saveProfileLockedDoesNotResurrectADeletedRow() {
+        storage.save(new StoredProfile(null, "Steve", false, FloodgateState.FALSE, "1.1.1.1"));
+        StoredProfile stale = storage.loadProfile("Steve");
+        assertNotNull(stale);
+
+        assertTrue(storage.deleteProfile("Steve"));
+
+        assertNull(storage.saveProfileLocked("Steve", stale,
+                current -> current.setLastIp("2.2.2.2")));
+        assertFalse(storage.loadProfile("Steve").isExistingPlayer(),
+                "a login in flight must not recreate a deleted record");
+    }
+
+    @Test
+    void saveProfileLockedInsertsANewRow() {
+        StoredProfile fresh = new StoredProfile(null, "NewBedrock", false, FloodgateState.LINKED, "1.1.1.1");
+
+        StoredProfile persisted = storage.saveProfileLocked("NewBedrock", fresh,
+                current -> current.setLastIp("3.3.3.3"));
+
+        assertNotNull(persisted);
+        StoredProfile loaded = storage.loadProfile("NewBedrock");
+        assertTrue(loaded.isExistingPlayer());
+        assertEquals(FloodgateState.LINKED, loaded.getFloodgate());
+        assertEquals("3.3.3.3", loaded.getLastIp());
+    }
+
     private int countUuidIndexes() throws Exception {
         String dbPath = tempDir.resolve("FastLogin.db").toString();
         try (Connection con = DriverManager.getConnection("jdbc:sqlite:" + dbPath);

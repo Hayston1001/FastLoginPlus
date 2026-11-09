@@ -77,13 +77,18 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     onForceActionSuccess(session);
 
                     if (playerProfile != null) {
-                        // persist under the name-level striped lock; a failed
-                        // write is logged by saveQuietly and the proxy remains
-                        // the source of truth for this observation
-                        storage.withNameLock(getName(player), () -> {
-                            playerProfile.setId(session.getUuid());
-                            playerProfile.setSameNameCracked(false);
-                            storage.saveQuietly(playerProfile);
+                        // persist the fields this session owns under the
+                        // name-level striped lock. The row is re-read inside the
+                        // window, so a concurrent toggle is not overwritten by
+                        // the pre-login snapshot and a deleted record stays
+                        // deleted. A failed write is logged by saveQuietly and
+                        // the proxy remains the source of truth for this
+                        // observation.
+                        storage.saveProfileLocked(getName(player), playerProfile, current -> {
+                            current.setId(session.getUuid());
+                            current.setSameNameCracked(false);
+                            current.setFloodgate(playerProfile.getFloodgate());
+                            current.setLastIp(playerProfile.getLastIp());
                         });
                     }
                 } else {
@@ -94,16 +99,21 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 // observations (premium UUID, same-name cracked) and the consent survive
                 // an offline join — a cracked connection under a premium name is exactly
                 // the same-name cracked case, and only an explicit toggle revokes consent.
-                storage.withNameLock(getName(player), () -> {
-                    storage.saveQuietly(playerProfile);
-                });
+                StoredProfile persisted = storage.saveProfileLocked(getName(player), playerProfile,
+                        current -> {
+                            current.setFloodgate(playerProfile.getFloodgate());
+                            current.setLastIp(playerProfile.getLastIp());
+                        });
 
                 // the one-time notice for a freshly confirmed same-name cracked
                 // observation. Delivered here — when the player has
                 // actually reached the game — because the login phase has no chat
                 // yet; it goes only to the password flow the observation caused,
-                // and only while the observation is still recorded.
-                notifySameNameCracked(playerProfile);
+                // and only while the observation is still recorded. A concurrent
+                // delete leaves nothing to notify about.
+                if (persisted != null) {
+                    notifySameNameCracked(persisted);
+                }
             }
         } catch (Exception ex) {
             core.getPlugin().getLog().warn("ERROR ON FORCE LOGIN of {}", getName(player), ex);
@@ -243,14 +253,16 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
         if (success) {
             //update only on success to prevent corrupt data
             if (playerProfile != null) {
-                // persist under the name-level striped lock. This write is the
-                // confirmed outcome: the account now belongs to the verified
-                // premium identity, which is what the consent records.
-                storage.withNameLock(getName(player), () -> {
-                    playerProfile.setId(session.getUuid());
-                    playerProfile.setSameNameCracked(false);
-                    playerProfile.setOnlinemodePreferred(true);
-                    storage.saveQuietly(playerProfile);
+                // persist the confirmed outcome under the name-level striped
+                // lock. The row is re-read inside the window: the write must not
+                // resurrect a deleted record or overwrite a newer operator
+                // change with the pre-login snapshot.
+                storage.saveProfileLocked(getName(player), playerProfile, current -> {
+                    current.setId(session.getUuid());
+                    current.setSameNameCracked(false);
+                    current.setOnlinemodePreferred(true);
+                    current.setFloodgate(playerProfile.getFloodgate());
+                    current.setLastIp(playerProfile.getLastIp());
                 });
             }
 

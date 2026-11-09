@@ -20,6 +20,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.slf4j.Logger;
 
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -103,6 +104,17 @@ class ForceLoginManagementTest {
             ((Runnable) inv.getArgument(1)).run();
             return null;
         }).when(storage).withNameLock(anyString(), any(Runnable.class));
+        // production re-reads the row inside the lock; the mock applies the
+        // changes to the session profile and persists it, so the existing
+        // saveQuietly assertions still describe what the row receives
+        when(storage.saveProfileLocked(anyString(), any(StoredProfile.class), any()))
+                .thenAnswer(invocation -> {
+                    StoredProfile sessionProfile = invocation.getArgument(1);
+                    Consumer<StoredProfile> changes = invocation.getArgument(2);
+                    changes.accept(sessionProfile);
+                    storage.saveQuietly(sessionProfile);
+                    return sessionProfile;
+                });
     }
 
     // ---- proxy without auth hook: record the observation, never the consent ----

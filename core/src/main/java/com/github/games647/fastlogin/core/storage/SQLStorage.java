@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadFactory;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -148,6 +149,39 @@ public abstract class SQLStorage implements AuthStorage {
     private static int lockIndexFor(String name) {
         // & strip mask keeps the index in range for negative hash codes too
         return name == null ? 0 : name.hashCode() & (NAME_LOCK_STRIPES - 1);
+    }
+
+    /**
+     * Persists the fields a login owns onto the current row while holding the
+     * name-level lock. The row is re-read inside the window, so a snapshot
+     * loaded before the login was assembled cannot overwrite a concurrent
+     * toggle, and a record deleted in the meantime is not resurrected.
+     *
+     * @param name           the player name the window operates on
+     * @param sessionProfile the profile this login assembled before the lock
+     * @param changes        the fields this login owns, applied to the persisted row
+     * @return the persisted row, or null when nothing was written
+     */
+    public StoredProfile saveProfileLocked(String name, StoredProfile sessionProfile,
+                                           Consumer<StoredProfile> changes) {
+        return withNameLock(name, () -> {
+            StoredProfile current = loadProfile(name);
+            if (current == null) {
+                // the database could not be queried: fail closed instead of
+                // writing the stale snapshot
+                return null;
+            }
+            if (!current.isExistingPlayer()) {
+                if (sessionProfile.isExistingPlayer()) {
+                    // the row was deleted while this login was in flight
+                    return null;
+                }
+                changes.accept(sessionProfile);
+                return saveQuietly(sessionProfile) ? sessionProfile : null;
+            }
+            changes.accept(current);
+            return saveQuietly(current) ? current : null;
+        });
     }
 
     public void createTables() throws SQLException {

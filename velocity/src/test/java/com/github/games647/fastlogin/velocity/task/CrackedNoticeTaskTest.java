@@ -38,6 +38,15 @@ class CrackedNoticeTaskTest {
         when(storage.saveQuietly(profile)).thenReturn(true);
         doAnswer(invocation -> { ((Runnable) invocation.getArgument(1)).run(); return null; })
                 .when(storage).withNameLock(eq("TestUser"), any(Runnable.class));
+        // production re-reads the row inside the lock and applies the fields
+        // this login owns; hand back the same profile so the save is observed
+        when(storage.saveProfileLocked(eq("TestUser"), eq(profile), any()))
+                .thenAnswer(invocation -> {
+                    java.util.function.Consumer<StoredProfile> changes = invocation.getArgument(2);
+                    changes.accept(profile);
+                    storage.saveQuietly(profile);
+                    return profile;
+                });
         VelocityLoginSession session = new VelocityLoginSession("TestUser", false, profile);
         new ForceLoginTask(core, player, server, session).run();
         verify(storage).saveQuietly(profile);
