@@ -194,6 +194,29 @@ class JoinManagementTest {
     }
 
     @Test
+    void mistypedConfigValuesFallBackInsteadOfAbortingTheLogin() {
+        // a wrong type must degrade to the bundled default instead of throwing
+        // out of the per-login path
+        StoredProfile profile = newRow();
+        when(storage.loadProfile("TestUser")).thenReturn(profile);
+        when(core.getDefiniteFailures("TestUser")).thenReturn(0);
+        when(config.get("secondAttemptCracked")).thenReturn("yes");
+        when(config.get("nameChangeCheck")).thenReturn("true");
+        when(config.get("autoRegister")).thenReturn(0);
+        when(config.get("offline-whitelist")).thenReturn("no");
+        when(config.get("mojang-retry-count")).thenReturn("3");
+        when(config.get("mojang-retry-delay")).thenReturn("100");
+
+        TestJoinManagement mgmt = createManagement();
+        mgmt.onLogin("TestUser", new TestSource());
+
+        // every switch fell back to false: no lookup, no offline-whitelist kick,
+        // the name opens the password flow instead of aborting the login
+        assertEquals(0, mgmt.premiumRequests);
+        assertEquals(1, mgmt.crackedSessions);
+    }
+
+    @Test
     void fallbackDisabledTreatsAnObservationAsNeverRecorded() throws Exception {
         // with secondAttemptCracked off a marked name is "as if never
         // recorded" - a row that holds nothing but the observation gets the

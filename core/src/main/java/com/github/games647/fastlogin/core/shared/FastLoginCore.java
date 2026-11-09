@@ -347,6 +347,30 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
+     * Reads a long without a raw cast. Numeric strings and other types are
+     * reported and replaced by the bundled template default.
+     *
+     * @param config the user configuration
+     * @param defaults the bundled template defaults, may be null
+     * @param key the config key
+     * @param logger the logger for the type mismatch warning
+     * @return the configured value or the template default
+     */
+    static long readLong(Configuration config, Configuration defaults, String key, Logger logger) {
+        Object value = config.get(key);
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        Object fallbackValue = defaults == null ? null : defaults.get(key);
+        long fallback = fallbackValue instanceof Number ? ((Number) fallbackValue).longValue() : 0L;
+        if (value != null) {
+            logger.warn("Config '{}' must be a number but is {}; using default {}",
+                    key, value.getClass().getSimpleName(), fallback);
+        }
+        return fallback;
+    }
+
+    /**
      * Reads a string without a raw cast. A non-string value is reported and
      * replaced by the bundled template default.
      *
@@ -587,6 +611,18 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     public Configuration getConfig() {
         return config;
+    }
+
+    /**
+     * Returns the bundled template defaults used by the tolerant readers.
+     * Shared callers in this package pass both configurations to
+     * {@link #readBoolean(Configuration, Configuration, String, Logger)} and
+     * its siblings so a misconfigured value falls back to the shipped default.
+     *
+     * @return the bundled template defaults, or null before they are loaded
+     */
+    Configuration getConfigDefaults() {
+        return configDefaults;
     }
 
     /**

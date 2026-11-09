@@ -48,6 +48,19 @@ class FastLoginCoreConfigReadTest {
     }
 
     @Test
+    void numericStringForALongFallsBackToTheTemplateDefaultWithAWarning() {
+        Configuration config = new Configuration();
+        config.set("mojang-retry-delay", "100");
+        Configuration defaults = new Configuration();
+        defaults.set("mojang-retry-delay", 100L);
+        Logger logger = mock(Logger.class);
+
+        assertEquals(100L, FastLoginCore.readLong(config, defaults, "mojang-retry-delay", logger));
+        verify(logger).warn(contains("must be a number"), eq("mojang-retry-delay"),
+                eq("String"), eq(100L));
+    }
+
+    @Test
     void wrongTypesFallBackToTheTemplateDefaultWithAWarning() {
         Configuration config = new Configuration();
         config.set("debug", 1);

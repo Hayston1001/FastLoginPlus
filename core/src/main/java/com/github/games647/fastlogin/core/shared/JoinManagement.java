@@ -14,7 +14,6 @@ import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
 import com.github.games647.fastlogin.core.storage.ProfileLookupException;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
-import net.md_5.bungee.config.Configuration;
 
 import java.io.IOException;
 import java.util.Optional;
@@ -155,14 +154,11 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                 return;
             }
 
-            Configuration config = core.getConfig();
             Optional<Profile> premiumUUID = Optional.empty();
-            if ((boolean) config.get("nameChangeCheck") || (boolean) config.get("autoRegister")
-                    || (boolean) config.get("offline-whitelist")) {
-                int retryCount = Math.max(1,
-                        ((Number) config.get("mojang-retry-count")).intValue());
-                long retryDelay =
-                        ((Number) config.get("mojang-retry-delay")).longValue();
+            if (booleanConfig("nameChangeCheck") || booleanConfig("autoRegister")
+                    || booleanConfig("offline-whitelist")) {
+                int retryCount = Math.max(1, intConfig("mojang-retry-count"));
+                long retryDelay = longConfig("mojang-retry-delay");
 
                 boolean checkedPremium = false;
                 for (int attempt = 1; attempt <= retryCount; attempt++) {
@@ -227,7 +223,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
                     || (!isNameChanged(source, username, premiumUUID.get())
                     && !isUsernameAvailable(source, username, profile, premiumUUID.get()))) {
                 //nothing detected the player as premium -> start a cracked session
-                if ((boolean) core.getConfig().get("offline-whitelist")) {
+                if (booleanConfig("offline-whitelist")) {
                     source.kick(core.getMessage("offline-whitelist-kick-message"));
                     return;
                 }
@@ -245,7 +241,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             core.getPlugin().getLog().error("Failed to check premium state of {}", username, ex);
             // Fail closed: an error in the decision tree must not
             // open a registration window — kick like the whitelist miss above
-            if ((boolean) core.getConfig().get("offline-whitelist")) {
+            if (booleanConfig("offline-whitelist")) {
                 try {
                     source.kick(core.getMessage("offline-whitelist-kick-message"));
                 } catch (Exception kickEx) {
@@ -282,7 +278,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
             requestPremiumLogin(source, profile, username, true);
             return true;
         }
-        if ((boolean) core.getConfig().get("autoRegister") && (authHook == null || !authHook.isRegistered(username))) {
+        if (booleanConfig("autoRegister") && (authHook == null || !authHook.isRegistered(username))) {
             requestPremiumLogin(source, profile, username, false);
             return true;
         }
@@ -298,7 +294,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
 
     private boolean isNameChanged(S source, String username, Profile profile) {
         //user not exists in the db
-        if ((boolean) core.getConfig().get("nameChangeCheck")) {
+        if (booleanConfig("nameChangeCheck")) {
             StoredProfile storedProfile = core.getStorage().loadProfile(profile.getId());
             if (storedProfile != null) {
                 if (storedProfile.getFloodgate() == FloodgateState.TRUE) {
@@ -341,7 +337,7 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
      * @return true when the fallback and the observation semantics are enabled
      */
     protected boolean isFallbackEnabled() {
-        return (boolean) core.getConfig().get("secondAttemptCracked");
+        return booleanConfig("secondAttemptCracked");
     }
 
     /**
@@ -434,5 +430,20 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
     @Deprecated
     protected void startUndecidedSession(S source, StoredProfile profile, String username) {
         startCrackedSession(source, profile, username);
+    }
+
+    private boolean booleanConfig(String key) {
+        return FastLoginCore.readBoolean(core.getConfig(), core.getConfigDefaults(), key,
+                core.getPlugin().getLog());
+    }
+
+    private int intConfig(String key) {
+        return FastLoginCore.readInt(core.getConfig(), core.getConfigDefaults(), key,
+                core.getPlugin().getLog());
+    }
+
+    private long longConfig(String key) {
+        return FastLoginCore.readLong(core.getConfig(), core.getConfigDefaults(), key,
+                core.getPlugin().getLog());
     }
 }
