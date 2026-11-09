@@ -22,6 +22,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -70,6 +71,17 @@ class JoinManagementTest {
             ((Runnable) inv.getArgument(1)).run();
             return null;
         }).when(storage).withNameLock(anyString(), any(Runnable.class));
+        // production re-reads the row inside the lock; the mock applies the
+        // changes to the session profile and persists it, so the existing
+        // saveQuietly assertions still describe what the row receives
+        when(storage.saveProfileLocked(anyString(), any(StoredProfile.class), any()))
+                .thenAnswer(invocation -> {
+                    StoredProfile sessionProfile = invocation.getArgument(1);
+                    Consumer<StoredProfile> changes = invocation.getArgument(2);
+                    changes.accept(sessionProfile);
+                    storage.saveQuietly(sessionProfile);
+                    return sessionProfile;
+                });
     }
 
     // ---- routing: consent wins over every observation ----
@@ -131,7 +143,7 @@ class JoinManagementTest {
     @Test
     void onlyTheFirstConfirmationQueuesTheNotice() {
         // the record already exists on later joins: the one-time chat notice is
-        // owed by the confirmation that flipped the flag, not by every one
+        // owed by the confirmation that flipped the flag, not by every join
         StoredProfile profile = existingRow(null, false, false);
         TestJoinManagement mgmt = createManagement();
         mgmt.confirmForTest("TestUser", profile);
@@ -139,6 +151,20 @@ class JoinManagementTest {
 
         assertTrue(profile.isSameNameCracked());
         verify(core, times(1)).queueSameNameCrackedNotice("TestUser");
+    }
+
+    @Test
+    void confirmationWithoutAPersistedRowDoesNotQueueTheNotice() {
+        // a record deleted while the login was in flight must not produce a
+        // "recorded" notice for a row that no longer exists
+        StoredProfile profile = existingRow(null, false, false);
+        when(storage.saveProfileLocked(anyString(), any(StoredProfile.class), any()))
+                .thenReturn(null);
+
+        TestJoinManagement mgmt = createManagement();
+        mgmt.confirmForTest("TestUser", profile);
+
+        verify(core, never()).queueSameNameCrackedNotice(anyString());
     }
 
     @Test

@@ -367,13 +367,19 @@ public abstract class JoinManagement<P extends C, C, S extends LoginSource> {
      */
     protected void confirmSameNameCracked(String username, StoredProfile profile) {
         SQLStorage storage = core.getStorage();
-        boolean firstConfirmation = storage.withNameLock(username, () -> {
-            boolean first = !profile.isSameNameCracked();
-            profile.setSameNameCracked(true);
-            // only queue the "recorded" notice when the observation was persisted
-            return storage.saveQuietly(profile) && first;
+        // re-read the row under the lock and merge only the observation: the
+        // snapshot loaded before this login must not overwrite a concurrent
+        // toggle, and a record deleted in the meantime stays deleted
+        boolean[] firstConfirmation = {false};
+        StoredProfile persisted = storage.saveProfileLocked(username, profile, current -> {
+            firstConfirmation[0] = !current.isSameNameCracked();
+            current.setSameNameCracked(true);
         });
-        if (firstConfirmation) {
+        // the caller keeps using its profile object; reflect the observation
+        // there even when the row was deleted, as the previous behaviour did
+        profile.setSameNameCracked(true);
+        // only queue the "recorded" notice when the observation was persisted
+        if (persisted != null && firstConfirmation[0]) {
             core.queueSameNameCrackedNotice(username);
         }
     }
