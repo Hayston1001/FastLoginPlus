@@ -279,7 +279,14 @@ public class ProtocolLibListener extends PacketAdapter {
             }
         } catch (NoSuchAlgorithmException | InvalidKeyException | SignatureException | NoSuchPaddingException
                  | IllegalBlockSizeException | BadPaddingException signatureEx) {
-            plugin.getLog().error("Invalid signature from player {}", sender, signatureEx);
+            // A forged or corrupt response is remotely triggerable; keep the stack
+            // trace out of the error log unless debug output is enabled.
+            if (plugin.getCore().isDebug()) {
+                plugin.getLog().warn("Invalid signature from player {}", sender, signatureEx);
+            } else {
+                plugin.getLog().warn("Invalid signature from player {} ({})",
+                        sender, signatureEx.getClass().getSimpleName());
+            }
             return false;
         }
     }
