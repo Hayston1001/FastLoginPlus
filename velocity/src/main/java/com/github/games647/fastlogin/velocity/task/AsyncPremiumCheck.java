@@ -14,6 +14,7 @@ import com.github.games647.fastlogin.velocity.FastLoginVelocity;
 import com.github.games647.fastlogin.velocity.VelocityLoginSession;
 import com.github.games647.fastlogin.velocity.VelocityLoginSource;
 import com.github.games647.fastlogin.velocity.event.VelocityFastLoginPreLoginEvent;
+import com.github.games647.fastlogin.velocity.listener.VerificationCloseWatcher;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.proxy.InboundConnection;
@@ -74,6 +75,7 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
         plugin.getSession().put(source.getConnection().getRemoteAddress(), session);
 
         plugin.getCore().markPendingVerification(username, source.getConnection());
+        VerificationCloseWatcher.attach(plugin, username, source.getConnection());
         source.enableOnlinemode();
     }
 

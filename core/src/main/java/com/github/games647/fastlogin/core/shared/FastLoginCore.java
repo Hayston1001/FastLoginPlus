@@ -738,6 +738,46 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
+     * Settles one attempt as a definitive failure when the proxy reports that the
+     * client answered encryption but no player was created. The count is applied
+     * only while the attempt still belongs to that connection: a later attempt or
+     * an already successful login is left untouched.
+     *
+     * @param username exact login name
+     * @param owner connection identity token of the attempt
+     * @return true when the matching attempt was still pending and was counted
+     */
+    public boolean settleVerificationAsFailure(String username, Object owner) {
+        String key = attemptKey(username);
+        boolean[] counted = {false};
+        pendingVerifications.computeIfPresent(key, (pendingKey, pending) -> {
+            if (pending.owner != owner) {
+                return pending;
+            }
+            definiteFailures.merge(pendingKey, 1, Integer::sum);
+            counted[0] = true;
+            return null;
+        });
+        if (counted[0]) {
+            plugin.getLog().warn("Premium verification for {} failed before the player was created: "
+                    + "counted as a failed verification", key);
+        }
+        return counted[0];
+    }
+
+    /**
+     * Drops one attempt without counting it when the proxy reports that the
+     * client never answered encryption. Only the matching connection is affected.
+     *
+     * @param username exact login name
+     * @param owner connection identity token of the attempt
+     */
+    public void dropPendingVerification(String username, Object owner) {
+        pendingVerifications.computeIfPresent(attemptKey(username), (key, pending) ->
+                pending.owner == owner ? null : pending);
+    }
+
+    /**
      * A passing verification refutes everything recorded for the name: the
      * pending mark and every counted failure.
      *

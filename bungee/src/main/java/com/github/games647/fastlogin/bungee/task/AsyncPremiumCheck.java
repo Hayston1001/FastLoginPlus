@@ -10,6 +10,7 @@ import com.github.games647.fastlogin.bungee.BungeeLoginSession;
 import com.github.games647.fastlogin.bungee.BungeeLoginSource;
 import com.github.games647.fastlogin.bungee.FastLoginBungee;
 import com.github.games647.fastlogin.bungee.event.BungeeFastLoginPreLoginEvent;
+import com.github.games647.fastlogin.bungee.listener.VerificationCloseWatcher;
 import com.github.games647.fastlogin.core.shared.JoinManagement;
 import com.github.games647.fastlogin.core.shared.event.FastLoginPreLoginEvent;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -62,6 +63,7 @@ public class AsyncPremiumCheck extends JoinManagement<ProxiedPlayer, CommandSend
         plugin.getSession().put(source.getConnection(), new BungeeLoginSession(username, registered, profile));
 
         plugin.getCore().markPendingVerification(username, source.getConnection());
+        VerificationCloseWatcher.attach(plugin, username, source.getConnection());
     }
 
     @Override

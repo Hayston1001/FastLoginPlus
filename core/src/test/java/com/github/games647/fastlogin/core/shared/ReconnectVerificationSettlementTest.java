@@ -257,6 +257,44 @@ class ReconnectVerificationSettlementTest {
     }
 
     @Test
+    void ownerAwareSettlementCountsOnlyTheMatchingAttempt() {
+        Object owner = new Object();
+        core.markPendingVerification(NAME, owner);
+
+        assertFalse(core.settleVerificationAsFailure(NAME, new Object()));
+        assertEquals(0, core.getDefiniteFailures(NAME), "another connection cannot settle this attempt");
+
+        assertTrue(core.settleVerificationAsFailure(NAME, owner));
+        assertEquals(1, core.getDefiniteFailures(NAME));
+        assertFalse(core.settleVerificationAsFailure(NAME, owner), "a settled attempt cannot count twice");
+        assertEquals(1, core.getDefiniteFailures(NAME));
+    }
+
+    @Test
+    void ownerAwareDropLeavesAReplacementAlone() {
+        Object old = new Object();
+        Object current = new Object();
+        core.markPendingVerification(NAME, old);
+        core.markPendingVerification(NAME, current);
+
+        core.dropPendingVerification(NAME, old);
+
+        assertTrue(core.settleVerificationAsFailure(NAME, current),
+                "the replacement is still pending after the old connection drops");
+        assertEquals(1, core.getDefiniteFailures(NAME));
+    }
+
+    @Test
+    void aPassingVerificationPreventsTheCloseCount() {
+        Object owner = new Object();
+        core.markPendingVerification(NAME, owner);
+        core.resetVerificationState(NAME);
+
+        assertFalse(core.settleVerificationAsFailure(NAME, owner));
+        assertEquals(0, core.getDefiniteFailures(NAME));
+    }
+
+    @Test
     void sameOwnerKeepsGraceAndOutageStillDropsWithoutCounting() throws Exception {
         Object owner = new Object();
         core.markPendingVerification(NAME, owner);
