@@ -492,8 +492,12 @@ public final class AuthMePremiumIntegrator {
         if (auth == null) {
             return com.github.games647.fastlogin.core.shared.LoginMethodDecider.AccountState.NONE;
         }
-        Method isPremium = auth.getClass().getMethod("isPremium");
-        boolean premium = (boolean) isPremium.invoke(auth);
+        // AuthMe 5.x has no premium flag on PlayerAuth; only 6.x exposes it.
+        boolean premium = false;
+        if (versionDetector.isAuthMe6()) {
+            Method isPremium = auth.getClass().getMethod("isPremium");
+            premium = (boolean) isPremium.invoke(auth);
+        }
         Object password = auth.getClass().getMethod("getPassword").invoke(auth);
         String hash = password == null ? null
                 : (String) password.getClass().getMethod("getHash").invoke(password);
