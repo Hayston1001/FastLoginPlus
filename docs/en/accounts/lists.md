@@ -37,8 +37,9 @@ Premium players on the list still need verification on each connection. Non-prem
 `secondAttemptCracked` defaults to `false`. When enabled, a confirmed premium verification failure for a name without binding consent can cause later connections to use password login. The first change is accompanied by a notice pointing to `/flp premium`.
 
 - A consented name does not fall back merely because an impostor attempted to connect.
-- On standalone servers, explicit session rejection is distinguished from an unreachable session service and an interrupted attempt.
-- Proxy mode cannot always distinguish failed verification from a player's network interruption. A disconnected player can be counted as a failure even when Mojang is reachable.
-- Successful verification or a premium/cracked command clears the previous fallback record.
+- On standalone servers, an explicit session rejection is distinguished from an unreachable session service and an interrupted attempt.
+- On a proxy the proxy performs the verification, so FLP takes the outcome from the login connection. Where the proxy exposes its login phase, a client that answered encryption and then failed verification is counted as soon as the connection closes; a client that never answered is settled by the 30-second grace period, like any other unfinished attempt.
+- Cancelling after answering, or losing the connection during verification, can also be counted as one failure. A successful verification, `/flp premium` or `/flp cracked` clears the record.
+- If the fallback sends the player to password login and the backend still treats the name as a bound premium account, the backend refuses that login as an ownership conflict. Clear the backend binding first.
 
 Keep this off unless you understand the trade-off. Do not enable it as a general workaround for Mojang outages or a wrongly configured proxy.

@@ -9,7 +9,7 @@ Defaults below come from the Bukkit/Folia and proxy templates. In a proxy networ
 | `auto-register-unknown` | `true` | Create a missing local account for a verified Java identity. Off leaves registration to the auth plugin. Never creates an account merely for an unknown offline name |
 | `premiumUuid` | `true` | Deliver the verified Mojang UUID; false keeps a name-derived offline connection UUID. Does not disable identity verification |
 | `nameChangeCheck` | `true` | Look up new names and reconcile existing FLP records by UUID. Not a world-data migration |
-| `secondAttemptCracked` | `false` | After a failed verification, allow eligible players with the same name to use password login on a later attempt; see [lists and admission](../accounts/lists.md) |
+| `secondAttemptCracked` | `false` | After a failed verification, allow eligible players with the same name to use password login on a later attempt. On a proxy the verdict is settled when the login connection closes (30-second grace at the latest); cancelled or interrupted attempts may also count; see [lists and admission](../accounts/lists.md) |
 | `offline-whitelist` | `false` | Deny unknown offline Java names using FLP's known list, independently of password/account creation |
 | `forwardSkin` | `true` | Forward premium texture properties, including cape data; supported custom SkinsRestorer skins take priority |
 | `premium-warning` | `true` | Ask a player requesting their own premium binding to repeat the command; administrators acting on others are not prompted |

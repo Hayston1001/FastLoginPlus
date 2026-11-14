@@ -10,6 +10,16 @@ Start with one reproducible attempt. Record deployment, exact versions, account 
 4. With a proxy, follow the installation guide to check forwarding, the secret and the backend's allowed proxy IDs.
 5. Only after the holder logs in should they use the [binding procedure](../accounts/binding.md).
 
+## Same-name fallback leads to a rejected password login
+
+`secondAttemptCracked` counts one failed premium verification for a name without binding consent and routes later connections to password login. If the backend still treats the name as a bound premium account, it refuses that password login as an ownership conflict.
+
+1. Confirm the fallback applies. A consented name never falls back; check the name's list and consent state before changing anything.
+2. Clear the backend's premium binding for that name (for example with `/flp cracked`) and have the player reconnect. Until then the player is refused even though the fallback itself worked.
+3. If the player is the owner, `/flp premium` restores premium verification and clears the recorded failure.
+
+Do not delete the auth account or copy a UUID supplied by the player as a shortcut. See [lists and admission](../accounts/lists.md) for the full behaviour.
+
 ## Stuck in an AuthMe login dialog
 
 1. Confirm AuthMe and FLP are compatible with your server and check both startup logs.

@@ -9,7 +9,7 @@
 | `auto-register-unknown` | `true` | 为已验证 Java 身份创建缺失本地账号. 关闭则由认证插件注册, 不为未知离线名字自动建号 |
 | `premiumUuid` | `true` | 使用已验证 Mojang UUID; false 保留按名字生成的离线连接 UUID. 不关闭身份验证 |
 | `nameChangeCheck` | `true` | 查询新名字并按 UUID 协调已有 FLP 记录, 不迁移世界数据 |
-| `secondAttemptCracked` | `false` | 验证失败后, 允许符合条件的同名玩家下次使用密码登录; 详见[名单与准入](../accounts/lists.md) |
+| `secondAttemptCracked` | `false` | 验证失败后, 允许符合条件的同名玩家下次使用密码登录. 代理模式下在登录连接关闭时结算 (最迟 30 秒宽限期); 取消或中断的尝试也可能计入; 详见[名单与准入](../accounts/lists.md) |
 | `offline-whitelist` | `false` | 根据 FLP 已知名单拒绝未知离线 Java 名字, 独立于密码/建号 |
 | `forwardSkin` | `true` | 转发包含披风的正版纹理属性, 受支持的 SkinsRestorer 自定义皮肤优先 |
 | `premium-warning` | `true` | 玩家自己申请正版绑定时需要再次输入命令确认; 管理员指定其他玩家时不需要 |
