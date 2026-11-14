@@ -19,12 +19,11 @@ import java.lang.reflect.Proxy;
  * Settles a login-phase attempt as soon as its connection closes, using the
  * proxy's own login state as the phase marker.
  *
- * <p>{@code ENCRYPT} (and every earlier state) means the client never answered
- * the encryption request, so no verification happened. {@code FINISHING} means
- * the encrypted response was accepted and Mojang verification was running when
- * the connection closed: the proxy turned a rejection into this close, so the
- * attempt counts as a failed verification. Unknown states leave the attempt to
- * the core's grace-period sweep.</p>
+ * <p>{@code FINISHING} means the encrypted response was accepted and Mojang
+ * verification was running when the connection closed: the proxy turned a
+ * rejection into this close, so the attempt counts as a failed verification.
+ * {@code ENCRYPT} and every earlier state mean the client never answered; like
+ * an unknown state, such an attempt is left to the core's grace-period sweep.</p>
  *
  * <p>The login handler is a proxy implementation class, reached reflectively
  * like the existing {@code InitialHandler} lookups. When a version moves its
@@ -106,14 +105,13 @@ public final class VerificationCloseWatcher {
             Object state = stateField.get(connection);
             String stateName = state instanceof Enum<?> ? ((Enum<?>) state).name() : null;
             switch (classify(stateName)) {
-                case NOT_ANSWERED:
-                    plugin.getCore().dropPendingVerification(username, connection);
-                    break;
                 case AUTH_FAILED:
                     plugin.getCore().settleVerificationAsFailure(username, connection);
                     break;
+                case NOT_ANSWERED:
                 default:
-                    // unknown phase: the core's grace-period sweep decides
+                    // the client never answered or the phase is unknown: the
+                    // core's grace-period sweep decides, as before
                     break;
             }
         } catch (ReflectiveOperationException | InaccessibleObjectException | LinkageError ex) {

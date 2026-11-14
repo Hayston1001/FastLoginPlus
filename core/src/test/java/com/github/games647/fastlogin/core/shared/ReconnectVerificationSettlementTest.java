@@ -271,20 +271,6 @@ class ReconnectVerificationSettlementTest {
     }
 
     @Test
-    void ownerAwareDropLeavesAReplacementAlone() {
-        Object old = new Object();
-        Object current = new Object();
-        core.markPendingVerification(NAME, old);
-        core.markPendingVerification(NAME, current);
-
-        core.dropPendingVerification(NAME, old);
-
-        assertTrue(core.settleVerificationAsFailure(NAME, current),
-                "the replacement is still pending after the old connection drops");
-        assertEquals(1, core.getDefiniteFailures(NAME));
-    }
-
-    @Test
     void aPassingVerificationPreventsTheCloseCount() {
         Object owner = new Object();
         core.markPendingVerification(NAME, owner);

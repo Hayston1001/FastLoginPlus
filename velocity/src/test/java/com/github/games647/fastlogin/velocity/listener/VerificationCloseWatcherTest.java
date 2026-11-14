@@ -12,18 +12,24 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class VerificationCloseWatcherTest {
 
     @Test
-    void classifiesTheLoginPhaseHandler() {
-        assertEquals(VerificationCloseWatcher.Outcome.NOT_ANSWERED,
-                VerificationCloseWatcher.classify("InitialLoginSessionHandler"));
+    void classifiesTheLoginStateOfARejectedAttempt() {
         assertEquals(VerificationCloseWatcher.Outcome.AUTH_FAILED,
-                VerificationCloseWatcher.classify("AuthSessionHandler"));
+                VerificationCloseWatcher.classifyLoginState("ENCRYPTION_RESPONSE_RECEIVED"));
+        assertEquals(VerificationCloseWatcher.Outcome.NOT_ANSWERED,
+                VerificationCloseWatcher.classifyLoginState("ENCRYPTION_REQUEST_SENT"));
+        assertEquals(VerificationCloseWatcher.Outcome.NOT_ANSWERED,
+                VerificationCloseWatcher.classifyLoginState("LOGIN_PACKET_RECEIVED"));
+        assertEquals(VerificationCloseWatcher.Outcome.NOT_ANSWERED,
+                VerificationCloseWatcher.classifyLoginState("LOGIN_PACKET_EXPECTED"));
     }
 
     @Test
-    void unknownHandlersLeaveTheGracePeriodInCharge() {
+    void unknownStatesLeaveTheGracePeriodInCharge() {
         assertEquals(VerificationCloseWatcher.Outcome.UNKNOWN,
-                VerificationCloseWatcher.classify("ClientPlaySessionHandler"));
+                VerificationCloseWatcher.classifyLoginState(null));
         assertEquals(VerificationCloseWatcher.Outcome.UNKNOWN,
-                VerificationCloseWatcher.classify(null));
+                VerificationCloseWatcher.classifyLoginState("SOMETHING_NEW"));
+        assertEquals(VerificationCloseWatcher.Outcome.UNKNOWN,
+                VerificationCloseWatcher.classifyHandler(null));
     }
 }

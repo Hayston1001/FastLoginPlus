@@ -766,18 +766,6 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Drops one attempt without counting it when the proxy reports that the
-     * client never answered encryption. Only the matching connection is affected.
-     *
-     * @param username exact login name
-     * @param owner connection identity token of the attempt
-     */
-    public void dropPendingVerification(String username, Object owner) {
-        pendingVerifications.computeIfPresent(attemptKey(username), (key, pending) ->
-                pending.owner == owner ? null : pending);
-    }
-
-    /**
      * A passing verification refutes everything recorded for the name: the
      * pending mark and every counted failure.
      *
