@@ -120,6 +120,30 @@ class SQLiteStorageTest {
     }
 
     @Test
+    void saveProfileLockedFollowsARename() {
+        // a premium account renamed: the row keeps its id, so the login's own
+        // record is still there under the previous name — the write must
+        // follow it instead of being dropped as "deleted"
+        storage.save(new StoredProfile(null, "Steve", true, FloodgateState.FALSE, "1.1.1.1"));
+        StoredProfile renamed = storage.loadProfile("Steve");
+        assertNotNull(renamed);
+        renamed.setPlayerName("SteveRenamed");
+
+        StoredProfile persisted = storage.saveProfileLocked("SteveRenamed", renamed, current -> {
+            current.setSameNameCracked(false);
+            current.setLastIp("4.4.4.4");
+        });
+
+        assertNotNull(persisted);
+        assertEquals(renamed.getRowId(), persisted.getRowId(), "the renamed row must keep its id");
+        StoredProfile loaded = storage.loadProfile("SteveRenamed");
+        assertTrue(loaded.isExistingPlayer());
+        assertEquals("4.4.4.4", loaded.getLastIp());
+        assertFalse(storage.loadProfile("Steve").isExistingPlayer(),
+                "the previous name must not keep a second row");
+    }
+
+    @Test
     void saveProfileLockedKeepsAConcurrentPremiumChange() {
         // a login assembled before the lock must not write its stale copy over
         // an operator toggle that landed in the meantime

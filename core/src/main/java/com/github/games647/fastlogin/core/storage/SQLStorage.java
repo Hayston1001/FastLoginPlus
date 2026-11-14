@@ -67,6 +67,8 @@ public abstract class SQLStorage implements AuthStorage {
             + "` WHERE `Name`=? LIMIT 1";
     protected static final String LOAD_BY_UUID = "SELECT * FROM `" + PREMIUM_TABLE
             + "` WHERE `UUID`=? LIMIT 1";
+    protected static final String LOAD_BY_ROW_ID = "SELECT * FROM `" + PREMIUM_TABLE
+            + "` WHERE `UserID`=? LIMIT 1";
     protected static final String INSERT_PROFILE = "INSERT INTO `" + PREMIUM_TABLE
             + "` (`UUID`, `Name`, `Premium`, `Floodgate`, `SameNameCracked`, `LastIp`) "
             + "VALUES (?, ?, ?, ?, ?, ?) ";
@@ -173,8 +175,20 @@ public abstract class SQLStorage implements AuthStorage {
             }
             if (!current.isExistingPlayer()) {
                 if (sessionProfile.isExistingPlayer()) {
-                    // the row was deleted while this login was in flight
-                    return null;
+                    // No row holds this name. That is either a record deleted
+                    // while the login was in flight, or a premium rename: the
+                    // row keeps its id and only changes its name, so the login's
+                    // own row is still there under the previous name. Follow the
+                    // rename instead of dropping the write (which left the name
+                    // stale and made a later toggle insert a second row).
+                    StoredProfile renamed = loadProfileByRowIdQuietly(sessionProfile.getRowId());
+                    if (renamed == null) {
+                        // the row was deleted while this login was in flight
+                        return null;
+                    }
+                    renamed.setPlayerName(name);
+                    changes.accept(renamed);
+                    return saveQuietly(renamed) ? renamed : null;
                 }
                 changes.accept(sessionProfile);
                 return saveQuietly(sessionProfile) ? sessionProfile : null;
@@ -317,6 +331,27 @@ public abstract class SQLStorage implements AuthStorage {
         } catch (SQLException sqlEx) {
             log.error("Failed to query profile: {}", uuid, sqlEx);
             throw new ProfileLookupException("Failed to query the profile for " + uuid, sqlEx);
+        }
+    }
+
+    /**
+     * Loads the row with the given id, treating an unreadable database as
+     * "cannot tell": the caller writes nothing rather than guessing.
+     *
+     * @param rowId the surrogate primary key of the row
+     * @return the row, or null when it no longer exists or could not be read
+     */
+    private StoredProfile loadProfileByRowIdQuietly(long rowId) {
+        try (Connection con = dataSource.getConnection();
+             PreparedStatement loadStmt = con.prepareStatement(LOAD_BY_ROW_ID)) {
+            loadStmt.setLong(1, rowId);
+
+            try (ResultSet resultSet = loadStmt.executeQuery()) {
+                return parseResult(resultSet).orElse(null);
+            }
+        } catch (SQLException sqlEx) {
+            log.error("Failed to query the profile row {}", rowId, sqlEx);
+            return null;
         }
     }
 
