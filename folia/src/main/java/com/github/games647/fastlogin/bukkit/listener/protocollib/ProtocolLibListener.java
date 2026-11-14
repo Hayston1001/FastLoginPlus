@@ -7,6 +7,7 @@
 package com.github.games647.fastlogin.bukkit.listener.protocollib;
 
 import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.async.AsyncMarker;
 import com.comphenix.protocol.ProtocolLibrary;
 import com.comphenix.protocol.events.PacketAdapter;
 import com.comphenix.protocol.events.PacketContainer;
@@ -145,7 +146,7 @@ public class ProtocolLibListener extends PacketAdapter {
                 switch (action) {
                     case Block:
                         String message = plugin.getCore().getMessage("kick-antibot");
-                        sender.kickPlayer(message);
+                        refuseLogin(packetEvent, sender, message);
                         break;
                     case Continue:
                     default:
@@ -186,13 +187,40 @@ public class ProtocolLibListener extends PacketAdapter {
         return packetType;
     }
 
+    /**
+     * Refuses the connection during the login phase.
+     *
+     * <p>A plain kick at this stage only records the reason on the server: the
+     * client is dropped without it and shows a generic disconnect. The
+     * login-state DISCONNECT packet is what actually shows the configured
+     * message, so every rejection in this listener goes through
+     * {@link ProtocolLibCompat#refuseLogin}. The login packet is cancelled so
+     * the server does not open a session for a connection already being closed.</p>
+     *
+     * @param packetEvent the login packet being handled
+     * @param player      the login-phase player
+     * @param message     the localized reason shown to the client
+     */
+    private void refuseLogin(PacketEvent packetEvent, Player player, String message) {
+        AsyncMarker marker = packetEvent.getAsyncMarker();
+        if (marker == null) {
+            packetEvent.setCancelled(true);
+        } else {
+            synchronized (marker.getProcessingLock()) {
+                packetEvent.setCancelled(true);
+            }
+        }
+
+        ProtocolLibCompat.refuseLogin(plugin.getLog(), plugin.getCore().isDebug(), player, message);
+    }
+
     private void onEncryptionBegin(PacketEvent packetEvent, Player sender) {
         byte[] sharedSecret = packetEvent.getPacket().getByteArrays().read(0);
 
         BukkitLoginSession session = plugin.getSession(sender.getAddress());
         if (session == null) {
             plugin.getLog().warn("Profile {} tried to send encryption response at invalid state", sender.getAddress());
-            sender.kickPlayer(plugin.getCore().getMessage("invalid-request"));
+            refuseLogin(packetEvent, sender, plugin.getCore().getMessage("invalid-request"));
         } else {
             byte[] expectedVerifyToken = session.getVerifyToken();
             if (verifyNonce(sender, packetEvent.getPacket(), session.getClientPublicKey(), expectedVerifyToken)) {
@@ -201,7 +229,7 @@ public class ProtocolLibListener extends PacketAdapter {
                 if (!session.startVerification()) {
                     plugin.getLog().warn("Duplicate encryption response from {} — ignoring",
                             sender.getAddress());
-                    sender.kickPlayer(plugin.getCore().getMessage("invalid-request"));
+                    refuseLogin(packetEvent, sender, plugin.getCore().getMessage("invalid-request"));
                     return;
                 }
 
@@ -212,7 +240,7 @@ public class ProtocolLibListener extends PacketAdapter {
                 );
                 plugin.getScheduler().runAsync(verifyTask);
             } else {
-                sender.kickPlayer(plugin.getCore().getMessage("invalid-verify-token"));
+                refuseLogin(packetEvent, sender, plugin.getCore().getMessage("invalid-verify-token"));
             }
         }
     }
@@ -286,7 +314,7 @@ public class ProtocolLibListener extends PacketAdapter {
                     && verifyPublicKey(clientKey.get(), sessionUUID.get())) {
                 // missing or incorrect
                 // expired always not allowed
-                player.kickPlayer(plugin.getCore().getMessage("invalid-public-key"));
+                refuseLogin(packetEvent, player, plugin.getCore().getMessage("invalid-public-key"));
                 plugin.getLog().warn("Invalid public key from player {}", username);
                 return;
             }

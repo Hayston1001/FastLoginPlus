@@ -6,11 +6,15 @@
  */
 package com.github.games647.fastlogin.bukkit.listener.protocollib;
 
+import com.comphenix.protocol.PacketType;
+import com.comphenix.protocol.ProtocolLibrary;
+import com.comphenix.protocol.events.PacketContainer;
 import com.comphenix.protocol.injector.netty.channel.NettyChannelInjector;
 import com.comphenix.protocol.injector.temporary.TemporaryPlayerFactory;
 import com.comphenix.protocol.reflect.FuzzyReflection;
 import com.comphenix.protocol.reflect.accessors.Accessors;
 import com.comphenix.protocol.reflect.accessors.MethodAccessor;
+import com.comphenix.protocol.wrappers.WrappedChatComponent;
 import io.netty.channel.Channel;
 import org.bukkit.entity.Player;
 import org.slf4j.Logger;
@@ -88,6 +92,50 @@ final class ProtocolLibCompat {
     static boolean isConnectionActive(Logger log, boolean debug, Player player) {
         Channel channel = getChannel(log, debug, player);
         return channel != null && channel.isActive();
+    }
+
+    /**
+     * Refuses a login-phase connection with a reason the client can display.
+     *
+     * <p>{@link Player#kickPlayer(String)} only reaches the client in the play
+     * state: during login the server records the reason but the client is
+     * dropped without it. The login-state DISCONNECT packet is the only way to
+     * show the configured message; the kick afterwards closes the connection on
+     * the server side.</p>
+     *
+     * @param log     the plugin logger
+     * @param debug   whether debug output is enabled (config {@code debug})
+     * @param player  the login-phase player
+     * @param message the localized reason shown to the client
+     * @return true when the disconnect packet was sent
+     */
+    static boolean refuseLogin(Logger log, boolean debug, Player player, String message) {
+        if (!isConnectionActive(log, debug, player)) {
+            // The player is already gone (client cancel, vanilla 'Took too long to
+            // log in', ...) — resolving the injector would fail and the kick itself
+            // is moot.
+            return false;
+        }
+
+        PacketContainer kickPacket = new PacketContainer(PacketType.Login.Server.DISCONNECT);
+        kickPacket.getChatComponents().write(0, WrappedChatComponent.fromText(message));
+        boolean sent = false;
+        try {
+            ProtocolLibrary.getProtocolManager().sendServerPacket(player, kickPacket);
+            sent = true;
+        } catch (Exception ex) {
+            // Narrow race: the connection can drop between the isConnectionActive()
+            // check and the send above.
+            debugLog(log, debug, player, "Failed to send the login-phase disconnect", ex);
+        }
+
+        try {
+            //tell the server that we want to close the connection
+            player.kickPlayer("Disconnect");
+        } catch (RuntimeException ex) {
+            debugLog(log, debug, player, "Failed to close the refused login", ex);
+        }
+        return sent;
     }
 
     private static void debugLog(Logger log, boolean debug, Player player, String message, Exception ex) {
