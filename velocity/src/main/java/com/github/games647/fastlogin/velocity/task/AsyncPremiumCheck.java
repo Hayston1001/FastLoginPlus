@@ -73,7 +73,7 @@ public class AsyncPremiumCheck extends JoinManagement<Player, CommandSource, Vel
         VelocityLoginSession session = new VelocityLoginSession(username, registered, profile);
         plugin.getSession().put(source.getConnection().getRemoteAddress(), session);
 
-        plugin.getCore().markPendingVerification(username, source.getConnection(), source.getConnection()::isActive);
+        plugin.getCore().markPendingVerification(username, source.getConnection());
         source.enableOnlinemode();
     }
 

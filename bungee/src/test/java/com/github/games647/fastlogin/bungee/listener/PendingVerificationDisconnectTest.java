@@ -15,20 +15,16 @@ import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.event.PlayerDisconnectEvent;
 import net.md_5.bungee.api.event.PreLoginEvent;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BooleanSupplier;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 class PendingVerificationDisconnectTest {
     @Test
-    void bindsPendingConnectionBeforePlayerExistsAndDisconnectDropsOnlyThatOwner() {
+    void bindsPendingConnectionAndDisconnectLeavesItForSettlement() {
         FastLoginBungee plugin = mock(FastLoginBungee.class);
         FastLoginCore core = mock(FastLoginCore.class);
         when(plugin.getCore()).thenReturn(core);
@@ -37,22 +33,20 @@ class PendingVerificationDisconnectTest {
         when(plugin.getCrackedNoticeDelivery()).thenReturn(mock(CrackedNoticeDelivery.class));
         PendingConnection connection = mock(PendingConnection.class);
         when(connection.getName()).thenReturn("Steve");
-        when(connection.isConnected()).thenReturn(true);
         PreLoginEvent event = mock(PreLoginEvent.class);
         new AsyncPremiumCheck(plugin, event, connection, "Steve").requestPremiumLogin(
                 new BungeeLoginSource(connection, event), mock(StoredProfile.class), "Steve", true);
-        ArgumentCaptor<BooleanSupplier> liveness = ArgumentCaptor.forClass(BooleanSupplier.class);
-        verify(core).markPendingVerification(eq("Steve"), eq(connection), liveness.capture());
-        assertTrue(liveness.getValue().getAsBoolean());
-        when(connection.isConnected()).thenReturn(false);
-        assertFalse(liveness.getValue().getAsBoolean(), "works before PlayerDisconnectEvent can fire");
+        verify(core).markPendingVerification("Steve", connection);
+
         ProxiedPlayer player = mock(ProxiedPlayer.class);
         when(player.getName()).thenReturn("Steve");
         when(player.getPendingConnection()).thenReturn(connection);
         when(player.getUniqueId()).thenReturn(UUID.randomUUID());
         when(core.getPendingConfirms()).thenReturn(ConcurrentHashMap.newKeySet());
         new ConnectListener(plugin, null).onDisconnect(new PlayerDisconnectEvent(player));
-        verify(core).dropPendingVerification("Steve", connection);
+
+        // the attempt stays pending: the proxy's own rejection is only visible
+        // as this disconnect, so the core settles it instead of dropping it
         verify(core, never()).dropPendingVerification(anyString());
     }
 }

@@ -15,21 +15,17 @@ import com.velocitypowered.api.event.connection.PreLoginEvent;
 import com.velocitypowered.api.proxy.InboundConnection;
 import com.velocitypowered.api.proxy.Player;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 
 import java.net.InetSocketAddress;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.BooleanSupplier;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 class PendingVerificationDisconnectTest {
     @Test
-    void bindsOriginalInboundConnectionAndDisconnectUsesLivenessNotNameOnlyCancellation() {
+    void bindsOriginalInboundConnectionAndDisconnectLeavesItForSettlement() {
         FastLoginVelocity plugin = mock(FastLoginVelocity.class);
         FastLoginCore core = mock(FastLoginCore.class);
         when(plugin.getCore()).thenReturn(core);
@@ -38,15 +34,11 @@ class PendingVerificationDisconnectTest {
         when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
         InboundConnection inbound = mock(InboundConnection.class);
         when(inbound.getRemoteAddress()).thenReturn(new InetSocketAddress("127.0.0.1", 12345));
-        when(inbound.isActive()).thenReturn(true);
         PreLoginEvent event = new PreLoginEvent(inbound, "Steve");
         new AsyncPremiumCheck(plugin, inbound, "Steve", event).requestPremiumLogin(
                 new VelocityLoginSource(inbound, event), mock(StoredProfile.class), "Steve", true);
-        ArgumentCaptor<BooleanSupplier> liveness = ArgumentCaptor.forClass(BooleanSupplier.class);
-        verify(core).markPendingVerification(eq("Steve"), eq(inbound), liveness.capture());
-        assertTrue(liveness.getValue().getAsBoolean());
-        when(inbound.isActive()).thenReturn(false);
-        assertFalse(liveness.getValue().getAsBoolean(), "works before Velocity has a Player/DisconnectEvent");
+        verify(core).markPendingVerification("Steve", inbound);
+
         Player player = mock(Player.class);
         when(player.getUsername()).thenReturn("Steve");
         when(player.getUniqueId()).thenReturn(UUID.randomUUID());
@@ -55,7 +47,9 @@ class PendingVerificationDisconnectTest {
         DisconnectEvent disconnect = mock(DisconnectEvent.class);
         when(disconnect.getPlayer()).thenReturn(player);
         new ConnectListener(plugin, null).onDisconnect(disconnect);
-        verify(core).dropDisconnectedVerification("Steve");
+
+        // the attempt stays pending: the proxy's own rejection is only visible
+        // as this disconnect, so the core settles it instead of dropping it
         verify(core, never()).dropPendingVerification(anyString());
     }
 }

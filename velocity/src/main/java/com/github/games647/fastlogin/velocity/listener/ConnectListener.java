@@ -442,7 +442,8 @@ public class ConnectListener {
     @Subscribe
     public void onDisconnect(DisconnectEvent disconnectEvent) {
         Player player = disconnectEvent.getPlayer();
-        plugin.getCore().dropDisconnectedVerification(player.getUsername());
+        // an unfinished verification is settled by the core instead of being
+        // dropped: the proxy's own rejection is only visible as this disconnect
         plugin.getCrackedNoticeDelivery().disconnected(player);
         plugin.getCore().getPendingConfirms().remove(player.getUniqueId());
 

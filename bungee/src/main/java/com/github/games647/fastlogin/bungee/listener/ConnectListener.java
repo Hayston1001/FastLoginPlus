@@ -510,7 +510,8 @@ public class ConnectListener implements Listener {
     @EventHandler
     public void onDisconnect(PlayerDisconnectEvent disconnectEvent) {
         ProxiedPlayer player = disconnectEvent.getPlayer();
-        plugin.getCore().dropPendingVerification(player.getName(), player.getPendingConnection());
+        // an unfinished verification is settled by the core instead of being
+        // dropped: the proxy's own rejection is only visible as this disconnect
         plugin.getCrackedNoticeDelivery().disconnected(player);
         plugin.getSession().remove(player.getPendingConnection());
         plugin.getCore().getPendingConfirms().remove(player.getUniqueId());

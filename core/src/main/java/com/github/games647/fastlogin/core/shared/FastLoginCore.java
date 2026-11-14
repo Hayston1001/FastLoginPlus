@@ -31,7 +31,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
 
 import org.slf4j.Logger;
@@ -685,21 +684,32 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
      */
     public void markPendingVerification(String username) {
         pendingVerifications.putIfAbsent(attemptKey(username),
-                new PendingVerification(verificationClock.getAsLong(), null, () -> true));
+                new PendingVerification(verificationClock.getAsLong(), null));
     }
 
     /**
      * Binds a proxy attempt to its original connection, including the pre-player phase.
-     * Only repeated requests by the same owner retain their original grace period.
+     * Reconnecting does not extend the grace period: the deadline stays at the
+     * name's first unverified request, so repeatedly reconnecting cannot postpone
+     * the settlement forever.
+     *
+     * <p>A connection that closes before a verdict is not discarded: a proxy performs
+     * the verification itself, so its rejection reaches FLP only as a closed
+     * connection. The attempt is settled like any other instead of guessing which
+     * of rejection, cancellation and network loss produced the close.</p>
      *
      * @param username login name
      * @param owner connection identity token
-     * @param connected live connection check, not a name-based player lookup
      */
-    public void markPendingVerification(String username, Object owner, BooleanSupplier connected) {
-        pendingVerifications.compute(attemptKey(username), (key, pending) ->
-                pending != null && pending.owner == owner ? pending
-                        : new PendingVerification(verificationClock.getAsLong(), owner, connected));
+    public void markPendingVerification(String username, Object owner) {
+        pendingVerifications.compute(attemptKey(username), (key, pending) -> {
+            if (pending == null) {
+                return new PendingVerification(verificationClock.getAsLong(), owner);
+            }
+            // a retry replaces the owner but keeps the first request's deadline
+            return pending.owner == owner ? pending
+                    : new PendingVerification(pending.startedAt, owner);
+        });
     }
 
     /**
@@ -717,30 +727,14 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
-     * Drops a pending verification without counting it: the outcome was
-     * "could not tell" — an authentication outage, or a player who left
-     * mid-verification. Nothing is recorded.
+     * Drops a pending verification without counting it: the caller obtained an
+     * explicit "could not tell" verdict, such as an authentication outage.
+     * A closed connection is not such a verdict and is settled normally.
      *
      * @param username exact login name whose attempt ended without a verdict
      */
     public void dropPendingVerification(String username) {
         pendingVerifications.remove(attemptKey(username));
-    }
-
-    public void dropPendingVerification(String username, Object owner) {
-        pendingVerifications.computeIfPresent(attemptKey(username), (key, pending) ->
-                pending.owner == owner ? null : pending);
-    }
-
-    /**
-     * Velocity replaces its inbound wrapper with a Player before DisconnectEvent.
-     * Check the captured original connection instead of cancelling by player name.
-     *
-     * @param username disconnected player's name
-     */
-    public void dropDisconnectedVerification(String username) {
-        pendingVerifications.computeIfPresent(attemptKey(username), (key, pending) ->
-                pending.connected.getAsBoolean() ? pending : null);
     }
 
     /**
@@ -770,14 +764,18 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     /**
      * Settles pending verifications only after the authentication grace period.
-     * The settlement is the moment the attempt is judged failed, and
-     * it decides with a session-server reachability probe of that moment: the
-     * server answers (the client itself could not verify) -> count one
+     * An attempt that produced no verdict — the client failed verification,
+     * cancelled, or its connection closed — is judged by a session-server
+     * reachability probe at that moment: the server answers -> count one
      * definitive failure; it cannot be reached (an authentication outage) ->
      * drop the attempt without counting and without any action.
+     *
+     * <p>A closed connection is not treated as "could not tell": on a proxy the
+     * service performs the verification itself, so a rejection and a player
+     * leaving are both observed only as a closed connection. Distinguishing them
+     * is not possible from FLP's side, so the attempt is settled uniformly.</p>
      */
     public void settlePendingVerifications() {
-        pendingVerifications.keySet().forEach(this::dropDisconnectedVerification);
         long now = verificationClock.getAsLong();
         if (sessionProbe == null || pendingVerifications.values().stream().noneMatch(pending -> pending.isDue(now))) {
             return;
@@ -788,19 +786,19 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     /**
      * Settles only this name's previous attempt before routing a new connection.
-     * A previous attempt inside the grace period is dropped without counting.
-     * The new attempt is marked later, only if routing requests verification.
+     * An expired attempt is settled even when its connection has already closed.
+     * An attempt still inside the grace period stays pending; the new connection
+     * keeps its original deadline instead of starting a fresh one.
      *
      * @param username exact login name of the returning player
      */
     public void settlePendingVerification(String username) {
-        dropDisconnectedVerification(username);
         String key = attemptKey(username);
         PendingVerification pending = pendingVerifications.get(key);
         if (pending != null) {
             long now = verificationClock.getAsLong();
             boolean reachable = pending.isDue(now) && sessionProbe != null && sessionProbe.isReachable();
-            settlePendingVerification(key, pending, reachable, now, true);
+            settlePendingVerification(key, pending, reachable, now);
         }
     }
 
@@ -816,22 +814,18 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
 
     private void settlePendingVerifications(boolean sessionServerReachable, long now) {
         pendingVerifications.forEach((username, pending) ->
-                settlePendingVerification(username, pending, sessionServerReachable, now, false));
+                settlePendingVerification(username, pending, sessionServerReachable, now));
     }
 
     private void settlePendingVerification(String username, PendingVerification attempt,
-                                           boolean sessionServerReachable, long now, boolean reconnect) {
+                                           boolean sessionServerReachable, long now) {
         pendingVerifications.computeIfPresent(username, (key, pending) -> {
             // A probe result for an old attempt must not consume a replacement.
             if (pending != attempt) {
                 return pending;
             }
-            // Also recheck after a potentially slow session-server probe.
-            if (!pending.connected.getAsBoolean()) {
-                return null;
-            }
             if (!pending.isDue(now)) {
-                return reconnect ? null : pending;
+                return pending;
             }
             if (sessionServerReachable) {
                 definiteFailures.merge(key, 1, Integer::sum);
@@ -848,12 +842,10 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     private static final class PendingVerification {
         private final long startedAt;
         private final Object owner;
-        private final BooleanSupplier connected;
 
-        private PendingVerification(long startedAt, Object owner, BooleanSupplier connected) {
+        private PendingVerification(long startedAt, Object owner) {
             this.startedAt = startedAt;
             this.owner = owner;
-            this.connected = connected;
         }
 
         private boolean isDue(long now) {
