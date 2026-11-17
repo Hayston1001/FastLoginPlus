@@ -1,0 +1,18 @@
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: What would you like to know?
+      description: Describe your question and what you are trying to do.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant context
+      description: If relevant, share your deployment, platform and FastLoginPlus versions, and what you have already tried.
+  - type: textarea
+    id: details
+    attributes:
+      label: Additional details
+      description: Share relevant configuration or logs if helpful. Remove secrets and personal information first.

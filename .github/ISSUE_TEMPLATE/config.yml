@@ -1,11 +1,7 @@
-# General configuration for issue templates
-
-# Allow issues without a template
-#blank_issues_enabled: false
-
-# Extra section on creating issues to redirect to another site
 contact_links:
-  - name: 📌 Questions
-    url: https://github.com/Hayston1001/FastLoginPlus/discussions
-    about:
-      You want to ask something - general questions. Example includes how to set it up or how it is working internally
+  - name: Feature requests and suggestions
+    url: https://github.com/Hayston1001/FastLoginPlus/discussions/categories/ideas
+    about: Share feature requests and suggestions in the Ideas category.
+  - name: Questions
+    url: https://github.com/Hayston1001/FastLoginPlus/discussions/categories/q-a
+    about: Ask questions about setup or how FastLoginPlus works in Q&A.

@@ -1,0 +1,26 @@
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe your use case and the current limitation.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What outcome would you like?
+      description: Describe the desired behavior; a technical design is not required.
+    validations:
+      required: true
+  - type: textarea
+    id: platforms
+    attributes:
+      label: Platforms and deployment
+      description: List all relevant platforms and your setup, or say if you are unsure.
+      placeholder: "Example: Velocity proxy with Paper and Fabric backends"
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and context
+      description: Optionally describe alternatives, constraints or related configuration.

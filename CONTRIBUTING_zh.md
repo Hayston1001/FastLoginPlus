@@ -2,46 +2,74 @@
 
 [English](CONTRIBUTING.md)
 
-欢迎代码, 文档, 翻译和测试贡献. 本项目是 [FastLogin](https://github.com/TuxCoding/FastLogin) 的维护分支, 请保留来源署名和兼容包名. 同样适用于上游的修复, 可以另提最小化上游 PR.
+欢迎参与代码, 文档, 翻译和测试, 也欢迎提供有助于排查的 Bug 报告.
+FastLoginPlus 是 [FastLogin](https://github.com/TuxCoding/FastLogin) 的维护分支.
+请保留源码署名和兼容包名; 如果修复同样适用于上游, 可以另提最小化的上游 PR.
 
-## 构建与测试
+## 快速开始
 
-使用已提交的 Gradle wrapper, **JDK 25** 运行 Gradle. 经典模块使用 JDK 21 工具链, Fabric 使用 25. 插件运行下限与构建要求是不同概念.
+1. Fork 仓库, 克隆自己的副本, 并从预期的基线创建分支.
+2. 安装 JDK 25, 使用它运行 Gradle wrapper. 经典模块使用 JDK 21 工具链,
+   Fabric 使用 JDK 25. 构建要求与插件及服务器的运行 Java 版本要求不同.
+3. 完成改动并运行相关测试. 请求审阅前, 通常应在仓库根目录运行完整构建:
 
-```powershell
-.\gradlew.bat build --console=plain
-.\gradlew.bat :core:sqliteFloorTest --console=plain
-```
+   Windows:
 
-Unix 类系统使用 `./gradlew`. `release` 构建全部模块并在 `build/release/` 收集五个可安装 JAR. 不部署 `-plain.jar`, 不为测试改动就发布/打标签. 详细[构建检查](docs/zh/development/build.md)和[模块边界](docs/zh/development/architecture.md)见手册.
+   ```powershell
+   .\gradlew.bat build --console=plain
+   ```
 
-## 修改前
+   macOS / Linux:
 
-- 检查当前分支, 工作区和目标源码, 不覆盖无关工作.
-- 认证变化先阅读[登录/身份信任模型](docs/zh/LOGIN-FLOW.md). 名字查询, UUID 外形或插件消息本身都不证明身份.
-- 平台 API 不进入共享 core 逻辑. 唯一例外是独立的 `net.md_5.bungee.config` (`bungeecord-config`) YAML 库: 它不是 BungeeCord 平台 API, 打包 JAR 会被重定位到 `fastlogin.config`; 该例外不适用于 BungeeCord API 类型. 适用 Bukkit 变化同步 Folia, 保留调度差异; 改协议同时检查 Velocity 与 Fabric.
-- 保留刻意固定的驱动/依赖基线和 UUID 黄金向量. 源码编译不证明打包后的运行兼容.
-- 注释保持简洁, 已有许可头采用 MIT SPDX 短头并保留适用原作者署名. 遵守 Checkstyle 与 `.gitattributes` (LF, `.bat`/`.cmd` 例外).
+   ```sh
+   ./gradlew build --console=plain
+   ```
 
-## 文档与翻译
+4. 推送分支并向 **Hayston1001/FastLoginPlus:main** 提交 PR, 不要误投上游.
+   未完成的工作也可以提交为 Draft PR.
 
-完整 1.0.0 手册位于 `docs/en/`, `docs/zh/` 保持对应路径. 根 README 只是简短入口, 不再重复配置手册. 同步两种语言, SUMMARY 和公共行为说明. 文档不能引用私有/本机文件, 不暗示未测试的普遍兼容.
+只检查某个模块时, 可以使用 `./gradlew :velocity:build` 等任务 (Windows 使用
+`.\gradlew.bat`). 完整构建会运行全项目的测试和检查, 包括 Fabric. 详情见
+[构建指南](docs/zh/development/build.md).
 
-经典与 Fabric 平台分别提供默认消息, 含共享和平台专属键. 保留替换标记和语言版本行为, 修改消息时检查内置两种语言及所选语言/英文兜底. 见[语言](docs/zh/operations/languages.md), [Wiki 维护](docs/zh/development/gitbook.md).
+## 按改动选择检查
 
-公共配置/命令/行为变化还需同步默认值, 描述符和用户文档. 发布说明在授权下写入 `CHANGELOG.md` 与 `CHANGELOG_zh.md` 的对应开发/发布段, 不把新增中英文混进同一文件, 不重写无关历史版本.
+- 为变化的决策和失败路径补测试, 不只测试正常情况. 认证或存储改动应考虑
+  断线, 重试, 读写失败和重载等情况.
+- 修改共享代码时检查受影响的平台. 适用的 Bukkit 改动要同步到 Folia, 保留调度差异,
+  并验证两侧.
+- 修改协议时同时检查 `protocol`, Velocity 和 Fabric.
+- 修改存储或 JDBC 兼容性时, 还应运行 `./gradlew :core:sqliteFloorTest
+  --console=plain` (Windows 使用 `.\gradlew.bat :core:sqliteFloorTest --console=plain`).
+- 修改身份相关逻辑时, 运行 `:craftapi:test` 并保留 UUID 黄金测试.
+  编译通过本身不能证明打包产物的运行兼容性.
 
-## Pull request
+请如实说明运行了哪些检查, 哪些场景尚未验证. 单元测试, 构建, 服务器启动,
+真实客户端登录和故障注入分别提供不同的验证证据.
 
-1. Fork 后从预期基线建分支, 目标为 **Hayston1001/FastLoginPlus:main**, 不要误投上游.
-2. 尽量采用简洁 Conventional Commit 风格摘要并使用 [PR 模板](.github/pull_request_template.md), 需要时带仓库引用相关 issue.
-3. 为决策及失败路径补测试, 不只测正常情景. 运行受影响检查, 请求审阅前通常还需完整 `build`.
-4. 分开说明实际证据: 单元测试, 编译, 启动, 真实客户端与故障注入. 适用时覆盖断线/重连, 读写失败与关闭/重载.
-5. 不提交密钥, 测试服务器数据和本地生成产物. 精确暂存, 不把整个工作区一并加入.
-6. 检查当前 CI. 未完成工作可以提交 draft PR. 提交, 推送, 标签和发布是单独的明确操作, 不包含在准备工作里.
+## 项目约定
 
-## 反馈与许可证
+- 修改认证前, 请阅读[登录与身份信任模型](docs/zh/LOGIN-FLOW.md).
+  名字查询, UUID 外形或插件消息本身都不能证明身份.
+- 平台 API 不进入共享 core 逻辑. 独立的 `bungeecord-config` YAML 库是例外,
+  这不意味着 core 可以使用 BungeeCord 平台 API. 详见[模块边界](docs/zh/development/architecture.md).
+- 保留有意固定的驱动和依赖兼容基线. 遵守 Checkstyle, `.gitattributes` 和现有
+  MIT SPDX 短头, 在适用时保留原作者署名. 注释保持简洁.
+- 修改公共配置, 命令或行为时, 同步相关默认值, 平台描述符和用户文档.
+  保持 `docs/en/` 和 `docs/zh/` 及其导航一致. 修改消息时保留占位符,
+  检查两种内置语言和回退行为. 详见[语言](docs/zh/operations/languages.md).
+- 不要提交密钥, 测试服务器数据或本地生成产物.
 
-按[反馈指南](docs/zh/operations/reporting.md)提供脱敏版本/配置/日志. 敏感安全问题优先使用可用的私密漏洞报告.
+## Pull request 与问题反馈
 
-贡献采用项目 [MIT License](LICENSE).
+使用 [PR 模板](.github/pull_request_template.md)说明改动, 关联问题, 检查结果和尚未
+验证的内容. 保持改动聚焦, 并检查当前 CI 结果.
+
+反馈 Bug 时请参考[反馈指南](docs/zh/operations/reporting.md), 删除日志和配置中的
+密钥及个人信息. 安全漏洞请在可用时通过 GitHub 私密漏洞报告提交, 不要在公开
+Issue 中发布利用细节或密钥.
+
+功能请求和改进建议请发到
+[Discussions 的 Ideas 分类](https://github.com/Hayston1001/FastLoginPlus/discussions/categories/ideas).
+
+贡献采用项目的 [MIT License](LICENSE).

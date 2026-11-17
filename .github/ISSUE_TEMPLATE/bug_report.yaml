@@ -1,70 +1,56 @@
-name: 🐞 Bug Report
-description: Something isn't working, broken, not expected behavior
-labels: [ bug ]
+name: Bug report
+description: Report unexpected behavior
+title: "[Bug] "
+labels: [bug]
 body:
   - type: markdown
     attributes:
       value: |
-        This ticket is about bugs, so broken, not expected behavior. Feedback about this form is appreciated.
+        Do not post security vulnerabilities or exploit details publicly. Use GitHub's
+        private vulnerability reporting if available. Remove passwords, tokens, forwarding
+        secrets, proxy IDs, database credentials and personal information from all attachments.
+        Never upload an authentication database.
   - type: textarea
     attributes:
       label: What happened?
-      description: What behavior is observed?
+      description: Describe the actual behavior and what you expected instead.
     validations:
       required: true
   - type: textarea
     attributes:
       label: Steps to reproduce
-      description: The actions that cause the issues. Please explain it in detail.
+      description: List the steps, or explain the known conditions if the issue is intermittent.
+    validations:
+      required: true
   - type: input
     attributes:
-      label: Plugin list
-      description: This can be found by running `/pl`
-      placeholder: AuthMe, ProtocolLib, ...
-  - type: input
-    attributes:
-      label: Configuration file
-      description: |
-        Link to the contents of your config.yml file.
-        You can use [GitHub](https://gist.github.com/), [Hastebin](https://hastebin.com) or similar for that.
-      placeholder: https://gist.github.com/
+      label: FastLoginPlus version
+      description: Include the version and, for a development build, the commit or build source.
+    validations:
+      required: true
   - type: textarea
     attributes:
-      label: Server log
-      description: The error, stacktrace or link the complete log. You can use the links above for long versions.
-      placeholder: https://www.toptal.com/developers/hastebin / https://gist.github.com/
-  - type: input
-    attributes:
-      label: Plugin version
-      description: Plugin version or build number. This can be found by running `/version plugin-name`
-      placeholder: v3.1-SNAPSHOT-570b321
+      label: Deployment and platform versions
+      description: State whether this is a standalone server or proxy and backend. List the software and exact version on each side, and where FLP is installed.
+      placeholder: "Example: Velocity 3.x (proxy, FLP); Paper 1.x (backend, FLP)"
     validations:
       required: true
-  - type: dropdown
+  - type: textarea
     attributes:
-      label: Platform
-      description: Server software - choose your proxy software if you have multiple servers
-      options:
-        - Fabric
-        - Bukkit
-        - Spigot
-        - Paper
-        - Folia
-        - BungeeCord
-        - Velocity
-        - All / Shared
-    validations:
-      required: true
+      label: Other environment details
+      description: "As relevant: Java versions, authentication plugin and version, forwarding mode, storage, Floodgate, Fabric mods, and other plugins."
+  - type: textarea
+    attributes:
+      label: Logs and configuration
+      description: Share relevant sanitized configuration and logs, ideally from both sides of one attempt with timestamps. Include a link if they are long. Remove secrets and personal data first.
+      render: text
+  - type: textarea
+    attributes:
+      label: Additional context
+      description: "What have you tried? Does it happen on the latest stable release or a development build? If not tested, say so. For login issues, describe the account state and player-visible message."
   - type: checkboxes
     attributes:
-      label: Relevance
-      description: Check list for previous tickets
+      label: Before submitting
       options:
-        - label: |
-            I tried the [latest build](https://github.com/Hayston1001/FastLoginPlus/actions) 
-            (build refers to development builds from GitHub Actions)
-          required: true
-        - label: |
-            I checked for existing tickets -
-            If there are, please vote them with a thumbs reaction and not create new ones
+        - label: I searched existing issues for the same problem.
           required: true

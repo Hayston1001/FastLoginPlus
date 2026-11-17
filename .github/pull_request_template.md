@@ -1,11 +1,19 @@
-[//]: # (Lines in this format are considered as comments and will not be displayed.)
+### What changed and why?
 
-[//]: # (If your work is in progress, please consider making a draft pull request.)
+<!-- Describe the change and affected platforms. -->
 
-### Summary of your change
+### Related issues
 
-[//]: # (Example: motivation, enhancement)
+<!-- If applicable, link issues using #NUMBER, Fixes #NUMBER or the full repository reference. -->
 
-### Related issue
+### Verification
 
-[//]: # (Reference it using '#NUMBER'. Ex: Fixes/Related #...)
+<!-- List the commands or tests actually run and their results. -->
+
+### Not verified or not applicable
+
+<!-- For example: server startup, real-client login, other platforms or failure paths. Explain any gaps. -->
+
+### User-facing impact
+
+<!-- If applicable, describe configuration, commands, messages, documentation or compatibility changes. -->

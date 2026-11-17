@@ -2,46 +2,81 @@
 
 [简体中文](CONTRIBUTING_zh.md)
 
-Contributions include code, documentation, translations and testing. This is a maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin). Keep provenance and compatibility packages intact; consider a separate minimal upstream PR where a fix also applies there.
+Code, documentation, translations, testing and useful bug reports are welcome.
+FastLoginPlus is a maintained fork of [FastLogin](https://github.com/TuxCoding/FastLogin).
+Preserve source attribution and compatibility packages. If a fix also applies upstream,
+consider a separate minimal upstream pull request.
 
-## Build and test
+## Get started
 
-Use the checked-in Gradle wrapper with **JDK 25** to run Gradle. Classic modules use a JDK 21 toolchain; Fabric uses 25. Plugin runtime floors are separate from these build requirements.
+1. Fork the repository, clone your fork and create a branch from the intended base.
+2. Install JDK 25 and use it to run the Gradle wrapper. Classic modules use a JDK 21
+   toolchain; Fabric uses JDK 25. These build requirements are separate from the
+   Java versions required to run the plugin and server.
+3. Make your change and run the relevant tests. Before requesting review, normally
+   run the full build from the repository root:
 
-```powershell
-.\gradlew.bat build --console=plain
-.\gradlew.bat :core:sqliteFloorTest --console=plain
-```
+   Windows:
 
-On Unix-like systems use `./gradlew`. `release` builds every module and collects five installable JARs in `build/release/`. Do not deploy `-plain.jar` or publish/tag just to test a change. Detailed [build checks](docs/en/development/build.md) and [module boundaries](docs/en/development/architecture.md) live in the manual.
+   ```powershell
+   .\gradlew.bat build --console=plain
+   ```
 
-## Before editing
+   macOS / Linux:
 
-- Check the current branch, working tree and affected source. Do not overwrite unrelated work.
-- Read the [login/identity trust model](docs/en/LOGIN-FLOW.md) for authentication changes. A name lookup, UUID shape or plugin message alone is not identity proof.
-- Keep platform APIs out of shared core logic. The standalone `net.md_5.bungee.config` (`bungeecord-config`) YAML library is the documented exception: it is not the BungeeCord API, and packaged jars relocate it to `fastlogin.config`; the exception does not extend to BungeeCord API types. Mirror applicable Bukkit changes into Folia while preserving scheduler differences; protocol changes need Velocity and Fabric checks together.
-- Preserve the deliberate driver/dependency baselines and UUID golden vectors. Source compilation does not prove packaged runtime compatibility.
-- Keep comments concise and licensed source headers in the MIT SPDX short form, with original contributor credit where applicable. Follow Checkstyle and `.gitattributes` (LF, with `.bat`/`.cmd` exceptions).
+   ```sh
+   ./gradlew build --console=plain
+   ```
 
-## Documentation and translations
+4. Push your branch and open a pull request against **Hayston1001/FastLoginPlus:main**,
+   not the upstream repository. Draft pull requests are welcome.
 
-The full 1.0.0 manual is under `docs/en/`, with matching `docs/zh/` paths. Root READMEs are short entry points, not duplicate configuration manuals. Keep language versions, SUMMARY navigation and public behavior descriptions aligned. Documentation must not cite private/local machine files or imply untested universal compatibility.
+For a focused check, use a module task such as `./gradlew :velocity:build` (on Windows,
+use `.\gradlew.bat`). The full build runs tests and checks across the project, including
+Fabric. See the [build guide](docs/en/development/build.md) for more.
 
-Default messages exist separately for classic and Fabric platforms, with shared and platform-specific keys. Preserve replacement tokens and language-version behavior. Check both built-in languages and selected-language/English fallback when changing messages. See [languages](docs/en/operations/languages.md) and [Wiki maintenance](docs/en/development/gitbook.md).
+## Choose checks for your change
 
-Public config/command/behavior changes also need the relevant defaults, descriptors and user documentation. Release-note changes belong in `CHANGELOG.md` and `CHANGELOG_zh.md` under the appropriate development/release section as authorized; do not mix both languages into one file's new entries or rewrite unrelated historical releases.
+- Test changed decisions and failure paths, not just the happy path. For authentication
+  or storage changes, consider disconnects, retries, failed reads and writes, and reloads.
+- Changes to shared code need checks for affected platforms. Mirror applicable Bukkit
+  changes in Folia while preserving scheduler differences, and verify both.
+- Protocol changes need checks for `protocol`, Velocity and Fabric together.
+- For storage or JDBC compatibility changes, also run `./gradlew :core:sqliteFloorTest
+  --console=plain` (or `.\gradlew.bat :core:sqliteFloorTest --console=plain` on Windows).
+- For identity-related changes, run `:craftapi:test` and preserve the UUID golden tests.
+  Compilation alone does not prove packaged runtime compatibility.
 
-## Pull requests
+Report what you actually ran and what remains unverified. Unit tests, a build, server
+startup, real-client login and fault injection provide different evidence.
 
-1. Fork the repository and branch from the intended base. Target **Hayston1001/FastLoginPlus:main**, not the upstream repository by accident.
-2. Use a concise Conventional Commit-style summary where practical and the [PR template](.github/pull_request_template.md). Reference relevant issues with their repository when needed.
-3. Add tests for changed decisions and failure paths, not just the happy path. Run the affected checks and normally the full `build` before requesting review.
-4. Describe actual evidence separately: unit tests, compilation, startup, real clients and fault injection. Include disconnect/reconnect, failed reads/writes and shutdown/reload where relevant.
-5. Keep secrets, test server data and generated local artifacts out of commits. Stage deliberately, not with an indiscriminate add of the whole working tree.
-6. Check current CI results. Draft PRs are welcome for unfinished work. Committing, pushing, tagging and publishing are separate explicit operations, not implied by preparation.
+## Project guidelines
 
-## Reporting and license
+- Read the [login and identity trust model](docs/en/LOGIN-FLOW.md) before changing
+  authentication. A name lookup, UUID shape or plugin message alone is not proof of identity.
+- Keep platform APIs out of shared core logic. The standalone `bungeecord-config` YAML
+  library is an exception, not permission to use BungeeCord platform APIs in core.
+  See the [module boundaries](docs/en/development/architecture.md).
+- Preserve deliberate driver and dependency compatibility baselines. Follow Checkstyle,
+  `.gitattributes` and the existing MIT SPDX short headers, retaining original attribution
+  where applicable. Keep comments concise.
+- Update relevant defaults, platform descriptors and user documentation when changing
+  public configuration, commands or behavior. Keep `docs/en/` and `docs/zh/` and their
+  navigation aligned. Preserve message placeholders and check both built-in languages
+  and fallback behavior. See [languages](docs/en/operations/languages.md).
+- Do not commit secrets, test server data or generated local artifacts.
 
-Follow the [reporting guide](docs/en/operations/reporting.md), including sanitized versions/config/logs. Use private vulnerability reporting where available for sensitive security issues.
+## Pull requests and reports
+
+Use the [PR template](.github/pull_request_template.md) to explain the change, related
+issues, checks and remaining gaps. Keep the change focused and check the current CI result.
+
+For bugs, use the [reporting guide](docs/en/operations/reporting.md) and remove secrets
+and personal data from logs and configuration. For security vulnerabilities, use GitHub's
+private vulnerability reporting if available; do not publish exploit details or secrets
+in an issue.
+
+Share feature requests and suggestions in
+[Ideas](https://github.com/Hayston1001/FastLoginPlus/discussions/categories/ideas).
 
 Contributions are licensed under the project's [MIT License](LICENSE).
