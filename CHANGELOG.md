@@ -2,6 +2,50 @@
 
 English | [简体中文](CHANGELOG_zh.md)
 
+## v1.1.0
+
+> This update focuses on bug fixes and safe fallbacks
+
+### Login and accounts
+
+- **A dropped connection is recorded as a failure**: if the player leaves or closes the window during verification, that login ends as a failure instead of staying on the waiting screen
+- **The state changes only after the event completed**: only a login or registration the authentication plugin actually completed marks the name as upgraded to premium; a cancelled event or a failed save leaves it unchanged
+- **A rename keeps one record**: a premium player who renames keeps the existing record instead of getting a second one
+- **A database error fails the login**: a failed lookup ends that login with a message instead of registering an existing player as new
+- **An older proxy falls back to the password login**: when the proxy does not declare its login policy, the backend logs a warning and keeps the password/registration flow instead of forcing an automatic login
+- **A missing session no longer allows auto-login**: the configured `autoLogin` decides instead of defaulting to on
+- **Bedrock logins stay verified**: a Floodgate login stays verified, while an unconfirmed Java login is not upgraded to premium
+
+### Servers and proxies
+
+- **BungeeCord shows its notice on the login screen**: notices such as a taken name appear without waiting for the backend login
+- **A refusal shows the configured reason**: the player sees a message instead of a bare disconnect
+- **AuthMe 5.x accounts are read correctly**: existing accounts are no longer treated as new because the account state could not be read
+- **MySQL/MariaDB keeps the same-name state**: the same-name cracked state is no longer lost on those databases
+- **Fabric reaches the same decision as the classic backends**: a name that already agreed to upgrade but connects without a passed verification is refused by the same rule as on Bukkit, Folia or BungeeCord
+- **An ignored AuthMe pin is warned about at startup**: when the installed AuthMe version ignores the configured auto-login pin, startup logs a warning
+
+### Stability
+
+- **Shutdown completes queued database writes**: running database tasks get up to three seconds before the connection pool closes
+- **Undeliverable admin actions are retried**: an action the proxy could not deliver is queued again instead of disappearing
+- **Actions queued too long expire**: premium, cracked and delete requests older than a day are dropped instead of being applied much later
+- **A mistyped configuration value falls back to the default**: a wrong-type value is reported and the template default is used instead of failing the login
+- **Login responses that are not for this attempt are ignored silently**: they no longer flood the console error log
+
+### Commands and skins
+
+- **`/flp delete` completion needs the permission**: players without the delete permission no longer get names completed
+- **Same-name players no longer share a skin**: a cached skin applies only to the connection it belongs to
+
+### Fabric
+
+- **Default messages update**: untouched default messages are updated with the new language files
+
+### Configuration
+
+- **`require-declared-proxy-policy` is removed**: the proxy's declaration alone decides, the key is no longer configurable, and an older proxy keeps the password login
+
 ## v1.0.0
 
 > FLP's first stable release:
