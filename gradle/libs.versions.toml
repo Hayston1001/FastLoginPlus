@@ -5,7 +5,6 @@ geyserBaseApi = "1.0.3"
 fastutil = "8.5.16"
 cumulus = "1.1.2"
 protocolLib = "5.3.0"
-protocolSupport = "master-66b494a8dd-1"
 datafixerupper = "7.1.15"
 netty = "4.1.103.Final"
 placeholderApi = "2.11.6"
@@ -37,7 +36,6 @@ geyser-base-api = { module = "org.geysermc.api:base-api", version.ref = "geyserB
 fastutil-core = { module = "it.unimi.dsi:fastutil-core", version.ref = "fastutil" }
 cumulus = { module = "org.geysermc.cumulus:cumulus", version.ref = "cumulus" }
 protocol-lib = { module = "com.comphenix.protocol:ProtocolLib", version.ref = "protocolLib" }
-protocol-support = { module = "com.github.ProtocolSupport:ProtocolSupport", version.ref = "protocolSupport" }
 datafixerupper = { module = "com.mojang:datafixerupper", version.ref = "datafixerupper" }
 netty-handler = { module = "io.netty:netty-handler", version.ref = "netty" }
 placeholder-api = { module = "me.clip:placeholderapi", version.ref = "placeholderApi" }

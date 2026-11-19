@@ -22,7 +22,7 @@ configurations.matching {
 dependencies {
     compileOnly(libs.datafixerupper) { transitive = false }
     compileOnly(libs.protocol.lib) { transitive = false }
-    compileOnly(libs.protocol.support) { transitive = false }
+    compileOnly project(':protocolsupport-api')
     compileOnly libs.netty.handler
     compileOnly(libs.placeholder.api) { transitive = false }
     compileOnly(libs.authme) { transitive = false }

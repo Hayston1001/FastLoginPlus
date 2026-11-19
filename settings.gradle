@@ -39,7 +39,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = 'FastLoginPlus'
-include 'protocol', 'shared', 'craftapi', 'core', 'bukkit', 'folia', 'bungee', 'velocity'
+include 'protocol', 'shared', 'craftapi', 'core', 'protocolsupport-api', 'bukkit', 'folia', 'bungee', 'velocity'
 
 // Fabric 26.2 and Loom require the JVM running Gradle to be Java 25. The classic
 // modules keep their Java 21 toolchain.

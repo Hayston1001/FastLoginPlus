@@ -1,6 +1,6 @@
 # 备份, 升级与回退
 
-本手册描述 FLP 1.0.0. 更早的发布产物不一定包含这里介绍的全部行为. 实际安装时阅读该构建的[发布说明](https://github.com/Hayston1001/FastLoginPlus/releases).
+本手册描述 FLP 的当前版本. 更早的发布产物不一定包含这里介绍的全部行为. 实际安装时阅读该构建的[发布说明](https://github.com/Hayston1001/FastLoginPlus/releases).
 
 ## 一致性备份
 

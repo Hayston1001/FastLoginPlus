@@ -1,6 +1,6 @@
 # Backup, upgrade and rollback
 
-This manual describes FLP 1.0.0. Older release artifacts do not contain all documented behaviors. Read the [release notes](https://github.com/Hayston1001/FastLoginPlus/releases) for the actual build being installed.
+This manual describes the current FLP release. Older release artifacts do not contain all documented behaviors. Read the [release notes](https://github.com/Hayston1001/FastLoginPlus/releases) for the actual build being installed.
 
 ## Back up a consistent set
 

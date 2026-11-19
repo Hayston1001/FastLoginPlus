@@ -1,0 +1,12 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * Copyright (c) 2026 Hayston1001
+ */
+
+// Compile-only declarations of the ProtocolSupport API used by the Bukkit and Folia
+// listeners. The upstream JitPack artifact stopped building (its own manifest still points
+// at a retired repository), so the build compiles against these signatures instead. The
+// installed ProtocolSupport plugin supplies the real classes at runtime and this module is
+// never packaged or published.
+ext.javaFloor = 8
