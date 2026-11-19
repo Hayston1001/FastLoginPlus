@@ -31,6 +31,7 @@
     "Fabric": {
       "loaders": ["fabric"],
       "game_versions": "fabric",
+      "environment": "dedicated_server_only",
       "name": "Fabric 26.2",
       "jar_prefix": "FastLoginPlusFabric-26.2-"
     }

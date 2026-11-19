@@ -50,7 +50,7 @@ jobs:
                        f"[简体中文]({base}/CHANGELOG_zh.md)")
               badge = ("[![modrinth](https://cdn.jsdelivr.net/npm/@intergrav/devins-badges@3/"
                        "assets/cozy/available/modrinth_vector.svg)]"
-                       "(https://modrinth.com/plugin/fastloginplus)")
+                       "(https://modrinth.com/plugin/fastloginplus/versions)")
               return f"{links}\n\n{badge}\n\n{body}\n"
 
           def notes_main():
@@ -156,6 +156,8 @@ jobs:
                   "file_parts": ["file"],
                   "primary_file": "file",
               }
+              if "environment" in entry:
+                  metadata["environment"] = entry["environment"]
               return jar, metadata
 
           def existing_upload(versions, metadata, jar):
@@ -171,6 +173,7 @@ jobs:
                       and matches[0]["files"][0]["hashes"].get("sha512") == digest
                       and set(matches[0]["game_versions"]) == set(metadata["game_versions"])
                       and matches[0]["version_type"] == metadata["version_type"]
+                      and ("environment" not in metadata or matches[0].get("environment") == metadata["environment"])
                       and matches[0]["status"] == metadata["status"]):
                   return matches[0]["id"]
               raise ValueError("This platform/version already exists with different files or metadata; refusing to overwrite")
