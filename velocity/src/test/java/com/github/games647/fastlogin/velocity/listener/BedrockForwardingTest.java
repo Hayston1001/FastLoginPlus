@@ -45,6 +45,7 @@ class BedrockForwardingTest {
         when(core.getConfig()).thenReturn(config);
         FloodgateService floodgate = mock(FloodgateService.class);
         when(plugin.getFloodgateService()).thenReturn(floodgate);
+        when(plugin.hasFloodgate()).thenReturn(true);
         Player player = mock(Player.class);
         when(player.getUniqueId()).thenReturn(uuid);
         when(player.getUsername()).thenReturn("Bedrock");

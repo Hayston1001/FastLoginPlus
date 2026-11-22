@@ -7,7 +7,6 @@
 package com.github.games647.fastlogin.bukkit.command;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
-import com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator;
 import com.github.games647.fastlogin.bukkit.event.BukkitFastLoginPremiumToggleEvent;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import org.bukkit.command.Command;
@@ -50,16 +49,7 @@ public class CrackedCommand extends ToggleCommand {
         Player player = (Player) sender;
         String playerName = sender.getName();
 
-        // Always clear AuthMe locally — AuthMe is on the backend,
-        // the proxy (BungeeCord/Velocity) cannot access it.
-        // This must run even when the command is forwarded to a proxy.
-        AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
-        if (integrator != null) {
-            integrator.clearPlayerPremium(playerName);
-        } else {
-            plugin.getLog().warn("CrackedCommand: authMePremiumIntegrator is null, "
-                + "skipping AuthMe cleanup for {}", playerName);
-        }
+        plugin.clearPremiumAccount(playerName);
 
         // Forward to proxy if enabled; proxy handles profile persistence,
         // messages, kick — the backend has no DB in proxy mode.
@@ -126,15 +116,7 @@ public class CrackedCommand extends ToggleCommand {
 
         String playerName = args[0];
 
-        // Always clear AuthMe locally — same as onCrackedSelf().
-        // AuthMe is on the backend, the proxy cannot access it.
-        AuthMePremiumIntegrator integrator = plugin.getAuthMePremiumIntegrator();
-        if (integrator != null) {
-            integrator.clearPlayerPremium(playerName);
-        } else if (plugin.getCore().isDebug()) {
-            plugin.getLog().info("CrackedCommand: authMePremiumIntegrator is null, "
-                + "skipping AuthMe cleanup for {}", playerName);
-        }
+        plugin.clearPremiumAccount(playerName);
 
         // Forward to proxy if enabled; proxy handles profile persistence,
         // messages, kick — the backend has no DB in proxy mode.

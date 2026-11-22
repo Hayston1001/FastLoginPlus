@@ -145,7 +145,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     private SQLStorage storage;
     private AntiBotService antiBot;
     private PasswordGenerator<P> passwordGenerator = new DefaultPasswordGenerator<>();
-    private AuthPlugin<P> authPlugin;
+    private volatile AuthPlugin<P> authPlugin;
     private UpdateChecker updateChecker;
 
     public FastLoginCore(T plugin) {

@@ -11,7 +11,6 @@ import com.github.games647.fastlogin.core.antibot.AntiBotService;
 import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
 
 import com.github.games647.fastlogin.velocity.event.VelocityFastLoginAntiBotEvent;
-import com.github.games647.fastlogin.core.hooks.bedrock.FloodgateService;
 import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.LoginSession;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
@@ -22,12 +21,8 @@ import com.github.games647.fastlogin.core.hooks.bedrock.BedrockSession;
 import com.github.games647.fastlogin.velocity.FastLoginVelocity;
 import com.github.games647.fastlogin.velocity.VelocityLoginSession;
 import com.github.games647.fastlogin.velocity.task.AsyncPremiumCheck;
-import com.github.games647.fastlogin.velocity.task.FloodgateAuthTask;
 import com.github.games647.fastlogin.velocity.task.ForceLoginTask;
-import com.google.common.cache.Cache;
-import com.google.common.collect.ListMultimap;
 import com.velocitypowered.api.event.Continuation;
-import com.velocitypowered.api.event.EventManager;
 import com.velocitypowered.api.event.EventTask;
 import com.velocitypowered.api.event.PostOrder;
 import com.velocitypowered.api.event.Subscribe;
@@ -37,7 +32,6 @@ import com.velocitypowered.api.event.connection.PreLoginEvent.PreLoginComponentR
 import com.velocitypowered.api.event.player.GameProfileRequestEvent;
 import com.velocitypowered.api.event.player.ServerConnectedEvent;
 import com.velocitypowered.api.event.player.ServerPreConnectEvent;
-import com.velocitypowered.api.plugin.PluginContainer;
 import com.velocitypowered.api.proxy.InboundConnection;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.server.RegisteredServer;
@@ -45,9 +39,7 @@ import com.velocitypowered.api.util.GameProfile;
 import com.velocitypowered.api.util.GameProfile.Property;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import org.geysermc.floodgate.api.player.FloodgatePlayer;
 
-import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -58,8 +50,6 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 public class ConnectListener {
-
-    private static final String FLOODGATE_PLUGIN_NAME = "org.geysermc.floodgate.VelocityPlugin";
 
     private final FastLoginVelocity plugin;
     private final AntiBotService antiBotService;
@@ -87,8 +77,8 @@ public class ConnectListener {
         }
 
         // FloodgateVelocity only sets the correct username in GetProfileRequestEvent, but we need it here too.
-        if (plugin.getFloodgateService() != null) {
-            String floodgateUsername = getFloodgateUsername(connection);
+        if (plugin.hasFloodgate()) {
+            String floodgateUsername = FloodgateAccess.correctUsername(plugin, connection);
             if (floodgateUsername != null) {
                 if (plugin.getCore().isDebug()) {
                     plugin.getLog().info("Found player's Floodgate: {}", floodgateUsername);
@@ -293,16 +283,11 @@ public class ConnectListener {
         GameProfile profile = event.getGameProfile();
         List<Property> properties = new ArrayList<>(profile.getProperties());
         boolean stripped = properties.removeIf(property -> BedrockClaim.PROPERTY_NAME.equals(property.getName()));
-        FloodgatePlayer player = null;
-        if (plugin.getFloodgateService() != null) {
-            player = getFloodgatePlayer(event.getConnection());
-            if (player == null) {
-                player = plugin.getFloodgateService().getBedrockPlayer(profile.getId());
-            }
-        }
-        if (player != null) {
-            BedrockSession policy = BedrockSession.fromConfig(plugin.getCore().getConfig(),
-                    player.getLinkedPlayer() != null);
+        Boolean linked = plugin.hasFloodgate()
+                ? FloodgateAccess.linked(plugin, event.getConnection(), profile.getId())
+                : null;
+        if (linked != null) {
+            BedrockSession policy = BedrockSession.fromConfig(plugin.getCore().getConfig(), linked);
             BedrockClaim claim = new BedrockClaim(profile.getName(), profile.getId(), policy.isLinked(),
                     policy.getAutoLogin(), policy.getAutoRegister(), policy.getAllowConflict(),
                     System.currentTimeMillis(), UUID.randomUUID());
@@ -311,7 +296,7 @@ public class ConnectListener {
                 plugin.getLog().info("Attached signed proxy Bedrock facts for {}", profile.getName());
             }
         }
-        if (player != null || stripped) {
+        if (linked != null || stripped) {
             event.setGameProfile(profile.withProperties(properties));
         }
     }
@@ -319,13 +304,13 @@ public class ConnectListener {
     @Subscribe(order = PostOrder.LAST)
     public void refreshBedrockClaim(ServerPreConnectEvent event) {
         Player player = event.getPlayer();
-        FloodgatePlayer bedrock = plugin.getFloodgateService() == null ? null
-                : plugin.getFloodgateService().getBedrockPlayer(player.getUniqueId());
-        if (bedrock == null) {
+        Boolean linked = plugin.hasFloodgate()
+                ? FloodgateAccess.linked(plugin, player.getUniqueId())
+                : null;
+        if (linked == null) {
             return;
         }
-        BedrockSession policy = BedrockSession.fromConfig(plugin.getCore().getConfig(),
-                bedrock.getLinkedPlayer() != null);
+        BedrockSession policy = BedrockSession.fromConfig(plugin.getCore().getConfig(), linked);
         List<Property> properties = new ArrayList<>(player.getGameProfileProperties());
         properties.removeIf(property -> BedrockClaim.PROPERTY_NAME.equals(property.getName()));
         BedrockClaim claim = new BedrockClaim(player.getUsername(), player.getUniqueId(), policy.isLinked(),
@@ -354,8 +339,8 @@ public class ConnectListener {
         }
         IdentityClaim claim;
         try {
-            boolean bedrock = plugin.getFloodgateService() != null
-                    && getFloodgateUsername(event.getConnection()) != null;
+            boolean bedrock = plugin.hasFloodgate()
+                    && FloodgateAccess.correctUsername(plugin, event.getConnection()) != null;
             if (session != null) {
                 // observation facts + upgrade consent, computed from the record state
                 // this connection saw at login time
@@ -406,17 +391,8 @@ public class ConnectListener {
         Player player = serverConnectedEvent.getPlayer();
         RegisteredServer server = serverConnectedEvent.getServer();
 
-        FloodgateService floodgateService = plugin.getFloodgateService();
-        if (floodgateService != null) {
-            FloodgatePlayer floodgatePlayer = floodgateService.getBedrockPlayer(player.getUniqueId());
-            if (floodgatePlayer != null) {
-                if (plugin.getCore().isDebug()) {
-                    plugin.getLog().info("Running floodgate handling for {}", player);
-                }
-                Runnable floodgateAuthTask = new FloodgateAuthTask(plugin.getCore(), player, floodgatePlayer, server);
-                plugin.getScheduler().runAsync(floodgateAuthTask);
-                return;
-            }
+        if (plugin.hasFloodgate() && FloodgateAccess.authenticate(plugin, player, server)) {
+            return;
         }
 
         VelocityLoginSession session = plugin.getSession().get(player.getRemoteAddress());
@@ -448,80 +424,5 @@ public class ConnectListener {
         plugin.getCore().getPendingConfirms().remove(player.getUniqueId());
 
         plugin.getSession().remove(player.getRemoteAddress());
-    }
-
-    /**
-     * Get the Floodgate username from the Floodgate plugin's playerCache using lots of reflections
-     *
-     * @param connection
-     * @return the Floodgate username or null if not found
-     */
-    private String getFloodgateUsername(InboundConnection connection) {
-        FloodgatePlayer player = getFloodgatePlayer(connection);
-        return player == null ? null : player.getCorrectUsername();
-    }
-
-    private FloodgatePlayer getFloodgatePlayer(InboundConnection connection) {
-        try {
-            // get floodgate's event handler
-            Object floodgateEventHandler = getFloodgateHandler();
-            if (floodgateEventHandler == null) {
-                return null;
-            }
-
-            // Get the Floodgate playerCache field
-            Field playerCacheField = floodgateEventHandler.getClass().getDeclaredField("playerCache");
-            playerCacheField.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            Cache<InboundConnection, FloodgatePlayer> playerCache =
-                    (Cache<InboundConnection, FloodgatePlayer>) playerCacheField.get(floodgateEventHandler);
-
-            // Find the FloodgatePlayer instance in playerCache
-            FloodgatePlayer floodgatePlayer = playerCache.getIfPresent(connection);
-            if (floodgatePlayer == null) {
-                return null;
-            }
-
-            return floodgatePlayer;
-        } catch (Exception ex) {
-            plugin.getLog().error("Failed to fetch current floodgate username", ex);
-        }
-
-        return null;
-    }
-
-    private Object getFloodgateHandler()
-            throws NoSuchFieldException, IllegalAccessException {
-        // Get Velocity's event manager
-        EventManager eventManager = plugin.getServer().getEventManager();
-        Field handlerField = eventManager.getClass().getDeclaredField("handlersByType");
-        handlerField.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        ListMultimap<Class<?>, ?> handlersByType = (ListMultimap<Class<?>, ?>) handlerField.get(eventManager);
-
-        // Get all registered PreLoginEvent handlers
-        List<?> loginEventRegistrations = handlersByType.get(PreLoginEvent.class);
-        Field pluginField = loginEventRegistrations.get(0).getClass().getDeclaredField("plugin");
-        pluginField.setAccessible(true);
-
-        // Find the Floodgate plugin's PreLoginEvent handler registration (Velocity implementation)
-        Object floodgateRegistration = null;
-        for (Object handler : loginEventRegistrations) {
-            PluginContainer eventHandlerPlugin = (PluginContainer) pluginField.get(handler);
-            String eventHandlerPluginName = eventHandlerPlugin.getInstance().get().getClass().getName();
-            if (eventHandlerPluginName.equals(FLOODGATE_PLUGIN_NAME)) {
-                floodgateRegistration = handler;
-                break;
-            }
-        }
-
-        if (floodgateRegistration == null) {
-            return null;
-        }
-
-        // Extract the EventHandler instance (floodgate impl) from Velocity's internal registration handler storage
-        Field eventHandlerField = floodgateRegistration.getClass().getDeclaredField("instance");
-        eventHandlerField.setAccessible(true);
-        return eventHandlerField.get(floodgateRegistration);
     }
 }

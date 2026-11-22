@@ -10,6 +10,7 @@ import com.github.games647.fastlogin.core.hooks.AuthPlugin;
 import com.github.games647.fastlogin.core.shared.event.FastLoginAutoLoginEvent;
 import com.github.games647.fastlogin.core.storage.SQLStorage;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import com.github.games647.fastlogin.protocol.IdentityClaim.Consent;
 
 public abstract class ForceLoginManagement<P extends C, C, L extends LoginSession, T extends PlatformPlugin<C>>
         implements Runnable {
@@ -132,9 +133,8 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
     }
 
     /**
-     * The login flow for a verified premium session with an auth plugin: the
-     * message path applies the decision table, the standalone path keeps
-     * its local keys, and only confirmed outcomes touch the record.
+     * Runs the account decision and applies only confirmed actions.
+     * Legacy routes without a Java decision keep their existing flow.
      *
      * @param storage the storage to persist the record with
      * @param playerProfile the name's record, or null on proxy-mode backends
@@ -149,19 +149,19 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
         boolean success = false;
         boolean eventVetoed = false;
         boolean recoveringPremiumAccount = false;
-        if (session.isFactsPresent()) {
-            // The message path: a proxy exists, so the decision table
-            // decides from the account state plus its facts.
+        boolean declared = session.isFactsPresent();
+        if (declared || usesStandaloneJavaDecision()) {
             LoginMethodDecider.AccountState account = readAccountState(authPlugin, playerName);
-            if (!session.getFacts().policyDeclared()) {
+            if (declared && !session.getFacts().policyDeclared()) {
                 core.getPlugin().getLog().warn(
                         "Proxy did not declare identity facts for {}; falling back to "
                                 + "conservative behaviour", playerName);
             }
+            Consent consent = declared
+                    ? session.getFacts().consent() : LoginMethodDecider.standaloneConsent(session);
             boolean autoLogin = resolveAutoLogin(session);
             LoginMethodDecider.Outcome outcome = LoginMethodDecider.decide(isOnlineMode(), account,
-                    session.getFacts().consent(), autoLogin,
-                    resolveAutoRegisterUnknown(session));
+                    consent, autoLogin, resolveAutoRegisterUnknown(session));
             switch (outcome) {
                 case AUTO_REGISTER_LOGIN:
                     premiumHandlingAllowed = true;
@@ -172,10 +172,9 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     boolean cancelled = callFastLoginAutoLoginEvent(session, playerProfile).isCancelled();
                     eventVetoed = cancelled;
                     success = !cancelled && forceLogin(player);
-                    recoveringPremiumAccount = !cancelled
+                    recoveringPremiumAccount = declared && !cancelled
                             && account == LoginMethodDecider.AccountState.PREMIUM_OWNED
-                            && session.getConsent()
-                            != com.github.games647.fastlogin.protocol.IdentityClaim.Consent.YES;
+                            && consent != Consent.YES;
                     break;
                 case REJECT:
                     denyLogin(player, core.getMessage("ownership-conflict"));
@@ -209,9 +208,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
             }
         } else if ((boolean) core.getConfig().get("autoLogin")) {
             premiumHandlingAllowed = true;
-            // Standalone deployment: no proxy declared anything, so the
-            // local keys and the session's registration expectation
-            // decide, exactly as before the decision table landed.
+            // Legacy route without declared facts: preserve its existing flow.
             // The "verified premium + no local account" cell is gated by
             // auto-register-unknown: on = auto-create for the proven
             // identity, off = the auth plugin's own register dialog, never an
@@ -220,8 +217,11 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
             // the declared policy first, the local key only when nothing
             // was declared (standalone).
             boolean autoRegisterUnknown = resolveAutoRegisterUnknown(session);
-            boolean needsAccount = session.needsRegistration()
-                    || !authPlugin.isRegistered(playerName);
+            // A pre-login expectation is not evidence of absence in the account store now.
+            boolean needsAccount = !authPlugin.isRegistered(playerName);
+            if (!needsAccount && session.needsRegistration()) {
+                return;
+            }
             if (needsAccount && autoRegisterUnknown) {
                 success = forceRegister(player);
             } else if (needsAccount) {
@@ -239,6 +239,8 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                 // a plugin vetoed the auto login: never record consent for it
                 eventVetoed = true;
             }
+        } else {
+            return;
         }
 
         if (!success && !eventVetoed && authPlugin.isAuthenticated(player)) {
@@ -250,7 +252,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
             success = true;
         }
 
-        if (success) {
+        if (success && isOnline(player)) {
             //update only on success to prevent corrupt data
             if (playerProfile != null) {
                 // persist the confirmed outcome under the name-level striped
@@ -277,7 +279,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
                     "Auth plugin did not accept the verified premium session for {}; not recording consent",
                     playerName);
         }
-        if (recoveringPremiumAccount) {
+        if (success && recoveringPremiumAccount) {
             core.getPlugin().getLog().warn(
                     "Recovered verified premium login for {} from the auth plugin's premium account "
                             + "despite proxy consent {}; requested proxy resynchronization",
@@ -342,6 +344,10 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
 
     public abstract boolean isOnlineMode();
 
+    protected boolean usesStandaloneJavaDecision() {
+        return false;
+    }
+
     /**
      * Refuses the connection because the verified identity and the account
      * ownership do not match.
@@ -364,7 +370,7 @@ public abstract class ForceLoginManagement<P extends C, C, L extends LoginSessio
         try {
             // the account state comes from the auth plugin itself, so a name can
             // never be handed to someone just because a premium identity claims it
-            return authPlugin.inspectAccount(playerName);
+            return java.util.Objects.requireNonNull(authPlugin.inspectAccount(playerName), "Missing account state");
         } catch (Exception readError) {
             core.getPlugin().getLog().warn(
                     "Could not read the account state of {}; keeping the password lock",

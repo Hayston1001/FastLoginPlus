@@ -22,7 +22,6 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.metadata.FixedMetadataValue;
 
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, BukkitLoginSession, FastLoginBukkit> {
@@ -36,7 +35,8 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
     public void run() {
         // block this target player for BungeeCord ID brute force attacks
         FastLoginBukkit plugin = core.getPlugin();
-        if (plugin.getProxyBedrockPreLogin() != null && plugin.getProxyBedrockPreLogin().isHandled(player)) {
+        if (!plugin.isServerFullyStarted() || plugin.getProxyBedrockPreLogin() != null
+                && plugin.getProxyBedrockPreLogin().isHandled(player)) {
             return;
         }
         player.setMetadata(core.getPlugin().getName(), new FixedMetadataValue(plugin, true));
@@ -47,40 +47,12 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
             return;
         }
 
+        if (core.getAuthPluginHook() == null) {
+            return;
+        }
         super.run();
-
-        // AuthMe 6.0: if we just registered/logged in a premium player,
-        // also mark them as premium in AuthMe's database
-        if (session != null && session.isVerifiedPremium() && premiumHandlingAllowed) {
-            com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
-                plugin.getAuthMePremiumIntegrator();
-            if (integrator != null && integrator.isAuthMePremiumEnabled()) {
-                // the session UUID is the Mojang UUID the proxy verified
-                // and now sends along with the force message; it is null only when the proxy
-                // verified nothing. Fall back to the connection UUID otherwise. Handing null
-                // to AuthMe would CLEAR premium_uuid instead of setting it, so the v4 check
-                // inside rejects offline (v3) UUIDs. On Paper the configuration phase already
-                // stamped the record; this covers Spigot backends, which have no such phase
-                // and where AuthMe would otherwise never learn the player is premium.
-                UUID premiumUuid = com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator
-                    .resolvePremiumUuid(session.getUuid(), player.getUniqueId());
-                if (premiumUuid != null && integrator.markPlayerAsPremium(player.getName(), premiumUuid)) {
-                    // the record was created *here*, i.e. after the join - so on a
-                    // platform without a configuration phase (Spigot) AuthMe has already shown its
-                    // blocking post-join register dialog, and only a completed login closes it
-                    // (AuthMe clears the dialog state in its synchronous login completion). The
-                    // register branch in ForceLoginManagement ran before this marking, so the login
-                    // has to be attempted now, once the record exists. On Paper/Folia the record was
-                    // already stamped during the configuration phase, markPlayerAsPremium() reports
-                    // "existing record" (false) and nothing is attempted here - if it ever did, the
-                    // login is a no-op that reports "already authenticated".
-                    forceLogin(player);
-                } else if (premiumUuid == null && plugin.getCore().isDebug()) {
-                    plugin.getLog().info(
-                        "Skipping AuthMe premium marking for {}: no verified UUID",
-                        player.getName());
-                }
-            }
+        if (session == null || !player.isOnline()) {
+            return;
         }
 
         PremiumStatus status = PremiumStatus.CRACKED;
@@ -90,8 +62,7 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
 
         plugin.getPremiumPlayers().put(player.getUniqueId(), status);
 
-        // super.run() supports a null session — the tail must too
-        StoredProfile profile = session == null ? null : session.getProfile();
+        StoredProfile profile = session.getProfile();
         if (profile != null) {
             FloodgateState floodgate = profile.getFloodgate();
             if (floodgate != null) {
@@ -109,6 +80,9 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
 
     @Override
     public void onForceActionSuccess(LoginSession session) {
+        if (this.session.isVerifiedPremium() && core.getPlugin().markConfirmedAccount(player, session.getUuid())) {
+            forceLogin(player);
+        }
         if (core.getPlugin().getBungeeManager().isEnabled()) {
             core.getPlugin().getBungeeManager().sendPluginMessage(player, new SuccessMessage());
         }
@@ -148,5 +122,12 @@ public class ForceLoginTask extends ForceLoginManagement<Player, CommandSender, 
     @Override
     public boolean isOnlineMode() {
         return session.isVerifiedPremium();
+    }
+
+    @Override
+    protected boolean usesStandaloneJavaDecision() {
+        // A standalone Floodgate compatibility session may set the legacy
+        // premium flag, but does not carry a verified Mojang UUID.
+        return !core.getPlugin().getBungeeManager().isEnabled() && session.getUuid() != null;
     }
 }

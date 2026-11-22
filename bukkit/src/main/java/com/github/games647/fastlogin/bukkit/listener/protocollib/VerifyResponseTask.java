@@ -278,35 +278,7 @@ public class VerifyResponseTask implements Runnable {
         // PlayerJoinEvent and drop the player into the password flow
         plugin.putSession(player.getAddress(), session);
 
-        // AuthMe 6.0 premium integration: inject state to skip Pre-Join dialog
-        com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
-            plugin.getAuthMePremiumIntegrator();
-        if (integrator != null && integrator.isAuthMePremiumEnabled()) {
-            // Last-resort re-assert: the events that make AuthMe start its own premium listener
-            // are covered by AuthMeTakeoverListener, and the reload path is prevented at the
-            // source (FLP leaves AuthMe's flag at "registered"). This covers what neither can see —
-            // a path that fires no event at all. Idempotent, and silent in the normal case.
-            integrator.unregisterPremiumPacketListener();
-
-            UUID mojangUuid = verification.getId();
-            integrator.injectPendingPremium(requestedUsername, mojangUuid);
-            integrator.injectVerifiedUuid(requestedUsername, mojangUuid);
-            // Mark as premium in DB NOW so shouldSkipPreJoinDialogForPremium()
-            // sees auth.isPremium()=true during the configuration phase.
-            // For first-time players this also pre-creates the AuthMe DB record
-            // (with premiumUuid set) so the preJoin register dialog is skipped.
-            boolean preCreated = integrator.markPlayerAsPremium(requestedUsername, mojangUuid);
-            if (preCreated) {
-                // The AuthMe DB record now exists, so ForceLoginTask should
-                // call forceLogin (not forceRegister, which AuthMe would reject
-                // with NAME_ALREADY_REGISTERED). Setting registered=true makes
-                // needsRegistration() return false.
-                session.setRegistered(true);
-            }
-            if (plugin.getCore().isDebug()) {
-                plugin.getLog().info("Injected AuthMe 6.0 premium state for {}", requestedUsername);
-            }
-        }
+        plugin.prepareVerifiedAccount(requestedUsername, session);
 
         // Encryption was installed before contacting Mojang. Keep the remaining pipeline work
         // (UUID spoof and fake START injection) on the event loop without installing it again.

@@ -36,14 +36,11 @@ import com.comphenix.protocol.ProtocolLibrary;
 import com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator;
 import com.github.games647.fastlogin.bukkit.compat.AuthMeVersionDetector;
 import com.github.games647.fastlogin.bukkit.command.FlpCommand;
-import com.github.games647.fastlogin.bukkit.listener.AuthMeCommandGuard;
-import com.github.games647.fastlogin.bukkit.listener.AuthMeTakeoverListener;
 import com.github.games647.fastlogin.bukkit.listener.ConnectionListener;
 import com.github.games647.fastlogin.bukkit.listener.FloodgatePreLoginListener;
 import com.github.games647.fastlogin.bukkit.listener.protocollib.ProtocolLibListener;
 import com.github.games647.fastlogin.bukkit.listener.protocolsupport.ProtocolSupportListener;
 import com.github.games647.fastlogin.bukkit.listener.UpdateNotifyListener;
-import com.github.games647.fastlogin.bukkit.task.DelayedAuthHook;
 import com.github.games647.fastlogin.core.CommonUtil;
 import com.github.games647.fastlogin.core.PremiumStatus;
 import com.github.games647.fastlogin.core.UpdateChecker;
@@ -129,7 +126,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
     }
 
-    private boolean serverStarted;
+    private volatile boolean serverStarted;
     private BungeeManager bungeeManager;
     private final FoliaScheduler scheduler;
 
@@ -138,14 +135,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     // when the plugin disables (a reload would otherwise accumulate chains of
     // dead plugin instances)
     private final AtomicBoolean relayChainsRunning = new AtomicBoolean(true);
-
-    // True once FLP took over packet verification. On proxy backends the persisted
-    // premium flag is left untouched until a policy is declared. AuthMe's commands stay executable in that
-    // state but no longer converge with FLP's profile, so AuthMeCommandGuard intercepts
-    // them for players who could actually run them.
-    private boolean premiumTakeoverActive;
-    // Unsupported AuthMe builds fail the proxy pin; warn once instead of on every reassert.
-    private boolean authMeProxyPinWarningLogged;
 
     // give up relaying after ~5 minutes (1s interval) and keep the
     // entry queued instead of retrying forever
@@ -157,8 +146,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     private PremiumPlaceholder premiumPlaceholder;
     private SkinsRestorerCompat skinsRestorerCompat;
 
-    private AuthMeVersionDetector authMeVersionDetector;
-    private AuthMePremiumIntegrator authMePremiumIntegrator;
+    private volatile AuthMeIntegration authMe;
 
     // Durable queue for proxy relay messages that could not be sent because
     // no player was online to serve as the plugin-message carrier.
@@ -175,19 +163,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     @Override
     public void onEnable() {
-        core = new FastLoginCore<>(this);
+        BackendAuthCore providers = new BackendAuthCore(this);
+        core = providers;
         core.load();
-
-        authMeVersionDetector = new AuthMeVersionDetector();
-        if (authMeVersionDetector.isAuthMePresent()) {
-            authMePremiumIntegrator = new AuthMePremiumIntegrator(this, authMeVersionDetector);
-            if (authMeVersionDetector.isAuthMe6()) {
-                logger.info("AuthMe 6.0+ detected: v{}", authMeVersionDetector.getVersion());
-            } else {
-                logger.info("AuthMe 5.x detected: v{} — using standard FLP flow",
-                    authMeVersionDetector.getVersion());
-            }
-        }
 
         if (getServer().getOnlineMode()) {
             logger.error("Server has to be in offline mode");
@@ -206,21 +184,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         bungeeManager = new BungeeManager(this);
         bungeeManager.initialize();
 
-        // Proxy mode must be known before takeover: preserve its stored flag until trusted facts arrive.
-        if (authMePremiumIntegrator != null && authMeVersionDetector.isAuthMe6()) {
-            premiumTakeoverActive = authMePremiumIntegrator.enforceFlpPremiumControl(bungeeManager.isEnabled());
-            pinAuthMeProxyAutoLoginOff();
-            if (!premiumTakeoverActive) {
-                logger.warn("Failed to fully enforce FastLogin premium control in AuthMe 6.0"
-                        + " — premium logins may conflict with AuthMe's own listener");
-            }
-        }
-
-        // AuthMe's own verification is off while its command layer stays
-        // registered. Direct connections only — see the method's javadoc. Proxy mode is part of
-        // that decision, so this has to run after the manager above is initialized.
-        warnOnAuthMeCommandLayerWithoutVerification();
-
         // Restore the durable relay queue after a restart and resume delivery.
         pendingRelayStore = new PendingRelayStore(getPluginFolder(), logger);
         if (pendingRelayStore.load()) {
@@ -231,7 +194,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     pendingRelayStore.premiumNotices().size());
                 pendingRelayStore.toggles().keySet().forEach(this::scheduleToggleRelay);
                 pendingRelayStore.deletes().forEach(this::scheduleDeleteRelay);
-                pendingRelayStore.premiumNotices().keySet().forEach(this::schedulePremiumRelay);
             } else {
                 logger.warn("Discarding {} pending relay(s): proxy support is disabled",
                     pendingRelayStore.toggles().size() + pendingRelayStore.deletes().size()
@@ -241,28 +203,22 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         }
 
         PluginManager pluginManager = getServer().getPluginManager();
-        if (bungeeManager.isEnabled()) {
-            markInitialized();
-        } else {
+        if (!bungeeManager.isEnabled()) {
             if (!core.setupDatabase()) {
-                setEnabled(false);
-                return;
-            }
-
-            AntiBotService antiBotService = core.getAntiBotService();
-            if (pluginManager.isPluginEnabled("ProtocolSupport")) {
-                pluginManager.registerEvents(new ProtocolSupportListener(this, antiBotService), this);
-            } else if (pluginManager.isPluginEnabled("ProtocolLib")) {
-                ProtocolLibListener.register(this, antiBotService, core.getConfig().getBoolean("verifyClientKeys"));
-            } else {
-                logger.warn("Either ProtocolLib or ProtocolSupport have to be installed if you don't use BungeeCord");
                 setEnabled(false);
                 return;
             }
         }
 
-        // Delay dependency setup using Folia's global region scheduler
-        Bukkit.getGlobalRegionScheduler().runDelayed(this, task -> new DelayedAuthHook(this).run(), 5L);
+        // Preserve the startup window for dependent plugins to self-register. Packet
+        // listeners must capture the selected hook before the admission gate opens.
+        Runnable selectProvider = () -> {
+            if (providers.select(pluginManager, bungeeManager.isEnabled())
+                    && (bungeeManager.isEnabled() || registerPacketListener(pluginManager))) {
+                markInitialized();
+            }
+        };
+        Bukkit.getGlobalRegionScheduler().runDelayed(this, task -> selectProvider.run(), 5L);
 
         ConnectionListener connectionListener = new ConnectionListener(this);
         pluginManager.registerEvents(connectionListener, this);
@@ -291,15 +247,6 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         // Folia is Paper-based and therefore always has the configuration phase, where
         // applyPremiumAtConfigure() already pre-creates the AuthMe record before AuthMe's join
         // handler can open its dialog - the fallback would be dead code here.
-
-        // while the takeover is active, AuthMe's own /premium and /freemium
-        // are a second entry point that silently diverges from FLP — intercept
-        // them and point the player at /flp. Inert on AuthMe 5.x and without AuthMe.
-        pluginManager.registerEvents(new AuthMeCommandGuard(this), this);
-
-        // keep the takeover asserted across the events that can start
-        // AuthMe's own premium listener again — see AuthMeTakeoverListener
-        registerAuthMeTakeoverListener();
 
         registerCommands();
 
@@ -361,149 +308,65 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         getServer().getPluginManager().registerEvents(new UpdateNotifyListener(this), this);
     }
 
-    /**
-     * Registers the hooks that keep FLP's AuthMe premium takeover asserted after the events that
-     * can start AuthMe's own premium listener again.
-     *
-     * <p>The reload case is normally prevented at the source: FLP leaves AuthMe's "listener
-     * registered" flag set, so {@code PacketEventsService.setup()} skips re-registration on
-     * {@code /authme reload}. Two upstream paths still reset that flag (the packet library being
-     * unloaded, and {@code enablePremium} turning false), and enabling the packet library re-runs
-     * {@code setup()} from scratch — so the takeover is re-asserted after those events instead of
-     * being polled for.
-     *
-     * <p>Registered whenever the takeover is active; the per-event conditions live in
-     * {@link #reassertAuthMeTakeover(String)}, because a server can gain the packet library while
-     * it is running.
-     */
-    private void registerAuthMeTakeoverListener() {
-        if (authMePremiumIntegrator == null || authMeVersionDetector == null || !authMeVersionDetector.isAuthMe6()) {
-            return;
+    private boolean registerPacketListener(PluginManager pluginManager) {
+        AntiBotService antiBotService = core.getAntiBotService();
+        if (pluginManager.isPluginEnabled("ProtocolSupport")) {
+            pluginManager.registerEvents(new ProtocolSupportListener(this, antiBotService), this);
+        } else if (pluginManager.isPluginEnabled("ProtocolLib")) {
+            ProtocolLibListener.register(this, antiBotService, core.getConfig().getBoolean("verifyClientKeys"));
+        } else {
+            logger.warn("Either ProtocolLib or ProtocolSupport have to be installed if you don't use BungeeCord");
+            return false;
         }
-
-        getServer().getPluginManager().registerEvents(new AuthMeTakeoverListener(this), this);
-        if (premiumTakeoverActive && !bungeeManager.isEnabled()
-                && getServer().getPluginManager().isPluginEnabled("packetevents")) {
-            // only true here: on a proxy backend AuthMe never registers that listener, and
-            // without the packet library it cannot
-            logger.info("Took over AuthMe's premium packet verification — FLP is the sole "
-                    + "Mojang verification source on this server");
-        }
+        return true;
     }
 
-    /**
-     * Applies FLP's AuthMe proxy auto-login pin and reports a failure to the administrator.
-     *
-     * <p>A {@code false} result means the pin was skipped, for example on an AuthMe version FLP
-     * has not reviewed. Upstream's proxy login receiver may then stay active, so this warns
-     * once: the AuthMe version does not change between reasserts and a reload would otherwise
-     * repeat the same line.
-     */
-    private void pinAuthMeProxyAutoLoginOff() {
-        if (!authMePremiumIntegrator.pinProxyAutoLoginOff() && !authMeProxyPinWarningLogged) {
-            authMeProxyPinWarningLogged = true;
-            logger.warn("AuthMe proxy auto-login pin was not applied; "
-                    + "upstream proxy SSO may remain enabled.");
-        }
-    }
-
-    /**
-     * Re-asserts FLP's AuthMe premium takeover one tick after an event that may have started
-     * AuthMe's own packet listener.
-     *
-     * <p>The delay is the point: both event hooks fire <em>before</em> the work they announce —
-     * the command has not executed yet, and AuthMe's own plugin-enable handler runs at HIGHEST
-     * priority. Re-asserting inside the event would undo nothing. It runs in the global region,
-     * the same thread as the startup call, because AuthMe's packet-listener registry is not
-     * verified to be thread-safe.
-     *
-     * <p>Proxy backends instead reapply the last declared policy and refresh its consumers.
-     * This assumes AuthMe completes its synchronous reload before the next tick. A connection
-     * during that gap, or an asynchronously reloaded fork, still needs real-server validation.
-     *
-     * @param reason short description of the triggering event, used in the log line
-     */
-    public void reassertAuthMeTakeover(String reason) {
-        if (authMePremiumIntegrator == null || bungeeManager == null) {
-            return;
-        }
+    void startAuthMe() {
+        AuthMeVersionDetector version = new AuthMeVersionDetector();
+        AuthMeIntegration integration = new AuthMeIntegration(this, version,
+                new AuthMePremiumIntegrator(this, version));
+        integration.start();
+        authMe = integration;
         if (bungeeManager.isEnabled()) {
-            Bukkit.getGlobalRegionScheduler().runDelayed(this, task -> {
-                pinAuthMeProxyAutoLoginOff();
-                if (authMePremiumIntegrator.hasProxyAutoLoginPolicy()) {
-                    authMePremiumIntegrator.reassertProxyAutoLogin();
-                }
-            }, 1L);
-            return;
+            pendingRelayStore.premiumNotices().keySet().forEach(this::schedulePremiumRelay);
         }
-        Bukkit.getGlobalRegionScheduler().runDelayed(this,
-                task -> pinAuthMeProxyAutoLoginOff(), 1L);
-        if (!getServer().getPluginManager().isPluginEnabled("packetevents")) {
-            return;
-        }
-
-        logger.info("Detected {} — re-asserting FLP's AuthMe premium takeover", reason);
-        Bukkit.getGlobalRegionScheduler().runDelayed(this,
-            task -> authMePremiumIntegrator.unregisterPremiumPacketListener(), 1L);
     }
 
-    /**
-     * Warns when AuthMe's own premium verification is inactive while its command layer is
-     * still registered: FLP forced {@code enablePremium=true}, but PacketEvents is
-     * absent, so AuthMe's {@code setup()} gave up without resetting the setting and its
-     * {@code /premium} and {@code /freemium} commands stay usable. FastLoginPlus verifies
-     * premium logins itself and {@link AuthMeCommandGuard} redirects those commands to
-     * {@code /flp}, but upstream's "Premium auto-login is disabled" warning reads as if the
-     * whole feature were off — this line states what actually happened, so admins do not
-     * chase a FastLoginPlus failure that does not exist.
-     *
-     * <p><b>Direct connections only (2026-09-15).</b> Proxy backends are excluded on purpose.
-     * There AuthMe's listener never registers at all ({@code setup()} requires
-     * {@code !isProxyMode}), so nothing surprising happened; the upstream warning this message
-     * exists to disambiguate is not printed there either; and the command layer is already
-     * covered by {@link AuthMeCommandGuard}. Emitting it anyway put a WARN on every startup of
-     * an AuthMe 6.0 proxy network without PacketEvents, including one sentence about an
-     * upstream warning that cannot appear in that setup.
-     *
-     * <p>Called after {@code bungeeManager.initialize()}, because proxy mode is part of the
-     * decision. A server that disables FLP before that point (online mode, Floodgate failure)
-     * therefore gets no such line — which is correct: "FLP intercepts them" would not be true
-     * there, and those paths log an ERROR of their own.
-     */
-    private void warnOnAuthMeCommandLayerWithoutVerification() {
-        if (!shouldWarnAboutCommandLayer(premiumTakeoverActive,
-                getServer().getPluginManager().isPluginEnabled("packetevents"),
-                bungeeManager.isEnabled())) {
-            return;
-        }
-
-        logger.warn("AuthMe's enablePremium was forced to true, but PacketEvents is "
-                + "not installed — AuthMe's own premium verification stays off. "
-                + "FastLoginPlus verifies premium logins itself, so this is not a "
-                + "FastLoginPlus failure. AuthMe's /premium and /freemium remain "
-                + "registered; FastLoginPlus intercepts them and points players at "
-                + "/flp. An upstream 'Premium auto-login is disabled' warning refers "
-                + "to AuthMe's own verification, not to FastLoginPlus. Consider "
-                + "denying authme.player.premium and authme.player.freemium.");
+    void nextGlobalTick(Runnable action) {
+        Bukkit.getGlobalRegionScheduler().runDelayed(this, task -> action.run(), 1L);
     }
 
-    /**
-     * Whether the PacketEvents warning applies on this server.
-     *
-     * <p>Extracted as a pure function for the same reason as this codebase's other decision
-     * helpers: the test setup cannot mock {@code FastLoginBukkit} (ByteBuddy cannot instrument
-     * the {@code JavaPlugin} hierarchy on this JDK), so a three-way condition can only be
-     * pinned by a static predicate.
-     *
-     * @param takeoverActive      whether FLP forced {@code enablePremium} and removed AuthMe's listener
-     * @param packetEventsEnabled whether the {@code packetevents} plugin is enabled
-     * @param proxyMode           whether this backend sits behind a proxy
-     * @return true only for a direct connection whose AuthMe verification is off <em>because</em>
-     *         PacketEvents is missing
-     */
-    static boolean shouldWarnAboutCommandLayer(boolean takeoverActive,
-            boolean packetEventsEnabled, boolean proxyMode) {
-        return takeoverActive && !packetEventsEnabled && !proxyMode;
+    public void reassertAuthMeTakeover(String reason) {
+        AuthMeIntegration selected = authMe;
+        if (selected != null) {
+            selected.reassert(reason);
+        }
+    }
+
+    public void prepareVerifiedAccount(String name, BukkitLoginSession session) {
+        AuthMeIntegration selected = authMe;
+        if (selected != null) {
+            selected.prepareStandalone(name, session);
+        }
+    }
+
+    public void prepareCrackedAccount(String name, boolean known) {
+        AuthMeIntegration selected = authMe;
+        if (selected != null) {
+            selected.accounts.ensureNotPremium(name, known);
+        }
+    }
+
+    public void clearPremiumAccount(String name) {
+        AuthMeIntegration selected = authMe;
+        if (selected != null) {
+            selected.accounts.clearPlayerPremium(name);
+        }
+    }
+
+    public boolean markConfirmedAccount(Player player, UUID uuid) {
+        AuthMeIntegration selected = authMe;
+        return selected != null && selected.markAfterLogin(player, uuid);
     }
 
     private boolean initializeFloodgate() {
@@ -540,6 +403,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
 
     @Override
     public void onDisable() {
+        stopAuthentication();
         loginSession.clear();
         premiumPlayers.clear();
         playerFloodgateState.clear();
@@ -584,7 +448,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * @return true if the AuthMe 6.0 takeover succeeded at startup
      */
     public boolean isPremiumTakeoverActive() {
-        return premiumTakeoverActive;
+        AuthMeIntegration selected = authMe;
+        return selected != null && selected.ownsCommands();
     }
 
     public ConcurrentMap<String, BukkitLoginSession> getLoginSessions() {
@@ -626,7 +491,12 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         return serverStarted;
     }
 
-    public void markInitialized() {
+    void stopAuthentication() {
+        serverStarted = false;
+        authMe = null;
+    }
+
+    private void markInitialized() {
         this.serverStarted = true;
     }
 
@@ -672,11 +542,13 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
     }
 
     public AuthMeVersionDetector getAuthMeVersionDetector() {
-        return authMeVersionDetector;
+        AuthMeIntegration selected = authMe;
+        return selected == null ? null : selected.version;
     }
 
     public AuthMePremiumIntegrator getAuthMePremiumIntegrator() {
-        return authMePremiumIntegrator;
+        AuthMeIntegration selected = authMe;
+        return selected == null ? null : selected.accounts;
     }
 
     @Override
@@ -846,53 +718,8 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        final com.github.games647.fastlogin.protocol.IdentityClaim.Facts declaredFacts = identityFacts;
-        scheduler.runAsync(() -> {
-            try {
-                java.util.Optional<com.github.games647.craftapi.model.Profile> mojang =
-                    core.getResolver().findProfile(playerName);
-                if (!mojang.isPresent()) {
-                    return;
-                }
-                java.util.UUID premiumUuid = mojang.get().getId();
+        // No connection-bound premium evidence. Wait for the validated play-phase action.
 
-                // Guard: if the player's connection UUID doesn't match the
-                // Mojang premium UUID, the proxy assigned an offline UUID.
-                // This means the player is either cracked, or the proxy uses
-                // premiumUuid:false.  In either case we must NOT pre-create a
-                // premium AuthMe record — that would re-register a cracked
-                // player as premium behind the proxy's back.
-                if (!premiumUuid.equals(connectionUuid)) {
-                    if (!isPendingPremium) {
-                        // say why this is normal. The mismatch is expected whenever
-                        // the proxy hands out the offline UUID — a cracked player, or a premium
-                        // player under premiumUuid:false on a fallback path (Bungee, or a proxy
-                        // too old for the profile attestation); it is not a failure.
-                        debugLog(
-                            "Skipping autoRegister for {}: connection UUID {} != premium UUID {}"
-                                + " (expected when the proxy assigns the offline UUID — a cracked"
-                                + " player, or premiumUuid:false)",
-                            playerName, connectionUuid, premiumUuid);
-                        return;
-                    }
-                    debugLog(
-                        "Pending premium toggle for {}: allowing autoRegister "
-                            + "despite UUID mismatch ({} vs {})",
-                        playerName, connectionUuid, premiumUuid);
-                }
-
-                // A public name lookup cannot authenticate an unsigned connection or repair
-                // a rejected attestation, even when the supplied UUID happens to match.
-                if (!trustedAttestation) {
-                    return;
-                }
-                applyPremiumAtConfigure(playerName, premiumUuid, connectionUuid,
-                        connection, address, isPendingPremium, declaredFacts);
-            } catch (Exception e) {
-                logger.warn("AutoRegister in configure phase failed for {}: {}",
-                    playerName, e.getMessage());
-            }
-        });
     }
 
     /**
@@ -1004,16 +831,9 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             return;
         }
 
-        com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator integrator =
-            getAuthMePremiumIntegrator();
-        if (integrator != null && integrator.isAuthMePremiumEnabled()) {
-            integrator.injectVerifiedUuid(playerName, premiumUuid);
-            integrator.markPlayerAsPremium(playerName, premiumUuid);
-            // Close both register AND login dialogs.  AuthMe may show
-            // a login dialog for existing records (cracked→premium)
-            // if the async task hasn't updated the record yet.
-            integrator.closePreJoinRegisterDialog(connectionUuid, connection);
-            integrator.closePreJoinLoginDialog(connectionUuid, connection);
+        AuthMeIntegration selected = authMe;
+        if (selected != null) {
+            selected.prepareConfigure(playerName, premiumUuid, connectionUuid, connection);
         }
 
         BukkitLoginSession session = newPremiumSession(playerName, premiumUuid, facts);
@@ -1246,9 +1066,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      */
     public void synchronizeAuthMePremiumPolicy(
             com.github.games647.fastlogin.protocol.IdentityClaim.Facts facts) {
-        if (facts != null && facts.policyDeclared() && authMePremiumIntegrator != null
+        AuthMeIntegration selected = authMe;
+        if (facts != null && facts.policyDeclared() && selected != null
                 && bungeeManager != null && bungeeManager.isEnabled()) {
-            authMePremiumIntegrator.applyProxyAutoLogin(facts.autoLogin());
+            selected.accounts.applyProxyAutoLogin(facts.autoLogin());
         }
     }
 
@@ -1300,27 +1121,10 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
                     && verified && !autoLogin
                     && account == com.github.games647.fastlogin.core.shared.LoginMethodDecider
                             .AccountState.PREMIUM_OWNED) {
-                debugLog("AuthMe placeholder release policy for {}: source={} autoLogin=false",
-                        playerName, declared.policyDeclared() ? "proxy declaration" : "local configuration");
-                AuthMePremiumIntegrator integrator = getAuthMePremiumIntegrator();
-                AuthMePremiumIntegrator.ReleaseOutcome release = integrator == null
-                        ? AuthMePremiumIntegrator.ReleaseOutcome.UNSUPPORTED
-                        : integrator.releaseUnusablePlaceholder(playerName, verifiedPremiumUuid);
-                if (release == AuthMePremiumIntegrator.ReleaseOutcome.RELEASED
-                        || release == AuthMePremiumIntegrator.ReleaseOutcome.ALREADY_ABSENT) {
-                    clearPasswordNotice(address, playerName);
-                    integrator.closePreJoinRegisterDialog(connectionUuid, connection);
-                    integrator.closePreJoinLoginDialog(connectionUuid, connection);
-                } else if (release == AuthMePremiumIntegrator.ReleaseOutcome.UUID_MISMATCH) {
-                    clearPasswordNotice(address, playerName);
-                    integrator.closePreJoinRegisterDialog(connectionUuid, connection);
-                    integrator.closePreJoinLoginDialog(connectionUuid, connection);
-                    String reason = core.getMessage("ownership-conflict");
-                    if (connection != null) {
-                        disconnectConfiguration(playerName, connection, reason);
-                    } else {
-                        denyLogin(playerName, reason);
-                    }
+                AuthMeIntegration selected = authMe;
+                if (selected != null) {
+                    selected.handlePasswordPolicy(playerName, verifiedPremiumUuid, connectionUuid,
+                            connection, address, facts != null);
                 } else if (facts != null) {
                     queuePasswordNotice(address, playerName, "premium-policy-disabled");
                 }
@@ -1363,7 +1167,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
             com.google.common.cache.CacheBuilder.newBuilder().maximumSize(10000)
                     .expireAfterWrite(2, java.util.concurrent.TimeUnit.MINUTES).build();
 
-    private void clearPasswordNotice(java.net.InetSocketAddress address, String playerName) {
+    void clearPasswordNotice(java.net.InetSocketAddress address, String playerName) {
         if (address != null) {
             passwordNotices.invalidate(address);
         }
@@ -1379,7 +1183,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * @param playerName the connecting player name
      * @param key the message key to deliver
      */
-    private void queuePasswordNotice(java.net.InetSocketAddress address, String playerName, String key) {
+    void queuePasswordNotice(java.net.InetSocketAddress address, String playerName, String key) {
         if (address != null) {
             passwordNotices.put(address, key);
         } else {
@@ -1442,7 +1246,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
         return true;
     }
 
-    private void disconnectConfiguration(String playerName, Object connection, String reason) {
+    void disconnectConfiguration(String playerName, Object connection, String reason) {
         try {
             Class<?> component = Class.forName("net.kyori.adventure.text.Component");
             Class<?> serializer = Class.forName("net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer");
@@ -1754,7 +1558,7 @@ public class FastLoginBukkit extends JavaPlugin implements PlatformPlugin<Comman
      * @return true if the entry is gone (delivered, or nothing left to talk to)
      */
     private boolean relayPremiumNotice(String target, boolean isSet) {
-        AuthMePremiumIntegrator integrator = authMePremiumIntegrator;
+        AuthMePremiumIntegrator integrator = getAuthMePremiumIntegrator();
         if (integrator == null) {
             // no AuthMe 6.0 on this server — the notice can never be delivered, so retire it
             // instead of retrying it for five minutes

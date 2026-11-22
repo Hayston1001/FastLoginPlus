@@ -370,6 +370,16 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
         return floodgateService;
     }
 
+    /**
+     * Whether Floodgate was detected at startup. Listeners check this before touching any
+     * Floodgate type, so the plugin also loads when Floodgate is absent.
+     *
+     * @return true if the Floodgate service is available
+     */
+    public boolean hasFloodgate() {
+        return floodgateService != null;
+    }
+
     public GeyserService getGeyserService() {
         return geyserService;
     }

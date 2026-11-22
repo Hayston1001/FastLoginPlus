@@ -59,7 +59,7 @@ class SpigotPolicyLoginTest {
         logger = mock(Logger.class);
         set("core", core);
         set("logger", logger);
-        set("authMePremiumIntegrator", integrator);
+        set("authMe", new AuthMeIntegration(plugin, null, integrator));
         set("bungeeManager", manager);
         set("pendingKicks", new ConcurrentHashMap<String, String>());
         set("passwordNotices", com.google.common.cache.CacheBuilder.newBuilder().build());

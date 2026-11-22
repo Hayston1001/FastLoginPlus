@@ -57,7 +57,8 @@ class UnverifiedDeclarationTest {
         hook = mock(AuthPlugin.class);
         manager = mock(BungeeManager.class);
         integrator = mock(com.github.games647.fastlogin.bukkit.compat.AuthMePremiumIntegrator.class);
-        set("authMePremiumIntegrator", integrator);
+        doReturn(true).when(plugin).isServerFullyStarted();
+        set("authMe", new AuthMeIntegration(plugin, null, integrator));
         com.github.games647.fastlogin.core.shared.PendingRelayStore relays =
                 mock(com.github.games647.fastlogin.core.shared.PendingRelayStore.class);
         when(relays.getToggle(anyString())).thenReturn(null);
@@ -368,7 +369,7 @@ class UnverifiedDeclarationTest {
         Profile profile = new Profile(uuid, null, premium);
         configureWithLookup(profile, premium);
         assertNoPremiumGrant();
-        verify(core).getResolver();
+        verify(core, never()).getResolver();
         verify(plugin.getLog()).warn(contains("unsigned forwarding has no validated flp_identity"), eq("TestUser"));
     }
 
@@ -378,7 +379,7 @@ class UnverifiedDeclarationTest {
         UUID premium = UUID.randomUUID();
         configureWithLookup(new Profile(premium, null, null), premium);
         assertNoPremiumGrant();
-        verify(core).getResolver();
+        verify(core, never()).getResolver();
     }
 
     @Test

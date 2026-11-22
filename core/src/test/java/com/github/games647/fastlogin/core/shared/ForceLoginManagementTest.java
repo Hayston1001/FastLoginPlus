@@ -19,6 +19,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.slf4j.Logger;
 
+import java.util.Arrays;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -413,6 +414,33 @@ class ForceLoginManagementTest {
     }
 
     @Test
+    void standaloneJavaAccountRequiresConsentForTheCurrentName() throws Exception {
+        when(core.getAuthPluginHook()).thenReturn(authPlugin);
+        when(config.get("autoLogin")).thenReturn(true);
+        when(config.get("auto-register-unknown")).thenReturn(true);
+        when(authPlugin.inspectAccount("TestUser"))
+                .thenReturn(LoginMethodDecider.AccountState.PASSWORD_ACCOUNT);
+        when(authPlugin.forceLogin(any())).thenReturn(true);
+        StoredProfile consented = new StoredProfile(
+                null, "TestUser", true, FloodgateState.FALSE, "127.0.0.1");
+        TestForceLoginManagement unconsented = createManagement(
+                new TestLoginSession("TestUser", true, null), true);
+        TestForceLoginManagement registrationRoute = createManagement(
+                new TestLoginSession("TestUser", false, consented), true);
+        TestForceLoginManagement bound = createManagement(
+                new TestLoginSession("TestUser", true, consented), true);
+        for (TestForceLoginManagement management : Arrays.asList(unconsented, registrationRoute, bound)) {
+            management.standaloneJavaDecision = true;
+            management.run();
+        }
+        assertEquals(0, unconsented.ackCount);
+        assertEquals(0, registrationRoute.ackCount);
+        assertEquals(1, bound.ackCount);
+        verify(authPlugin).forceLogin(any());
+        verify(authPlugin, never()).forceRegister(any(), anyString());
+    }
+
+    @Test
     void unreadableAccountKeepsItsOwnExplanationInsteadOfPasswordUpgradeNotice() throws Exception {
         when(core.getAuthPluginHook()).thenReturn(authPlugin);
         when(authPlugin.inspectAccount("TestUser")).thenThrow(new IllegalStateException("database unavailable"));
@@ -627,6 +655,7 @@ class ForceLoginManagementTest {
         private final boolean onlineMode;
         private int ackCount;
         private boolean cancelAutoLoginEvent;
+        private boolean standaloneJavaDecision;
 
         TestForceLoginManagement(FastLoginCore<Object, Object, PlatformPlugin<Object>> core,
                                  Object player, TestLoginSession session, boolean onlineMode) {
@@ -659,6 +688,11 @@ class ForceLoginManagementTest {
         @Override
         public boolean isOnlineMode() {
             return onlineMode;
+        }
+
+        @Override
+        protected boolean usesStandaloneJavaDecision() {
+            return standaloneJavaDecision;
         }
 
         @Override

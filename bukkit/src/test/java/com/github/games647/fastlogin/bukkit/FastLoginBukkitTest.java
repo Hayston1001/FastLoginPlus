@@ -32,17 +32,17 @@ class FastLoginBukkitTest {
     @Test
     void commandLayerWarningOnlyAppliesToDirectConnectionsWithoutPacketEvents() {
         // the only case it is meant for
-        assertTrue(FastLoginBukkit.shouldWarnAboutCommandLayer(true, false, false));
+        assertTrue(AuthMeIntegration.shouldWarnAboutCommandLayer(true, false, false));
 
         // proxy backend: nothing surprising happened, nothing upstream to disambiguate
-        assertFalse(FastLoginBukkit.shouldWarnAboutCommandLayer(true, false, true));
+        assertFalse(AuthMeIntegration.shouldWarnAboutCommandLayer(true, false, true));
 
         // PacketEvents present: AuthMe's own verification is active
-        assertFalse(FastLoginBukkit.shouldWarnAboutCommandLayer(true, true, false));
-        assertFalse(FastLoginBukkit.shouldWarnAboutCommandLayer(true, true, true));
+        assertFalse(AuthMeIntegration.shouldWarnAboutCommandLayer(true, true, false));
+        assertFalse(AuthMeIntegration.shouldWarnAboutCommandLayer(true, true, true));
 
         // no takeover (AuthMe 5.x, absent, or half-applied): the command layer is AuthMe's own
-        assertFalse(FastLoginBukkit.shouldWarnAboutCommandLayer(false, false, false));
+        assertFalse(AuthMeIntegration.shouldWarnAboutCommandLayer(false, false, false));
     }
 
     @Test

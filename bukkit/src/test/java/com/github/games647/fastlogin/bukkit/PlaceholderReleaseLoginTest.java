@@ -52,7 +52,7 @@ class PlaceholderReleaseLoginTest {
         integrator = mock(AuthMePremiumIntegrator.class);
         set("core", core);
         set("logger", mock(Logger.class));
-        set("authMePremiumIntegrator", integrator);
+        set("authMe", new AuthMeIntegration(plugin, null, integrator));
         set("passwordNotices", notices);
         set("passwordNoticesByName", CacheBuilder.newBuilder().build());
         doReturn(mock(FileConfiguration.class)).when(plugin).getConfig();
@@ -142,7 +142,7 @@ class PlaceholderReleaseLoginTest {
 
     @Test
     void missingIntegratorKeepsNoticeWithoutCrash() throws Exception {
-        set("authMePremiumIntegrator", null);
+        set("authMe", null);
         assertFalse(decide(true, false, owner));
         assertEquals("premium-policy-disabled", notices.getIfPresent(address));
     }

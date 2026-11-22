@@ -31,6 +31,8 @@ softdepend:
     - UltraAuth
     - xAuth
     - Passky
+    - UserLogin
+    - MyLogin
     # Skin plugins
     - SkinsRestorer
 

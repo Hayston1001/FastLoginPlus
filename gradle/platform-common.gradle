@@ -7,6 +7,13 @@
 
 apply from: rootProject.file('gradle/bedrock.gradle')
 
+// One source for provider selection and account integrations. Host scheduling
+// remains in each module and each jar is compiled against its own server API.
+def backendSources = rootProject.file('bukkit/src/backend/java')
+sourceSets.main.java.srcDir backendSources
+sourceSets.test.java.srcDir rootProject.file('bukkit/src/backendTest/java')
+tasks.named('checkstyleMain') { source backendSources }
+
 // bukkit and folia both shade Guava and Gson (relocated below), and both take their
 // version from the server API they run on, not from what craftapi declares for its own
 // tests. Without this pin Gradle resolves craftapi's newer versions instead: the server

@@ -23,6 +23,7 @@ import org.bukkit.event.Listener;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeUnit;
 
 /**
  * GitHub: <a href="https://github.com/Xephi/AuthMeReloaded/">...</a>
@@ -91,7 +92,7 @@ public class AuthMeHook implements AuthPlugin<Player>, PreLoginAuthPlugin, Liste
 
     @Override
     public boolean forceLogin(Player player) {
-        if (authmeAPI.isAuthenticated(player)) {
+        if (!currentPlayer(player) || authmeAPI.isAuthenticated(player)) {
             if (plugin.getCore().isDebug()) {
                 plugin.getLog().warn(ALREADY_AUTHENTICATED, player);
             }
@@ -100,7 +101,7 @@ public class AuthMeHook implements AuthPlugin<Player>, PreLoginAuthPlugin, Liste
 
         //skips registration and login
         authmeAPI.forceLogin(player);
-        return true;
+        return awaitAuthentication(player);
     }
 
     @Override
@@ -110,7 +111,7 @@ public class AuthMeHook implements AuthPlugin<Player>, PreLoginAuthPlugin, Liste
 
     @Override
     public boolean isAuthenticated(Player player) {
-        return authmeAPI != null && authmeAPI.isAuthenticated(player);
+        return currentPlayer(player) && authmeAPI != null && authmeAPI.isAuthenticated(player);
     }
 
     @Override
@@ -221,14 +222,45 @@ public class AuthMeHook implements AuthPlugin<Player>, PreLoginAuthPlugin, Liste
     @Override
     //this automatically login the player too
     public boolean forceRegister(Player player, String password) {
+        if (!currentPlayer(player) || authmeAPI.isRegistered(player.getName())) {
+            return false;
+        }
         //if we have the management - we can trigger register with IP limit checks
         if (authmeManagement != null) {
             authmeManagement.performRegister(RegistrationMethod.PASSWORD_REGISTRATION,
                     ApiPasswordRegisterParams.of(player, password, true));
-        } else {
+        } else if (!plugin.getCore().getConfig().getBoolean("respectIpLimit")) {
             authmeAPI.forceRegister(player, password);
+        } else {
+            plugin.getLog().warn("Cannot enforce AuthMe registration IP limits; leaving registration to AuthMe");
+            return false;
         }
 
-        return true;
+        return awaitAuthentication(player) && authmeAPI.checkPassword(player.getName(), password)
+                && currentPlayer(player);
+    }
+
+    private boolean currentPlayer(Player player) {
+        return plugin.isEnabled() && player.isOnline() && plugin.getServer().getPlayer(player.getUniqueId()) == player;
+    }
+
+    // The API dispatches void actions. Only the auth worker waits, never the server thread.
+    private boolean awaitAuthentication(Player player) {
+        long started = System.nanoTime();
+        while (currentPlayer(player)) {
+            if (authmeAPI.isAuthenticated(player)) {
+                return currentPlayer(player);
+            }
+            if (System.nanoTime() - started >= TimeUnit.SECONDS.toNanos(5)) {
+                break;
+            }
+            try {
+                Thread.sleep(50L);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return false;
     }
 }

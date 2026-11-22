@@ -6,20 +6,17 @@
  */
 package com.github.games647.fastlogin.bukkit.hook;
 
-import com.comphenix.protocol.reflect.accessors.Accessors;
-import com.comphenix.protocol.reflect.accessors.FieldAccessor;
 import de.st_ddt.crazylogin.CrazyLogin;
 import de.st_ddt.crazylogin.listener.PlayerListener;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class CrazyLoginHookTest {
 
     @Test
-    void testPlayerListener() {
-        FieldAccessor accessor = Accessors.getFieldAccessor(CrazyLogin.class, PlayerListener.class, true);
-        assertNotNull(accessor.getField());
+    void findsHostPlayerListenerWithoutProtocolLib() throws NoSuchFieldException {
+        assertEquals(PlayerListener.class, CrazyLoginHook.resolveListenerField(CrazyLogin.class).getType());
     }
 
 }

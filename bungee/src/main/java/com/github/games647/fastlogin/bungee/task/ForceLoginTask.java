@@ -69,8 +69,11 @@ public class ForceLoginTask
             return true;
         }
 
-        session.setAlreadyLogged(true);
-        return super.forceLogin(player);
+        boolean confirmed = super.forceLogin(player);
+        if (confirmed) {
+            session.setAlreadyLogged(true);
+        }
+        return confirmed;
     }
 
     @Override

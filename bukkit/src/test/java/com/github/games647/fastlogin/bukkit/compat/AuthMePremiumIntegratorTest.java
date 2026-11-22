@@ -78,6 +78,23 @@ class AuthMePremiumIntegratorTest {
     }
 
     @Test
+    void premiumRecordIsRemovedEvenWhenItHasAPassword() {
+        // AuthMe 6 premium accounts may carry an FLP-generated password the player never saw.
+        assertTrue(AuthMePremiumIntegrator.shouldRemoveAuthMeRecord(true, true));
+    }
+
+    @Test
+    void passwordlessRecordIsRemoved() {
+        assertTrue(AuthMePremiumIntegrator.shouldRemoveAuthMeRecord(false, false));
+    }
+
+    @Test
+    void plainPasswordAccountSurvivesRoutineCrackedAdmission() {
+        // /flp cracked is also how offline players are admitted; never wipe their password.
+        assertFalse(AuthMePremiumIntegrator.shouldRemoveAuthMeRecord(false, true));
+    }
+
+    @Test
     void enabledProxyMustReceiveNotification() {
         // AuthMe resolved its BungeeSender, the bungeecord hook is on and a player is
         // online to carry the message → notify.

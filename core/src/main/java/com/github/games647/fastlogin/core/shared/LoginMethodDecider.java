@@ -76,6 +76,19 @@ public final class LoginMethodDecider {
     }
 
     /**
+     * Consent for a standalone Java connection. A route that expected to
+     * register cannot carry consent onto a password record found later,
+     * including a record under a premium player's new name.
+     *
+     * @param session the verified standalone Java session
+     * @return whether the local list grants consent for an existing account
+     */
+    public static Consent standaloneConsent(LoginSession session) {
+        return !session.needsRegistration() && session.getProfile() != null
+                && session.getProfile().isOnlinemodePreferred() ? Consent.YES : Consent.NO;
+    }
+
+    /**
      * Resolves a policy value behind a proxy: the proxy's declared value
      * is the authority and this server's local copy is never even read for it
      * (its config.yml copy is "ignored here"). The local value only serves facts
