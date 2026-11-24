@@ -147,6 +147,15 @@ public class FastLoginBungee extends Plugin implements PlatformPlugin<CommandSen
         return core;
     }
 
+    @Override
+    public void disconnectPendingVerification(String username, Object owner) {
+        if (!(owner instanceof PendingConnection) || !((PendingConnection) owner).isConnected()) {
+            return;
+        }
+        ((PendingConnection) owner).disconnect(
+                TextComponent.fromLegacyText(core.getMessage("premium-verification-timeout")));
+    }
+
     public ConcurrentMap<PendingConnection, BungeeLoginSession> getSession() {
         return session;
     }

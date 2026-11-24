@@ -75,6 +75,7 @@ corrupt-premium-uuid: '&4This account has a corrupt premium UUID and cannot be l
 account-state-unavailable: '&6Your account state could not be confirmed, so the automatic premium login was skipped. Use your password to log in.'
 premium-password-login: '&eYour premium identity was verified. This account already has a password, so passwordless login is skipped for this session. After logging in you may run &b/flp premium&e to enable passwordless login.'
 premium-policy-disabled: '&eThe server has disabled automatic premium login. This premium-owned account has no usable password. Contact an administrator or reset the password according to the server policy.'
+premium-verification-timeout: '&4This name is on the premium list, but premium verification did not complete. Reconnect with a premium account, or ask an administrator to switch it back to cracked.'
 invalid-verify-token: '&4Invalid nonce token. Please verify you are using the correct server address'
 invalid-session: '&4Invalid session'
 invalid-request: '&4Invalid request'

@@ -727,6 +727,20 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
     }
 
     /**
+     * Whether the given connection still owns the pending verification for the name.
+     * A platform that must disconnect before its own login timeout can use this to
+     * avoid kicking a connection whose attempt already ended or was replaced.
+     *
+     * @param username exact login name
+     * @param owner connection identity token used when the attempt was marked
+     * @return true if this connection still owns the pending attempt
+     */
+    public boolean hasPendingVerification(String username, Object owner) {
+        PendingVerification pending = pendingVerifications.get(attemptKey(username));
+        return pending != null && pending.owner == owner;
+    }
+
+    /**
      * Drops a pending verification without counting it: the caller obtained an
      * explicit "could not tell" verdict, such as an authentication outage.
      * A closed connection is not such a verdict and is settled normally.
@@ -857,6 +871,7 @@ public class FastLoginCore<P extends C, C, T extends PlatformPlugin<C>> {
             }
             if (sessionServerReachable) {
                 definiteFailures.merge(key, 1, Integer::sum);
+                plugin.disconnectPendingVerification(key, pending.owner);
                 plugin.getLog().warn("Premium verification for {} never completed while the session "
                         + "server answers: counted as a failed verification", key);
             } else {

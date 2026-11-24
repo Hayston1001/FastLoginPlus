@@ -38,6 +38,17 @@ public interface PlatformPlugin<C> {
 
     BedrockService<?> getBedrockService();
 
+    /**
+     * Closes a login connection whose premium verification expired without a verdict.
+     * The default leaves the connection to the proxy; platforms that can close it
+     * during login override this so the player gets a clear message instead of a hang.
+     *
+     * @param username exact login name
+     * @param owner connection identity token used when the attempt was marked
+     */
+    default void disconnectPendingVerification(String username, Object owner) {
+    }
+
     default ThreadFactory getThreadFactory() {
         return new ThreadFactoryBuilder()
                 .setNameFormat(getName() + " Pool Thread #%1$d")

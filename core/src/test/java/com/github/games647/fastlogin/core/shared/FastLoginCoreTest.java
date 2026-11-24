@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -101,6 +102,20 @@ class FastLoginCoreTest {
         core.settlePendingVerifications(true);
         assertEquals(0, core.getDefiniteFailures("OtherUser"),
                 "an outage attempt must not be charged when the session server recovers");
+    }
+
+    @Test
+    void expiredAttemptDisconnectsThePendingConnection() {
+        PlatformPlugin<Object> plugin = mock(PlatformPlugin.class);
+        when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
+        FastLoginCore<Object, Object, PlatformPlugin<Object>> core = new FastLoginCore<>(plugin, now::get);
+        Object connection = new Object();
+
+        core.markPendingVerification("TestUser", connection);
+        now.addAndGet(FastLoginCore.VERIFICATION_GRACE_MS);
+        core.settlePendingVerifications(true);
+
+        verify(plugin).disconnectPendingVerification("testuser", connection);
     }
 
     @Test

@@ -18,8 +18,12 @@ import org.geysermc.floodgate.api.player.FloodgatePlayer;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 public class FloodgateService extends BedrockService<FloodgatePlayer> {
+
+    /** Mojang accounts only use these characters; a prefixed Bedrock name can never match. */
+    private static final Pattern JAVA_NAME = Pattern.compile("[A-Za-z0-9_]{1,16}");
 
     private final FloodgateApi floodgate;
     private final Cache<FloodgatePlayer, String> preLoginRequests;
@@ -104,19 +108,45 @@ public class FloodgateService extends BedrockService<FloodgatePlayer> {
             }
             return true;
         }
-        boolean isLinked = floodgatePlayer.getLinkedPlayer() != null;
-
-        if ("false".equals(allowConflict)
-            || "linked".equals(allowConflict) && !isLinked) {
-            super.checkNameConflict(username, source);
-        } else {
-            if (core.isDebug()) {
-                core.getPlugin().getLog().info("Skipping name conflict checking for player {}", username);
-            }
-        }
+        enforceNameConflict(floodgatePlayer, source);
 
         //Floodgate users don't need Java specific checks
         return true;
+    }
+
+    /**
+     * Applies the configured name-conflict policy to a Bedrock player. The caller supplies the
+     * disconnect source, so a platform without a pre-login hook can enforce the policy before
+     * any automatic account action.
+     *
+     * @param player the Floodgate player (non-null)
+     * @param source the source used to kick the player on a conflict
+     */
+    public void enforceNameConflict(FloodgatePlayer player, LoginSource source) {
+        // A linked player legitimately uses the Java account's own name; the conflict switch
+        // only concerns unlinked Bedrock names, as the backend check and the docs already say.
+        if (player.getLinkedPlayer() != null) {
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info(
+                        "Skipping name conflict checking for linked player {}", player.getCorrectUsername());
+            }
+            return;
+        }
+        String name = player.getCorrectUsername();
+        // A name outside the Java charset (for example the default "." Floodgate prefix) can
+        // never match a Mojang account, so asking Mojang would only waste a lookup.
+        if (!JAVA_NAME.matcher(name).matches()) {
+            if (core.isDebug()) {
+                core.getPlugin().getLog().info(
+                        "Skipping name conflict checking for non-Java name {}", name);
+            }
+            return;
+        }
+        if ("false".equals(allowConflict) || "linked".equals(allowConflict)) {
+            checkNameConflict(name, source);
+        } else if (core.isDebug()) {
+            core.getPlugin().getLog().info("Skipping name conflict checking for player {}", name);
+        }
     }
 
     /**

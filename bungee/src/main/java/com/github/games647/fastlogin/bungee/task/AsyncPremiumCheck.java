@@ -19,8 +19,13 @@ import net.md_5.bungee.api.connection.PendingConnection;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.event.PreLoginEvent;
 
+import java.util.concurrent.TimeUnit;
+
 public class AsyncPremiumCheck extends JoinManagement<ProxiedPlayer, CommandSender, BungeeLoginSource>
         implements Runnable {
+
+    /** Must fire before BungeeCord's default 30s login read timeout. */
+    private static final long VERIFICATION_DISCONNECT_DELAY_SECONDS = 25L;
 
     private final FastLoginBungee plugin;
     private final PreLoginEvent preLoginEvent;
@@ -64,6 +69,13 @@ public class AsyncPremiumCheck extends JoinManagement<ProxiedPlayer, CommandSend
 
         plugin.getCore().markPendingVerification(username, source.getConnection());
         VerificationCloseWatcher.attach(plugin, username, source.getConnection());
+        // BungeeCord's default read timeout would close the login at 30s without a
+        // reason; give the player the explicit message a few seconds earlier.
+        plugin.getProxy().getScheduler().schedule(plugin, () -> {
+            if (plugin.getCore().hasPendingVerification(username, source.getConnection())) {
+                plugin.disconnectPendingVerification(username, source.getConnection());
+            }
+        }, VERIFICATION_DISCONNECT_DELAY_SECONDS, TimeUnit.SECONDS);
     }
 
     @Override

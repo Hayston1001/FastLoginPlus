@@ -10,10 +10,12 @@ import com.github.games647.fastlogin.bungee.FastLoginBungee;
 import com.github.games647.fastlogin.bungee.task.AsyncPremiumCheck;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
+import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.connection.PendingConnection;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.event.PlayerDisconnectEvent;
 import net.md_5.bungee.api.event.PreLoginEvent;
+import net.md_5.bungee.api.scheduler.TaskScheduler;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -29,6 +31,9 @@ class PendingVerificationDisconnectTest {
         FastLoginCore core = mock(FastLoginCore.class);
         when(plugin.getCore()).thenReturn(core);
         when(plugin.getSession()).thenReturn(new ConcurrentHashMap<>());
+        ProxyServer proxy = mock(ProxyServer.class);
+        when(plugin.getProxy()).thenReturn(proxy);
+        when(proxy.getScheduler()).thenReturn(mock(TaskScheduler.class));
         when(plugin.getLog()).thenReturn(mock(org.slf4j.Logger.class));
         when(plugin.getCrackedNoticeDelivery()).thenReturn(mock(CrackedNoticeDelivery.class));
         PendingConnection connection = mock(PendingConnection.class);

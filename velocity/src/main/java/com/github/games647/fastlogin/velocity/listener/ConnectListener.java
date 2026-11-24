@@ -13,6 +13,7 @@ import com.github.games647.fastlogin.core.antibot.AntiBotService.Action;
 import com.github.games647.fastlogin.velocity.event.VelocityFastLoginAntiBotEvent;
 import com.github.games647.fastlogin.core.shared.ForwardingAttributes;
 import com.github.games647.fastlogin.core.shared.LoginSession;
+import com.github.games647.fastlogin.core.shared.LoginSource;
 import com.github.games647.fastlogin.core.storage.StoredProfile;
 import com.github.games647.fastlogin.protocol.IdentityClaim;
 import com.github.games647.fastlogin.protocol.CrackedNoticeClaim;
@@ -271,21 +272,25 @@ public class ConnectListener {
                 event.setGameProfile(event.getGameProfile().withProperties(newProp));
             }
         }
-        // Best effort: early failure is visible, but never disables the late sender.
-        earlyDeclarations.attempt(event.isOnlineMode() ? EarlyDeclarationSupport.FailureKind.PREMIUM_CLAIM
-                : EarlyDeclarationSupport.FailureKind.UNVERIFIED_DECLARATION,
-                () -> attachIdentityClaim(event, claimSession));
+        // A Bedrock connection carries the signed Bedrock claim; its dotted platform name is
+        // not a Java name, so the Java identity claim is only built for non-Bedrock connections.
+        Boolean bedrock = plugin.hasFloodgate()
+                ? FloodgateAccess.linked(plugin, event.getConnection(), event.getGameProfile().getId())
+                : null;
+        if (bedrock == null) {
+            // Best effort: early failure is visible, but never disables the late sender.
+            earlyDeclarations.attempt(event.isOnlineMode() ? EarlyDeclarationSupport.FailureKind.PREMIUM_CLAIM
+                    : EarlyDeclarationSupport.FailureKind.UNVERIFIED_DECLARATION,
+                    () -> attachIdentityClaim(event, claimSession));
+        }
         earlyDeclarations.attempt(EarlyDeclarationSupport.FailureKind.UNVERIFIED_DECLARATION,
-                () -> attachBedrockClaim(event));
+                () -> attachBedrockClaim(event, bedrock));
     }
 
-    void attachBedrockClaim(GameProfileRequestEvent event) {
+    void attachBedrockClaim(GameProfileRequestEvent event, Boolean linked) {
         GameProfile profile = event.getGameProfile();
         List<Property> properties = new ArrayList<>(profile.getProperties());
         boolean stripped = properties.removeIf(property -> BedrockClaim.PROPERTY_NAME.equals(property.getName()));
-        Boolean linked = plugin.hasFloodgate()
-                ? FloodgateAccess.linked(plugin, event.getConnection(), profile.getId())
-                : null;
         if (linked != null) {
             BedrockSession policy = BedrockSession.fromConfig(plugin.getCore().getConfig(), linked);
             BedrockClaim claim = new BedrockClaim(profile.getName(), profile.getId(), policy.isLinked(),
@@ -391,6 +396,15 @@ public class ConnectListener {
         Player player = serverConnectedEvent.getPlayer();
         RegisteredServer server = serverConnectedEvent.getServer();
 
+        if (plugin.hasFloodgate() && plugin.getFloodgateService().isBedrockPlayer(player.getUniqueId())) {
+            // Velocity has no pre-login hook here, so enforce the name-conflict policy before the
+            // automatic account action; a conflicting player is disconnected.
+            plugin.getFloodgateService().performChecks(player.getUsername(), new PlayerLoginSource(player));
+            if (!player.isActive()) {
+                return;
+            }
+        }
+
         if (plugin.hasFloodgate() && FloodgateAccess.authenticate(plugin, player, server)) {
             return;
         }
@@ -424,5 +438,30 @@ public class ConnectListener {
         plugin.getCore().getPendingConfirms().remove(player.getUniqueId());
 
         plugin.getSession().remove(player.getRemoteAddress());
+    }
+
+    /** LoginSource adapter for a Bedrock player already connected to the proxy. */
+    private static final class PlayerLoginSource implements LoginSource {
+
+        private final Player player;
+
+        private PlayerLoginSource(Player player) {
+            this.player = player;
+        }
+
+        @Override
+        public void enableOnlinemode() {
+            // Velocity already handled the Java side; the interface method is unused here.
+        }
+
+        @Override
+        public void kick(String message) {
+            player.disconnect(LegacyComponentSerializer.legacyAmpersand().deserialize(message));
+        }
+
+        @Override
+        public InetSocketAddress getAddress() {
+            return player.getRemoteAddress();
+        }
     }
 }

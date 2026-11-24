@@ -18,6 +18,7 @@ import com.google.common.base.Ticker;
 import net.md_5.bungee.config.Configuration;
 import org.geysermc.floodgate.api.FloodgateApi;
 import org.geysermc.floodgate.api.player.FloodgatePlayer;
+import org.geysermc.floodgate.util.LinkedPlayer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -189,6 +190,31 @@ class FloodgateServiceTest {
         when(resolver.findProfile("UniqueName")).thenReturn(Optional.empty());
 
         assertTrue(service.performChecks("UniqueName", source));
+        verify(source, never()).kick(anyString());
+    }
+
+    @Test
+    void prefixedBedrockNameSkipsMojangLookup() throws Exception {
+        FloodgatePlayer fgPlayer = mockFloodgatePlayer(".Steve");
+        when(floodgateApi.getPlayers()).thenReturn(Collections.singletonList(fgPlayer));
+
+        assertTrue(service.performChecks(".Steve", source));
+
+        // A prefixed name cannot be a Mojang account, so no request is sent.
+        verify(resolver, never()).findProfile(anyString());
+        verify(source, never()).kick(anyString());
+    }
+
+    @Test
+    void linkedPlayerSkipsConflictCheckEvenWhenConflictsAreDisallowed() throws Exception {
+        FloodgatePlayer fgPlayer = mock(FloodgatePlayer.class);
+        when(fgPlayer.getCorrectUsername()).thenReturn("hayston0610");
+        when(fgPlayer.getLinkedPlayer()).thenReturn(mock(LinkedPlayer.class));
+
+        service.enforceNameConflict(fgPlayer, source);
+
+        // The linked player legitimately uses this Java name; only unlinked names are checked.
+        verify(resolver, never()).findProfile(anyString());
         verify(source, never()).kick(anyString());
     }
 
