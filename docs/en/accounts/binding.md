@@ -38,7 +38,7 @@ Confirm the next login and player data are as expected.
 ## Bukkit/Paper/Folia: return to password login
 
 {% hint style="warning" %}
-**Back up the authentication database first.** AuthMe can remove or reset an account, and the player may need to register again; do not assume the original password is retained.
+**Back up the authentication database first.** AuthMe removes a record only when it is premium-marked or has no password; a password account that was never premium keeps its password. A premium account may still need to register again.
 {% endhint %}
 
 {% stepper %}

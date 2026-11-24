@@ -3,7 +3,7 @@
 ## Enable the offline whitelist
 
 {% hint style="warning" %}
-**Back up the authentication database first.** `/flp cracked` can change existing accounts; with AuthMe it can remove or reset an account record.
+**Back up the authentication database first.** `/flp cracked` can change existing accounts. With AuthMe it removes a record that is marked as premium or has no password; an account that was never premium keeps its password.
 {% endhint %}
 
 1. Stop the server. In a proxy deployment, stop the proxy and edit its FLP configuration; on a standalone server, edit the local FLP configuration.

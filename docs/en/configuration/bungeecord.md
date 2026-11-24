@@ -4,7 +4,7 @@ File: `plugins/fastloginplus/config.yml` on the BungeeCord proxy. Stop the proxy
 
 FLP login policies and lists live on the proxy; backend authentication accounts and passwords remain on the backend.
 
-BungeeCord bundles SQLite, but **does not bundle the MariaDB driver**. Before using MySQL/MariaDB, make sure a driver compatible with the proxy's Java version is available; see [database configuration](database.md).
+The default SQLite store is supported on BungeeCord. Before using MySQL/MariaDB, make sure a driver compatible with the proxy's Java version is available; see [database configuration](database.md).
 
 ## General and login
 

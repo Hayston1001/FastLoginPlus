@@ -37,6 +37,6 @@ Fabric does not use Bukkit permission nodes or classic aliases. No bare version/
 
 ## Destructive and delayed effects
 
-Read [binding and switching](binding.md) before granting permissions. AuthMe cracked cleanup can remove/reset an auth account. EasyAuth unbinding retains an existing password; a passwordless release requires a second operation within 30 seconds. FLP delete does not delete the world or all authentication records.
+Read [binding and switching](binding.md) before granting permissions. AuthMe cracked cleanup removes only a premium-marked or passwordless record; a password account that was never premium keeps its password. EasyAuth unbinding retains an existing password; a passwordless release requires a second operation within 30 seconds. FLP delete does not delete the world or all authentication records.
 
 `kick-toggle` affects disconnect behavior, not authentication proof. No command transfers or automatically reconnects the player. Operators should validate target names, confirm final writes and test the next login.

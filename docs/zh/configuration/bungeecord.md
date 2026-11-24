@@ -4,7 +4,7 @@
 
 FLP 登录策略和名单位于代理; 后端认证插件的账号和密码仍在后端管理.
 
-数据库方面, BungeeCord 内置 SQLite 驱动, **不内置 MariaDB 驱动**. 使用 MySQL/MariaDB 前, 请确认有与代理 Java 版本兼容的驱动, 见[数据库配置](database.md).
+默认的 SQLite 存储在 BungeeCord 上受支持. 使用 MySQL/MariaDB 前, 请确认有与代理 Java 版本兼容的驱动, 见[数据库配置](database.md).
 
 ## 通用和登录
 

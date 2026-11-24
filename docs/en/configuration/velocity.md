@@ -72,4 +72,4 @@ This database stores the proxy's FLP list, not backend authentication accounts. 
 | `allowPublicKeyRetrieval` | `false` | MySQL public-key retrieval option on the SSL path |
 | `ServerRSAPublicKeyFile` | Empty | Optional local RSA public-key file |
 
-See [database configuration](database.md) for driver and connection details. Velocity bundles SQLite and MariaDB drivers.
+See [database configuration](database.md) for driver and connection details. The default SQLite store is supported on Velocity.

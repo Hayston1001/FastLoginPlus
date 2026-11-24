@@ -4,7 +4,7 @@
 
 Standalone FLP stores its premium/cracked records on that server. Proxy deployments use the **proxy's** FLP database; classic backends do not open a second FLP list database in proxy mode. The auth plugin's database remains a separate local account store, including EasyAuth on Fabric.
 
-SQLite is the default. Do not put one SQLite file on a network share for several processes or copy a live database without a consistent backup. Multi-proxy or multi-backend account synchronization needs its own design and testing; choosing MySQL does not solve every cross-server race or local-account mismatch.
+SQLite is the default. Proxy deployments support the same local SQLite store as standalone servers; it is part of FLP's own storage support, not something the proxy software provides. Do not put one SQLite file on a network share for several processes or copy a live database without a consistent backup. Multi-proxy or multi-backend account synchronization needs its own design and testing; choosing MySQL does not solve every cross-server race or local-account mismatch.
 
 ## Configure MySQL or MariaDB
 
@@ -51,7 +51,7 @@ These FLP options do not configure EasyAuth's storage. Fabric's supported integr
 
 Create the database and a least-privileged account before starting FLP. Keep `lifetime` below the server's idle timeout. Review TLS and authentication options against the exact JDBC driver; `useSSL` alone is not a claim of hostname/certificate validation.
 
-Runtime drivers differ by artifact: Bukkit/Folia normally use server-provided JDBC drivers; Velocity bundles SQLite and MariaDB, while BungeeCord bundles SQLite but does not bundle the MariaDB driver. Do not assume the same MySQL configuration is self-contained on both proxies; check driver availability before switching. The existing SQL support does not justify dropping an arbitrary modern driver onto a Java-8 server.
+Runtime driver availability differs between artifacts and servers: Bukkit/Folia normally use server-provided JDBC drivers. Use `driver: mysql` for both MySQL and MariaDB, and confirm that a compatible driver is available before switching. The existing SQL support does not justify dropping an arbitrary modern driver onto a Java-8 server.
 
 ## Backup and errors
 

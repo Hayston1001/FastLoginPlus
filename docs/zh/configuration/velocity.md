@@ -72,4 +72,4 @@
 | `allowPublicKeyRetrieval` | `false` | SSL 路径的 MySQL 公钥获取选项 |
 | `ServerRSAPublicKeyFile` | 空 | 可选的本地 RSA 公钥文件 |
 
-驱动和连接设置见[数据库配置](database.md). Velocity 内置 SQLite 和 MariaDB 驱动.
+驱动和连接设置见[数据库配置](database.md). 默认的 SQLite 存储在 Velocity 上受支持.
