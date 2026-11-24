@@ -2,6 +2,32 @@
 
 English | [简体中文](CHANGELOG_zh.md)
 
+## v1.2.0
+
+> This update broadens authentication-plugin support (see the [upstream repository](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)) and fixes issues in the login flow, account management and Floodgate compatibility
+
+### Login and accounts
+
+- **Switching back to password login no longer loses the password**: on AuthMe servers, `/flp cracked` keeps the password of an account that was never premium; only premium-marked or passwordless accounts are removed and need to register again
+- **Standalone premium login now requires consent**: when the name already has a password account, a verified premium connection no longer takes it over; the player must log in with the password and mark the name as premium before passwordless login is enabled
+- **An unconfirmed authentication is not a success**: a login or registration only counts once the authentication plugin has completed it; a disconnect or an unfinished action no longer records success or consent
+- **Only one authentication plugin is used**: the first in a fixed order is selected, the rest are listed in the startup log and ignored; if the selected plugin fails to load, logins stay closed and a restart is needed to select again
+- **UserLogin and MyLogin support added**: both can auto-login and auto-register; disable their own automatic login (MyLogin also needs IP memory disabled)
+- **AuthMe's per-IP registration limit is respected**: enabling `respectIpLimit` no longer bypasses the limit for automatic registration
+- **CrazyLogin registration is more reliable**: no placeholder account with an unknown password is created; ProtocolSupport alone is enough
+- **LogIt and BungeeAuth confirm login after registration**: a successful registration without an actual login no longer counts as success
+- **UltraAuth, xAuth and Passky results are verified**: existing accounts are not registered twice, and the result follows the plugin's actual state
+- **Multiple authentication plugins are handled by a fixed strategy**: when several are installed, FLP integrates with only one, in this order (AuthMe → CrazyLogin → LogIt → LoginSecurity → UltraAuth → xAuth → Passky → UserLogin → MyLogin)
+
+### Servers and proxies
+
+- **Velocity starts when Floodgate is not installed**: fixed the initialization failure that left login inactive without Floodgate
+- **BungeeAuth login state follows the actual result**: only a confirmed login marks the connection as logged in
+- **Linked Bedrock accounts are no longer rejected by the default conflict policy**: with `allowFloodgateNameConflict: false`, a linked Floodgate player logs in under the Java account instead of being treated as an impersonator; only unlinked Bedrock names are checked for conflicts
+- **Bedrock connections no longer spam identity errors**: each Bedrock join no longer produces an `Invalid player name` ERROR; only the signed Bedrock identity claim is attached
+- **Velocity now actually runs the Bedrock name-conflict check**: unlinked Bedrock names are checked against Java premium names before automatic login
+- **Bungee shows a clear notice when premium verification is unfinished**: a listed connection that does not finish verification is disconnected after about 25 seconds with a notice to reconnect with a premium account or switch back to cracked, instead of being closed silently by the proxy's 30-second read timeout
+
 ## v1.1.0
 
 > This update focuses on bug fixes and safe fallbacks

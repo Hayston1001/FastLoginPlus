@@ -2,6 +2,32 @@
 
 [English](CHANGELOG.md) | 简体中文
 
+## v1.2.0
+
+> 本次更新扩展了登录插件适配范围(参照[上游仓库](https://github.com/TuxCoding/FastLogin#supported-auth-plugins)), 并改进了登录流程/账号管理/Floodgate兼容的相关问题
+
+### 登录与账号
+
+- **改回密码登录后不再丢失密码**: 在 AuthMe 服务器上, 从未绑定过正版的密码账号执行 `/flp cracked` 后会保留原密码; 只有已绑定正版或本来没有密码的账号会被清除, 需要重新注册
+- **单服正版免密需要先同意**: 用户名下已有密码账号时, 单凭正版验证不会再直接接管; 玩家需要先用原密码登录并标记正版, 之后才能免密
+- **认证未完成就不算成功**: 登录或注册必须由认证插件真正完成; 玩家中途掉线或插件没有完成时, 不再记录为成功或写入同意
+- **同时安装多个认证插件时只用一个**: 按固定顺序选择第一个, 其余在启动日志中列出并忽略; 选中的插件加载失败时登录保持关闭, 需要重启后重新选择
+- **新增 UserLogin 和 MyLogin 支持**: 两者都可以自动登录和自动注册; 使用时需要关闭它们自带的自动登录 (MyLogin 还需关闭 IP 记忆)
+- **AuthMe 的每 IP 注册限制会被遵守**: 启用 `respectIpLimit` 后不再绕过限制强行注册
+- **CrazyLogin 注册更可靠**: 不再创建玩家不知道密码的占位账号; 仅安装 ProtocolSupport 也能配合使用
+- **LogIt 和 BungeeAuth 注册后会确认登录**: 注册成功但没有真正登录时不再算作成功
+- **UltraAuth, xAuth 和 Passky 会核对结果**: 已有账号不会重复注册, 登录或注册结果以插件实际状态为准
+- **多登录插件的接入策略**: 同时存在多个认证插件时, 仅按照固定顺序接入一个(AuthMe → CrazyLogin → LogIt → LoginSecurity → UltraAuth → xAuth → Passky → UserLogin → MyLogin)
+
+### 服务器与代理
+
+- **Velocity 不装 Floodgate 时正常启动**: 修复了未安装 Floodgate 时插件初始化失败, 登录功能不生效的问题
+- **BungeeAuth 的登录状态以实际结果为准**: 只有确认登录后, 代理才会把这次连接当作已登录
+- **Bedrock 关联账号不再被默认冲突策略拒绝**: `allowFloodgateNameConflict: false` 下, 已关联 Floodgate 的玩家按 Java 账号正常登录, 不再被当成同名冒充; 只有未关联的 Bedrock 名字参与冲突检查
+- **Bedrock 连接不再刷身份错误**: 每次 Bedrock 进服不再产生 `Invalid player name` 的 ERROR; 只附加签名的 Bedrock 身份声明
+- **Velocity 会真正执行 Bedrock 名字冲突检查**: 未关联的 Bedrock 名字在自动登录前会检查是否与 Java 正版名冲突
+- **Bungee 上未完成正版验证会收到明确提示**: 名单内但未完成验证的连接约 25 秒后被断开, 并提示重新使用正版账号连接或切回非正版; 不再被代理的 30 秒读取超时无声关闭
+
 ## v1.1.0
 
 > 本次更新聚焦漏洞修复和安全兜底
