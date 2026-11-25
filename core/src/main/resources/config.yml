@@ -8,19 +8,14 @@
 # ========================================
 # FastLoginPlus Configuration (Bukkit / Folia)
 # ========================================
-# This file configures a standalone server or a backend behind a proxy.
-# Scope labels appear above each setting or group:
-#   [Standalone only] - without a proxy; shared policies are set on the proxy.
-#   [Proxy backend only] - only on a backend behind a proxy.
-#   [Both modes] - applies locally in both deployments.
-#   [Standalone + Paper/Folia lookup] - also used behind a proxy for applicable
-#     Paper/Folia configuration-phase lookups, but not on Spigot backends.
-# A group label also applies to its nested or following settings.
+# Settings may not apply in every scenario. We use TAGS to indicate such exceptions:
+#   [ignored behind proxy] - NO effect behind a proxy, so CONFIGURE IT ON PROXY instead.
+#   [only paper if behind proxy] - IF behind a proxy, it only takes effect on Paper/Folia;
+#                                - IF NO proxy, it takes effect on ALL platforms.
 
 # ========================================
 # Language
 # ========================================
-# [Both modes]
 # Language file to use. Built-in options: "en"(English), "zh"(中文)
 # You can also use a custom value, e.g. "ja" -> loads messages_ja.yml
 # Missing keys will be auto-filled on startup.
@@ -29,18 +24,16 @@ language: en
 # ========================================
 # Update Check
 # ========================================
-# [Both modes] Update check settings.
 # Check for new versions on GitHub. Logs to console; notifies OPs on login
 check-update: true
 # Check interval in hours
 update-check-interval: 24
 
 # ========================================
-# Anti-bot
+# Anti-bot [ignored behind proxy]
 # ========================================
-# [Standalone only] All anti-bot settings below.
-# Reject connections that exceed these limits. Behind a proxy,
-# configure anti-bot on the proxy. Use a firewall for stronger protection.
+# Reject connections that exceed these limits. Use a firewall for stronger
+# protection.
 anti-bot:
   enabled: true
   # Total connections allowed in the time window
@@ -61,7 +54,7 @@ anti-bot:
   burst-window: 10
 
   # --- Temporary ban ---
-  # Ban duration when per-IP limit is exceeded (minutes) 
+  # Ban duration when per-IP limit is exceeded (minutes)
   ban-duration: 5
 
   # --- Trusted IPs ---
@@ -73,28 +66,28 @@ anti-bot:
 # ========================================
 # Premium Detection
 # ========================================
-# [Standalone only]
+# [ignored behind proxy]
 # Route new premium names to verification. Account creation still
 # depends on login policy and account ownership; other checks may also verify.
 autoRegister: true
 
-# [Standalone only]
-# Allow auto-login for verified premium players. Behind a proxy,
-# the backend enforces the proxy's policy instead. A force action from a
-# proxy that does not declare its policy is always ignored.
+# [ignored behind proxy]
+# Allow auto-login for verified premium players. Behind a proxy the backend
+# enforces the proxy's policy; older proxies that declare no policy fall back
+# to this value.
 autoLogin: true
 
-# [Standalone only]
+# [ignored behind proxy]
 # Use the verified premium UUID instead of the offline UUID.
 # This does not enable verification or migrate player data.
 premiumUuid: true
 
-# [Standalone only]
+# [ignored behind proxy]
 # Look up new names and reconcile FLP records by UUID after a name
 # change. This does not migrate player data.
 nameChangeCheck: true
 
-# [Standalone only]
+# [ignored behind proxy]
 # Remember eligible failed premium verification attempts for an
 # offline retry (not recommended). Confirmed premium accounts are not downgraded.
 secondAttemptCracked: false
@@ -102,7 +95,7 @@ secondAttemptCracked: false
 # ========================================
 # Offline Whitelist
 # ========================================
-# [Standalone only]
+# [ignored behind proxy]
 # Deny offline Java names unknown to FLP. This controls admission,
 # not password or premium authentication. Manage the list with /flp cracked
 # and /flp delete.
@@ -111,64 +104,62 @@ offline-whitelist: false
 # ========================================
 # Skin
 # ========================================
-# [Standalone only]
+# [ignored behind proxy]
 # Forward premium skins. SkinsRestorer custom skins take priority.
 forwardSkin: true
 
 # ========================================
 # Command Behavior
 # ========================================
-# [Standalone only]
+# [ignored behind proxy]
 # Ask for confirmation before /flp premium takes effect.
 premium-warning: true
 
-# [Both modes]
-# Standalone: kick after a toggle so the player can reconnect manually.
-# Proxy backend: also controls kicks after relaying a queued toggle;
-# the proxy's setting controls its own kick after a toggle.
+# Kick the player after a toggle so they reconnect manually. Behind a proxy,
+# this also controls the kick after relaying a queued toggle; the proxy has
+# its own kick-toggle for toggles it handles directly.
 kick-toggle: true
 
 # ========================================
 # Advanced
 # ========================================
-# [Both modes]
 # Enable verbose logging for troubleshooting.
 debug: false
 
-# [Standalone only]
+# [ignored behind proxy]
 # Automatically create a missing auth-plugin account for a verified
 # premium player. If false, they use the normal registration flow. This never
-# creates accounts for unverified offline players. Proxy backends enforce the
-# proxy's policy instead.
+# creates accounts for unverified offline players. Behind a proxy the backend
+# enforces the proxy's policy; older proxies that declare no policy fall back
+# to this value.
 auto-register-unknown: true
 
-# [Both modes]
 # Respect AuthMe's per-IP registration limit. Other auth hooks do not
 # currently implement this check.
 respectIpLimit: false
 
-# [Standalone only]
+# [ignored behind proxy]
 # Omit the IP from Mojang session verification. Useful with DNAT or
 # transparent reverse proxies when the server sees a different client IP.
 useProxyAgnosticResolver: true
 
-# [Standalone only] Both retry settings.
+# [ignored behind proxy]
 # Total attempts for Mojang name lookups and session verification.
 mojang-retry-count: 3
 # Retry delay in milliseconds, doubled per retry and capped at 10s.
 mojang-retry-delay: 500
 
-# [Standalone only]
+# [ignored behind proxy]
 # Verify client public key signatures (1.19+, ProtocolLib).
 verifyClientKeys: false
 
-# [Standalone + Paper/Folia lookup]
+# [only paper if behind proxy]
 # Rotate local IPs for Mojang API requests.
 # ip-addresses:
 #   - 192-168-0-2
 ip-addresses:
 
-# [Standalone + Paper/Folia lookup]
+# [only paper if behind proxy]
 # Direct name lookups per 10 minutes per IP.
 # Range: 0..600. Values are clamped; 0 disables direct requests and requires
 # at least one HTTP proxy below, otherwise the limit resets to 600.
@@ -177,24 +168,23 @@ mojang-request-limit: 600
 # ========================================
 # Floodgate / Bedrock
 # ========================================
-# [Standalone only]
+# [ignored behind proxy]
 # Floodgate auto-login policy: false / true / linked / no-conflict.
 autoLoginFloodgate: false
 
-# [Standalone only]
+# [ignored behind proxy]
 # Allow Bedrock names that conflict with Java premium names.
 allowFloodgateNameConflict: false
 
-# [Standalone only]
+# [ignored behind proxy]
 # Auto-register Floodgate players. Requires autoLoginFloodgate.
 autoRegisterFloodgate: false
 
 # ========================================
-# Database
+# Database [ignored behind proxy]
 # ========================================
-# [Standalone only] All FLP database settings below.
-# FLP list database. Behind a proxy, configure the proxy's database;
-# the backend auth plugin still maintains its own local accounts.
+# FLP list database. The backend auth plugin still maintains its own local
+# accounts.
 # Database driver: 'sqlite' (default) or 'mysql'
 driver: 'sqlite'
 
@@ -226,9 +216,8 @@ allowPublicKeyRetrieval: false
 ServerRSAPublicKeyFile:
 
 # ========================================
-# Proxies
+# Proxies [only paper if behind proxy]
 # ========================================
-# [Standalone + Paper/Folia lookup]
 # HTTP proxies for Mojang API requests.
 # proxies:
 #   - 'xyz.com:1337'
