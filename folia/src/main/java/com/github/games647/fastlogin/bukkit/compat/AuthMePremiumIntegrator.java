@@ -42,6 +42,11 @@ import java.util.function.Consumer;
  * internal classes like {@code AsynchronousJoin} and {@code PaperDialogFlowListener}.
  * This class accesses them by reflecting on the {@code AuthMe.injector} field and calling
  * {@code injector.getSingleton(TargetClass.class)}.
+ *
+ * <p><b>Relocated libraries:</b> some forks move the bundled libraries into their own namespace
+ * (for example {@code fr.xephi.authme.libs.ch.jalu.injector.Injector}). The probes therefore accept
+ * the upstream coordinates and a relocated name. Only the lookup tolerates the rename; the object
+ * graph handed back is still AuthMe's own, so no verification is skipped.
  */
 public final class AuthMePremiumIntegrator {
 
@@ -62,6 +67,14 @@ public final class AuthMePremiumIntegrator {
 
     /** The single parameter type of a {@code SettingsDependent}'s {@code reload} method. */
     private static final String AUTHME_SETTINGS_CLASS = "fr.xephi.authme.settings.Settings";
+
+    /** AuthMe's proxy-channel settings holder, DI type and ConfigMe base type, upstream names. */
+    private static final String HOOKS_SETTINGS_CLASS = "fr.xephi.authme.settings.properties.HooksSettings";
+    private static final String INJECTOR_CLASS = "ch.jalu.injector.Injector";
+    private static final String CONFIGME_PROPERTY_CLASS = "ch.jalu.configme.properties.Property";
+
+    /** Relocation prefix used by forks that move bundled libraries into their own namespace. */
+    private static final String AUTHME_LIB_PREFIX = "fr.xephi.authme.libs.";
 
     private final FastLoginBukkit plugin;
     private final AuthMeVersionDetector versionDetector;
@@ -1172,20 +1185,84 @@ public final class AuthMePremiumIntegrator {
         if (authMePlugin == null) {
             return null;
         }
-        // AuthMe has: private Injector injector;
-        for (Class<?> c = authMePlugin.getClass(); c != null; c = c.getSuperclass()) {
-            for (Field f : c.getDeclaredFields()) {
-                if (f.getType().getName().equals("ch.jalu.injector.Injector")) {
-                    f.setAccessible(true);
-                    authMeInjector = f.get(authMePlugin);
-                    return authMeInjector;
-                }
-            }
+        authMeInjector = findInjector(authMePlugin);
+        if (authMeInjector != null) {
+            return authMeInjector;
         }
         if (plugin.getCore().isDebug()) {
             plugin.getLog().info("Could not find AuthMe's Injector field");
         }
         return null;
+    }
+
+    // Finds AuthMe's injector field, accepting the library at its upstream or a relocated name.
+    static Object findInjector(Object authMePlugin) throws IllegalAccessException {
+        for (Class<?> type = authMePlugin.getClass(); type != null; type = type.getSuperclass()) {
+            for (Field field : type.getDeclaredFields()) {
+                if (isJaluType(field.getType().getName(), INJECTOR_CLASS)) {
+                    field.setAccessible(true);
+                    return field.get(authMePlugin);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether a reflected type name is the Jalu type, exact or under any relocation prefix.
+     *
+     * @param actualTypeName the name observed through reflection
+     * @param originalName   the upstream fully qualified name
+     * @return true when the name matches exactly or carries a relocation prefix
+     */
+    static boolean isJaluType(String actualTypeName, String originalName) {
+        return actualTypeName != null
+                && (actualTypeName.equals(originalName) || actualTypeName.endsWith("." + originalName));
+    }
+
+    // Resolves a library class, falling back to the relocated candidates in order.
+    static Class<?> resolveRelocated(String original, String... relocatedNames)
+            throws ClassNotFoundException {
+        try {
+            return Class.forName(original);
+        } catch (ClassNotFoundException originalMissing) {
+            for (String relocatedName : relocatedNames) {
+                try {
+                    return Class.forName(relocatedName);
+                } catch (ClassNotFoundException ignored) {
+                    // try the next candidate
+                }
+            }
+            throw originalMissing;
+        }
+    }
+
+    // Resolves ConfigMe's {@code Property} base type, accepting a relocated copy.
+    private static Class<?> configMePropertyClass() throws ClassNotFoundException {
+        String[] prefixes = relocationPrefixes();
+        String[] candidates = new String[prefixes.length];
+        for (int i = 0; i < prefixes.length; i++) {
+            candidates[i] = prefixes[i] + CONFIGME_PROPERTY_CLASS;
+        }
+        return resolveRelocated(CONFIGME_PROPERTY_CLASS, candidates);
+    }
+
+    // Relocation prefixes to try, most specific first.
+    private static String[] relocationPrefixes() {
+        Plugin authMePlugin = Bukkit.getPluginManager().getPlugin("AuthMe");
+        String derived = authMePlugin == null || authMePlugin.getClass().getPackage() == null ? null
+                : authMePlugin.getClass().getPackage().getName() + ".libs.";
+        return derived == null || derived.equals(AUTHME_LIB_PREFIX)
+                ? new String[] {AUTHME_LIB_PREFIX} : new String[] {derived, AUTHME_LIB_PREFIX};
+    }
+
+    // Whether AuthMe's own proxy channel is enabled; read before the reviewed-version gate.
+    boolean proxyChannelEnabled(Object injector) throws ReflectiveOperationException {
+        Method singleton = injector.getClass().getMethod("getSingleton", Class.class);
+        Object settings = singleton.invoke(injector, Class.forName(AUTHME_SETTINGS_CLASS));
+        Object enabled = Class.forName(HOOKS_SETTINGS_CLASS).getField("BUNGEECORD").get(null);
+        Method get = settings.getClass().getMethod("getProperty", configMePropertyClass());
+        return Boolean.TRUE.equals(get.invoke(settings, enabled));
     }
 
     /**
@@ -1339,6 +1416,10 @@ public final class AuthMePremiumIntegrator {
      * Disables AuthMe's independent proxy login receiver without disabling notifications.
      * No old secret is logged, backed up, or restored when FLP is removed.
      *
+     * <p>The reviewed-version gate applies only while AuthMe's proxy channel is enabled. With the
+     * channel off there is no receiver that could auto-login, so a standalone server on another
+     * build must not be told its version is unsupported.
+     *
      * @return whether the pin succeeded or the integration is absent/disabled
      */
     public synchronized boolean pinProxyAutoLoginOff() {
@@ -1346,15 +1427,22 @@ public final class AuthMePremiumIntegrator {
             plugin.getLog().info("AuthMe 6 proxy receiver absent; skipping proxy auto-login pin");
             return true;
         }
-        if (!AuthMeProxyPin.isReviewedVersion(versionDetector.getVersion())) {
-            plugin.getLog().error("Unsupported AuthMe version; proxy auto-login disablement is NOT guaranteed. "
-                    + "Use the reviewed AuthMe 6.0.1 integration.");
-            return false;
-        }
         try {
             Object injector = getAuthMeInjector();
             if (injector == null) {
                 throw new IllegalStateException("AuthMe injector unavailable");
+            }
+            if (!proxyChannelEnabled(injector)) {
+                // nothing AuthMe could auto-login through, so no reviewed version is needed
+                if (plugin.getCore().isDebug()) {
+                    plugin.getLog().info("AuthMe proxy channel is disabled; nothing to pin");
+                }
+                return true;
+            }
+            if (!AuthMeProxyPin.isReviewedVersion(versionDetector.getVersion())) {
+                plugin.getLog().error("Unsupported AuthMe version; proxy auto-login disablement is NOT guaranteed. "
+                        + "Use the reviewed AuthMe 6.0.1 integration.");
+                return false;
             }
             boolean active = pinProxyReceiver(injector);
             if (active && !proxyReceiverPinLogged) {
@@ -1379,8 +1467,8 @@ public final class AuthMePremiumIntegrator {
 
     boolean pinProxyReceiver(Object injector) throws ReflectiveOperationException {
         return pinProxyReceiver(injector, Class.forName(AUTHME_SETTINGS_CLASS),
-                Class.forName("fr.xephi.authme.settings.properties.HooksSettings"),
-                Class.forName("ch.jalu.configme.properties.Property"), Class.forName(BUNGEE_RECEIVER_CLASS));
+                Class.forName(HOOKS_SETTINGS_CLASS),
+                configMePropertyClass(), Class.forName(BUNGEE_RECEIVER_CLASS));
     }
 
     // The same reflection path is exercised with stand-ins without starting AuthMe or Bukkit.
@@ -1451,8 +1539,8 @@ public final class AuthMePremiumIntegrator {
             Field enablePremiumField = premiumSettingsClass.getField("ENABLE_PREMIUM");
             Object enablePremiumProperty = enablePremiumField.get(null);
 
-            Method getProperty = settings.getClass().getMethod("getProperty",
-                Class.forName("ch.jalu.configme.properties.Property"));
+            Class<?> propertyBase = configMePropertyClass();
+            Method getProperty = settings.getClass().getMethod("getProperty", propertyBase);
             boolean currentValue = (boolean) getProperty.invoke(settings, enablePremiumProperty);
 
             warnIfPolicyDisabled(currentValue, enabled);
@@ -1465,7 +1553,7 @@ public final class AuthMePremiumIntegrator {
             if (changed) {
                 // Persist the same setting as the startup takeover; never alter player records/lists.
                 Method setProperty = settings.getClass().getMethod("setProperty",
-                    Class.forName("ch.jalu.configme.properties.Property"), Object.class);
+                    propertyBase, Object.class);
                 premiumSettingNeedsSave = true;
                 setProperty.invoke(settings, enablePremiumProperty, enabled);
             }

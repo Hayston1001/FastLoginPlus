@@ -6,6 +6,7 @@
 package com.github.games647.fastlogin.bukkit.compat;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
+import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 
@@ -25,8 +26,10 @@ class AuthMeProxyReceiverPinTest {
                 Property.class, Receiver.class);
     }
 
+    @SuppressWarnings("unchecked")
     private AuthMePremiumIntegrator integrator() throws Exception {
         when(plugin.getLog()).thenReturn(logger);
+        when(plugin.getCore()).thenReturn(mock(FastLoginCore.class));
         when(detector.isAuthMePresent()).thenReturn(true);
         when(detector.getVersion()).thenReturn("6.0.1-b2770");
         AuthMePremiumIntegrator result = spy(new AuthMePremiumIntegrator(plugin, detector));
@@ -34,6 +37,7 @@ class AuthMeProxyReceiverPinTest {
         cachedInjector.setAccessible(true);
         cachedInjector.set(result, injector);
         doAnswer(unused -> pin()).when(result).pinProxyReceiver(injector);
+        doReturn(true).when(result).proxyChannelEnabled(injector);
         return result;
     }
 
@@ -107,6 +111,19 @@ class AuthMeProxyReceiverPinTest {
         when(detector.getVersion()).thenReturn("6.2.0");
         assertFalse(result.pinProxyAutoLoginOff());
         verify(logger).error(contains("Unsupported"));
+        assertEquals(0, injector.settings.saves);
+    }
+
+    @Test
+    void disabledProxyChannelNeedsNoReviewedVersion() throws Exception {
+        // Standalone servers have nothing to pin, so an unreviewed build (a fork, or a newer
+        // AuthMe) must not be reported as unsupported just because its version string differs.
+        AuthMePremiumIntegrator result = integrator();
+        doReturn(false).when(result).proxyChannelEnabled(injector);
+        when(detector.getVersion()).thenReturn("5.7.0-FORK-b53");
+
+        assertTrue(result.pinProxyAutoLoginOff());
+        verify(logger, never()).error(anyString());
         assertEquals(0, injector.settings.saves);
     }
 
