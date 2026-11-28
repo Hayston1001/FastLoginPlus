@@ -9,13 +9,13 @@ import org.slf4j.Logger;
 
 import java.util.function.BooleanSupplier;
 
-/** Presence is observable; AuthMeVelocity's independent authentication policy is not controlled here. */
+/** Presence is observable; AuthMeVelocity's premium verification and premium list are not controlled here. */
 final class AuthMeProxyDiagnostics {
     void warnAtStartup(BooleanSupplier probe, Logger logger) {
         if (probe.getAsBoolean()) {
-            logger.warn("Detected AuthMeVelocity, which may run its own premium verification and premium list. "
-                    + "FLP cannot disable that proxy-side behavior. To disable passwordless login, configure "
-                    + "AuthMeVelocity as well; FLP autoLogin=false only controls FLP and the backend AuthMe mode.");
+            logger.warn("Detected AuthMeVelocity. FastLoginPlus disables its proxy auto-login and the "
+                    + "backend proxy receiver, but not its premium verification or premium list. Check "
+                    + "those AuthMeVelocity settings if passwordless login still occurs.");
         }
     }
 }

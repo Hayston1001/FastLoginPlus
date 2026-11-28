@@ -28,8 +28,9 @@ class AuthMeProxyDiagnosticsTest {
         ArgumentCaptor<String> message = ArgumentCaptor.forClass(String.class);
         verify(logger, times(2)).warn(message.capture());
         assertTrue(message.getValue().contains("Detected AuthMeVelocity"));
-        assertTrue(message.getValue().contains("FLP cannot disable that proxy-side behavior"));
-        assertTrue(message.getValue().contains("configure AuthMeVelocity as well"));
+        assertTrue(message.getValue().contains("disables its proxy auto-login"));
+        assertTrue(message.getValue().contains("premium verification or premium list"));
+        assertFalse(message.getValue().contains("cannot disable"));
         verifyNoMoreInteractions(logger);
     }
 }
