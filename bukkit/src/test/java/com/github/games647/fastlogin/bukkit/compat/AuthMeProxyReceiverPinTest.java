@@ -6,6 +6,8 @@
 package com.github.games647.fastlogin.bukkit.compat;
 
 import com.github.games647.fastlogin.bukkit.FastLoginBukkit;
+import com.github.games647.fastlogin.core.shared.AuthMeProxyReceiverPin;
+import com.github.games647.fastlogin.core.shared.AuthMeShapeProbe;
 import com.github.games647.fastlogin.core.shared.FastLoginCore;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -22,7 +24,7 @@ class AuthMeProxyReceiverPinTest {
     private final AuthMeVersionDetector detector = mock(AuthMeVersionDetector.class);
 
     private boolean pin() throws ReflectiveOperationException {
-        return AuthMePremiumIntegrator.pinProxyReceiver(injector, Settings.class, Hooks.class,
+        return AuthMeProxyReceiverPin.pin(injector, Settings.class, Hooks.class,
                 Property.class, Receiver.class);
     }
 
@@ -31,13 +33,14 @@ class AuthMeProxyReceiverPinTest {
         when(plugin.getLog()).thenReturn(logger);
         when(plugin.getCore()).thenReturn(mock(FastLoginCore.class));
         when(detector.isAuthMePresent()).thenReturn(true);
-        when(detector.getVersion()).thenReturn("6.0.1-b2770");
         AuthMePremiumIntegrator result = spy(new AuthMePremiumIntegrator(plugin, detector));
         Field cachedInjector = AuthMePremiumIntegrator.class.getDeclaredField("authMeInjector");
         cachedInjector.setAccessible(true);
         cachedInjector.set(result, injector);
         doAnswer(unused -> pin()).when(result).pinProxyReceiver(injector);
         doReturn(true).when(result).proxyChannelEnabled(injector);
+        doReturn(AuthMeShapeProbe.probeProxyReceiver(injector, Settings.class, Hooks.class,
+                Property.class, Receiver.class)).when(result).proxyReceiverShape(injector);
         return result;
     }
 
@@ -106,21 +109,48 @@ class AuthMeProxyReceiverPinTest {
     }
 
     @Test
-    void unknownVersionIsAnErrorWithoutWriting() throws Exception {
+    void matchingShapeIsPinnedWithoutVersionGate() throws Exception {
         AuthMePremiumIntegrator result = integrator();
-        when(detector.getVersion()).thenReturn("6.2.0");
+        assertTrue(result.pinProxyAutoLoginOff());
+        assertEquals("", injector.settings.persisted);
+        assertEquals(1, injector.settings.saves);
+    }
+
+    @Test
+    void shapeMismatchSkipsWithoutWriting() throws Exception {
+        AuthMePremiumIntegrator result = integrator();
+        OddInjector odd = new OddInjector();
+        doReturn(AuthMeShapeProbe.probeProxyReceiver(odd, Settings.class, Hooks.class,
+                Property.class, OddReceiver.class)).when(result).proxyReceiverShape(injector);
         assertFalse(result.pinProxyAutoLoginOff());
-        verify(logger).error(contains("Unsupported"));
+        verify(logger).error(contains("NOT guaranteed"));
         assertEquals(0, injector.settings.saves);
     }
 
     @Test
-    void disabledProxyChannelNeedsNoReviewedVersion() throws Exception {
-        // Standalone servers have nothing to pin, so an unreviewed build (a fork, or a newer
-        // AuthMe) must not be reported as unsupported just because its version string differs.
+    void missingIntegrationClassesAreReportedSeparately() throws Exception {
+        AuthMePremiumIntegrator result = integrator();
+        doThrow(new ClassNotFoundException("DO-NOT-LOG-SECRET")).when(result).proxyReceiverShape(injector);
+        assertFalse(result.pinProxyAutoLoginOff());
+        verify(logger).error(contains("missing or renamed"));
+        assertEquals(0, injector.settings.saves);
+        assertSanitizedLogs();
+    }
+
+    @Test
+    void readbackFailureRestoresTheSecret() {
+        injector.receiver.ignoreReload = true;
+        assertThrows(IllegalStateException.class, this::pin);
+        assertEquals("DO-NOT-LOG-SECRET", injector.settings.secret);
+        assertEquals("DO-NOT-LOG-SECRET", injector.settings.persisted);
+    }
+
+    @Test
+    void disabledProxyChannelNeedsNoShapeCheck() throws Exception {
+        // Standalone servers have nothing to pin, so an older or forked AuthMe
+        // build must not be reported as unsupported.
         AuthMePremiumIntegrator result = integrator();
         doReturn(false).when(result).proxyChannelEnabled(injector);
-        when(detector.getVersion()).thenReturn("5.7.0-FORK-b53");
 
         assertTrue(result.pinProxyAutoLoginOff());
         verify(logger, never()).error(anyString());
@@ -137,11 +167,11 @@ class AuthMeProxyReceiverPinTest {
     }
 
     @Test
-    void absentClassIsAnInfoSkipWithoutClaimingEnforcement() throws Exception {
+    void classResolutionFailureAfterShapeIsAnError() throws Exception {
         AuthMePremiumIntegrator result = integrator();
         doThrow(new ClassNotFoundException("DO-NOT-LOG-SECRET")).when(result).pinProxyReceiver(injector);
         assertFalse(result.pinProxyAutoLoginOff());
-        verify(logger).info(contains("NOT guaranteed"));
+        verify(logger).error(contains("missing or renamed"));
         assertSanitizedLogs();
     }
 
@@ -170,7 +200,7 @@ class AuthMeProxyReceiverPinTest {
         }
         public void setProperty(Property property, Object value) {
             assertSame(Hooks.PROXY_SHARED_SECRET, property);
-            assertEquals("", value);
+            assertTrue(value instanceof String);
             secret = (String) value;
         }
         public void save() {
@@ -198,5 +228,15 @@ class AuthMeProxyReceiverPinTest {
         public Object getSingleton(Class<?> type) {
             return type == Settings.class ? settings : receiver;
         }
+    }
+    public static final class OddInjector {
+        final Settings settings = new Settings();
+        final OddReceiver receiver = new OddReceiver();
+        public Object getSingleton(Class<?> type) {
+            return type == Settings.class ? settings : receiver;
+        }
+    }
+    public static final class OddReceiver {
+        private String proxySharedSecret = "DO-NOT-LOG-SECRET";
     }
 }

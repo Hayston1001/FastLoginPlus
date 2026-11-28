@@ -16,7 +16,7 @@ class AuthMeAutoLoginPinTest {
     private final FakePlugin plugin = new FakePlugin();
 
     private AuthMeProxyPin.Outcome pin() {
-        return AuthMeProxyPin.forceAutoLoginOff(plugin, Properties.class.getName(), "6.0.1-b2770",
+        return AuthMeProxyPin.forceAutoLoginOff(plugin, Properties.class.getName(),
                 logger, Property.class.getName());
     }
 
@@ -56,11 +56,12 @@ class AuthMeAutoLoginPinTest {
     }
 
     @Test
-    void failedSaveIsRetriedEvenIfMemoryAlreadyChanged() {
+    void failedSaveIsRolledBackAndRetried() {
         plugin.configManager.settingsManager.failSave = true;
-        pin();
+        assertEquals(AuthMeProxyPin.Outcome.FAILED, pin());
+        assertTrue(plugin.configManager.settingsManager.value);
         plugin.configManager.settingsManager.failSave = false;
-        assertEquals(AuthMeProxyPin.Outcome.ALREADY_OFF, pin());
+        assertEquals(AuthMeProxyPin.Outcome.APPLIED, pin());
         assertFalse(plugin.configManager.settingsManager.persisted);
         assertFalse(plugin.proxyBridge.configuration.autoLoginEnabled());
     }
@@ -83,40 +84,55 @@ class AuthMeAutoLoginPinTest {
     @Test
     void absentPluginIsAnInfoSkip() {
         assertEquals(AuthMeProxyPin.Outcome.UNSUPPORTED,
-                AuthMeProxyPin.forceAutoLoginOff(null, "absent", "", logger));
+                AuthMeProxyPin.forceAutoLoginOff(null, "absent", logger));
         verify(logger).info(contains("absent"));
         verify(logger, never()).error(anyString());
     }
 
     @Test
-    void absentClassIsAnInfoSkipWithoutClaimingEnforcement() {
+    void absentClassIsAnErrorSkipWithoutClaimingEnforcement() {
         assertEquals(AuthMeProxyPin.Outcome.UNSUPPORTED, AuthMeProxyPin.forceAutoLoginOff(plugin,
-                "absent.Class", "6.0.1", logger, Property.class.getName()));
-        verify(logger).info(contains("NOT guaranteed"));
+                "absent.Class", logger, Property.class.getName()));
+        verify(logger).error(contains("NOT guaranteed"));
     }
 
     @Test
-    void unknownVersionIsAnErrorAndDoesNotWrite() {
-        assertEquals(AuthMeProxyPin.Outcome.UNSUPPORTED, AuthMeProxyPin.forceAutoLoginOff(plugin,
-                Properties.class.getName(), "6.1.0", logger, Property.class.getName()));
-        verify(logger).error(contains("Unsupported"));
-        assertEquals(0, plugin.configManager.settingsManager.writes);
+    void matchingShapeIsPinnedWithoutVersionGate() {
+        assertEquals(AuthMeProxyPin.Outcome.APPLIED, AuthMeProxyPin.forceAutoLoginOff(plugin,
+                Properties.class.getName(), logger, Property.class.getName()));
+        assertEquals(1, plugin.configManager.settingsManager.writes);
+        assertFalse(plugin.proxyBridge.configuration.autoLoginEnabled());
     }
 
     @Test
-    void incompatibleShapeIsAnErrorWithoutThrowing() {
-        assertEquals(AuthMeProxyPin.Outcome.FAILED, AuthMeProxyPin.forceAutoLoginOff(new Properties(),
-                Properties.class.getName(), "6.0.1", logger, Property.class.getName()));
-        verify(logger).error(anyString());
+    void incompatibleShapeIsAnUnsupportedSkipWithoutThrowing() {
+        assertEquals(AuthMeProxyPin.Outcome.UNSUPPORTED, AuthMeProxyPin.forceAutoLoginOff(new Properties(),
+                Properties.class.getName(), logger, Property.class.getName()));
+        verify(logger).error(contains("NOT guaranteed"));
     }
 
     @Test
-    void onlyReviewedVersionAcceptsBuildSuffixes() {
-        assertTrue(AuthMeProxyPin.isReviewedVersion("6.0.1"));
-        assertTrue(AuthMeProxyPin.isReviewedVersion("6.0.1-b2770"));
-        assertFalse(AuthMeProxyPin.isReviewedVersion("6.0.10"));
-        assertFalse(AuthMeProxyPin.isReviewedVersion("6.0.0"));
-        assertFalse(AuthMeProxyPin.isReviewedVersion(null));
+    void shapeMismatchSkipsWithoutWriting() {
+        assertEquals(AuthMeProxyPin.Outcome.UNSUPPORTED, AuthMeProxyPin.forceAutoLoginOff(new OddPlugin(),
+                Properties.class.getName(), logger, Property.class.getName()));
+        verify(logger).error(contains("shape is unexpected"));
+    }
+
+    @Test
+    void nullLiveConfigurationDoesNotHideAMatchingShape() {
+        plugin.proxyBridge.configuration = null;
+        AuthMeShapeProbe.Result shape = AuthMeShapeProbe.probeProxyAutoLogin(
+                plugin, Properties.class.getName(), Property.class.getName());
+        assertTrue(shape.isComplete());
+    }
+
+    @Test
+    void readbackFailureRestoresThePreviousSetting() {
+        plugin.proxyBridge.ignoreReload = true;
+        assertEquals(AuthMeProxyPin.Outcome.FAILED, pin());
+        assertTrue(plugin.configManager.settingsManager.value);
+        assertTrue(plugin.configManager.settingsManager.persisted);
+        assertEquals(2, plugin.configManager.settingsManager.writes);
     }
 
     private void assertSanitizedLogs() {
@@ -136,6 +152,10 @@ class AuthMeAutoLoginPinTest {
         private final Manager configManager = new Manager();
         private final Bridge proxyBridge = new Bridge();
     }
+    public static final class OddPlugin {
+        private final Object configManager = new Object();
+        private final Bridge proxyBridge = new Bridge();
+    }
     public static final class Settings {
         boolean value = true;
         boolean persisted = true;
@@ -143,7 +163,7 @@ class AuthMeAutoLoginPinTest {
         int writes;
         public Object getProperty(Property property) { return value; }
         public void setProperty(Property property, Object value) {
-            assertEquals(Boolean.FALSE, value);
+            assertTrue(value instanceof Boolean);
             this.value = (Boolean) value;
             writes++;
         }

@@ -281,9 +281,7 @@ public class FastLoginVelocity implements PlatformPlugin<CommandSource> {
 
     void reassertAuthMeAutoLoginPin() {
         Object authMe = resolvePluginInstance(server.getPluginManager(), AUTHME_PLUGIN_ID);
-        String version = server.getPluginManager().getPlugin(AUTHME_PLUGIN_ID)
-                .flatMap(container -> container.getDescription().getVersion()).orElse("");
-        AuthMeProxyPin.forceAutoLoginOff(authMe, AUTHME_CONFIG_PROPERTIES_CLASS, version, logger);
+        AuthMeProxyPin.forceAutoLoginOff(authMe, AUTHME_CONFIG_PROPERTIES_CLASS, logger);
     }
 
     /**

@@ -65,52 +65,61 @@ public final class AuthMeProxyPin {
     }
 
     /**
-     * Pins the reviewed AuthMeVelocity 6.0.1 sender off independently of FLP's own policy.
+     * Pins AuthMeVelocity's own sender off independently of FLP's own policy.
      * The bridge snapshot is rebuilt even if ConfigMe already says false, then read back.
      *
      * @param plugin live AuthMeVelocity instance, or null when absent
      * @param propertiesClassName AuthMe's ConfigMe property holder
-     * @param version version reported by the proxy plugin descriptor
      * @param logger FLP logger; exception text is deliberately never logged
      * @return checked outcome, without propagating integration failures
      */
-    public static Outcome forceAutoLoginOff(Object plugin, String propertiesClassName,
-                                            String version, Logger logger) {
-        return forceAutoLoginOff(plugin, propertiesClassName, version, logger, CONFIGME_PROPERTY_CLASS);
+    public static Outcome forceAutoLoginOff(Object plugin, String propertiesClassName, Logger logger) {
+        return forceAutoLoginOff(plugin, propertiesClassName, logger, CONFIGME_PROPERTY_CLASS);
     }
 
     static Outcome forceAutoLoginOff(Object plugin, String propertiesClassName,
-                                    String version, Logger logger, String propertyBaseClassName) {
+                                    Logger logger, String propertyBaseClassName) {
         if (plugin == null) {
             logger.info("AuthMeVelocity absent; skipping its auto-login pin");
             return Outcome.UNSUPPORTED;
         }
-        if (!isReviewedVersion(version)) {
-            logger.error("Unsupported AuthMeVelocity version; auto-login pin is NOT guaranteed. "
-                    + "Use the reviewed AuthMe 6.0.1 integration.");
+        AuthMeShapeProbe.Result shape = AuthMeShapeProbe.probeProxyAutoLogin(
+                plugin, propertiesClassName, propertyBaseClassName);
+        if (!AuthMeShapeProbe.isApproved(shape)) {
+            logger.error("AuthMeVelocity member shape is unexpected; auto-login pin is NOT guaranteed. "
+                    + "Update FastLoginPlus or use a supported AuthMeVelocity build.");
             return Outcome.UNSUPPORTED;
         }
+
+        Object manager = null;
+        Object settings = null;
+        Object bridge = null;
+        Object previous = null;
+        boolean written = false;
         try {
             ClassLoader loader = plugin.getClass().getClassLoader();
             Class<?> properties = Class.forName(propertiesClassName, false, loader);
             Class<?> propertyBase = Class.forName(propertyBaseClassName, false, loader);
             Object property = properties.getField("AUTOLOGIN").get(null);
-            Object manager = readField(plugin, CONFIG_MANAGER_FIELD);
-            Object settings = readField(manager, SETTINGS_MANAGER_FIELD);
-            Object bridge = readField(plugin, BRIDGE_FIELD);
+            manager = readField(plugin, CONFIG_MANAGER_FIELD);
+            settings = readField(manager, SETTINGS_MANAGER_FIELD);
+            bridge = readField(plugin, BRIDGE_FIELD);
             Method get = settings.getClass().getMethod("getProperty", propertyBase);
-            boolean changed = !Boolean.FALSE.equals(get.invoke(settings, property));
+            previous = get.invoke(settings, property);
+            boolean changed = !Boolean.FALSE.equals(previous);
+            written = true;
             settings.getClass().getMethod("setProperty", propertyBase, Object.class)
                     .invoke(settings, property, false);
             settings.getClass().getMethod("save").invoke(settings);
             Method reload = manager.getClass().getDeclaredMethod("reload");
             reload.setAccessible(true);
+            Class<?> configurationClass = reload.getReturnType();
             Object configuration = reload.invoke(manager);
-            Method apply = bridge.getClass().getDeclaredMethod("reload", configuration.getClass());
+            Method apply = bridge.getClass().getDeclaredMethod("reload", configurationClass);
             apply.setAccessible(true);
             apply.invoke(bridge, configuration);
             Object liveConfiguration = readField(bridge, "configuration");
-            Method enabled = liveConfiguration.getClass().getDeclaredMethod("autoLoginEnabled");
+            Method enabled = configurationClass.getDeclaredMethod("autoLoginEnabled");
             enabled.setAccessible(true);
             if (!Boolean.FALSE.equals(get.invoke(settings, property))
                     || !Boolean.FALSE.equals(enabled.invoke(liveConfiguration))) {
@@ -125,18 +134,40 @@ public final class AuthMeProxyPin {
             return Outcome.UNSUPPORTED;
         } catch (ReflectiveOperationException | RuntimeException | LinkageError ex) {
             // AuthMe failures may embed configuration values. Never log their message or cause.
+            if (written) {
+                rollbackAutoLogin(manager, settings, bridge, propertiesClassName, propertyBaseClassName, previous);
+            }
             logger.error("Failed to pin/read back AuthMeVelocity autoLogin=false; "
-                    + "auto-login is NOT guaranteed disabled. Check the supported AuthMe version.");
+                    + "auto-login is NOT guaranteed disabled. Check the AuthMeVelocity build or "
+                    + "update FastLoginPlus.");
             return Outcome.FAILED;
         }
     }
 
-    /**
-     * @param version version reported by AuthMe's plugin descriptor
-     * @return whether the configuration/consumer shape has been reviewed for this version
-     */
-    public static boolean isReviewedVersion(String version) {
-        return version != null && version.matches("6\\.0\\.1(?:[-+].*)?");
+    private static void rollbackAutoLogin(Object manager, Object settings, Object bridge,
+                                         String propertiesClassName, String propertyBaseClassName,
+                                         Object previous) {
+        if (manager == null || settings == null || bridge == null || previous == null) {
+            return;
+        }
+        try {
+            ClassLoader loader = settings.getClass().getClassLoader();
+            Class<?> properties = Class.forName(propertiesClassName, false, loader);
+            Class<?> propertyBase = Class.forName(propertyBaseClassName, false, loader);
+            Object property = properties.getField("AUTOLOGIN").get(null);
+            settings.getClass().getMethod("setProperty", propertyBase, Object.class)
+                    .invoke(settings, property, previous);
+            settings.getClass().getMethod("save").invoke(settings);
+            Method reload = manager.getClass().getDeclaredMethod("reload");
+            reload.setAccessible(true);
+            Class<?> configurationClass = reload.getReturnType();
+            Object configuration = reload.invoke(manager);
+            Method apply = bridge.getClass().getDeclaredMethod("reload", configurationClass);
+            apply.setAccessible(true);
+            apply.invoke(bridge, configuration);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
+            // the caller reports the original failure; rollback stays best-effort
+        }
     }
 
     /**
